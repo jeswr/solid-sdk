@@ -1,0 +1,226 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$comment": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string",
+      "const": "agent-profile/0.1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "claims": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sources": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "methods": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "maxAgeDays": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "kind",
+          "sources",
+          "methods",
+          "maxAgeDays"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "purposes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "partial": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "claims",
+          "partial"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reads": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "produces": {
+            "type": "string",
+            "minLength": 1
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "complete": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "assurances": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "by-source",
+                "recomputed",
+                "proved",
+                "joint",
+                "attested"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "reads",
+          "produces",
+          "query",
+          "complete",
+          "assurances"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "personDecisions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "readingSteps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "reliance": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rules": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "claimType": {
+                "type": "string",
+                "minLength": 1
+              },
+              "methods": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "maxAgeDays": {
+                "type": "number",
+                "minimum": 0
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "claimType",
+              "methods",
+              "maxAgeDays",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id",
+        "rules"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "claims",
+    "purposes",
+    "rules",
+    "personDecisions",
+    "readingSteps",
+    "reliance"
+  ],
+  "additionalProperties": false
+}

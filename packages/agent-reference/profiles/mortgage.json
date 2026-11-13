@@ -1,0 +1,188 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "schema": "agent-profile/0.1",
+  "id": "mortgage",
+  "claims": [
+    {
+      "kind": "income.*",
+      "sources": [
+        "registered payroll provider",
+        "tax authority"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 92
+    },
+    {
+      "kind": "deposit.*",
+      "sources": [
+        "holding bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 31
+    },
+    {
+      "kind": "mortgage.decision-in-principle",
+      "sources": [
+        "lender"
+      ],
+      "methods": [
+        "decided-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "mortgage.product",
+      "sources": [
+        "registered lender"
+      ],
+      "methods": [
+        "published-by-lender"
+      ],
+      "maxAgeDays": 31
+    },
+    {
+      "kind": "identity.*",
+      "sources": [
+        "accepted identity provider"
+      ],
+      "methods": [
+        "certified-face-check"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+      "claims": [
+        "income.gross.monthly-series",
+        "deposit.balance"
+      ],
+      "partial": false
+    },
+    {
+      "id": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+      "claims": [
+        "income.gross.monthly-series",
+        "deposit.balance"
+      ],
+      "partial": false
+    },
+    {
+      "id": "https://w3id.org/jeswr/awp#purpose/product-search",
+      "claims": [],
+      "partial": true
+    }
+  ],
+  "rules": [
+    {
+      "id": "deposit-total",
+      "reads": [
+        "deposit.balance"
+      ],
+      "produces": "deposit.total",
+      "query": "sum(balance) grouped by subject and currency; asOf is the oldest input",
+      "complete": [
+        "accounts.complete"
+      ],
+      "assurances": [
+        "recomputed",
+        "proved",
+        "joint"
+      ]
+    },
+    {
+      "id": "deposit-at-least",
+      "reads": [
+        "deposit.balance"
+      ],
+      "produces": "deposit.at-least",
+      "query": "deposit-total >= threshold",
+      "complete": [
+        "accounts.complete"
+      ],
+      "assurances": [
+        "by-source",
+        "proved",
+        "joint"
+      ]
+    },
+    {
+      "id": "income-annual",
+      "reads": [
+        "income.gross.monthly-series"
+      ],
+      "produces": "income.gross.annual",
+      "query": "sum(gross) over twelve consecutive months in the stated period",
+      "complete": [],
+      "assurances": [
+        "by-source",
+        "recomputed",
+        "proved"
+      ]
+    }
+  ],
+  "personDecisions": [
+    "discretion",
+    "novel-request",
+    "term-with-no-agreed-meaning",
+    "accept-offer"
+  ],
+  "readingSteps": [
+    "product-search"
+  ],
+  "reliance": {
+    "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application",
+    "rules": [
+      {
+        "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#income",
+        "claimType": "income.*",
+        "methods": [
+          "recorded-by-authority"
+        ],
+        "maxAgeDays": 92,
+        "text": "Income must be recorded by a payroll provider or tax authority and be at most three months old."
+      },
+      {
+        "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#balance",
+        "claimType": "deposit.*",
+        "methods": [
+          "recorded-by-authority"
+        ],
+        "maxAgeDays": 31,
+        "text": "A balance must be recorded by the bank that holds the account and be at most one month old."
+      },
+      {
+        "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#decision",
+        "claimType": "mortgage.decision-in-principle",
+        "methods": [
+          "decided-by-authority"
+        ],
+        "maxAgeDays": 30,
+        "text": "A decision in principle must come from the lender itself and still be valid."
+      },
+      {
+        "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#product",
+        "claimType": "mortgage.product",
+        "methods": [
+          "published-by-lender"
+        ],
+        "maxAgeDays": 31,
+        "text": "A product record must be published by the lender itself and be at most a month old."
+      },
+      {
+        "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#approval",
+        "claimType": "identity.*",
+        "methods": [
+          "certified-face-check"
+        ],
+        "maxAgeDays": 1,
+        "text": "A stronger approval must be a certified face check made today."
+      }
+    ]
+  }
+}

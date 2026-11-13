@@ -1,0 +1,1150 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$comment": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string",
+      "const": "agent-scenario/0.1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "start": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "ids": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "configuration": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pilotConfiguration": {
+          "type": "string",
+          "minLength": 1
+        },
+        "layers": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "transport",
+              "data-access",
+              "identity",
+              "meaning",
+              "authority",
+              "authenticity",
+              "trust",
+              "reliance",
+              "usage-control",
+              "commitments",
+              "accountability"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": [
+            "transport",
+            "data-access",
+            "identity",
+            "meaning",
+            "authority",
+            "authenticity",
+            "trust",
+            "reliance",
+            "usage-control",
+            "commitments",
+            "accountability"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "pilotConfiguration",
+        "layers"
+      ],
+      "additionalProperties": false
+    },
+    "parties": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "principal",
+              "agent",
+              "source",
+              "register"
+            ]
+          },
+          "runs": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "issuer-only"
+            ]
+          },
+          "actsFor": {
+            "type": "string",
+            "minLength": 1
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "identity": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "party": {
+                "type": "string",
+                "minLength": 1
+              },
+              "actor": {
+                "type": "string",
+                "minLength": 1
+              },
+              "operator": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "name",
+              "party",
+              "actor"
+            ],
+            "additionalProperties": false
+          },
+          "representationOperations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "runs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "traceAgents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actsFor": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "actsFor",
+          "role"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "trust": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "principal": {
+            "type": "string",
+            "minLength": 1
+          },
+          "data": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "ownList": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/__schema0"
+              }
+            }
+          },
+          "root": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          }
+        },
+        "required": [
+          "principal",
+          "data"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "mandates": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/__schema0"
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "principalLimits": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "maxRetentionDays": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "configuration": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "pilotConfiguration": {
+                "type": "string",
+                "minLength": 1
+              },
+              "layers": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "transport",
+                    "data-access",
+                    "identity",
+                    "meaning",
+                    "authority",
+                    "authenticity",
+                    "trust",
+                    "reliance",
+                    "usage-control",
+                    "commitments",
+                    "accountability"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "required": [
+                  "transport",
+                  "data-access",
+                  "identity",
+                  "meaning",
+                  "authority",
+                  "authenticity",
+                  "trust",
+                  "reliance",
+                  "usage-control",
+                  "commitments",
+                  "accountability"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "pilotConfiguration",
+              "layers"
+            ],
+            "additionalProperties": false
+          },
+          "configurations": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "pilotConfiguration": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "layers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "enum": [
+                      "transport",
+                      "data-access",
+                      "identity",
+                      "meaning",
+                      "authority",
+                      "authenticity",
+                      "trust",
+                      "reliance",
+                      "usage-control",
+                      "commitments",
+                      "accountability"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "required": [
+                    "transport",
+                    "data-access",
+                    "identity",
+                    "meaning",
+                    "authority",
+                    "authenticity",
+                    "trust",
+                    "reliance",
+                    "usage-control",
+                    "commitments",
+                    "accountability"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "pilotConfiguration",
+                "layers"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "accepted": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "agent",
+          "configuration"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "statements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "typ": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "typ",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "core": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/__schema0"
+              }
+            },
+            "requiresRepresentation": {
+              "type": "boolean"
+            },
+            "agreementDelivery": {
+              "type": "string",
+              "enum": [
+                "offeror",
+                "acceptor"
+              ]
+            },
+            "requiredApproval": {
+              "type": "object",
+              "properties": {
+                "level": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "claimType": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "level",
+                "label",
+                "claimType"
+              ],
+              "additionalProperties": false
+            },
+            "hooks": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "enum": [
+                  "intentForProposal",
+                  "intentForInvoke",
+                  "onProposal",
+                  "onAgreement",
+                  "onInvoke",
+                  "onDeliver",
+                  "onReceipt",
+                  "onClosed",
+                  "vetDescription",
+                  "describeFor",
+                  "validateSelection"
+                ]
+              },
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "$ref": "#/$defs/__schema1"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "required": [
+            "description",
+            "requiresRepresentation",
+            "hooks"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "script": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "showMandate",
+              "instruct",
+              "startNegotiation",
+              "startInvocation",
+              "admitStatements",
+              "receive",
+              "submitApproval",
+              "sendReceipt",
+              "runTask",
+              "checkRecord"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/__schema2"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "by",
+          "method",
+          "at",
+          "step",
+          "args"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "inject": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "patches": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^\\/"
+                },
+                "value": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "path",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "step",
+          "by",
+          "patches"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "branches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "changes": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^\\/"
+                },
+                "value": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "path",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "expect": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "agent": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "part": {
+                  "type": "string",
+                  "enum": [
+                    "principal",
+                    "transport",
+                    "inbound-gate",
+                    "core",
+                    "memory",
+                    "outbound-gate",
+                    "record",
+                    "policies"
+                  ]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "check",
+                    "decision",
+                    "message-in",
+                    "message-out",
+                    "ask-principal"
+                  ]
+                },
+                "check": {
+                  "type": "string",
+                  "enum": [
+                    "integrity",
+                    "source",
+                    "authority",
+                    "terms",
+                    "fitness",
+                    "mandate",
+                    "recipient",
+                    "disclosure",
+                    "data-terms",
+                    "limits-approval",
+                    "evidence"
+                  ]
+                },
+                "verdict": {
+                  "type": "string",
+                  "enum": [
+                    "pass",
+                    "fail",
+                    "ask-more",
+                    "ask-principal",
+                    "indeterminate",
+                    "not-applicable"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "agent",
+                "part",
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "admit",
+              "ask-more",
+              "refuse",
+              "go",
+              "ask-principal",
+              "stop"
+            ]
+          },
+          "check": {
+            "type": "string",
+            "enum": [
+              "integrity",
+              "source",
+              "authority",
+              "terms",
+              "fitness",
+              "mandate",
+              "recipient",
+              "disclosure",
+              "data-terms",
+              "limits-approval",
+              "evidence"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "changes",
+          "expect",
+          "outcome",
+          "check",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "expect": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "part": {
+            "type": "string",
+            "enum": [
+              "principal",
+              "transport",
+              "inbound-gate",
+              "core",
+              "memory",
+              "outbound-gate",
+              "record",
+              "policies"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "check",
+              "decision",
+              "message-in",
+              "message-out",
+              "ask-principal"
+            ]
+          },
+          "check": {
+            "type": "string",
+            "enum": [
+              "integrity",
+              "source",
+              "authority",
+              "terms",
+              "fitness",
+              "mandate",
+              "recipient",
+              "disclosure",
+              "data-terms",
+              "limits-approval",
+              "evidence"
+            ]
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "ask-more",
+              "ask-principal",
+              "indeterminate",
+              "not-applicable"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "agent",
+          "part",
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "steps": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "names": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "labels": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "claimLabel": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tellPrincipal": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "stepLabels": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "agent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "to": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "step",
+          "agent",
+          "parts",
+          "to"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "profile",
+    "start",
+    "ids",
+    "configuration",
+    "parties",
+    "traceAgents",
+    "trust",
+    "mandates",
+    "settings",
+    "statements",
+    "core",
+    "script",
+    "inject",
+    "branches",
+    "expect",
+    "steps",
+    "names",
+    "tasks",
+    "labels",
+    "stepLabels"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema0"
+          }
+        }
+      ]
+    },
+    "__schema1": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema1"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema1"
+          }
+        }
+      ]
+    },
+    "__schema2": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema2"
+          }
+        }
+      ]
+    },
+    "__schema3": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema3"
+          }
+        }
+      ]
+    }
+  }
+}

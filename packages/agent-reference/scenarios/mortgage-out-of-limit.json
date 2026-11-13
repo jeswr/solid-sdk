@@ -1,0 +1,2201 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "schema": "agent-scenario/0.1",
+  "id": "mortgage-out-of-limit",
+  "title": "The lender's terms are outside Sam's limits",
+  "profile": "mortgage",
+  "start": "2026-11-13T09:00:00.000Z",
+  "ids": "ref",
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    },
+    "pilotConfiguration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+  },
+  "parties": [
+    {
+      "id": "sam",
+      "name": "Sam",
+      "role": "agent",
+      "runs": "agent",
+      "identity": {
+        "name": "sam",
+        "party": "https://sam.example/#me",
+        "actor": "https://agents.hostco.example/sam#agent",
+        "operator": "https://hostco.example/#org"
+      },
+      "representationOperations": [
+        "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+        "https://w3id.org/jeswr/awp#op/valuation-order"
+      ],
+      "actsFor": "sam-principal"
+    },
+    {
+      "id": "northbank-intake",
+      "name": "North Bank",
+      "role": "agent",
+      "runs": "agent",
+      "identity": {
+        "name": "northbank-intake",
+        "party": "https://northbank.example/#org",
+        "actor": "https://northbank.example/agents/intake#agent",
+        "operator": "https://northbank.example/#org"
+      },
+      "representationOperations": [
+        "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+        "https://w3id.org/jeswr/awp#op/valuation-order"
+      ],
+      "actsFor": "northbank-intake-principal"
+    },
+    {
+      "id": "sam-principal",
+      "name": "Sam",
+      "role": "principal",
+      "runs": "issuer-only",
+      "key": "sam/owner"
+    },
+    {
+      "id": "northbank-intake-principal",
+      "name": "North Bank",
+      "role": "principal",
+      "runs": "issuer-only",
+      "key": "northbank-intake/owner"
+    },
+    {
+      "id": "harbourbank-issuer",
+      "name": "harbourbank",
+      "role": "source",
+      "runs": "issuer-only",
+      "key": "harbourbank/issuer"
+    },
+    {
+      "id": "paywell-issuer",
+      "name": "paywell",
+      "role": "source",
+      "runs": "issuer-only",
+      "key": "paywell/issuer"
+    }
+  ],
+  "traceAgents": [
+    {
+      "id": "sams-agent",
+      "name": "Sam's agent",
+      "actsFor": "sam",
+      "role": "Personal agent"
+    },
+    {
+      "id": "lender",
+      "name": "North Bank",
+      "actsFor": "lender",
+      "role": "Lender"
+    }
+  ],
+  "trust": {
+    "sam": {
+      "data": {
+        "version": 1,
+        "owner": "https://sam.example/#me",
+        "keys": [
+          {
+            "role": "party",
+            "subject": "https://sam.example/#me",
+            "kid": "i04_wphUWMTweJspHVkwZbGZubNvmh9zr_aSBEiz6Yg",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "vaUbTT_9kE5qhIK9qYtCy4JvtX_3Ri1j9X17F-B_1mg"
+            },
+            "note": "local owner (pinned at provisioning)"
+          },
+          {
+            "role": "party",
+            "subject": "https://northbank.example/#org",
+            "kid": "O0Uif6jTaQxVCopgl5eu-dy4uRUvx8SfCy5E-17NZj8",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "WyzVILTCovsEZCNnKPCPoCOt-wAhnsBd1K3czujkBnI"
+            },
+            "note": "pinned by introduction"
+          },
+          {
+            "role": "actor",
+            "subject": "https://northbank.example/agents/intake#agent",
+            "party": "https://northbank.example/#org",
+            "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "_xz8gQ6jlRd_KGPlkxlGpb4kuqwGgGoEyrke3HgApqU"
+            },
+            "endpoints": [],
+            "note": "pinned by introduction"
+          },
+          {
+            "role": "issuer",
+            "subject": "https://paywell.example/#org",
+            "kid": "vVnBGZ9G8exNhe12g23GAvWkTmM6HOSdmAZ-kJSntbY",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "aZa7zBHRN6jmRBydX8_8T07-Sk2iR_Hel1zfk4eVgQQ"
+            },
+            "note": "synthetic issuer pinned at onboarding"
+          },
+          {
+            "role": "issuer",
+            "subject": "https://harbourbank.example/#org",
+            "kid": "Nvsi7qh2QBvAgmXy5UIvfOhDMK33PxeFJgU0anifewY",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "pM2dzLt3m-nQTK5QLg9iYs9dP07pajArtO4nb4xXfkQ"
+            },
+            "note": "synthetic issuer pinned at onboarding"
+          }
+        ],
+        "sourceAuthority": [
+          {
+            "id": "https://w3id.org/jeswr/awp#rule/sam/own-bank-balances",
+            "version": "1",
+            "source": "https://harbourbank.example/#org",
+            "claimTypes": [
+              "deposit.*"
+            ],
+            "subjects": [
+              "https://sam.example/#me"
+            ],
+            "validUntil": "2027-11-13T09:00:00.000Z",
+            "framework": "Sam's own list: Sam's own bank"
+          },
+          {
+            "id": "https://w3id.org/jeswr/awp#rule/sam/payroll-income",
+            "version": "1",
+            "source": "https://paywell.example/#org",
+            "claimTypes": [
+              "income.*"
+            ],
+            "subjects": [
+              "https://sam.example/#me"
+            ],
+            "validUntil": "2027-11-13T09:00:00.000Z",
+            "framework": "Sam's own list: Sam's employer's payroll"
+          }
+        ]
+      },
+      "principal": "Sam",
+      "root": {
+        "id": "https://w3id.org/jeswr/awp#fixture/national-trust-root",
+        "name": "National trust root",
+        "delegates": [
+          {
+            "id": "https://w3id.org/jeswr/awp#fixture/sector-register",
+            "name": "Sector register",
+            "answersFor": "lenders",
+            "answerTtlMs": 86400000,
+            "entries": [
+              {
+                "party": "https://northbank.example/#org",
+                "authorizedFor": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                ],
+                "claimTypes": [
+                  "mortgage.decision-in-principle"
+                ],
+                "status": "authorized",
+                "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "northbank-intake": {
+      "data": {
+        "version": 1,
+        "owner": "https://northbank.example/#org",
+        "keys": [
+          {
+            "role": "party",
+            "subject": "https://northbank.example/#org",
+            "kid": "O0Uif6jTaQxVCopgl5eu-dy4uRUvx8SfCy5E-17NZj8",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "WyzVILTCovsEZCNnKPCPoCOt-wAhnsBd1K3czujkBnI"
+            },
+            "note": "local owner (pinned at provisioning)"
+          },
+          {
+            "role": "party",
+            "subject": "https://sam.example/#me",
+            "kid": "i04_wphUWMTweJspHVkwZbGZubNvmh9zr_aSBEiz6Yg",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "vaUbTT_9kE5qhIK9qYtCy4JvtX_3Ri1j9X17F-B_1mg"
+            },
+            "note": "pinned by introduction"
+          },
+          {
+            "role": "actor",
+            "subject": "https://agents.hostco.example/sam#agent",
+            "party": "https://sam.example/#me",
+            "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "3AyVc-BUMtZUCC51Woe6OutXgd1_n5sUUgWN_fALL8U"
+            },
+            "endpoints": [],
+            "note": "pinned by introduction"
+          },
+          {
+            "role": "issuer",
+            "subject": "https://paywell.example/#org",
+            "kid": "vVnBGZ9G8exNhe12g23GAvWkTmM6HOSdmAZ-kJSntbY",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "aZa7zBHRN6jmRBydX8_8T07-Sk2iR_Hel1zfk4eVgQQ"
+            },
+            "note": "synthetic issuer pinned at onboarding"
+          },
+          {
+            "role": "issuer",
+            "subject": "https://harbourbank.example/#org",
+            "kid": "Nvsi7qh2QBvAgmXy5UIvfOhDMK33PxeFJgU0anifewY",
+            "alg": "EdDSA",
+            "publicJwk": {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "x": "pM2dzLt3m-nQTK5QLg9iYs9dP07pajArtO4nb4xXfkQ"
+            },
+            "note": "synthetic issuer pinned at onboarding"
+          }
+        ],
+        "sourceAuthority": [
+          {
+            "id": "https://w3id.org/jeswr/awp#rule/nb/paywell-income",
+            "version": "1",
+            "source": "https://paywell.example/#org",
+            "claimTypes": [
+              "income.*"
+            ],
+            "subjects": "any",
+            "validUntil": "2027-11-13T09:00:00.000Z",
+            "framework": "North Bank source policy"
+          },
+          {
+            "id": "https://w3id.org/jeswr/awp#rule/nb/harbourbank-deposits",
+            "version": "1",
+            "source": "https://harbourbank.example/#org",
+            "claimTypes": [
+              "deposit.*"
+            ],
+            "subjects": "any",
+            "validUntil": "2027-11-13T09:00:00.000Z",
+            "framework": "North Bank source policy"
+          }
+        ]
+      },
+      "principal": "North Bank",
+      "root": {
+        "id": "https://w3id.org/jeswr/awp#fixture/national-trust-root",
+        "name": "National trust root",
+        "delegates": [
+          {
+            "id": "https://w3id.org/jeswr/awp#fixture/sector-register",
+            "name": "Sector register",
+            "answersFor": "lenders",
+            "answerTtlMs": 86400000,
+            "entries": [
+              {
+                "party": "https://northbank.example/#org",
+                "authorizedFor": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                ],
+                "claimTypes": [
+                  "mortgage.decision-in-principle"
+                ],
+                "status": "authorized",
+                "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "mandates": {
+    "sam": {
+      "type": "OwnerMandate",
+      "id": "urn:awp:mandate:f7152745cd24bc84478991af673e49ba:mortgage",
+      "version": 1,
+      "issuer": "https://sam.example/#me",
+      "subject": "https://agents.hostco.example/sam#agent",
+      "validFrom": "2026-11-13T08:59:00.000Z",
+      "validUntil": "2027-01-12T09:00:00.000Z",
+      "autonomous": {
+        "id": "urn:awp:policy:6e3170ea3768c354665f1cd392eb0a5a:mortgage/autonomous",
+        "type": "Set",
+        "assigner": "https://sam.example/#me",
+        "assignee": "https://agents.hostco.example/sam#agent",
+        "conflict": "prohibit",
+        "permissions": [
+          {
+            "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
+            "type": "permission",
+            "action": "use",
+            "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+            "constraints": [
+              {
+                "leftOperand": "purpose",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                ]
+              },
+              {
+                "leftOperand": "recipient",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://northbank.example/#org",
+                  "https://valleybank.example/#org"
+                ]
+              }
+            ]
+          }
+        ],
+        "prohibitions": []
+      },
+      "withApproval": {
+        "id": "urn:awp:policy:e617261e55aa48cbb777721a374deb63:mortgage/with-approval",
+        "type": "Set",
+        "assigner": "https://sam.example/#me",
+        "assignee": "https://agents.hostco.example/sam#agent",
+        "conflict": "prohibit",
+        "permissions": [
+          {
+            "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
+            "type": "permission",
+            "action": "distribute",
+            "target": "https://w3id.org/jeswr/awp#op/evidence-disclosure",
+            "constraints": [
+              {
+                "leftOperand": "purpose",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                ]
+              },
+              {
+                "leftOperand": "recipient",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://northbank.example/#org",
+                  "https://valleybank.example/#org"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "urn:awp:rule:1270726c4dc45d8bdbf48d2fe43490ab:fees-with-approval",
+            "type": "permission",
+            "action": "compensate",
+            "target": "https://w3id.org/jeswr/awp#op/payment",
+            "constraints": [
+              {
+                "leftOperand": "purpose",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                ]
+              },
+              {
+                "leftOperand": "recipient",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://northbank.example/#org"
+                ]
+              }
+            ]
+          }
+        ],
+        "prohibitions": []
+      },
+      "note": "Synthetic mortgage mandate (pilot subset)."
+    },
+    "northbank-intake": {
+      "type": "OwnerMandate",
+      "id": "urn:awp:mandate:5a2483307fd89c276e512ca45009d2d6:lender-intake",
+      "version": 1,
+      "issuer": "https://northbank.example/#org",
+      "subject": "https://northbank.example/agents/intake#agent",
+      "validFrom": "2026-11-13T08:59:00.000Z",
+      "validUntil": "2027-01-12T09:00:00.000Z",
+      "autonomous": {
+        "id": "urn:awp:policy:b3d35fe333f397655c9070b7209e8690:lender-intake/autonomous",
+        "type": "Set",
+        "assigner": "https://northbank.example/#org",
+        "assignee": "https://northbank.example/agents/intake#agent",
+        "conflict": "prohibit",
+        "permissions": [
+          {
+            "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
+            "type": "permission",
+            "action": "use",
+            "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+            "constraints": [
+              {
+                "leftOperand": "purpose",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "urn:awp:rule:ec966362aff0477440a45a00b64b0d0d:onward-underwriting",
+            "type": "permission",
+            "action": "distribute",
+            "target": "https://w3id.org/jeswr/awp#op/underwriting-check",
+            "constraints": [
+              {
+                "leftOperand": "purpose",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                ]
+              },
+              {
+                "leftOperand": "recipient",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://underwriter.example/#org"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "urn:awp:rule:9b89245457300fbac63f6e4e05b647ea:valuation-orders",
+            "type": "permission",
+            "action": "use",
+            "target": "https://w3id.org/jeswr/awp#op/valuation-order",
+            "constraints": [
+              {
+                "leftOperand": "purpose",
+                "operator": "isAnyOf",
+                "rightOperand": [
+                  "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                ]
+              }
+            ]
+          }
+        ],
+        "prohibitions": []
+      },
+      "withApproval": {
+        "id": "urn:awp:policy:ae1f00e5a97629eacfc710713b4541f5:lender-intake/with-approval",
+        "type": "Set",
+        "assigner": "https://northbank.example/#org",
+        "assignee": "https://northbank.example/agents/intake#agent",
+        "conflict": "prohibit",
+        "permissions": [],
+        "prohibitions": []
+      },
+      "note": "Synthetic lender-intake mandate (pilot subset)."
+    }
+  },
+  "settings": {
+    "sam": {
+      "agent": "sams-agent",
+      "principalLimits": {
+        "id": "https://w3id.org/jeswr/awp#limits/sam/retention",
+        "maxRetentionDays": 60
+      },
+      "configuration": {
+        "id": "baseline",
+        "pilotConfiguration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "layers": {
+          "transport": "direct-http",
+          "data-access": "by-value",
+          "identity": "pinned-key",
+          "meaning": "fixed-vocabulary",
+          "authority": "mandate-signed",
+          "authenticity": "jws",
+          "trust": "register-chain",
+          "reliance": "precedence-rules",
+          "usage-control": "odrl-rules",
+          "commitments": "signed-offer-acceptance",
+          "accountability": "local-ledger"
+        }
+      }
+    },
+    "northbank-intake": {
+      "agent": "lender",
+      "configuration": {
+        "id": "baseline",
+        "pilotConfiguration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "layers": {
+          "transport": "direct-http",
+          "data-access": "by-value",
+          "identity": "pinned-key",
+          "meaning": "fixed-vocabulary",
+          "authority": "mandate-signed",
+          "authenticity": "jws",
+          "trust": "register-chain",
+          "reliance": "precedence-rules",
+          "usage-control": "odrl-rules",
+          "commitments": "signed-offer-acceptance",
+          "accountability": "local-ledger"
+        }
+      }
+    }
+  },
+  "core": {
+    "sam": [
+      {
+        "description": {
+          "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+          "version": "0.1",
+          "label": "Mortgage prequalification with a bounded evidence request (synthetic)",
+          "pattern": "negotiate",
+          "access": "represented",
+          "roles": [
+            "initiator"
+          ],
+          "models": [
+            {
+              "id": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+              "version": "0.1"
+            }
+          ],
+          "purposes": [
+            "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+            "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+          ],
+          "effects": [
+            "evidence disclosed under agreed terms",
+            "indicative eligibility (not approval)"
+          ],
+          "outcomes": [
+            "application-state receipt: received / checked / decided"
+          ],
+          "limitations": [
+            "synthetic lender; indicative only; no credit decision or institutional approval"
+          ]
+        },
+        "requiresRepresentation": true,
+        "agreementDelivery": "acceptor",
+        "hooks": {
+          "intentForProposal": [
+            {
+              "result": {
+                "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "action": "use",
+                "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                "recipient": "https://northbank.example/#org",
+                "parameters": {
+                  "termsDigest": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59",
+                  "disclosed": [
+                    "propertyPrice",
+                    "loanAmount"
+                  ]
+                },
+                "conversation": "urn:awp:ref:sam:0001"
+              }
+            }
+          ],
+          "onProposal": [
+            {
+              "result": {
+                "type": "accept",
+                "intent": {
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "action": "distribute",
+                  "target": "https://w3id.org/jeswr/awp#op/evidence-disclosure",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                  "recipient": "https://northbank.example/#org",
+                  "parameters": {
+                    "termsDigest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b",
+                    "evidence": [
+                      "urn:awp:evidence:harbourbank-deposit-2026-10",
+                      "urn:awp:evidence:paywell-income-2026-10"
+                    ],
+                    "onward": [
+                      "https://underwriter.example/#org"
+                    ],
+                    "retentionDays": 90
+                  },
+                  "conversation": "urn:awp:ref:sam:0001"
+                }
+              }
+            }
+          ],
+          "onAgreement": [],
+          "onReceipt": []
+        }
+      }
+    ],
+    "northbank-intake": [
+      {
+        "description": {
+          "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+          "version": "0.1",
+          "label": "Mortgage prequalification with a bounded evidence request (synthetic)",
+          "pattern": "negotiate",
+          "access": "represented",
+          "roles": [
+            "responder"
+          ],
+          "models": [
+            {
+              "id": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+              "version": "0.1"
+            }
+          ],
+          "purposes": [
+            "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+            "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+          ],
+          "effects": [
+            "evidence disclosed under agreed terms",
+            "indicative eligibility (not approval)"
+          ],
+          "outcomes": [
+            "application-state receipt: received / checked / decided"
+          ],
+          "limitations": [
+            "synthetic lender; indicative only; no credit decision or institutional approval"
+          ]
+        },
+        "requiresRepresentation": true,
+        "agreementDelivery": "acceptor",
+        "hooks": {
+          "onProposal": [
+            {
+              "result": {
+                "type": "counter",
+                "terms": {
+                  "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+                  "modelVersion": "0.1",
+                  "application": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "applicationId": "urn:awp:ref:sam:0001#application",
+                  "evidenceRequest": [
+                    {
+                      "claimType": "income.gross.monthly-series",
+                      "periodMonths": 12,
+                      "currency": "USD"
+                    },
+                    {
+                      "claimType": "deposit.balance",
+                      "periodMonths": 1,
+                      "currency": "USD"
+                    }
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                  "recipients": [
+                    "https://northbank.example/#org"
+                  ],
+                  "onward": [
+                    {
+                      "recipient": "https://underwriter.example/#org",
+                      "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                      "fields": [
+                        "annualGrossIncome",
+                        "depositBalance"
+                      ]
+                    }
+                  ],
+                  "retentionDays": 90,
+                  "prohibitedPurposes": [
+                    "https://w3id.org/dpv#Marketing"
+                  ],
+                  "fee": {
+                    "amount": 0
+                  },
+                  "synthetic": true
+                },
+                "intent": {
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "action": "use",
+                  "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                  "recipient": "https://sam.example/#me",
+                  "parameters": {
+                    "termsDigest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b"
+                  },
+                  "conversation": "urn:awp:ref:sam:0001"
+                }
+              }
+            }
+          ],
+          "onAgreement": [],
+          "onDeliver": []
+        }
+      }
+    ]
+  },
+  "script": [
+    {
+      "id": "call-0",
+      "by": "sam",
+      "method": "instruct",
+      "at": "2026-11-13T09:00:00.000Z",
+      "step": 2,
+      "args": [
+        "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+      ]
+    },
+    {
+      "id": "call-1",
+      "by": "sam",
+      "method": "startNegotiation",
+      "at": "2026-11-13T09:00:00.000Z",
+      "step": 3,
+      "args": [
+        {
+          "peer": {
+            "actor": "https://northbank.example/agents/intake#agent",
+            "party": "https://northbank.example/#org"
+          },
+          "operation": {
+            "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+            "version": "0.1"
+          },
+          "terms": {
+            "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+            "propertyPrice": 450000,
+            "loanAmount": 380000,
+            "currency": "USD",
+            "applicant": "https://sam.example/#me",
+            "synthetic": true
+          },
+          "models": [
+            {
+              "id": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+              "version": "0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "call-2",
+      "by": "northbank-intake",
+      "method": "receive",
+      "at": "2026-11-13T09:00:00.000Z",
+      "step": 4,
+      "args": [
+        {
+          "$ref": "call-1.outbound.0.wire"
+        },
+        {
+          "binding": "direct-local/0.1"
+        }
+      ]
+    },
+    {
+      "id": "call-3",
+      "by": "sam",
+      "method": "receive",
+      "at": "2026-11-13T09:00:00.000Z",
+      "step": 4,
+      "args": [
+        {
+          "$ref": "call-2.outbound.0.wire"
+        },
+        {
+          "binding": "direct-local/0.1"
+        }
+      ]
+    },
+    {
+      "id": "call-4",
+      "by": "northbank-intake",
+      "method": "receive",
+      "at": "2026-11-13T09:00:00.000Z",
+      "step": 5,
+      "args": [
+        {
+          "$ref": "call-3.outbound.0.wire"
+        },
+        {
+          "binding": "direct-local/0.1"
+        }
+      ]
+    },
+    {
+      "id": "call-5",
+      "by": "sam",
+      "method": "admitStatements",
+      "at": "2026-11-13T09:00:00.000Z",
+      "step": 10,
+      "args": [
+        [
+          {
+            "jws": {
+              "$statement": "statement-0"
+            },
+            "statement": {
+              "type": "EvidenceStatement",
+              "subject": "https://sam.example/#me",
+              "version": 1,
+              "currency": "USD",
+              "synthetic": true,
+              "id": "urn:awp:evidence:paywell-income-2026-10",
+              "issuer": "https://paywell.example/#org",
+              "claimType": "income.gross.monthly-series",
+              "period": {
+                "start": "2025-11",
+                "end": "2026-10"
+              },
+              "monthly": [
+                {
+                  "month": "2025-11",
+                  "gross": 7500
+                },
+                {
+                  "month": "2025-12",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-01",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-02",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-03",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-04",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-05",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-06",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-07",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-08",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-09",
+                  "gross": 7500
+                },
+                {
+                  "month": "2026-10",
+                  "gross": 7500
+                }
+              ],
+              "issuedAt": "2026-11-02T09:00:00Z",
+              "method": "recorded-by-authority",
+              "terms": {
+                "policy": {
+                  "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
+                  "type": "Set",
+                  "assigner": "https://paywell.example/#org",
+                  "conflict": "prohibit",
+                  "permissions": [
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/paywell-income#use",
+                      "type": "permission",
+                      "action": "use",
+                      "target": "urn:awp:evidence:paywell-income-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "isAnyOf",
+                          "rightOperand": [
+                            "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                            "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/paywell-income#share",
+                      "type": "permission",
+                      "action": "distribute",
+                      "target": "urn:awp:evidence:paywell-income-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "isAnyOf",
+                          "rightOperand": [
+                            "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                            "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "obligations": [
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/paywell-income#delete",
+                      "action": "delete",
+                      "target": "urn:awp:evidence:paywell-income-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "elapsedTime",
+                          "operator": "lteq",
+                          "rightOperand": "P90D"
+                        }
+                      ]
+                    }
+                  ],
+                  "prohibitions": [
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/paywell-income#no-marketing",
+                      "type": "prohibition",
+                      "action": "use",
+                      "target": "urn:awp:evidence:paywell-income-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "isAnyOf",
+                          "rightOperand": [
+                            "https://w3id.org/dpv#Marketing"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "recipientMustBe": {
+                  "task": "mortgage lending",
+                  "label": "a regulated lender"
+                }
+              }
+            }
+          },
+          {
+            "jws": {
+              "$statement": "statement-1"
+            },
+            "statement": {
+              "type": "EvidenceStatement",
+              "subject": "https://sam.example/#me",
+              "version": 1,
+              "currency": "USD",
+              "synthetic": true,
+              "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
+              "issuer": "https://harbourbank.example/#org",
+              "claimType": "deposit.balance",
+              "period": {
+                "start": "2026-10",
+                "end": "2026-10"
+              },
+              "balance": 90000,
+              "asOf": "2026-10-31T23:59:59Z",
+              "issuedAt": "2026-11-01T09:00:00Z",
+              "method": "recorded-by-authority",
+              "terms": {
+                "policy": {
+                  "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
+                  "type": "Set",
+                  "assigner": "https://harbourbank.example/#org",
+                  "conflict": "prohibit",
+                  "permissions": [
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#use",
+                      "type": "permission",
+                      "action": "use",
+                      "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "isAnyOf",
+                          "rightOperand": [
+                            "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                            "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#share",
+                      "type": "permission",
+                      "action": "distribute",
+                      "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "isAnyOf",
+                          "rightOperand": [
+                            "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                            "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "obligations": [
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#delete",
+                      "action": "delete",
+                      "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "elapsedTime",
+                          "operator": "lteq",
+                          "rightOperand": "P90D"
+                        }
+                      ]
+                    }
+                  ],
+                  "prohibitions": [
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#no-marketing",
+                      "type": "prohibition",
+                      "action": "use",
+                      "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "isAnyOf",
+                          "rightOperand": [
+                            "https://w3id.org/dpv#Marketing"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "recipientMustBe": {
+                  "task": "mortgage lending",
+                  "label": "a regulated lender"
+                }
+              }
+            }
+          }
+        ],
+        {
+          "subject": "https://sam.example/#me",
+          "task": "a mortgage application",
+          "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+        }
+      ]
+    },
+    {
+      "id": "call-6",
+      "by": "sam",
+      "method": "receive",
+      "at": "2026-11-13T09:00:00.000Z",
+      "step": 11,
+      "args": [
+        {
+          "$ref": "call-4.outbound.0.wire"
+        },
+        {
+          "binding": "direct-local/0.1"
+        }
+      ]
+    },
+    {
+      "id": "call-7",
+      "by": "sam",
+      "method": "submitApproval",
+      "at": "2026-11-13T09:01:00.000Z",
+      "step": 11,
+      "args": [
+        {
+          "$statement": "statement-2"
+        }
+      ]
+    },
+    {
+      "id": "call-8",
+      "by": "northbank-intake",
+      "method": "receive",
+      "at": "2026-11-13T09:01:00.000Z",
+      "step": 11,
+      "args": [
+        {
+          "$ref": "call-7.outbound.0.wire"
+        },
+        {
+          "binding": "direct-local/0.1"
+        }
+      ]
+    },
+    {
+      "id": "call-9",
+      "by": "sam",
+      "method": "checkRecord",
+      "at": "2026-11-13T09:01:00.000Z",
+      "step": 14,
+      "args": []
+    },
+    {
+      "id": "call-10",
+      "by": "northbank-intake",
+      "method": "checkRecord",
+      "at": "2026-11-13T09:01:00.000Z",
+      "step": 14,
+      "args": []
+    }
+  ],
+  "inject": [],
+  "branches": [],
+  "expect": [
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "reason": "limit-exceeded"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "reason": "limit-exceeded"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "principal",
+      "kind": "ask-principal"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "approval-denied"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "established-earlier"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "steps": {
+    "2": "Sam asks for a mortgage in principle",
+    "3": "Sam's agent looks North Bank up before contacting it",
+    "4": "The agents describe themselves and Sam's agent applies",
+    "5": "North Bank says what evidence it needs",
+    "10": "Sam's agent checks the statements it holds",
+    "11": "Sam is asked, and the agent shares the evidence",
+    "14": "Each side checks its own record"
+  },
+  "labels": {
+    "urn:awp:evidence:paywell-income-2026-10": {
+      "claimLabel": "Paywell's record of your pay for the last 12 months"
+    },
+    "urn:awp:evidence:harbourbank-deposit-2026-10": {
+      "claimLabel": "Harbour Bank's balance at October 31, 2026"
+    }
+  },
+  "names": {
+    "https://mortgage-index.example/#org": "the mortgage product index",
+    "https://mortgage-index.example/agents/search#agent": "the index's agent",
+    "https://harbourbank.example/agents/statements#agent": "Harbour Bank's agent",
+    "https://id-provider.example/#org": "the identity provider",
+    "https://sam.example/#me": "Sam",
+    "https://agents.hostco.example/sam#agent": "Sam's agent",
+    "https://northbank.example/#org": "North Bank",
+    "https://northbank.example/agents/intake#agent": "North Bank's agent",
+    "https://paywell.example/#org": "Paywell",
+    "https://harbourbank.example/#org": "Harbour Bank",
+    "https://valuer.example/#org": "the valuer",
+    "https://underwriter.example/#org": "the underwriter",
+    "https://w3id.org/jeswr/awp#fixture/national-trust-root": "National trust root",
+    "https://valleybank.example/#org": "https://valleybank.example/#org"
+  },
+  "tasks": {
+    "https://w3id.org/jeswr/awp#op/mortgage-prequalification": "a mortgage application",
+    "https://w3id.org/jeswr/awp#op/evidence-disclosure": "https://w3id.org/jeswr/awp#op/evidence-disclosure"
+  },
+  "statements": [
+    {
+      "id": "statement-0",
+      "key": "paywell/issuer",
+      "typ": "awp-statement+jws",
+      "value": {
+        "type": "EvidenceStatement",
+        "subject": "https://sam.example/#me",
+        "version": 1,
+        "currency": "USD",
+        "synthetic": true,
+        "id": "urn:awp:evidence:paywell-income-2026-10",
+        "issuer": "https://paywell.example/#org",
+        "claimType": "income.gross.monthly-series",
+        "period": {
+          "start": "2025-11",
+          "end": "2026-10"
+        },
+        "monthly": [
+          {
+            "month": "2025-11",
+            "gross": 7500
+          },
+          {
+            "month": "2025-12",
+            "gross": 7500
+          },
+          {
+            "month": "2026-01",
+            "gross": 7500
+          },
+          {
+            "month": "2026-02",
+            "gross": 7500
+          },
+          {
+            "month": "2026-03",
+            "gross": 7500
+          },
+          {
+            "month": "2026-04",
+            "gross": 7500
+          },
+          {
+            "month": "2026-05",
+            "gross": 7500
+          },
+          {
+            "month": "2026-06",
+            "gross": 7500
+          },
+          {
+            "month": "2026-07",
+            "gross": 7500
+          },
+          {
+            "month": "2026-08",
+            "gross": 7500
+          },
+          {
+            "month": "2026-09",
+            "gross": 7500
+          },
+          {
+            "month": "2026-10",
+            "gross": 7500
+          }
+        ],
+        "issuedAt": "2026-11-02T09:00:00Z",
+        "method": "recorded-by-authority",
+        "terms": {
+          "policy": {
+            "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
+            "type": "Set",
+            "assigner": "https://paywell.example/#org",
+            "conflict": "prohibit",
+            "permissions": [
+              {
+                "id": "https://w3id.org/jeswr/awp#terms/paywell-income#use",
+                "type": "permission",
+                "action": "use",
+                "target": "urn:awp:evidence:paywell-income-2026-10",
+                "constraints": [
+                  {
+                    "leftOperand": "purpose",
+                    "operator": "isAnyOf",
+                    "rightOperand": [
+                      "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                      "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "https://w3id.org/jeswr/awp#terms/paywell-income#share",
+                "type": "permission",
+                "action": "distribute",
+                "target": "urn:awp:evidence:paywell-income-2026-10",
+                "constraints": [
+                  {
+                    "leftOperand": "purpose",
+                    "operator": "isAnyOf",
+                    "rightOperand": [
+                      "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                      "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                    ]
+                  }
+                ]
+              }
+            ],
+            "obligations": [
+              {
+                "id": "https://w3id.org/jeswr/awp#terms/paywell-income#delete",
+                "action": "delete",
+                "target": "urn:awp:evidence:paywell-income-2026-10",
+                "constraints": [
+                  {
+                    "leftOperand": "elapsedTime",
+                    "operator": "lteq",
+                    "rightOperand": "P90D"
+                  }
+                ]
+              }
+            ],
+            "prohibitions": [
+              {
+                "id": "https://w3id.org/jeswr/awp#terms/paywell-income#no-marketing",
+                "type": "prohibition",
+                "action": "use",
+                "target": "urn:awp:evidence:paywell-income-2026-10",
+                "constraints": [
+                  {
+                    "leftOperand": "purpose",
+                    "operator": "isAnyOf",
+                    "rightOperand": [
+                      "https://w3id.org/dpv#Marketing"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "recipientMustBe": {
+            "task": "mortgage lending",
+            "label": "a regulated lender"
+          }
+        }
+      }
+    },
+    {
+      "id": "statement-1",
+      "key": "harbourbank/issuer",
+      "typ": "awp-statement+jws",
+      "value": {
+        "type": "EvidenceStatement",
+        "subject": "https://sam.example/#me",
+        "version": 1,
+        "currency": "USD",
+        "synthetic": true,
+        "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
+        "issuer": "https://harbourbank.example/#org",
+        "claimType": "deposit.balance",
+        "period": {
+          "start": "2026-10",
+          "end": "2026-10"
+        },
+        "balance": 90000,
+        "asOf": "2026-10-31T23:59:59Z",
+        "issuedAt": "2026-11-01T09:00:00Z",
+        "method": "recorded-by-authority",
+        "terms": {
+          "policy": {
+            "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
+            "type": "Set",
+            "assigner": "https://harbourbank.example/#org",
+            "conflict": "prohibit",
+            "permissions": [
+              {
+                "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#use",
+                "type": "permission",
+                "action": "use",
+                "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                "constraints": [
+                  {
+                    "leftOperand": "purpose",
+                    "operator": "isAnyOf",
+                    "rightOperand": [
+                      "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                      "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#share",
+                "type": "permission",
+                "action": "distribute",
+                "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                "constraints": [
+                  {
+                    "leftOperand": "purpose",
+                    "operator": "isAnyOf",
+                    "rightOperand": [
+                      "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                      "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                    ]
+                  }
+                ]
+              }
+            ],
+            "obligations": [
+              {
+                "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#delete",
+                "action": "delete",
+                "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                "constraints": [
+                  {
+                    "leftOperand": "elapsedTime",
+                    "operator": "lteq",
+                    "rightOperand": "P90D"
+                  }
+                ]
+              }
+            ],
+            "prohibitions": [
+              {
+                "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#no-marketing",
+                "type": "prohibition",
+                "action": "use",
+                "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                "constraints": [
+                  {
+                    "leftOperand": "purpose",
+                    "operator": "isAnyOf",
+                    "rightOperand": [
+                      "https://w3id.org/dpv#Marketing"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "recipientMustBe": {
+            "task": "mortgage lending",
+            "label": "a regulated lender"
+          }
+        }
+      }
+    },
+    {
+      "id": "statement-2",
+      "key": "sam/owner",
+      "typ": "awp-approval+jws",
+      "value": {
+        "type": "OwnerApproval",
+        "id": "urn:awp:ref:sam-approval:0001",
+        "issuer": "https://sam.example/#me",
+        "actor": "https://agents.hostco.example/sam#agent",
+        "actionDigest": "sha-256:6c4c29282271176ef971b39c3e51a87b17743636ab0e81b1c8a7fda2e2babc2b",
+        "conversation": "urn:awp:ref:sam:0001",
+        "decision": "deny",
+        "issuedAt": "2026-11-13T09:01:00.000Z",
+        "validUntil": "2026-11-13T10:01:00.000Z",
+        "note": "No. Three months is too long; lenders can keep my data for 60 days at most."
+      }
+    }
+  ],
+  "stepLabels": []
+}
