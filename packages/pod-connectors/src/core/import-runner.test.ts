@@ -105,7 +105,13 @@ describe("runImport (demo mode, memory pod)", () => {
     expect(second.written).toHaveLength(1);
     const ds = pod.dataset(second.written[0].url);
     // Still exactly one song subject — overwritten, not appended.
-    expect([...ds].filter((q) => q.predicate.value.endsWith("/name"))).toHaveLength(1);
+    expect(
+      ds.match(
+        null,
+        DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+        DataFactory.namedNode(CLASSES.MusicRecording),
+      ).size,
+    ).toBe(1);
   });
 
   it("refuses live mode without a token", async () => {

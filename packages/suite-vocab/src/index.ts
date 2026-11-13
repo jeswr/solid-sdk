@@ -2,6 +2,7 @@
 
 /** Canonical suite and standard namespace bases. These constants never build RDF. */
 export const NS = {
+  SUITE: "https://jeswr.org/ns/suite#",
   CORE: "https://jeswr.org/ns/core#",
   TASK: "https://jeswr.org/ns/task#",
   FED: "https://jeswr.org/ns/fed#",
@@ -75,6 +76,12 @@ export const NS = {
   DPV: "https://w3id.org/dpv#",
   DID: "https://www.w3.org/ns/did#",
   GUFO: "http://purl.org/nemo/gufo#",
+} as const;
+
+/** Suite-owned software agent for fixture imports; never denotes a live source or user. */
+export const DEMO_CONNECTOR = {
+  iri: `${NS.SUITE}demo-connector`,
+  label: "Demo data",
 } as const;
 
 /** Read-only aliases. Writers use NS; schema.org always canonicalizes to HTTPS. */

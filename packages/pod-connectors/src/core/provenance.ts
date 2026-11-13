@@ -14,6 +14,14 @@ import { PodThing, safeIri } from "./vocab.js";
 export const PROV = "http://www.w3.org/ns/prov#";
 /** Typed PROV accessors shared by the runners and shape tests. */
 export class Provenance extends PodThing {
+  get attributedTo(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      `${PROV}wasAttributedTo`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
   get derivedFrom(): Set<string> {
     return SetFrom.subjectPredicate(
       this,

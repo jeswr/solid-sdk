@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import {
   createRegistry,
@@ -22,6 +23,7 @@ import {
 } from "../src/apps/home/components/connect/import-service";
 import { withRequiredScopes, withSelectedScopes } from "../src/apps/home/components/connect/scopes";
 import { isDemoImport } from "../src/apps/home/lib/connect";
+import { DEMO_CONNECTOR } from "../src/apps/home/lib/connect/catalogue";
 import {
   type ConnectionAction,
   connectionReducer,
@@ -194,7 +196,12 @@ describe("Connect uses the real package writer against the suite demo pod", () =
     const adapter = createRegistry().adapterById("spotify");
     if (!adapter) throw new Error("Spotify adapter missing");
     const writer = () => createImportWriter(session, "spotify", new AbortController().signal);
-    const first = await runImport({ adapter, mode: "demo", podWriter: writer() });
+    const first = await runImport({
+      adapter,
+      mode: "demo",
+      demoAgent: DEMO_CONNECTOR,
+      podWriter: writer(),
+    });
     expect(first.state?.counts.items).toBe(25);
     expect(first.written.length).toBe(10);
     const counts = first.state?.counts;
@@ -210,10 +217,32 @@ describe("Connect uses the real package writer against the suite demo pod", () =
         ds.countQuads(null, DataFactory.namedNode(`${NS.PROV}wasDerivedFrom`), null, null),
       ).toBeGreaterThan(0);
       expect(
-        provenanceOf(ds, url, url, { storage: DEMO_ROOT, userWebId: DEMO_WEBID }),
+        provenanceOf(ds, url, url, { storage: DEMO_ROOT, userWebId: DEMO_WEBID, documentUrl: url }),
       ).toMatchObject({ kind: "source", label: "Spotify" });
+      const subjects = new Set(
+        [...ds]
+          .map((quad) => quad.subject.value)
+          .filter(
+            (subject) => subject.startsWith(`${DEMO_ROOT}integrations/spotify/`) && subject !== url,
+          ),
+      );
+      expect(subjects.size).toBeGreaterThan(0);
+      for (const subject of subjects) {
+        expect(
+          provenanceOf(ds, subject, url, {
+            storage: DEMO_ROOT,
+            userWebId: DEMO_WEBID,
+            documentUrl: url,
+          }),
+        ).toMatchObject({ demo: true });
+      }
     }
-    const second = await runImport({ adapter, mode: "demo", podWriter: writer() });
+    const second = await runImport({
+      adapter,
+      mode: "demo",
+      demoAgent: DEMO_CONNECTOR,
+      podWriter: writer(),
+    });
     expect(second.written.map(({ url }) => url).sort()).toEqual(urls);
     expect(second.state?.counts).toEqual(counts);
     expect(
@@ -436,6 +465,7 @@ describe("saved import transactions", () => {
               mode === "demo" ? source.adapter.metadata.scopes : ["user-read-recently-played"],
             ),
             mode,
+            ...(mode === "demo" ? { demoAgent: DEMO_CONNECTOR } : {}),
             sourceAuth: { fetch: transport },
             ...(cursor ? { cursor } : {}),
             podWriter: createImportWriter(

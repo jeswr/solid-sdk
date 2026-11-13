@@ -40,7 +40,19 @@ export function createImportSession(
   source: string,
   options: ImportSessionOptions,
   vocabMap?: VocabMap,
+  attribution?: { readonly iri: string; readonly label: string },
 ) {
+  if (attribution) {
+    attribution = { iri: attribution.iri, label: attribution.label };
+    const iri = safeIri(attribution.iri);
+    if (!iri || !/^https:\/\/[^/?#]/i.test(iri))
+      throw new IntegrationSyncError(id, "Demo agent must use an absolute HTTPS IRI.");
+    const url = new URL(iri);
+    if (url.username || url.password)
+      throw new IntegrationSyncError(id, "Demo agent IRI must not contain credentials.");
+    if (typeof attribution.label !== "string" || !attribution.label.trim())
+      throw new IntegrationSyncError(id, "Demo agent must have a nonblank label.");
+  }
   const requestedSources = options.maxRunSources ?? MAX_RUN_SOURCES;
   if (!Number.isSafeInteger(requestedSources) || requestedSources < 1)
     throw new RangeError("Run provenance source limit must be a positive safe integer.");
@@ -119,6 +131,7 @@ export function createImportSession(
     document.derivedFrom.add(fallback);
     document.generatedBy.clear();
     document.generatedBy.add(activityUrl);
+    let marked = false;
     for (const subject of subjects) {
       // Linked identities keep their typing, but were not created by this import.
       if (!subject.startsWith(connectorRoot)) continue;
@@ -128,8 +141,14 @@ export function createImportSession(
       document.derivedFrom.add(origin);
       item.generatedBy.clear();
       item.generatedBy.add(activityUrl);
+      if (attribution && subject !== url && !carried.has(subject)) {
+        item.attributedTo.add(attribution.iri);
+        marked = true;
+      }
       if (used.size < maxRunSources) used.add(origin);
     }
+    if (attribution && marked)
+      new Provenance(attribution.iri, dataset, DataFactory).name = attribution.label;
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
     let registered = result;
     if (doc.registrationContainer !== undefined) {
