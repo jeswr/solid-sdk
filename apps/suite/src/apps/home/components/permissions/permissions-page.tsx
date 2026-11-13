@@ -114,6 +114,15 @@ export function RequestsLink({ pending = 0 }: { pending?: number }) {
   );
 }
 
+/** Answered requests and the approvals still in place; a route beside Requests. */
+export function HistoryLink() {
+  return (
+    <Link className="hm-permission-requests" href="/permissions/history">
+      History
+    </Link>
+  );
+}
+
 /** The Requests link with the live pending count; mounted only when requests are available. */
 function PendingRequestsLink() {
   // Unreadable inbox items can't be answered, so they are never counted as pending.
@@ -141,6 +150,7 @@ export function PermissionsPage() {
             <TabsTrigger value="apps">Apps</TabsTrigger>
           </TabsList>
           {caps.accessRequests && <PendingRequestsLink />}
+          {caps.accessRequests && <HistoryLink />}
           <Input
             className="hm-permission-search"
             aria-label="Search permissions"

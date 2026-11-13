@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import {
@@ -5,7 +6,6 @@ import {
   classifyIpLiteral,
   DEFAULT_HOSTNAME_DENYLIST,
   isDeniedHostname,
-  isPublicAddress,
   isWithinPodScope,
   normalizeHostForClassification,
 } from "@jeswr/guarded-fetch";
@@ -34,13 +34,37 @@ export function httpUrl(url: string): string {
   return url;
 }
 
+/** Agent-class vocabularies: an IRI in these names everyone (or every signed-in agent), not one agent. */
+const AGENT_CLASS_PREFIXES: readonly string[] = Object.freeze([
+  "http://www.w3.org/ns/solid/acp#",
+  "http://www.w3.org/ns/auth/acl#",
+  "http://xmlns.com/foaf/0.1/Agent",
+]);
+
+/**
+ * A requester WebID: a safe HTTP(S) IRI that is not an access-control agent class such as
+ * `acp:PublicAgent`, `acp:AuthenticatedAgent`, `acl:AuthenticatedAgent` or `foaf:Agent`, which a
+ * grant would turn into public or any-signed-in-agent access.
+ */
+export function agentUrl(url: string): string {
+  httpUrl(url);
+  if (AGENT_CLASS_PREFIXES.some((prefix) => url.startsWith(prefix)))
+    throw new TypeError("An agent class can't be an access requester");
+  return url;
+}
+
 /** Names that resolve to the local machine or network; IP literals are classified separately. */
 const LOCAL_NAMES: readonly string[] = Object.freeze([
   ...DEFAULT_HOSTNAME_DENYLIST,
   "localhost",
   ".localhost",
   ".local",
+  ".lan",
   ".home.arpa",
+  ".internal",
+  ".intranet",
+  ".corp",
+  ".home",
 ]);
 
 /**
@@ -54,9 +78,10 @@ export function publicHttpsUrl(url: string): string {
   if (parsed.protocol !== "https:") throw new TypeError("Requester URLs must use HTTPS");
   const host = normalizeHostForClassification(parsed.hostname);
   const local =
-    classifyIpLiteral(host) === 0
-      ? isDeniedHostname(host, LOCAL_NAMES)
-      : !isPublicAddress(host, false);
+    classifyIpLiteral(host) !== 0 ||
+    !host.includes(".") ||
+    host.split(".").some((label) => label.length === 0) ||
+    isDeniedHostname(host, LOCAL_NAMES);
   if (local) throw new TypeError("Requester URL is not on the public web");
   return url;
 }

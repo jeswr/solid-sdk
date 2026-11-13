@@ -15,7 +15,7 @@
     "rdf": "@jeswr/fetch-rdf + @solid/object + @rdfjs/wrapper + @jeswr/solid-odrl + n3",
     "test": "vitest",
     "lint": "biome",
-    "deploy": "GitHub Pages: https://jeswr.github.io/solid-sdk/access-manager/; Vercel git deployments disabled"
+    "deploy": "GitHub Pages: https://jeswr.github.io/solid-sdk/access-manager/ (redirects to Solid Suite Permissions; still serves clientid.jsonld); Vercel git deployments disabled"
   },
   "dependsOn": [
     "full-solid-ecosystem",
@@ -24,7 +24,7 @@
     "solid-session-restore",
     "solid-odrl"
   ],
-  "notes": "Phase 1 (P2 of full-solid-ecosystem docs/design/access-management-proposal.md @ 8a069f4): standalone owner console over EXISTING pod surfaces — grant dashboard (by-resource/by-agent), revoke/edit with If-Match CAS, data-class view via type indexes, ODRL access-request inbox, client-side CAS-pinned approve/deny pipeline with deterministic grantIds + DPV consent receipts. It AUTHORS ACLs — security-critical; every ACL write goes through @solid/object typed accessors, never hand-built triples.",
+  "notes": "Moved: Access Manager now lives in Solid Suite Permissions (apps/suite /permissions: requests inbox with preview-pinned approve/deny, History with revoking of active approvals, grant dashboard). The app entry point redirects there (VITE_SUITE_URL, default https://solid-suite.vercel.app/permissions); public/clientid.jsonld is still served unchanged so existing Client ID references keep resolving, and ?demo still renders the read-only demo. Before the move \u2014 Phase 1 (P2 of full-solid-ecosystem docs/design/access-management-proposal.md @ 8a069f4): standalone owner console over EXISTING pod surfaces \u2014 grant dashboard (by-resource/by-agent), revoke/edit with If-Match CAS, data-class view via type indexes, ODRL access-request inbox, client-side CAS-pinned approve/deny pipeline with deterministic grantIds + DPV consent receipts. It AUTHORS ACLs \u2014 security-critical; every ACL write goes through @solid/object typed accessors, never hand-built triples.",
   "status": {
     "generatedAt": "2026-07-03T05:14:30.562Z",
     "commit": "15b8b5edeeb80af8a93855a8f4ed24e1a4f3356e",

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // The grant dashboard: BY-RESOURCE ("what is shared, with whom, which modes")
@@ -6,9 +7,12 @@
 // agent, downgrade modes, remove public) are optimistic + If-Match-guarded —
 // the CAS retry loop lives in the lib; a lost conflict reverts and surfaces.
 
+import type { DatasetCore } from "@rdfjs/types";
 import { useMemo, useState } from "react";
 import { useSession } from "../auth/SessionContext.js";
 import {
+  type AclEntry,
+  projectEntries,
   removeAgentFromEntry,
   removeAuthenticatedFromEntry,
   removePublicFromEntry,
@@ -32,6 +36,19 @@ function lineKey(url: string, line: ShareLine): string {
   return `${url}|${line.authIri}|${line.agent}`;
 }
 
+// RDF blank-node labels are local to one parse. Match a displayed blank-node row
+// by its complete projected shape after re-reading, refusing changed/ambiguous rows.
+function entryShape(entry: AclEntry): string {
+  return JSON.stringify([
+    [...entry.agents].sort(),
+    entry.isPublic,
+    entry.isAuthenticated,
+    [...entry.modes].sort(),
+    [...entry.accessTo].sort(),
+    [...entry.defaultFor].sort(),
+  ]);
+}
+
 export function DashboardView({
   nodes,
   storageRoot,
@@ -53,6 +70,19 @@ export function DashboardView({
   const resources = useMemo(() => byResource(nodes, session.webId), [nodes, session.webId]);
   const agents = useMemo(() => byAgent(nodes, session.webId), [nodes, session.webId]);
 
+  const currentAuthorization = (url: string, line: ShareLine, dataset: DatasetCore): string => {
+    if (!line.authIri.startsWith("_:")) return line.authIri;
+    const original = nodes
+      .find((node) => node.url === url)
+      ?.entries.find((entry) => entry.authIri === line.authIri);
+    const matches = original
+      ? projectEntries(dataset).filter((entry) => entryShape(entry) === entryShape(original))
+      : [];
+    if (matches.length !== 1 || !matches[0])
+      throw new Error("This access entry changed; refresh before editing it.");
+    return matches[0].authIri;
+  };
+
   const revokeLine = (url: string, line: ShareLine, aclUrl: string | undefined) => {
     if (!aclUrl) return;
     const key = lineKey(url, line);
@@ -66,12 +96,13 @@ export function DashboardView({
         }),
       persist: async () => {
         await updateAclWithRetry(aclUrl, session.fetch, (dataset) => {
+          const authIri = currentAuthorization(url, line, dataset);
           if (line.agent === PUBLIC_AGENT) {
-            removePublicFromEntry(dataset, line.authIri, session.webId, url);
+            removePublicFromEntry(dataset, authIri, session.webId, url);
           } else if (line.agent === AUTHENTICATED_AGENT) {
-            removeAuthenticatedFromEntry(dataset, line.authIri, session.webId, url);
+            removeAuthenticatedFromEntry(dataset, authIri, session.webId, url);
           } else {
-            removeAgentFromEntry(dataset, line.authIri, line.agent, session.webId, url);
+            removeAgentFromEntry(dataset, authIri, line.agent, session.webId, url);
           }
         });
         onChanged();
@@ -92,7 +123,15 @@ export function DashboardView({
         }),
       persist: async () => {
         await updateAclWithRetry(aclUrl, session.fetch, (dataset) => {
-          setAgentModes(dataset, aclUrl, line.authIri, line.agent, ["Read"], session.webId, url);
+          setAgentModes(
+            dataset,
+            aclUrl,
+            currentAuthorization(url, line, dataset),
+            line.agent,
+            ["Read"],
+            session.webId,
+            url,
+          );
         });
         onChanged();
       },
@@ -117,7 +156,7 @@ export function DashboardView({
         {showResource ? (
           <span className="resource-name">{resourceLabel(url, storageRoot)}</span>
         ) : (
-          <AgentLabel agent={line.agent} fetchFn={session.fetch} />
+          <AgentLabel agent={line.agent} />
         )}
         <ModeBadges modes={modes} />
         {line.inherited ? (
@@ -199,7 +238,7 @@ export function DashboardView({
           {agents.map((a) => (
             <li key={a.agent} className="agent-holding">
               <div className="agent-head">
-                <AgentLabel agent={a.agent} fetchFn={session.fetch} />
+                <AgentLabel agent={a.agent} />
                 <span className="count">{a.resources.length} resource(s)</span>
               </div>
               <ul className="share-lines">

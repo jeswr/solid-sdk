@@ -8,7 +8,7 @@
  * counts the Home model doesn't know.
  */
 
-import type { RequestDecision } from "@jeswr/pod-access/requests-solid";
+import type { DecisionPreview, RequestDecision } from "@jeswr/pod-access/requests-solid";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +33,7 @@ import {
   type SharingDuration,
   toast,
 } from "@jeswr/suite-ui";
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { type DurationSelection, expiresAtFor, initialDuration } from "../../lib/requests/duration";
 import {
   ADD_ONLY_TEXT,
@@ -55,6 +55,7 @@ import {
   selectedDataTypes,
 } from "../../lib/requests/model";
 import { useCardSummaries, useRequestCaps, useRequests } from "../../state/requests";
+import { PreviewPanel } from "./decision-preview";
 
 export const EXPIRY_UNAVAILABLE = "Expiring access isn't available on this storage";
 /** Shown once an approval failed: it may already be pinned, so its choices can't change. */
@@ -74,6 +75,11 @@ const RECORDED =
 export const RECORDED_TEXT = `${RECORDED}, or deny it.`;
 /** RECORDED_TEXT once denying was refused for good. */
 export const RECORDED_ONLY_TEXT = `${RECORDED}.`;
+
+export const SHARE_PREVIEW_TITLE = "What you'll share";
+export const FINISH_PREVIEW_TITLE = "What finishing will share";
+/** A preview went stale while it was being read: reading it again can succeed. */
+const NOT_CHECKED = "What this would share couldn't be checked. Check again.";
 
 export type ReviewOutcome = "approved" | "denied" | "already-decided" | "dismissed";
 
@@ -162,6 +168,27 @@ type PinnedChoices = "frozen" | "recorded";
 
 type ShownError = Extract<ReviewError, { kind: "error" }> & { attempt: Attempt };
 
+/**
+ * The approval the sheet's approve button would send. Its preview is read before the button is
+ * enabled and is cached under `key`, so an expiry is computed once and the decision sent is
+ * exactly the one previewed.
+ */
+interface ApprovalPlan {
+  key: string;
+  build(): FrozenApproval | undefined;
+}
+
+/** A preview read for one plan and check; the decision is sent with it as the expected pin. */
+interface CheckedApproval {
+  key: string;
+  check: number;
+  approval: FrozenApproval | undefined;
+  decision: RequestDecision;
+  preview?: DecisionPreview;
+  error?: string;
+  retry?: boolean;
+}
+
 function DenyButton({
   name,
   label,
@@ -225,6 +252,11 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
   const [denyOnly, setDenyOnly] = useState(false);
   // Denying was refused for good (e.g. approving already started): Deny isn't offered again.
   const [denyRefused, setDenyRefused] = useState(false);
+  // Bumped to read the preview again: after a failed approval, or when the owner asks.
+  const [check, setCheck] = useState(0);
+  const [checked, setChecked] = useState<CheckedApproval>();
+  // The preview the owner confirmed before decide found the access had changed.
+  const [previous, setPrevious] = useState<{ key: string; preview: DecisionPreview }>();
   const done = useRef(false);
   // One decision at a time, even for clicks that land before the disabled state renders.
   const busy = useRef(false);
@@ -237,32 +269,90 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
     done.current = true;
     onDone(outcome);
   };
+  // The choices can't change once an approval failed or is known to be pinned.
+  const fixed = frozen !== undefined || pinned !== undefined;
+  const shareTypes = selectedDataTypes(cards, selected);
+  // A choice-less finish resumes the pinned decision exactly as it was recorded; the frozen
+  // choices are accepted only if they match the pin, so what the cards show is what is applied.
+  let plan: ApprovalPlan | undefined;
+  if (denyOnly) plan = undefined;
+  else if (!finishing && !fixed) {
+    if (shareTypes.length && expiresAt !== null)
+      plan = {
+        key: JSON.stringify(["share", shareTypes, caps.grantExpiry ? duration : null]),
+        build: () => {
+          const sentExpiry = caps.grantExpiry ? expiresAtFor(duration, new Date()) : undefined;
+          return {
+            decision: {
+              approve: true,
+              dataTypes: shareTypes,
+              ...(sentExpiry ? { expiresAt: sentExpiry } : {}),
+            },
+            selected: [...selected],
+            retry: true,
+          };
+        },
+      };
+  } else if (finishing || pinned) {
+    if (!finishRefused)
+      plan =
+        pinned === "frozen" && frozen
+          ? { key: "finish-frozen", build: () => frozen }
+          : { key: "finish", build: () => undefined };
+  } else if (frozen?.retry) plan = { key: "retry", build: () => frozen };
+  const planKey = plan?.key;
+  const current =
+    plan && checked && checked.key === planKey && checked.check === check ? checked : undefined;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the plan key and check are the identity.
+  useEffect(() => {
+    if (!plan) return;
+    const controller = new AbortController();
+    const approval = plan.build();
+    const decision: RequestDecision = approval ? approval.decision : { approve: true };
+    const base = { key: plan.key, check, approval, decision };
+    requests.preview(entry, decision, controller.signal).then(
+      (preview) => {
+        if (!controller.signal.aborted) setChecked({ ...base, preview });
+      },
+      (caught: unknown) => {
+        if (controller.signal.aborted) return;
+        const failure = reviewError(caught, true, navigator.onLine);
+        if (failure.kind === "conflict") {
+          toast.info("This request was already decided");
+          finish("already-decided");
+          return;
+        }
+        if (failure.kind === "preview-changed") {
+          setChecked({ ...base, error: NOT_CHECKED, retry: true });
+          return;
+        }
+        // The same refusals decide() would hit: the actions left change the same way.
+        if (failure.finish) setPinned((value) => value ?? "recorded");
+        if (failure.deny) setDenyOnly(true);
+        setChecked({ ...base, error: failure.message, retry: failure.retry });
+      },
+    );
+    return () => controller.abort();
+  }, [planKey, check]);
+
   const run = async (attempt: Attempt) => {
     if (busy.current) return;
     let approval: FrozenApproval | undefined;
-    if (attempt === "retry" || (attempt === "finish" && pinned === "frozen")) approval = frozen;
-    else if (attempt === "share") {
-      const sentExpiry = expiresAt ?? undefined;
-      approval = {
-        decision: {
-          approve: true,
-          dataTypes: selectedDataTypes(cards, selected),
-          ...(sentExpiry ? { expiresAt: sentExpiry } : {}),
-        },
-        selected: [...selected],
-        retry: true,
-      };
+    let decision: RequestDecision = { approve: false };
+    let expected: DecisionPreview | undefined;
+    if (attempt !== "deny") {
+      // Only the decision that was previewed is ever sent, pinned to that preview.
+      if (!current?.preview) return;
+      approval = current.approval;
+      decision = current.decision;
+      expected = current.preview;
     }
-    if (attempt === "retry" && !approval) return;
-    // A choice-less finish resumes the pinned decision exactly as it was recorded; the frozen
-    // choices are accepted only if they match the pin, so what the cards show is what is applied.
-    const decision: RequestDecision =
-      attempt === "deny" ? { approve: false } : approval ? approval.decision : { approve: true };
     busy.current = true;
     setSaving(true);
     setError(undefined);
     try {
-      const result = await requests.decide(entry, decision);
+      const result = await requests.decide(entry, decision, expected);
       let message =
         attempt === "deny"
           ? deniedMessage(name, result.notified)
@@ -282,6 +372,15 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
         finish("already-decided");
         return;
       }
+      if (failure.kind === "preview-changed") {
+        // Nothing was written: show what changed and ask again with a fresh preview.
+        if (expected && current) setPrevious({ key: current.key, preview: expected });
+        setCheck((value) => value + 1);
+        busy.current = false;
+        setSaving(false);
+        return;
+      }
+      if (attempt !== "deny") setCheck((value) => value + 1);
       if (approval) setFrozen({ ...approval, retry: failure.retry });
       // A pin refused while sending choices holds other choices. A refused denial may have hit
       // this sheet's own frozen approval, if it could have pinned; finishing then resends it.
@@ -299,8 +398,6 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
   const allChecked = shareable.length > 0 && chosen.length === shareable.length;
   // The pinned choices aren't known here: show no cards, as for an interrupted approval.
   const unknownChoices = finishing || pinned === "recorded";
-  // The choices can't change once an approval failed or is known to be pinned.
-  const fixed = frozen !== undefined || pinned !== undefined;
   const locked = saving || fixed;
   const durationProps = !caps.grantExpiry
     ? { disabled: true as const, reason: EXPIRY_UNAVAILABLE }
@@ -381,6 +478,15 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
             />
           </>
         )}
+        {plan && (
+          <PreviewPanel
+            title={finishing || pinned ? FINISH_PREVIEW_TITLE : SHARE_PREVIEW_TITLE}
+            preview={current?.preview}
+            error={current?.error}
+            onRetry={current?.retry ? () => setCheck((value) => value + 1) : undefined}
+            previous={previous && previous.key === planKey ? previous.preview : undefined}
+          />
+        )}
         {error && (
           <ErrorState
             key={error.message}
@@ -406,9 +512,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
               />
               <Button
                 variant="outline"
-                disabled={
-                  saving || selectedDataTypes(cards, selected).length === 0 || expiresAt === null
-                }
+                disabled={saving || !current?.preview}
                 aria-busy={saving || undefined}
                 onClick={() => void run("share")}
               >
@@ -432,7 +536,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
               {denyOnly ? null : finishing || pinned ? (
                 <Button
                   variant="outline"
-                  disabled={saving || finishRefused}
+                  disabled={saving || finishRefused || !current?.preview}
                   aria-busy={saving || undefined}
                   onClick={() => void run("finish")}
                 >
@@ -441,7 +545,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
               ) : (
                 <Button
                   variant="outline"
-                  disabled={saving || frozen?.retry === false}
+                  disabled={saving || frozen?.retry === false || !current?.preview}
                   aria-busy={saving || undefined}
                   onClick={() => void run("retry")}
                 >

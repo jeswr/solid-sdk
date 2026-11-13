@@ -1,18 +1,27 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Claude Opus 5.5
 // The entry-point gate: demo mode mounts ONLY under ?demo, and WITHOUT ?demo
-// the real auth path is selected — buildController() runs and the login
-// screen renders; the demo module is never mounted. The heavy leaves
-// (LoginController, the login web component, the demo app) are mocked so the
-// test exercises exactly the REAL gating logic in src/main.tsx.
+// the app sends people to Solid Suite Permissions (where Access Manager now
+// lives) — no login controller is built and the demo module is never mounted.
+// The heavy leaves (LoginController, the login web component, the demo app,
+// the browser navigation) are mocked so the test exercises exactly the REAL
+// gating logic in src/main.tsx.
 import "@testing-library/jest-dom/vitest";
 import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { buildController } = vi.hoisted(() => ({ buildController: vi.fn(() => ({})) }));
+const { buildController, goToSuite } = vi.hoisted(() => ({
+  buildController: vi.fn(() => ({})),
+  goToSuite: vi.fn(),
+}));
 
 vi.mock("../../src/auth/controller.js", () => ({
   buildController,
+}));
+vi.mock("../../src/suite-redirect.js", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  goToSuite,
 }));
 vi.mock("../../src/demo/DemoApp.jsx", () => ({
   DemoApp: ({ view }: { view: string }) => <div data-testid="demo-app" data-view={view} />,
@@ -27,6 +36,7 @@ vi.mock("@jeswr/solid-elements/react", () => ({
 async function loadEntry(url: string): Promise<void> {
   vi.resetModules();
   buildController.mockClear();
+  goToSuite.mockClear();
   document.body.innerHTML = '<div id="root"></div>';
   window.history.replaceState({}, "", url);
   await import("../../src/main.jsx");
@@ -37,17 +47,25 @@ describe("main.tsx — the ?demo gate at the entry point", () => {
     document.body.innerHTML = "";
   });
 
-  it("WITHOUT ?demo the REAL auth path is selected (controller built, login rendered, no demo)", async () => {
+  it("WITHOUT ?demo it sends people to the suite's Permissions, with a link while it does", async () => {
     await loadEntry("/");
-    await waitFor(() => expect(screen.getByTestId("login-panel")).toBeInTheDocument());
-    expect(buildController).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "Open Permissions in Solid Suite" })).toHaveAttribute(
+        "href",
+        "https://solid-suite.vercel.app/permissions",
+      ),
+    );
+    expect(goToSuite).toHaveBeenCalledWith("https://solid-suite.vercel.app/permissions");
+    expect(buildController).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("login-panel")).not.toBeInTheDocument();
     expect(screen.queryByTestId("demo-app")).not.toBeInTheDocument();
   });
 
-  it("an unrelated query string still selects the real app", async () => {
+  it("an old sign-in callback query string is redirected too, without signing in", async () => {
     await loadEntry("/?code=abc&state=xyz");
-    await waitFor(() => expect(screen.getByTestId("login-panel")).toBeInTheDocument());
-    expect(buildController).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(goToSuite).toHaveBeenCalledTimes(1));
+    expect(goToSuite).toHaveBeenCalledWith("https://solid-suite.vercel.app/permissions");
+    expect(buildController).not.toHaveBeenCalled();
     expect(screen.queryByTestId("demo-app")).not.toBeInTheDocument();
   });
 
@@ -56,6 +74,7 @@ describe("main.tsx — the ?demo gate at the entry point", () => {
     await waitFor(() => expect(screen.getByTestId("demo-app")).toBeInTheDocument());
     expect(screen.getByTestId("demo-app")).toHaveAttribute("data-view", "dashboard");
     expect(buildController).not.toHaveBeenCalled();
+    expect(goToSuite).not.toHaveBeenCalled();
     expect(screen.queryByTestId("login-panel")).not.toBeInTheDocument();
   });
 

@@ -1,7 +1,8 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
-// The React session seam. A Session is just `{ webId, fetch }` — the
-// authenticated fetch handed down from the LoginController. Every view reads
+// The React session seam. A Session carries the WebID and the LoginController's
+// authenticated and pristine public fetches. Every view reads
 // the session from context and passes `session.fetch` into the data layer, so
 // UI tests inject a stubbed session and never touch real auth.
 
@@ -13,6 +14,20 @@ export interface Session {
   webId: string;
   /** The authenticated (DPoP-bound) fetch — the injectable seam. */
   fetch: SolidFetch;
+  /** Pristine public fetch from LoginController, or an explicit offline test/demo transport. */
+  publicFetch: SolidFetch;
+}
+
+const publicTransports = new WeakMap<Session, SolidFetch>();
+
+/** Stable pristine public fetch per session; the SDK applies public transport policy once. */
+export function publicFetchFor(session: Session): SolidFetch {
+  let transport = publicTransports.get(session);
+  if (!transport) {
+    transport = (input, init) => session.publicFetch(input, init);
+    publicTransports.set(session, transport);
+  }
+  return transport;
 }
 
 const SessionContext = createContext<Session | null>(null);

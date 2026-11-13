@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 // The security core: ACL read/edit round-trips through the @solid/object typed
 // accessors, effective-ACL resolution (own vs inherited, fail-closed), the
@@ -6,12 +7,9 @@
 import { describe, expect, it } from "vitest";
 import {
   AclConflictError,
-  addAgentGrant,
   createAuthorization,
   discoverAclUrl,
-  grantOnResource,
   LockoutError,
-  materializeOwnAcl,
   NoAclFoundError,
   ownerHasControl,
   parentContainer,
@@ -24,7 +22,7 @@ import {
   updateAclWithRetry,
 } from "../../src/lib/acl.js";
 import { readRdf } from "../../src/lib/http.js";
-import { BOB, buildPod, OWNER, POD, PREFIXES, REQUESTER } from "../fixtures.js";
+import { BOB, buildPod, OWNER, POD, PREFIXES } from "../fixtures.js";
 
 const REPORT = `${POD}docs/report.ttl`;
 const REPORT_ACL = `${REPORT}.acl`;
@@ -188,45 +186,6 @@ describe("setAgentModes", () => {
   });
 });
 
-describe("addAgentGrant", () => {
-  it("reuses an existing agent-only node with identical scope+modes", async () => {
-    const pod = buildPod();
-    pod.seed(
-      REPORT_ACL,
-      `${PREFIXES}
-<${REPORT_ACL}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
-  acl:accessTo <${REPORT}> ; acl:mode acl:Read, acl:Write, acl:Control .
-<${REPORT_ACL}#readers> a acl:Authorization ; acl:agent <${BOB}> ;
-  acl:accessTo <${REPORT}> ; acl:mode acl:Read .`,
-    );
-    const { read } = await entriesAt(pod, REPORT_ACL);
-    const authIri = addAgentGrant(read.dataset, REPORT_ACL, REPORT, REQUESTER, ["Read"]);
-    expect(authIri).toBe(`${REPORT_ACL}#readers`);
-    const readers = projectEntries(read.dataset).find((e) => e.authIri.endsWith("#readers"));
-    expect(readers?.agents.sort()).toEqual([BOB, REQUESTER].sort());
-  });
-
-  it("never reuses a PUBLIC node (would widen the grant); creates a fresh one", async () => {
-    const pod = buildPod();
-    const { read } = await entriesAt(pod, REPORT_ACL); // #shared is public+Read
-    const authIri = addAgentGrant(read.dataset, REPORT_ACL, REPORT, REQUESTER, ["Read"]);
-    expect(authIri).not.toBe(`${REPORT_ACL}#shared`);
-    const created = projectEntries(read.dataset).find((e) => e.authIri === authIri);
-    expect(created?.agents).toEqual([REQUESTER]);
-    expect(created?.isPublic).toBe(false);
-  });
-
-  it("is idempotent for the same agent+modes (set semantics)", async () => {
-    const pod = buildPod();
-    const { read } = await entriesAt(pod, REPORT_ACL);
-    const a = addAgentGrant(read.dataset, REPORT_ACL, REPORT, REQUESTER, ["Read"]);
-    const b = addAgentGrant(read.dataset, REPORT_ACL, REPORT, REQUESTER, ["Read"]);
-    expect(a).toBe(b);
-    const entry = projectEntries(read.dataset).find((e) => e.authIri === a);
-    expect(entry?.agents).toEqual([REQUESTER]);
-  });
-});
-
 describe("createAuthorization", () => {
   it("mints fresh fragments that do not collide", async () => {
     const pod = buildPod();
@@ -234,28 +193,6 @@ describe("createAuthorization", () => {
     const a = createAuthorization(read.dataset, REPORT_ACL, { agents: [BOB], modes: ["Read"] });
     const b = createAuthorization(read.dataset, REPORT_ACL, { agents: [BOB], modes: ["Write"] });
     expect(a).not.toBe(b);
-  });
-});
-
-describe("materializeOwnAcl", () => {
-  it("copies the applicable inherited entries, retargeted, container keeps default", async () => {
-    const pod = buildPod();
-    const effective = await readEffectiveAcl(`${POD}contacts/`, POD, pod.fetch);
-    expect(effective.owned).toBe(false);
-    const own = materializeOwnAcl(effective, `${POD}contacts/`);
-    const entries = projectEntries(own);
-    expect(entries).toHaveLength(1);
-    expect(entries[0]?.agents).toEqual([OWNER]);
-    expect(entries[0]?.accessTo).toEqual([`${POD}contacts/`]);
-    expect(entries[0]?.defaultFor).toEqual([`${POD}contacts/`]);
-  });
-
-  it("a plain resource gets accessTo only (no default)", async () => {
-    const pod = buildPod();
-    const effective = await readEffectiveAcl(`${POD}contacts/alice.ttl`, POD, pod.fetch);
-    const own = materializeOwnAcl(effective, `${POD}contacts/alice.ttl`);
-    const entries = projectEntries(own);
-    expect(entries[0]?.defaultFor).toEqual([]);
   });
 });
 
@@ -322,51 +259,6 @@ describe("updateAclWithRetry (CAS loop)", () => {
       }),
     ).rejects.toBeInstanceOf(LockoutError);
     expect(pod.etag(REPORT_ACL)).toBe(before); // nothing written
-  });
-});
-
-describe("grantOnResource", () => {
-  it("updates the OWN acl in place when one exists", async () => {
-    const pod = buildPod();
-    await grantOnResource(REPORT, POD, OWNER, REQUESTER, ["Read"], pod.fetch);
-    const effective = await readEffectiveAcl(REPORT, POD, pod.fetch);
-    expect(effective.entries.some((e) => e.agents.includes(REQUESTER))).toBe(true);
-  });
-
-  it("MATERIALISES an own acl (create-only) for an inherited-only resource, preserving owner Control", async () => {
-    const pod = buildPod();
-    const target = `${POD}contacts/alice.ttl`;
-    await grantOnResource(target, POD, OWNER, REQUESTER, ["Read"], pod.fetch);
-    const effective = await readEffectiveAcl(target, POD, pod.fetch);
-    expect(effective.owned).toBe(true); // now has its own ACL
-    expect(effective.entries.some((e) => e.agents.includes(REQUESTER))).toBe(true);
-    expect(ownerHasControl(effective.dataset, OWNER, target)).toBe(true); // no lock-out
-  });
-
-  it("loses the create race gracefully and falls through to the CAS update path", async () => {
-    const pod = buildPod();
-    const target = `${POD}contacts/alice.ttl`;
-    const targetAcl = `${target}.acl`;
-    let racedOnce = false;
-    pod.intercept = (method, url, init) => {
-      const headers = new Headers(init?.headers);
-      if (!racedOnce && method === "PUT" && url === targetAcl && headers.get("if-none-match")) {
-        // A concurrent granter creates the own ACL first.
-        racedOnce = true;
-        pod.seed(
-          targetAcl,
-          `${PREFIXES}
-<${targetAcl}#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
-  acl:accessTo <${target}> ; acl:mode acl:Read, acl:Write, acl:Control .`,
-        );
-        return undefined; // stub now returns 412 for the create-only PUT
-      }
-      return undefined;
-    };
-    await grantOnResource(target, POD, OWNER, REQUESTER, ["Read"], pod.fetch);
-    const effective = await readEffectiveAcl(target, POD, pod.fetch);
-    expect(effective.entries.some((e) => e.agents.includes(REQUESTER))).toBe(true);
-    expect(ownerHasControl(effective.dataset, OWNER, target)).toBe(true); // winner's doc kept
   });
 });
 

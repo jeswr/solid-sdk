@@ -10,9 +10,11 @@ import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import {
   type AccessRequestEntry,
+  type DecisionPreview,
   type DecisionResult,
   decide as decideRequest,
   listRequests,
+  previewDecision,
   type RequestDecision,
 } from "@jeswr/pod-access/requests-solid";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
@@ -112,7 +114,21 @@ export interface RequestsBinding extends RequestLists {
    * leaves the waiting lists as soon as the decision resolves, so it can't be decided twice while
    * the re-list runs or after it fails.
    */
-  decide(entry: AccessRequestEntry, decision: RequestDecision): Promise<DecisionResult>;
+  decide(
+    entry: AccessRequestEntry,
+    decision: RequestDecision,
+    expected?: DecisionPreview,
+  ): Promise<DecisionResult>;
+  /**
+   * What `decision` would grant, read-only (GET/HEAD only). Pass the result to `decide` as
+   * `expected` so the decision refuses (DecisionPreviewConflictError) if the access it would
+   * grant changed after the owner saw it.
+   */
+  preview(
+    entry: AccessRequestEntry,
+    decision: RequestDecision,
+    signal?: AbortSignal,
+  ): Promise<DecisionPreview>;
   /** Whether the note about unreadable inbox items was dismissed in this session. */
   unreadableDismissed: boolean;
   dismissUnreadable(): void;
@@ -148,9 +164,12 @@ export function useRequests(): RequestsBinding {
   }, [store, session]);
 
   const decide = useCallback(
-    async (entry: AccessRequestEntry, decision: RequestDecision) => {
+    async (entry: AccessRequestEntry, decision: RequestDecision, expected?: DecisionPreview) => {
       try {
-        const result = await decideRequest(entry, decision, requestOptions(session));
+        const result = await decideRequest(entry, decision, {
+          ...requestOptions(session),
+          ...(expected && { expected }),
+        });
         store.answered.add(entry.id);
         publish(store, { ...store.snapshot });
         return result;
@@ -159,6 +178,12 @@ export function useRequests(): RequestsBinding {
       }
     },
     [store, session, refresh],
+  );
+
+  const preview = useCallback(
+    (entry: AccessRequestEntry, decision: RequestDecision, signal?: AbortSignal) =>
+      previewDecision(entry, decision, { ...requestOptions(session), ...(signal && { signal }) }),
+    [session],
   );
 
   const dismissUnreadable = useCallback(() => {
@@ -171,6 +196,7 @@ export function useRequests(): RequestsBinding {
     ...splitRequests(snapshot.entries, new Date(), store.answered),
     refresh,
     decide,
+    preview,
     unreadableDismissed: store.unreadableDismissed,
     dismissUnreadable,
   };

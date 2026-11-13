@@ -1,7 +1,23 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Fable 5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
 # Solid Access Manager
+
+> **Moved: Access Manager now lives in Solid Suite Permissions.** The access-request
+> inbox (approve with a pinned `previewDecision` preview, deny), the History of answered
+> requests with revoking of active approvals, and the grant dashboard are all at the
+> suite's `/permissions` route (`/permissions/requests`, `/permissions/history`). This
+> app's entry point now redirects there: `src/suite-redirect.ts` builds the URL from
+> `VITE_SUITE_URL` (default `https://solid-suite.vercel.app`; anything that is not HTTPS,
+> or loopback HTTP, falls back to the default) and shows a link while the browser
+> follows it. `public/clientid.jsonld` and its headers are still served unchanged, so
+> existing Client ID references keep resolving; `?demo` still renders the read-only
+> demo. The standalone app's source and tests remain (the old mount is
+> `src/legacy-entry.tsx`) but it is no longer reachable from the entry point. The rest of
+> this README describes the standalone app as it was.
 
 See, review, grant and revoke access to your Solid pod — in plain, human terms
 (data classes + purposes), not raw ACL triples. The standalone owner console of
@@ -35,19 +51,14 @@ Phase 1 (the proposal's P2): it works **entirely against existing pod surfaces**
   constraint carrying a DPV purpose, and an `odrl:dateTime` expiry).
   Parsing is lenient — inbox contents are untrusted RDF; a malformed message
   drops fields or is listed as unparseable, never breaking the inbox.
-- **Approve / deny** — the proposal's §3.5 CAS-pinned pipeline, client-side:
-  approval first resolves the request's data class to the **concrete target
-  set** and shows it ("approving shares exactly these N resources"); the
-  `Pending → Approving` transition is an `If-Match` compare-and-set that
-  persists the resolved snapshot + a deterministic
-  `grantId = sha256(requestId ∥ resolvedTargetSet ∥ ownerWebID ∥ schemaVersion)`
-  into the request; then the grant record and DPV consent receipt are written
-  **create-only** (`If-None-Match: *`), then the WAC is materialised, then a
-  CAS to `Approved`. Retries are idempotent from the stored snapshot — an
-  interrupted approval offers a user-confirmed "finish approving exactly
-  these" that never re-resolves. Concurrent approvals: the second CAS loses
-  with a 412 and observes the winner — never two grants. Deny is a CAS to
-  `Denied` plus a `dpv:ConsentRefused` receipt.
+- **Approve / deny** — `@jeswr/pod-access/requests-solid` owns listing,
+  resolution, decisions and recovery; `previewDecision` shows each concrete target,
+  its combined role and recorded expiry before approval. The UI passes that preview as
+  `decide`'s expected pin; changes refuse and show the previous and refreshed targets for
+  another confirmation. The package seals owner-only
+  `settings/access-records/`, pins concrete targets in per-generation decision
+  records, and resumes only those records; ACP and unknown storage models show
+  that approval is unavailable.
 - **History / receipts** — DPV 2.2 consent records
   (`dpv:hasConsentStatus` ∈ ConsentGiven / ConsentRefused / ConsentWithdrawn,
   purpose, recipient, targets, timestamps) as the audit trail, plus one-click
@@ -69,6 +80,9 @@ over `@solid/reactive-authentication` (authorization-code + PKCE + DPoP popup;
 Document URL to override the client identity; without it or `APP_ORIGIN`, dynamic
 registration is used (dev fallback). All data access flows through an injectable
 authenticated-fetch seam, so every view is unit-testable with a stubbed fetch.
+Display names use the controller's pristine `publicFetch` through the SDK's public HTTPS,
+redirect and byte-limit policy. Rejected requester URLs show only their host without a fetch.
+Name caches are scoped to the session WebID, cleared on logout, and retry failed reads next load.
 
 From the monorepo root (Node 24), build for hosting with:
 
@@ -94,7 +108,7 @@ app can be embedded in walkthrough iframes with no auth and no network:
 - `?demo=dataclass` — the data-class view
 
 Demo mode is gated STRICTLY on the `?demo` query param (`src/demo/gate.ts`);
-without it the entry point builds the real `LoginController`, unchanged. The
+without it the entry point redirects to Solid Suite Permissions (see above). The
 demo fetch (`src/demo/pod.ts`) serves fixtures on GET/HEAD only and THROWS on
 every mutating method, so Approve / Deny / Revoke are visibly present but
 provably inert — the refusal surfaces in the saving indicator. Tests in
@@ -124,8 +138,8 @@ grant policies go through `@jeswr/solid-odrl` (`policyFromRdf` /
   applicable inherited entries — always including the owner's Control.
 - **Targets are confined to your storage**: a request naming an off-pod IRI
   can never reach the ACL-write path, and a resumed approval re-validates the
-  stored snapshot (in-storage targets + grantId recomputes) before any write.
-- **Resume is user-confirmed**, showing the pinned targets — never an
+  owner-only decision record (in-storage targets + grantId recomputes) before any write.
+- **Resume is user-confirmed**, using the private saved decision — never an
   automatic sweep (see `docs/DECISIONS.md` D9 for the inbox-integrity residual).
 - **Revocation is immediate** (proposal §6.1): WAC is evaluated fresh on every
   request against the current ACL, so retracting a grant takes effect on the

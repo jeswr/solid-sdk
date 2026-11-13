@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Fable 5
 // Demo mode renders the REAL four views over the Ada-&-Bex fixture pod:
@@ -65,24 +66,26 @@ describe("DemoApp — the four ?demo views render the Ada & Bex fixtures", () =>
     expect(screen.queryByText("Clinic App")).not.toBeInTheDocument();
   });
 
-  it("inbox: ONE pending Clinic App request (Read, health data, 30 days, care coordination) that resolves to the concrete file list", async () => {
+  it("inbox: ONE pending Clinic App request (Read, health data, 30 days, care coordination) reviewed by data class", async () => {
     render(<DemoApp view="inbox" />);
     // The Requests tab is selected by the ?demo=inbox deep link.
     expect(screen.getByRole("tab", { name: "Requests", selected: true })).toBeInTheDocument();
 
     await screen.findByText("Pending", undefined, FIND);
     expect((await screen.findAllByText("Clinic App", undefined, FIND)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/your Health data/)).toBeInTheDocument();
+    expect(screen.getByText("Health")).toBeInTheDocument();
     expect(screen.getByText("Care Coordination")).toBeInTheDocument();
     expect(screen.getByText("2026-08-09T00:00:00Z")).toBeInTheDocument();
 
-    // §3.4: approval is on the RESOLVED CONCRETE SET, shown before consent.
-    fireEvent.click(await screen.findByText("Review & approve…", undefined, FIND));
+    // Resolution and pinning belong to decide(), so review shows requested classes.
+    const review = await screen.findByText("Review & approve…", undefined, FIND);
+    await waitFor(() => expect(review).toBeEnabled());
+    fireEvent.click(review);
     const preview = await screen.findByTestId("approve-preview", undefined, FIND);
-    expect(preview).toHaveTextContent("/health/notes.ttl");
-    expect(preview).toHaveTextContent("/health/results/blood.ttl");
-    expect(preview).toHaveTextContent("/health/results/panel.ttl");
-    expect(screen.getByTestId("confirm-approve")).toHaveTextContent("Approve these 3");
+    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+    expect(preview).toHaveTextContent("Health");
+    expect(preview).toHaveTextContent("Can view — No expiry");
+    expect(screen.getByTestId("confirm-approve")).toHaveTextContent("Approve request");
   });
 
   it("history: ONE active grant (Dr. Bex); receipts record the Bex share + the approved-then-REVOKED Clinic grant", async () => {
@@ -150,8 +153,12 @@ describe("DemoApp — actions are inert (read-only fixture pod, no writes)", () 
       </ThemeProvider>,
     );
 
-    fireEvent.click(await screen.findByText("Review & approve…", undefined, FIND));
-    fireEvent.click(await screen.findByTestId("confirm-approve", undefined, FIND));
+    const review = await screen.findByText("Review & approve…", undefined, FIND);
+    await waitFor(() => expect(review).toBeEnabled());
+    fireEvent.click(review);
+    const confirm = await screen.findByTestId("confirm-approve", undefined, FIND);
+    await waitFor(() => expect(confirm).toBeEnabled(), FIND);
+    fireEvent.click(confirm);
 
     // The optimistic flip reverts and the demo refusal surfaces in the UI.
     await waitFor(

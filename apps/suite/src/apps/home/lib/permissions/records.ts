@@ -168,18 +168,23 @@ export function recordsFrom(
   }
   return result;
 }
-export async function readGrantRecords(
+/** The pod's fetch, confined to the storage and never following redirects. */
+export function podScoped(fetch: typeof globalThis.fetch, storage: string): typeof fetch {
+  return (input, init) =>
+    fetch(assertWithinPodScope(storage, String(input)), { ...init, redirect: "error" });
+}
+/** Every record document in the owner's `settings/access-records/` folder, merged into one store. */
+export async function readRecordsDataset(
   fetch: typeof globalThis.fetch,
   storage: string,
-): Promise<GrantRecordIndex> {
-  const scoped: typeof fetch = (input, init) =>
-    fetch(assertWithinPodScope(storage, String(input)), { ...init, redirect: "error" });
+): Promise<Store> {
+  const scoped = podScoped(fetch, storage);
   const url = new URL("settings/access-records/", storage).href;
   let listing: Awaited<ReturnType<typeof readResource>>;
   try {
     listing = await readResource(scoped, url);
   } catch (error) {
-    if (error instanceof RdfFetchError && error.status === 404) return new Map();
+    if (error instanceof RdfFetchError && error.status === 404) return new Store();
     throw error;
   }
   const dataset = new Store([...listing.dataset]);
@@ -189,5 +194,11 @@ export async function readGrantRecords(
     const resource = await readResource(scoped, child);
     dataset.addQuads([...resource.dataset]);
   }
-  return recordsFrom(dataset);
+  return dataset;
+}
+export async function readGrantRecords(
+  fetch: typeof globalThis.fetch,
+  storage: string,
+): Promise<GrantRecordIndex> {
+  return recordsFrom(await readRecordsDataset(fetch, storage));
 }

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { accmAliases as vocabularyAliases } from "@jeswr/pod-access/requests-solid";
 import {
   type ITermAsValueMapping,
   type ITermFromValueMapping,
@@ -8,7 +9,6 @@ import {
   SetFrom,
   type TermWrapper,
 } from "@rdfjs/wrapper";
-import { accmAliases as vocabularyAliases } from "./canonical-vocab.js";
 
 /** Read both spellings through the existing typed mappers; never rewrite pod data. */
 export const AliasOptionalFrom = {
