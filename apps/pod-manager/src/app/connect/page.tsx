@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
 /**
@@ -27,7 +28,8 @@ export default function ConnectPage() {
   const tierA = entries.filter((e) => e.tier === "A");
   const live = tierA.filter((e) => statusOf(e) === "live");
   const demo = tierA.filter((e) => statusOf(e) !== "live");
-  const tierB = entries.filter((e) => e.tier === "B");
+  const tierB = entries.filter((e) => e.tier === "B" && !e.cliOnly);
+  const cliOnly = entries.filter((e) => e.cliOnly);
   const tierC = entries.filter((e) => e.tier === "C");
 
   return (
@@ -55,6 +57,7 @@ export default function ConnectPage() {
           entries={demo}
         />
       ) : null}
+      <CatalogSection title="CLI only" description="Use the terminal to connect these services." entries={cliOnly} />
       <CatalogSection
         title="Coming soon"
         description="These platforms require an app-approval process before anyone can connect. We say so rather than pretend."

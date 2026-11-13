@@ -65,6 +65,15 @@ export class IntegrationSyncError extends IntegrationError {
   }
 }
 
+// AUTHORED-BY Claude Opus 5.5
+/** The Pod cannot support a safe conditional update (no strong ETag); retrying cannot help. */
+export class PreconditionUnsupportedError extends IntegrationSyncError {
+  constructor(adapterId: string, message: string) {
+    super(adapterId, message);
+    this.name = "PreconditionUnsupportedError";
+  }
+}
+
 /** The platform rate-limited us (HTTP 429). Retry after the given delay. */
 export class RateLimitedError extends IntegrationSyncError {
   /** Parsed `Retry-After`, in seconds, when the platform sent one. */

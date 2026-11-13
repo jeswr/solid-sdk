@@ -63,8 +63,9 @@ export interface RunImportOptions extends ConnectorStateOptions {
    *
    * A cancelled run records no activity. Documents and items it already wrote keep
    * `prov:wasGeneratedBy` naming its activity IRI, which `_provenance.ttl` never describes:
-   * read an activity missing from that document as a cancelled, incomplete run. The next run
-   * that rewrites those documents or items links them to its own activity.
+   * for adapters without bounded history, a missing activity indicates an incomplete run.
+   * Polling adapters may prune completed summaries with `maxRunActivities`, so absence alone
+   * then does not establish cancellation. The next rewrite links items to its own activity.
    */
   signal?: AbortSignal;
   /** Granted source permissions when the user withheld some (`ImportContext.scopes`). */
@@ -138,7 +139,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       source
         ? `${new URL(source).origin}/`
         : `urn:solid:connector:${encodeURIComponent(id)}:source`,
-      opts,
+      { ...opts, maxRunActivities: adapter.maxRunActivities },
       adapter.vocabMap,
     );
   } catch (error) {

@@ -13,11 +13,11 @@ import {
 } from "./registry.js";
 
 describe("integrations registry", () => {
-  it("exposes exactly 33 catalog entries with unique, URL-safe ids", () => {
+  it("exposes exactly 34 catalog entries with unique, URL-safe ids", () => {
     const entries = allCatalogEntries();
-    expect(entries).toHaveLength(33);
+    expect(entries).toHaveLength(34);
     const ids = entries.map((e) => e.id);
-    expect(new Set(ids).size).toBe(33);
+    expect(new Set(ids).size).toBe(34);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]+$/);
   });
 
@@ -98,7 +98,7 @@ describe("integrations registry", () => {
     for (const entry of allCatalogEntries()) {
       const status = statusOf(entry);
       if (entry.tier === "A") expect(status).toBe("demo");
-      if (entry.tier === "B") expect(status).toBe("approval-needed");
+      if (entry.tier === "B" && !entry.cliOnly) expect(status).toBe("approval-needed");
       if (entry.tier === "C") expect(status).toBe("export-file");
     }
     for (const a of ADAPTERS) expect(isLive(a)).toBe(false);
@@ -206,6 +206,24 @@ describe("injected public configuration", () => {
     expect(first.statusOf(TIER_C[0]!)).toBe("export-file");
     expect(first.statusOf({ ...ADAPTERS[0]!.metadata, id: "unknown" })).toBe("demo");
     expect(first.adapterById("unknown")).toBeUndefined();
-    expect(first.allCatalogEntries()).toHaveLength(33);
+    expect(first.allCatalogEntries()).toHaveLength(34);
   });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("advertises VeSync as CLI only, independently of OAuth configuration", async () => {
+  const { createRegistry } = await import("./registry.js");
+  for (const registry of [createRegistry(), createRegistry({ vesync: { clientId: "ignored" } })]) {
+    const entry = registry.allCatalogEntries().find(({ id }) => id === "vesync");
+    if (!entry) throw new Error("Missing VeSync catalogue entry.");
+    expect(entry).toMatchObject({
+      name: "Levoit (VeSync)",
+      cliOnly: true,
+      authKind: "account-cli",
+    });
+    expect(registry.statusOf(entry)).toBe("cli-only");
+    expect(statusOf(entry)).toBe("cli-only");
+    expect(entry.requirements.join(" ")).toContain("pod-connectors import vesync");
+    expect(registry.adapterById("vesync")?.oauth).toBeUndefined();
+  }
 });

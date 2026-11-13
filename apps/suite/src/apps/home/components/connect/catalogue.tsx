@@ -101,16 +101,19 @@ export function ConnectCatalogue() {
       <div className="hm-connect-grid">
         {visible.map((entry) => {
           const connection = connections[entry.id];
-          const disabled = !online || entry.status === "soon";
-          const action = connection?.lastSync
-            ? "Sync now"
-            : entry.status === "demo"
-              ? "Try with demo data"
-              : entry.status === "import"
-                ? "Import a file"
-                : entry.status === "soon"
-                  ? "Coming soon"
-                  : "Connect";
+          const disabled = !online || entry.status === "soon" || entry.status === "cli-only";
+          const action =
+            entry.status === "cli-only"
+              ? "CLI only"
+              : connection?.lastSync
+                ? "Sync now"
+                : entry.status === "demo"
+                  ? "Try with demo data"
+                  : entry.status === "import"
+                    ? "Import a file"
+                    : entry.status === "soon"
+                      ? "Coming soon"
+                      : "Connect";
           return (
             <article
               className="hm-connect-card"
@@ -129,6 +132,7 @@ export function ConnectCatalogue() {
               </ul>
               <div>
                 <StatusBadge status={entry.status} />
+                {entry.howTo && <p>{entry.howTo}</p>}
               </div>
               {connection?.lastSync && (
                 <p className="hm-connect-sync">

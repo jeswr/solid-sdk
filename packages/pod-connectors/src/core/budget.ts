@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Resource bounds for source traffic. Every JSON response is read through a byte cap, and the
  * runner owns one RunBudget per run, so a source that keeps returning
@@ -141,8 +142,9 @@ export async function readJson(
   url: string,
   maxBytes = MAX_JSON_BYTES,
   budget?: RunBudget,
+  signal?: AbortSignal,
 ): Promise<unknown> {
-  const bytes = await readBytes(res, adapterId, url, maxBytes, budget);
+  const bytes = await readBytes(res, adapterId, url, maxBytes, budget, signal);
   try {
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch (cause) {
@@ -160,21 +162,35 @@ export async function readBytes(
   url: string,
   maxBytes: number,
   budget?: RunBudget,
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
+  if (signal?.aborted)
+    throw new IntegrationSyncError(adapterId, "Source response cancelled or timed out.");
   limitSourceBody(res, maxBytes);
   const tooLarge = () => new ResponseTooLargeError(adapterId, url);
   const declared = Number(res.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
-    await res.body?.cancel().catch(() => undefined);
+    void res.body?.cancel().catch(() => undefined);
     throw tooLarge();
   }
   const chunks: Uint8Array[] = [];
   let size = 0;
   if (res.body) {
     const reader = res.body.getReader();
+    let abort: (() => void) | undefined;
+    const aborted = new Promise<never>((_, reject) => {
+      abort = () => {
+        void reader.cancel().catch(() => undefined);
+        reject(new IntegrationSyncError(adapterId, "Source response cancelled or timed out."));
+      };
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) abort();
+    });
     try {
       for (;;) {
-        const { done, value } = await reader.read();
+        const { done, value } = await Promise.race([reader.read(), aborted]);
+        if (signal?.aborted)
+          throw new IntegrationSyncError(adapterId, "Source response cancelled or timed out.");
         if (done) break;
         size += value.byteLength;
         budget?.bytes(value.byteLength);
@@ -182,9 +198,11 @@ export async function readBytes(
         chunks.push(value);
       }
     } catch (error) {
-      await reader.cancel().catch(() => undefined);
+      // Cancellation must not delay or replace the original cap, deadline or abort error.
+      void reader.cancel().catch(() => undefined);
       throw error;
     } finally {
+      if (abort) signal?.removeEventListener("abort", abort);
       reader.releaseLock();
     }
   }

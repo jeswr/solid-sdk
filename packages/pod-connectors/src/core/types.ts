@@ -10,13 +10,14 @@
 import type { DatasetCore } from "@rdfjs/types";
 import type { RunBudget, RunLimits } from "./budget.js";
 
-/** Catalog tiers (docs/integrations-catalog.md). Only Tier A ships adapters. */
+/** Catalog tiers (docs/integrations-catalog.md). Tier B includes approval-gated and CLI-only sources. */
 export type IntegrationTier = "A" | "B" | "C";
 
 /** How the user connects. */
 export type AuthKind =
   | "oauth-pkce" // end-user OAuth2 authorization-code + PKCE in a popup
   | "export-file" // Tier C: parse the platform's official data export
+  | "account-cli" // unofficial account API; Node CLI only
   | "none"; // metadata-only catalog entry (Tier B placeholder)
 
 /** Static, render-ready description of an integration. No RDF, no I/O. */
@@ -26,6 +27,8 @@ export interface IntegrationMetadata {
   readonly name: string;
   readonly tier: IntegrationTier;
   readonly authKind: AuthKind;
+  /** Live account access requires the Node CLI; requirements contain the how-to. */
+  readonly cliOnly?: boolean;
   /** OAuth scopes requested (empty for non-OAuth kinds). */
   readonly scopes: readonly string[];
   /** Category ids (`src/lib/categories.ts`) this integration writes into. */
@@ -100,6 +103,8 @@ export interface NormalisedDoc {
    * pages: incoming deterministic subjects replace their descriptions; absent subjects survive.
    */
   readonly writeMode?: "replace" | "merge";
+  /** Refuse an existing resource without a strong ETag before a read-modify-write. */
+  readonly requirePrecondition?: boolean;
   /** Source document for items without their own schema:url (e.g. file exports). */
   readonly sourceUrl?: string;
   /**
@@ -271,6 +276,8 @@ export interface ConnectorStateOptions {
 export interface IntegrationAdapter {
   /** Optional factory bounds, snapshotted and tightened by host run limits. */
   readonly limits?: Partial<RunLimits>;
+  /** Optional bounded history for polling; older provenance links can outlive their summaries. */
+  readonly maxRunActivities?: number;
   readonly vocabMap?: VocabMap;
   readonly metadata: IntegrationMetadata;
   /** Present iff `authKind === "oauth-pkce"`. */

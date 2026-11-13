@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { canonicalizeJeswrDataset } from "./canonical-vocab.js";
-import { IntegrationSyncError } from "./errors.js";
+import { IntegrationSyncError, PreconditionUnsupportedError } from "./errors.js";
 import { copyDataset, mergeItems } from "./incremental.js";
 import { registrationsFor } from "./pod-writer.js";
 import { PROV, Provenance } from "./provenance.js";
@@ -23,6 +24,9 @@ import type {
 import { safeIri } from "./vocab.js";
 
 const RUNS = "_provenance.ttl";
+function strongEtag(value: string | null): boolean {
+  return typeof value === "string" && /^"[\x21\x23-\x7e\x80-\xff]*"$/.test(value);
+}
 /** Connector containers with a run in progress in this process. */
 const active = new Set<string>();
 /** Run provenance is a bounded summary; documents retain every item origin. */
@@ -31,6 +35,8 @@ export const MAX_RUN_SOURCES = 1_000;
 export interface ImportSessionOptions extends ConnectorStateOptions {
   /** Lower the run provenance source ceiling; includes the connector source, minimum 1. */
   readonly maxRunSources?: number;
+  /** Retain only this many run activities; polling adapters opt in. */
+  readonly maxRunActivities?: number;
 }
 
 /** Shared write pipeline for API and file runners; host owns state persistence. */
@@ -41,6 +47,13 @@ export function createImportSession(
   options: ImportSessionOptions,
   vocabMap?: VocabMap,
 ) {
+  if (
+    options.maxRunActivities !== undefined &&
+    (!Number.isSafeInteger(options.maxRunActivities) ||
+      options.maxRunActivities < 1 ||
+      options.maxRunActivities > 1000)
+  )
+    throw new RangeError("Run history limit must be between 1 and 1000.");
   const requestedSources = options.maxRunSources ?? MAX_RUN_SOURCES;
   if (!Number.isSafeInteger(requestedSources) || requestedSources < 1)
     throw new RangeError("Run provenance source limit must be a positive safe integer.");
@@ -79,6 +92,8 @@ export function createImportSession(
       throw new Error("Reserved connector provenance slug.");
     if (!reads.has(url)) await read(input.slug);
     const previous = reads.get(url);
+    if (input.requirePrecondition && previous && !strongEtag(previous.etag))
+      throw new PreconditionUnsupportedError(id, "Conditional write requires a strong ETag.");
     const sourceSubjects = new Set(
       [...input.dataset]
         .filter((q) => q.subject.termType === "NamedNode")
@@ -188,6 +203,8 @@ export function createImportSession(
   }
   async function recordRun() {
     const previous = await writer.read(RUNS);
+    if (options.maxRunActivities !== undefined && previous && !strongEtag(previous.etag))
+      throw new PreconditionUnsupportedError(id, "Conditional run history requires a strong ETag.");
     const dataset = canonicalizeJeswrDataset(previous?.dataset);
     const activity = new Provenance(activityUrl, dataset, DataFactory);
     activity.types.add(`${PROV}Activity`);
@@ -195,6 +212,43 @@ export function createImportSession(
     activity.startedAt = started;
     activity.endedAt = new Date();
     for (const url of used) activity.used.add(url);
+    if (options.maxRunActivities !== undefined) {
+      const previousActivities = dataset
+        .getSubjects(`${PROV}wasAssociatedWith`, connector, null)
+        .filter((subject) => {
+          const prefix = `${writer.resolve(RUNS)}#run-`;
+          if (
+            subject.termType !== "NamedNode" ||
+            subject.value === activityUrl ||
+            !subject.value.startsWith(prefix)
+          )
+            return false;
+          if (
+            !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(
+              subject.value.slice(prefix.length),
+            )
+          )
+            return false;
+          try {
+            return new Provenance(subject, dataset, DataFactory).types.has(`${PROV}Activity`);
+          } catch {
+            return false;
+          }
+        })
+        .map((subject) => {
+          let time = 0;
+          try {
+            const ended = new Provenance(subject, dataset, DataFactory).endedAt?.getTime();
+            if (ended !== undefined && Number.isFinite(ended)) time = ended;
+          } catch {
+            /* A malformed old timestamp sorts before complete summaries. */
+          }
+          return { subject, time };
+        })
+        .sort((a, b) => b.time - a.time);
+      for (const { subject } of previousActivities.slice(options.maxRunActivities - 1))
+        dataset.removeQuads(dataset.getQuads(subject, null, null, null));
+    }
     await writer.write(
       {
         slug: RUNS,

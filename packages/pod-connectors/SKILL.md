@@ -10,7 +10,7 @@ description: Use when maintaining source adapters, injected PodWriter/SourceAuth
 Read README.md and src/core/types.ts before changing the public contract. The package was
 moved from apps/pod-manager/src/lib/integrations; retain registry/types exports and the
 app's compatibility shims. Hosts create an isolated createRegistry(config); never read
-process environment or install host-specific global configuration here.
+process environment outside the Node-only VeSync credential reader, or install host-specific global configuration here.
 
 Runners receive PodWriter and SourceAuth explicitly. Every adapter uses ctx.api for source
 I/O and ctx.write for Pod I/O. Keep credentials on their own transport. Fetch-backed and storage-backed writes
@@ -212,7 +212,7 @@ interrupted relabeling cannot strand memberships. Preserve one run per connector
 
 CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from
 browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
-changing the provisional MCP JSON schema. Never read process environment in this package;
+changing the provisional MCP JSON schema. Never read process environment outside the Node-only VeSync credential reader;
 use the 0600 owner-held config descriptor, with no symlink following. Use `@jeswr/pod-auth/node`'s `forClientCredentials` for Pod credentials; pass its bounded fetch
 to storage-client's Solid backend and `createStoragePodWriter`. Keep `node/pod-auth.ts` only as
 an adapter for the explicit token URL and exact profile-selected cross-storage index grant.
@@ -379,3 +379,36 @@ The connector's Apple adapter is workouts-only: use the separate suite Health mo
 Observation/CodeableConcept/Instant mapping for metrics, and keep the README candid that
 current Health charts read native shards rather than connector metric directories. Do not
 claim automatic connector chart discovery or HRV/VO2max charts without app support.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+VeSync is a CLI-only Tier B account adapter (`src/vesync/`), not OAuth. Read the
+README's "Connect your Levoit purifiers" section and `src/node/vesync-auth.ts` before
+changing its protocol. The Node-only credential reader is the explicit exception to
+the environment-free rule: only VESYNC_EMAIL / VESYNC_PASSWORD, consumed once, deleted
+from the process environment, password immediately MD5-hashed. Hidden prompts never
+echo. No credentials, hashes, account IDs or tokens enter reports, errors, pod RDF or
+state. Keep Node auth out of browser entry points and keep all source exceptions
+sanitized. Only fixed HTTPS login/list/status routes are allowed; never forward
+redirects, arbitrary methods, source URLs or caller headers with credentials.
+
+Read status keys per pyvesync family (Core snake_case with `level`, Vital camelCase,
+LV-PUR131S top-level and uuid-addressed; no Core 200S air readings) and treat only an
+explicit login rejection as an authentication failure; transport faults stay retryable.
+Use solid-environment builders and path helpers. Derive sensor slugs as an HMAC-SHA-256 of cid/uuid keyed by the connector's
+`environment/` container URL (stable per pod, unlinkable across pods);
+never persist raw identifiers in IRIs. Preserve per-sensor UTC day appends, minute
+identities, room/purifier feature distinctions, bounded numeric readings, and default
+model limits including malformed roots. VeSync documents set `requirePrecondition`:
+the shared session must reject existing resources without strong ETags. Do not advance
+checkpoints after source/Pod failures. Log and count capped-day skips. The adapter
+opts into a 32-activity provenance history cap; other adapters retain their existing
+history semantics. Watch mode rereads protected state each cycle, serializes imports,
+backs off with jitter, and classifies failures by cause with `classifyVeSyncFailure`
+(`src/node/vesync-failure.ts`): transient source/network/Pod 5xx-408-412-429 and transient
+`StateStoreError`s retry; VeSync login rejection, Pod 401/403 and other 4xx,
+`PreconditionUnsupportedError` (weak ETags), structural state problems and config stop.
+Hidden prompts enter raw mode before the label and always pause stdin afterwards. Any
+unexpected non-zero data code clears the VeSync session so the next cycle logs in again.
+Keep catalogue `cliOnly` / `cli-only` visible without approval flags and show terminal
+instructions instead of an OAuth flow. Test synthetic shapes only, with no provider
+traffic, including password safety, re-login bounds, source budgets and aborts.
