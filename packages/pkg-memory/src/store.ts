@@ -1,8 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { parseRdf } from "@jeswr/fetch-rdf";
-import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
+import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { type OdrlPolicy, policyToTurtle } from "@jeswr/solid-odrl";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
@@ -19,12 +18,15 @@ import { type PodConditions, type PodPort, podStatus } from "./pod-port.js";
 import { readMemoryPolicy } from "./policy.js";
 import { createDefaultPolicy } from "./purpose.js";
 import { dateTime, graph, NS, putGraph, RdfNode, ReferenceStore as Store } from "./rdf.js";
-import { discoverWacAcl, validateDedicatedWacAcl, type WacDiscoveryOptions } from "./wac.js";
+import {
+  ensureOwnerOnlyContainer,
+  protectOwnerOnlyResource,
+  type WacDiscoveryOptions,
+} from "./wac.js";
 
 const encode = (body: string) => new TextEncoder().encode(body);
 const decode = (body: Uint8Array) => new TextDecoder("utf-8", { fatal: true }).decode(body);
 const uuid = /^urn:uuid:([\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12})(?![\s\S])/;
-const acl = "http://www.w3.org/ns/auth/acl#";
 
 /** Identity and clock for an append-only withdrawal. */
 export interface RetractionOptions {
@@ -272,8 +274,7 @@ export class NanopubStore {
       throw error;
     }
   }
-  private condition(existing: { etag?: string } | undefined): PodConditions {
-    if (!existing) return { ifNoneMatch: "*" };
+  private condition(existing: { etag?: string }): PodConditions {
     if (!existing.etag || !/^"[^"\r\n]*"(?![\s\S])/.test(existing.etag))
       throw new Error("A strong ETag is required to replace a resource");
     return { ifMatch: existing.etag };
@@ -286,63 +287,22 @@ export class NanopubStore {
     await this.initialized;
   }
   private async protectContainers(): Promise<void> {
-    for (const path of ["private/", "private/pkg/", "private/pkg/mcp/"]) {
-      const container = new URL(path, this.root).href;
-      const existing = await this.readOptional(container);
-      // Ancestors are shared with other applications; only this store's subtree is ours.
-      if (container !== this.container && existing) continue;
-      const protection = await this.readAcl(container);
-      if (container === this.container || !protection.existing)
-        await this.protectResource(container, true, protection);
-      // CSS can create the container implicitly when its ACL is written.
-      if (!existing && !(await this.readOptional(container))) {
-        const description = new Store();
-        new RdfNode(container, description).link(
-          `${NS.rdf}type`,
-          "http://www.w3.org/ns/ldp#BasicContainer",
-        );
-        await this.pod.write(container, encode(await serialize([...description])), "text/turtle", {
-          ifNoneMatch: "*",
-        });
-      }
-    }
-  }
-  private async readAcl(url: string) {
-    let aclUrl: string;
     try {
-      aclUrl = await discoverWacAcl(this.pod, url, this.options);
-    } catch {
-      throw new Error("Memory protection unavailable");
-    }
-    return { aclUrl, existing: await this.readOptional(aclUrl) };
-  }
-  private async protectResource(
-    url: string,
-    inherit: boolean,
-    protection?: Awaited<ReturnType<NanopubStore["readAcl"]>>,
-  ) {
-    const { aclUrl, existing } = protection ?? (await this.readAcl(url));
-    const condition = this.condition(existing);
-    if (existing) {
-      try {
-        if (existing.contentType.split(";")[0]?.trim().toLowerCase() !== "text/turtle")
-          throw new Error();
-        validateDedicatedWacAcl(
-          await parseRdf(decode(existing.body), "text/turtle", { baseIRI: aclUrl }),
-          url,
-        );
-      } catch {
+      await ensureOwnerOnlyContainer(this.pod, this.container, this.options);
+    } catch (error) {
+      if (error instanceof Error && error.message === "WAC protection unavailable")
         throw new Error("Memory protection unavailable");
-      }
+      throw error;
     }
-    const dataset = new Store();
-    const authorization = new RdfNode(`${aclUrl}#owner`, dataset)
-      .link(`${NS.rdf}type`, `${acl}Authorization`)
-      .link(`${acl}agent`, this.owner)
-      .link(`${acl}accessTo`, url);
-    if (inherit) authorization.link(`${acl}default`, url);
-    for (const mode of ["Read", "Write", "Control"]) authorization.link(`${acl}mode`, acl + mode);
-    await this.pod.write(aclUrl, encode(await serialize([...dataset])), "text/turtle", condition);
+  }
+  private async protectResource(url: string, inherit: boolean) {
+    try {
+      await protectOwnerOnlyResource(this.pod, url, inherit, this.options);
+    } catch (error) {
+      if (error instanceof Error && error.message === "WAC protection unavailable")
+        throw new Error("Memory protection unavailable");
+      throw error;
+    }
   }
   private async writeNanopub(url: string, bytes: Uint8Array): Promise<void> {
     // A resource ACL overrides the container default, including orphan ACLs.

@@ -1,0 +1,301 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import type { AuditSource, PersonalDataRead } from "@jeswr/mcp-connections";
+import { beforeEach, expect, it, vi } from "vitest";
+import type { PodSession } from "../src/lib/session/types";
+import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
+
+const mocks = vi.hoisted(() => ({
+  state: { status: "loading" } as Record<string, unknown>,
+  url: undefined as string | undefined,
+  providerMounts: 0,
+}));
+vi.mock("../src/lib/session/pod-session", async () => {
+  const { useEffect } = await import("react");
+  return {
+    PodSessionProvider: ({ children }: { children: unknown }) => {
+      useEffect(() => {
+        mocks.providerMounts++;
+      }, []);
+      return children;
+    },
+  };
+});
+vi.mock("../src/lib/session/shell-pod-session", () => ({ usePodSessionState: () => mocks.state }));
+vi.mock("../src/shell/environment", () => ({
+  useSuiteEnvironment: () => ({ NEXT_PUBLIC_SUITE_MCP_URL: mocks.url }),
+}));
+
+import {
+  AssistantSettings,
+  ConnectAssistant,
+  PersonalDataReads,
+} from "../src/shell/settings/assistants/assistants";
+
+const URL = "https://mcp.example/mcp";
+function session(id = "alice"): PodSession {
+  return {
+    mode: "solid",
+    webId: `https://${id}.example/profile#me`,
+    displayName: id,
+    storageUrl: `https://${id}.example/`,
+    fetch: vi.fn(),
+    publicFetch: vi.fn(),
+    subscribe: () => () => {},
+  };
+}
+const CLIENT = "https://mcp.example/clients/opaque-secret";
+const row: PersonalDataRead = {
+  at: "2026-11-01T12:00:00.000Z",
+  client: CLIENT,
+  tool: "health_query",
+  purpose: "https://w3id.org/dpv#ServiceProvision",
+  categories: ["https://w3id.org/dpv/pd#Health"],
+  resourceCount: 2,
+  source: "monthly",
+};
+const source = (list = vi.fn().mockResolvedValue([row])): AuditSource => ({ list });
+function button(host: HTMLElement, name: string) {
+  const found = [...host.querySelectorAll("button")].find(
+    (b) => b.getAttribute("aria-label") === name || b.textContent === name,
+  );
+  if (!found) throw new Error(`Missing ${name}`);
+  return found;
+}
+beforeEach(() => {
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  mocks.state = { status: "loading" };
+  mocks.url = undefined;
+});
+it("shows unset setup text, a server how-to link and the disconnect footnote", async () => {
+  const { host } = await mount(h(ConnectAssistant, { url: undefined }));
+  expect(host.textContent).toContain(
+    "This suite has no assistant server set up. Ask whoever runs your suite for its MCP address.",
+  );
+  expect(host.textContent).toContain("choose Disconnect under Connected assistants");
+  expect(host.textContent).not.toContain("MCP_ACCESS_TOKEN");
+  expect(host.querySelector("input")).toBeNull();
+  expect(host.querySelector('[role="tablist"]')).toBeNull();
+  const link = host.querySelector("a");
+  expect(link?.textContent).toBe("How to run an assistant server");
+  expect(link?.getAttribute("href")).toBe(
+    "https://github.com/jeswr/solid-sdk/tree/main/apps/mcp-server#readme",
+  );
+  expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+});
+it("copies only the configured read-only URL, handles failure, and switches verbatim setup tabs", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  const { host } = await mount(h(ConnectAssistant, { url: URL }));
+  expect(host.querySelector("input")?.readOnly).toBe(true);
+  expect(host.querySelector("input")?.value).toBe(URL);
+  expect(host.textContent).toContain("Leave Advanced settings empty.");
+  expect(host.textContent).toContain("Turn it on from the tools menu in a chat.");
+  await click(button(host, "Copy assistant server address"));
+  expect(writeText).toHaveBeenCalledWith(URL);
+  expect(host.textContent).toContain("Copied");
+  writeText.mockRejectedValue(new Error("private clipboard failure"));
+  await click(button(host, "Copy assistant server address"));
+  expect(host.textContent).toContain("Couldn't copy. Select and copy the text.");
+  await key(button(host, "ChatGPT"), "Enter");
+  expect(button(host, "ChatGPT").getAttribute("aria-selected")).toBe("true");
+  expect(host.textContent).toContain(
+    "Developer mode needs a paid plan and isn't in the desktop app. Pick it from the + menu in a chat.",
+  );
+  expect(host.textContent).toContain(
+    `Name it "Solid pod", paste ${URL}, and choose OAuth for authentication.`,
+  );
+  expect(host.textContent).not.toContain("Leave Advanced settings empty.");
+  expect(host.textContent).toContain("Other MCP apps: use this address with OAuth.");
+});
+it("renders loading, whitelisted metadata with labels and a count, empty, and error with Retry", async () => {
+  const pending = deferred<PersonalDataRead[]>();
+  const list = vi
+    .fn()
+    .mockReturnValueOnce(pending.promise)
+    .mockRejectedValueOnce(new Error("secret backend value"))
+    .mockResolvedValueOnce([]);
+  const audit = source(list);
+  const account = session();
+  const view = await mount(
+    h(PersonalDataReads, { session: account, source: audit, serverUrl: URL }),
+  );
+  expect(view.host.textContent).toContain("Loading sensitive data reads");
+  await act(() =>
+    pending.resolve([
+      row,
+      {
+        ...row,
+        client: "https://assistant.example/app",
+        purpose: "urn:unknown",
+        categories: ["urn:unknown"],
+        decision: "prohibited",
+      },
+    ]),
+  );
+  expect(list).toHaveBeenCalledWith(expect.any(Function), account.storageUrl, 100);
+  expect(view.host.textContent).toContain("An assistant registered with mcp.example");
+  expect(view.host.textContent).toContain("Tool: health_query");
+  expect(view.host.textContent).toContain("Purpose: Provide the service");
+  expect(view.host.textContent).toContain("Health");
+  expect(view.host.textContent).toContain("2 resources");
+  expect(view.host.textContent).toContain("assistant.example");
+  expect(view.host.textContent).toContain("Other personal data");
+  expect(view.host.textContent).not.toMatch(/opaque-secret|urn:unknown/);
+  const other = session("bob");
+  await view.render(h(PersonalDataReads, { session: other, source: audit }));
+  expect(view.host.querySelector('[role="alert"]')).not.toBeNull();
+  expect(view.host.textContent).not.toContain("secret backend value");
+  await click(button(view.host, "Retry"));
+  expect(view.host.textContent).toContain("No sensitive data reads yet");
+});
+it("drops previous-account rows immediately and ignores late successful or failed completions", async () => {
+  const first = deferred<PersonalDataRead[]>();
+  const second = deferred<PersonalDataRead[]>();
+  const audit = source(
+    vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise),
+  );
+  const view = await mount(h(PersonalDataReads, { session: session(), source: audit }));
+  await view.render(h(PersonalDataReads, { session: session("bob"), source: audit }));
+  await act(() => first.resolve([row]));
+  expect(view.host.textContent).not.toContain("mcp.example");
+  await act(() => second.resolve([]));
+  expect(view.host.textContent).toContain("No sensitive data reads yet");
+  const late = deferred<PersonalDataRead[]>();
+  const secondView = await mount(
+    h(PersonalDataReads, {
+      session: session(),
+      source: source(vi.fn().mockReturnValue(late.promise)),
+    }),
+  );
+  await secondView.unmount();
+  await act(() => late.reject(new Error("private")));
+});
+it.each([
+  [URL, "https://mcp.example/clients/opaque", "An assistant registered with mcp.example"],
+  [URL, "https://other.example/clients/opaque", "other.example/clients/opaque"],
+  [URL, "https://mcp.example:8443/clients/opaque", "mcp.example:8443/clients/opaque"],
+  [URL, "https://mcp.example/app", "mcp.example/app"],
+  [undefined, "https://mcp.example/clients/opaque", "mcp.example/clients/opaque"],
+  [
+    URL,
+    `https://other.example/${"a".repeat(60)}?secret#hidden`,
+    `other.example/${"a".repeat(30)}…`,
+  ],
+])("labels client %s / %s against the configured server", async (serverUrl, client, label) => {
+  const view = await mount(
+    h(PersonalDataReads, {
+      session: session(),
+      serverUrl,
+      source: source(vi.fn().mockResolvedValue([{ ...row, client }])),
+    }),
+  );
+  expect(view.host.querySelector("strong")?.textContent).toBe(label);
+  expect(view.host.textContent).not.toMatch(/secret|hidden/);
+});
+it("renders readable decisions and the viewer's local time", async () => {
+  const at = "2026-07-01T12:00:00.000Z";
+  const decisions = ["permit", "confirm-required", "prohibited", "refuse-all"] as const;
+  const view = await mount(
+    h(PersonalDataReads, {
+      session: session(),
+      source: source(
+        vi.fn().mockResolvedValue(decisions.map((decision) => ({ ...row, at, decision }))),
+      ),
+    }),
+  );
+  for (const label of ["Allowed", "Confirmation required", "Blocked", "All access refused"])
+    expect(view.host.textContent).toContain(`Decision: ${label}`);
+  expect(view.host.textContent).not.toMatch(/confirm-required|refuse-all|prohibited|permit/);
+  const time = view.host.querySelector("time");
+  // vitest.config.ts pins Europe/London: July is BST, one hour ahead of UTC.
+  expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe("Europe/London");
+  expect(time?.textContent).toBe(
+    new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(at)),
+  );
+  expect(time?.textContent).not.toBe(
+    new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(new Date(at)),
+  );
+  expect(time?.getAttribute("datetime")).toBe(at);
+});
+it("keeps connection names alongside shared category labels and the configured-host fallback", async () => {
+  const view = await mount(
+    h(PersonalDataReads, {
+      session: session(),
+      serverUrl: URL,
+      names: { [CLIENT]: "My connected assistant" },
+      source: source(
+        vi.fn().mockResolvedValue([
+          {
+            ...row,
+            categories: [
+              "https://w3id.org/dpv/pd#MentalHealth",
+              "https://w3id.org/dpv/pd#Financial",
+            ],
+          },
+          { ...row, client: "https://mcp.example/clients/another", categories: [] },
+        ]),
+      ),
+    }),
+  );
+  expect([...view.host.querySelectorAll("strong")].map((item) => item.textContent)).toEqual([
+    "My connected assistant",
+    "An assistant registered with mcp.example",
+  ]);
+  expect(view.host.textContent).toContain("Mental Health, Financial data");
+  expect(view.host.textContent).toContain("Personal data");
+});
+it("hides reads offline, ignores in-flight replies, and reloads on reconnection", async () => {
+  const pending = deferred<PersonalDataRead[]>();
+  const list = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValueOnce([]);
+  const view = await mount(h(PersonalDataReads, { session: session(), source: source(list) }));
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  await act(() => window.dispatchEvent(new Event("offline")));
+  expect(view.host.textContent).toContain("Reconnect to load sensitive data reads.");
+  await act(() => pending.resolve([row]));
+  expect(view.host.textContent).not.toContain("mcp.example");
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  await act(() => window.dispatchEvent(new Event("online")));
+  expect(list).toHaveBeenCalledTimes(2);
+  expect(view.host.textContent).toContain("No sensitive data reads yet");
+});
+it("bounds a stalled source even when it ignores its abort signal", async () => {
+  vi.useFakeTimers();
+  try {
+    const view = await mount(
+      h(PersonalDataReads, {
+        session: session(),
+        source: source(vi.fn().mockReturnValue(new Promise(() => {}))),
+      }),
+    );
+    await act(() => vi.advanceTimersByTime(10001));
+    expect(view.host.querySelector('[role="alert"]')).not.toBeNull();
+    await view.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("shows session loading, signed-out and unavailable states with the configured setup", async () => {
+  mocks.url = URL;
+  const view = await mount(h(AssistantSettings));
+  expect(view.host.textContent).toContain("Opening your pod");
+  mocks.state = { status: "signed-out" };
+  await view.render(h(AssistantSettings));
+  expect(view.host.textContent).toContain("Sign in to see sensitive data reads.");
+  mocks.state = { status: "error" };
+  await view.render(h(AssistantSettings));
+  expect(view.host.querySelector('[role="alert"]')).not.toBeNull();
+  const mounts = mocks.providerMounts;
+  await click(button(view.host, "Retry"));
+  expect(mocks.providerMounts).toBe(mounts + 1);
+  const ready = { ...session(), fetch: async () => new Response(null, { status: 404 }) };
+  mocks.state = { status: "ready", session: ready };
+  await view.render(h(AssistantSettings));
+  expect(view.host.textContent).toContain("No sensitive data reads yet");
+});

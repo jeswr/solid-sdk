@@ -733,9 +733,15 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
+      '@jeswr/mcp-connections':
+        specifier: workspace:*
+        version: link:../../packages/mcp-connections
       '@jeswr/mcp-oauth':
         specifier: workspace:*
         version: link:../../packages/mcp-oauth
+      '@jeswr/pkg-memory':
+        specifier: workspace:*
+        version: link:../../packages/pkg-memory
       '@jeswr/pod-auth':
         specifier: workspace:*
         version: link:../../packages/pod-auth
@@ -2470,6 +2476,9 @@ importers:
       '@jeswr/ldp-container':
         specifier: workspace:*
         version: link:../../packages/ldp-container
+      '@jeswr/mcp-connections':
+        specifier: workspace:*
+        version: link:../../packages/mcp-connections
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
@@ -3710,6 +3719,46 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/mcp-connections:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../ldp-container
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pkg-memory':
+        specifier: workspace:*
+        version: link:../pkg-memory
+      '@rdfjs/wrapper':
+        specifier: 0.34.0
+        version: 0.34.0
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      '@vitest/coverage-v8':
+        specifier: 4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
   packages/mcp-oauth:
     dependencies:
@@ -5255,6 +5304,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
+      '@jeswr/mcp-connections':
+        specifier: workspace:*
+        version: link:../mcp-connections
       '@microsoft/api-extractor':
         specifier: 7.58.9
         version: 7.58.9(@types/node@26.1.1)

@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
-import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
+import {
+  assertWithinPodScope,
+  createPodScopedFetch,
+  ResponseBodyLimitError,
+  readBoundedText,
+} from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
 import { documentUrl } from "./data";
@@ -12,42 +17,16 @@ export const MAX_RDF_QUADS = 10_000;
 
 async function boundedResponse(response: Response, signal?: AbortSignal): Promise<Response> {
   if (!response.ok) return response;
-  const reader = response.body?.getReader();
-  // Settle pending reads even for injected streams that ignore the signal; cancellation
-  // of an already errored stream must not replace the original failure or reject unhandled.
-  const cancel = () => Promise.allSettled([reader?.cancel()]);
-  signal?.addEventListener("abort", cancel, { once: true });
   try {
-    signal?.throwIfAborted();
-    if (Number(response.headers.get("content-length")) > MAX_RDF_BYTES) {
-      throw new RangeError("Contacts RDF response exceeds the byte limit.");
-    }
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    if (reader) {
-      while (true) {
-        const { done, value } = await reader.read();
-        signal?.throwIfAborted();
-        if (done) break;
-        size += value.byteLength;
-        if (size > MAX_RDF_BYTES)
-          throw new RangeError("Contacts RDF response exceeds the byte limit.");
-        chunks.push(value);
-      }
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return new Response(size ? bytes : null, {
+    const text = await readBoundedText(response, MAX_RDF_BYTES, signal);
+    return new Response(text || null, {
       status: response.status,
       headers: response.headers,
     });
-  } finally {
-    signal?.removeEventListener("abort", cancel);
-    await cancel();
+  } catch (error) {
+    if (error instanceof ResponseBodyLimitError)
+      throw new RangeError("Contacts RDF response exceeds the byte limit.");
+    throw error;
   }
 }
 

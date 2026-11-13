@@ -1,0 +1,64 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.assistant-address {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--space-3);
+}
+.assistant-address input {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.assistant-steps {
+  list-style: decimal;
+  padding-inline-start: var(--space-6);
+  margin-block: var(--space-4);
+}
+.assistant-steps li {
+  overflow-wrap: anywhere;
+}
+.assistant-note {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+.assistant-audit {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.assistant-audit li {
+  display: grid;
+  gap: var(--space-2);
+  padding-block: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.assistant-audit time {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+.assistant-steps li + li {
+  margin-top: var(--space-3);
+}
+
+.assistant-connections {
+  list-style: none;
+  padding: 0;
+}
+.assistant-connections li {
+  border-bottom: 1px solid var(--border);
+  padding-block: var(--space-4);
+  overflow-wrap: anywhere;
+}
+.assistant-connections dl {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(0, 3fr);
+  gap: var(--space-2) var(--space-4);
+  margin-block: var(--space-4);
+}
+.assistant-connections dt {
+  color: var(--muted-foreground);
+}
+.assistant-connections dd {
+  margin: 0;
+}

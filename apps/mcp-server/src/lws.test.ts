@@ -10,7 +10,7 @@ import { POD_ISSUER, POD_ROOT } from "../../../packages/mcp-oauth/test/pod-issue
 import { navigation } from "../test/navigation.js";
 import { createApp } from "./handler.js";
 
-it("reads and lists private LWS storage through the default OAuth composition", async () => {
+it("refuses LWS consent without WAC connection-record protection", async () => {
   const lws = lwsStorage();
   expect((await lws.fetch(`${POD_ROOT}note.txt`)).status).toBe(401);
   const origin = "https://mcp.example";
@@ -74,50 +74,8 @@ it("reads and lists private LWS storage through the default OAuth composition", 
     { csrf: await csrf(consent), decision: "allow" },
     cookie,
   );
-  const code = (await navigation(approval)).searchParams.get("code") as string;
-  const token = await post("/auth/token", {
-    grant_type: "authorization_code",
-    client_id: clientId,
-    redirect_uri: redirect,
-    resource,
-    code_verifier: verifier,
-    code,
-  });
-  expect(token.status).toBe(200);
-  const { access_token: accessToken } = await token.json();
-  const call = (name: string, args: unknown) =>
-    app(
-      request("/mcp", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${accessToken}`,
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name, arguments: args },
-        }),
-      }),
-    );
-  for (let n = 0; n < 2; n++) {
-    const response = await call("pod_read", { url: `${POD_ROOT}note.txt` });
-    expect(response.status).toBe(200);
-    const result = (await response.json()).result;
-    expect(result.isError).not.toBe(true);
-    expect(result.content[0].text).toBe("private LWS content");
-  }
-  const listing = (await (await call("pod_list", { container: POD_ROOT })).json()).result;
-  expect(listing.isError).not.toBe(true);
-  expect(listing.content[0].text).toContain(`${POD_ROOT}note.txt`);
-  expect(lws.exchanges).toHaveLength(1);
-  expect(
-    lws.requests.some((request) => request.headers.get("authorization")?.includes(accessToken)),
-  ).toBe(false);
-  expect((await post("/auth/revoke", { token: accessToken, client_id: clientId })).status).toBe(
-    200,
-  );
-  expect((await call("pod_read", { url: `${POD_ROOT}note.txt` })).status).toBe(401);
+  const destination = await navigation(approval);
+  expect(destination.searchParams.get("error")).toBe("server_error");
+  expect(destination.searchParams.has("code")).toBe(false);
+  expect(destination.searchParams.get("state")).toBe("mcp-state");
 });
