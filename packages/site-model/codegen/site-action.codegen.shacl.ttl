@@ -1,0 +1,171 @@
+# AUTHORED-BY Claude Opus 5.5
+#
+# Generation INPUT (SHACL profile, L2) for @jeswr/site-model's generated model.
+#
+# A narrowing of the normative site-action.shacl.ttl to what the generator's closed
+# admission accepts. Every node is a FLAT entity read through its own wrapper; links
+# between nodes are plain IRI fields (sh:nodeKind sh:IRI), so the facade walks the
+# document. Narrowings and omissions, each also listed in the README under
+# "Generator gaps":
+#   - sh:class on links is dropped: closed admission accepts link classes only on
+#     composite links, and a site model is a variable-size graph of nodes that the
+#     fixed-fragment composite kind cannot describe. The facade checks node types.
+#   - sab:valuePath (a predicate IRI OR an RDF list) and sab:option (an RDF list) are
+#     omitted: admission has no rdf:List or sh:or projection. The facade reads and
+#     writes both through @rdfjs/wrapper.
+#   - The per-kind requirements of sab:CsrfSource (sh:xone in the normative shape)
+#     are omitted: admission has no sh:xone/sh:or. Each kind's fields are optional
+#     here and the facade enforces the discriminated union.
+#   - sh:pattern "^https?://" on string-valued URL templates and the probe URL is
+#     omitted: admission reviews that pattern only for IRI-valued fields.
+#   - The shared sabsh:LearnedActionShape (sh:node) of the normative shapes is inlined
+#     into the Operation and Flow shapes: admission projects sh:node only as a
+#     composite link.
+
+@prefix sab:    <https://jeswr.org/ns/site-action#> .
+@prefix schema: <https://schema.org/> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:SiteModel ;
+  sh:property [ sh:path schema:url ; sh:name "site" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:version ; sh:name "version" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path prov:generatedAtTime ; sh:name "generatedAt" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:potentialAction ; sh:name "actions" ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path sab:loginRoute ; sh:name "loginRoutes" ; sh:nodeKind sh:IRI ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:Operation ;
+  sh:property [ sh:path sab:actionType ; sh:name "actionType" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:name ; sh:name "label" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:input ; sh:name "inputs" ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path schema:target ; sh:name "request" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:session ; sh:name "session" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( sab:NoSession sab:SignedIn ) ] ;
+  sh:property [ sh:path sab:csrfRule ; sh:name "csrf" ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path sab:effect ; sh:name "effect" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( sab:Read sab:ReversibleWrite sab:IrreversibleWrite sab:Payment ) ] ;
+  sh:property [ sh:path sab:extraction ; sh:name "extraction" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:returnsShape ; sh:name "returnsShape" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "derivedFrom" ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path prov:generatedAtTime ; sh:name "learnedAt" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:learnMethod ; sh:name "method" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "crawl" "form" "js-analysis" "demonstration" "fallback" "manual" ) ] ;
+  sh:property [ sh:path sab:confidence ; sh:name "confidence" ; sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:minInclusive 0 ; sh:maxInclusive 1 ] ;
+  sh:property [ sh:path sab:lastVerified ; sh:name "lastVerified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:successes ; sh:name "successes" ; sh:datatype xsd:nonNegativeInteger ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:attempts ; sh:name "attempts" ; sh:datatype xsd:nonNegativeInteger ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:Flow ;
+  sh:property [ sh:path sab:actionType ; sh:name "actionType" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:name ; sh:name "label" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:input ; sh:name "inputs" ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path sab:step ; sh:name "steps" ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path sab:effect ; sh:name "effect" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( sab:Read sab:ReversibleWrite sab:IrreversibleWrite sab:Payment ) ] ;
+  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "derivedFrom" ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path prov:generatedAtTime ; sh:name "learnedAt" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:learnMethod ; sh:name "method" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "crawl" "form" "js-analysis" "demonstration" "fallback" "manual" ) ] ;
+  sh:property [ sh:path sab:confidence ; sh:name "confidence" ; sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:minInclusive 0 ; sh:maxInclusive 1 ] ;
+  sh:property [ sh:path sab:lastVerified ; sh:name "lastVerified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:successes ; sh:name "successes" ; sh:datatype xsd:nonNegativeInteger ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:attempts ; sh:name "attempts" ; sh:datatype xsd:nonNegativeInteger ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:FlowStep ;
+  sh:property [ sh:path sab:operation ; sh:name "operation" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:binding ; sh:name "bindings" ; sh:nodeKind sh:IRI ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:PropertyValue ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:value ; sh:name "propertyValue" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:Parameter ;
+  sh:property [ sh:path schema:valueName ; sh:name "name" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:range ; sh:name "range" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:valueRequired ; sh:name "required" ; sh:datatype xsd:boolean ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:location ; sh:name "location" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "path" "query" "body" "form" "header" ) ] ;
+  sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path skos:example ; sh:name "example" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:defaultValue ; sh:name "default" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:EntryPoint ;
+  sh:property [ sh:path schema:httpMethod ; sh:name "method" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "GET" "POST" "PUT" "PATCH" "DELETE" ) ] ;
+  sh:property [ sh:path schema:urlTemplate ; sh:name "urlTemplate" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:contentType ; sh:name "contentType" ; sh:datatype xsd:string ; sh:maxCount 1 ;
+    sh:in ( "application/json" "application/x-www-form-urlencoded" "multipart/form-data" ) ] ;
+  sh:property [ sh:path sab:bodyTemplate ; sh:name "bodyTemplate" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:header ; sh:name "headers" ; sh:nodeKind sh:IRI ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:CsrfRule ;
+  sh:property [ sh:path sab:csrfSource ; sh:name "source" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:csrfTarget ; sh:name "target" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:CsrfSource ;
+  sh:property [ sh:path sab:sourceKind ; sh:name "kind" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "cookie" "html" "json" "meta" ) ] ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:urlTemplate ; sh:name "urlTemplate" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:selector ; sh:name "selector" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:attribute ; sh:name "attribute" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:pointer ; sh:name "pointer" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:CsrfTarget ;
+  sh:property [ sh:path sab:targetKind ; sh:name "kind" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "header" "form" "query" ) ] ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:Extraction ;
+  sh:property [ sh:path sab:format ; sh:name "format" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "json" "html" ) ] ;
+  sh:property [ sh:path sab:itemPath ; sh:name "itemPath" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:itemType ; sh:name "itemType" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:idField ; sh:name "idField" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:fieldRule ; sh:name "fields" ; sh:nodeKind sh:IRI ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:FieldRule ;
+  sh:property [ sh:path sab:fieldProperty ; sh:name "property" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:selectorPath ; sh:name "path" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:attribute ; sh:name "attribute" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:valueDatatype ; sh:name "valueDatatype" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:untrusted ; sh:name "untrusted" ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:LoginRoute ;
+  sh:property [ sh:path sab:loginMethod ; sh:name "method" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:operation ; sh:name "operation" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:sessionCookie ; sh:name "sessionCookies" ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path sab:probeUrl ; sh:name "probeUrl" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:refresh ; sh:name "refresh" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:RefreshRule ;
+  sh:property [ sh:path schema:urlTemplate ; sh:name "urlTemplate" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:tokenPointer ; sh:name "tokenPointer" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:expiresInPointer ; sh:name "expiresInPointer" ; sh:datatype xsd:string ; sh:maxCount 1 ] .

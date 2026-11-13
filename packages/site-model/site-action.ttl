@@ -1,0 +1,442 @@
+# AUTHORED-BY Claude Opus 5.5
+#
+# Site-action ontology (provisional) for the semantic agent browser
+# (@jeswr/site-model). A SITE MODEL describes the actions a website offers as
+# schema.org action types mapped onto the site's own HTTP calls, so a planner can
+# ask for an action in RDF and never read the site's HTML.
+#
+# Reuse first: schema.org (https://schema.org/, the https scheme throughout) for
+# actions, entry points, request templates, property-value pairs, positions and
+# input specifications; PROV-O for derivation and generation time; SKOS for the
+# effect and session concept schemes and for examples. The sab: namespace mints
+# only what neither covers.
+#
+# This file is also the ontology input of the generated model (see
+# codegen/site-action.codegen.shacl.ttl and codegen.config.json): every sab: class
+# and property carries a label, a definition, a domain and a range.
+
+@prefix sab:    <https://jeswr.org/ns/site-action#> .
+@prefix schema: <https://schema.org/> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix vann:   <http://purl.org/vocab/vann/> .
+
+<https://jeswr.org/ns/site-action> a owl:Ontology ;
+    dct:title "Site-action ontology"@en ;
+    rdfs:label "Site-action ontology"@en ;
+    vann:preferredNamespacePrefix "sab" ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/site-action#" ;
+    owl:versionInfo "0.1.0" ;
+    rdfs:comment """Provisional vocabulary for site models: the operations and flows a website offers, each labelled with a schema.org action type and mapped onto the site's own HTTP requests, with CSRF handling, response extraction rules, login routes, effect classes and learning provenance."""@en .
+
+vann:preferredNamespacePrefix a owl:AnnotationProperty .
+vann:preferredNamespaceUri a owl:AnnotationProperty .
+
+# -----------------------------------------------------------------------------
+# Classes
+# -----------------------------------------------------------------------------
+
+sab:SiteModel a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Site model"@en ;
+    rdfs:comment "A learned description of one website: its operations, flows and login routes. Linked to its operations and flows with schema:potentialAction."@en .
+
+sab:Operation a owl:Class ;
+    rdfs:subClassOf schema:Action ;
+    rdfs:label "Operation"@en ;
+    rdfs:comment "One HTTP interaction a site offers, labelled with a schema.org action type and described by a request template (schema:target, a schema:EntryPoint), its inputs, CSRF rules, effect and response extraction."@en .
+
+sab:Flow a owl:Class ;
+    rdfs:subClassOf schema:Action ;
+    rdfs:label "Flow"@en ;
+    rdfs:comment "An ordered sequence of operations that together perform one schema.org action, such as a buy action made of add-to-cart and checkout."@en .
+
+sab:FlowStep a owl:Class ;
+    rdfs:label "Flow step"@en ;
+    rdfs:comment "One step of a flow: the operation it runs, its position in the flow and the bindings that supply the operation's parameters."@en .
+
+sab:Parameter a owl:Class ;
+    rdfs:subClassOf schema:PropertyValueSpecification ;
+    rdfs:label "Parameter"@en ;
+    rdfs:comment "An input of an operation or flow: a template variable (schema:valueName), the property path on the requested action node that supplies it, its range, where it goes in the request, and whether it is required (schema:valueRequired)."@en .
+
+sab:CsrfRule a owl:Class ;
+    rdfs:label "CSRF rule"@en ;
+    rdfs:comment "How to obtain an anti-forgery token (a CSRF source) and where to send it (a CSRF target)."@en .
+
+sab:CsrfSource a owl:Class ;
+    rdfs:label "CSRF source"@en ;
+    rdfs:comment "Where an anti-forgery token is read from: a cookie, an HTML element attribute, a JSON pointer into a response, or an HTML meta tag."@en .
+
+sab:CsrfTarget a owl:Class ;
+    rdfs:label "CSRF target"@en ;
+    rdfs:comment "Where an anti-forgery token is sent: a request header, a form field or a query parameter."@en .
+
+sab:Extraction a owl:Class ;
+    rdfs:label "Extraction"@en ;
+    rdfs:comment "How a response is lifted into RDF facts: the response format, how items are found, their rdf:type and the field rules that read each property."@en .
+
+sab:FieldRule a owl:Class ;
+    rdfs:label "Field rule"@en ;
+    rdfs:comment "How one property of an extracted item is read: a JSON pointer or CSS selector relative to the item, an optional attribute, the value datatype and whether the text is untrusted third-party content."@en .
+
+sab:LoginRoute a owl:Class ;
+    rdfs:label "Login route"@en ;
+    rdfs:comment "One way to sign in to a site (password form, passkey, single sign-on, magic link or one-time code) and how a signed-in session is recognised and refreshed."@en .
+
+sab:RefreshRule a owl:Class ;
+    rdfs:label "Refresh rule"@en ;
+    rdfs:comment "How a site's bearer token is refreshed: the refresh endpoint template and the JSON pointers to the new token and its lifetime."@en .
+
+# -----------------------------------------------------------------------------
+# Concept schemes: effects, session requirements, value kinds
+# -----------------------------------------------------------------------------
+
+sab:EffectScheme a skos:ConceptScheme ;
+    rdfs:label "Effect classes"@en ;
+    rdfs:comment "What running an operation changes, ordered sab:Read < sab:ReversibleWrite < sab:IrreversibleWrite < sab:Payment. The outbound approval gate keys off this."@en .
+
+sab:Read a skos:Concept ;
+    skos:inScheme sab:EffectScheme ;
+    rdfs:label "Read"@en ;
+    rdfs:comment "Changes nothing on the site."@en .
+
+sab:ReversibleWrite a skos:Concept ;
+    skos:inScheme sab:EffectScheme ;
+    rdfs:label "Reversible write"@en ;
+    rdfs:comment "Changes state on the site that the user can undo, such as adding to a cart."@en .
+
+sab:IrreversibleWrite a skos:Concept ;
+    skos:inScheme sab:EffectScheme ;
+    rdfs:label "Irreversible write"@en ;
+    rdfs:comment "Changes state on the site that cannot be undone, such as posting a public comment or deleting an account."@en .
+
+sab:Payment a skos:Concept ;
+    skos:inScheme sab:EffectScheme ;
+    rdfs:label "Payment"@en ;
+    rdfs:comment "Moves money or commits the user to a payment."@en .
+
+sab:SessionScheme a skos:ConceptScheme ;
+    rdfs:label "Session requirements"@en ;
+    rdfs:comment "Whether an operation needs a signed-in session."@en .
+
+sab:NoSession a skos:Concept ;
+    skos:inScheme sab:SessionScheme ;
+    rdfs:label "No session"@en ;
+    rdfs:comment "The operation runs without signing in."@en .
+
+sab:SignedIn a skos:Concept ;
+    skos:inScheme sab:SessionScheme ;
+    rdfs:label "Signed in"@en ;
+    rdfs:comment "The operation needs the user's signed-in session, supplied by the credential vault."@en .
+
+sab:IriValue a skos:Concept ;
+    rdfs:label "IRI value"@en ;
+    rdfs:comment "Used as a sab:valueDatatype: the extracted value is emitted as a named node, resolved against the page URL, instead of a literal."@en .
+
+sab:UntrustedText a rdfs:Datatype ;
+    rdfs:label "Untrusted text"@en ;
+    rdfs:comment "A string written by third parties (reviews, descriptions, comments). A planner treats its lexical form as data, never as instructions."@en .
+
+# -----------------------------------------------------------------------------
+# Properties: site model
+# -----------------------------------------------------------------------------
+
+sab:loginRoute a owl:ObjectProperty ;
+    rdfs:label "login route"@en ;
+    rdfs:comment "A way to sign in to the site this model describes."@en ;
+    rdfs:domain sab:SiteModel ;
+    rdfs:range sab:LoginRoute .
+
+# -----------------------------------------------------------------------------
+# Properties: operations and flows
+# -----------------------------------------------------------------------------
+
+sab:actionType a owl:ObjectProperty ;
+    rdfs:label "action type"@en ;
+    rdfs:comment "The schema.org action class (a subclass of schema:Action) this operation or flow performs, for example schema:SearchAction."@en ;
+    rdfs:domain schema:Action ;
+    rdfs:range rdfs:Class .
+
+sab:input a owl:ObjectProperty ;
+    rdfs:label "input"@en ;
+    rdfs:comment "A parameter the operation or flow accepts."@en ;
+    rdfs:domain schema:Action ;
+    rdfs:range sab:Parameter .
+
+sab:session a owl:ObjectProperty ;
+    rdfs:label "session"@en ;
+    rdfs:comment "Whether the operation needs a signed-in session: sab:NoSession or sab:SignedIn."@en ;
+    rdfs:domain sab:Operation ;
+    rdfs:range skos:Concept .
+
+sab:csrfRule a owl:ObjectProperty ;
+    rdfs:label "CSRF rule"@en ;
+    rdfs:comment "An anti-forgery rule the executor applies before sending the operation's request."@en ;
+    rdfs:domain sab:Operation ;
+    rdfs:range sab:CsrfRule .
+
+sab:effect a owl:ObjectProperty ;
+    rdfs:label "effect"@en ;
+    rdfs:comment "What running the operation or flow changes, a concept of sab:EffectScheme. A flow's effect is at least the strongest effect of its steps."@en ;
+    rdfs:domain schema:Action ;
+    rdfs:range skos:Concept .
+
+sab:extraction a owl:ObjectProperty ;
+    rdfs:label "extraction"@en ;
+    rdfs:comment "How the operation's response is lifted into RDF facts."@en ;
+    rdfs:domain sab:Operation ;
+    rdfs:range sab:Extraction .
+
+sab:returnsShape a owl:ObjectProperty ;
+    rdfs:label "returns shape"@en ;
+    rdfs:comment "A SHACL node shape the graph extracted from the operation's response must satisfy."@en ;
+    rdfs:domain sab:Operation ;
+    rdfs:range rdfs:Resource .
+
+sab:step a owl:ObjectProperty ;
+    rdfs:label "step"@en ;
+    rdfs:comment "A step of the flow; steps run in ascending schema:position."@en ;
+    rdfs:domain sab:Flow ;
+    rdfs:range sab:FlowStep .
+
+# Provenance (on operations and flows, next to prov:wasDerivedFrom and prov:generatedAtTime).
+
+sab:learnMethod a owl:DatatypeProperty ;
+    rdfs:label "learn method"@en ;
+    rdfs:comment "How the profiler learned this operation or flow: crawl, form, js-analysis, demonstration, fallback or manual."@en ;
+    rdfs:domain schema:Action ;
+    rdfs:range xsd:string .
+
+sab:confidence a owl:DatatypeProperty ;
+    rdfs:label "confidence"@en ;
+    rdfs:comment "The profiler's confidence, from 0 to 1, in the action label and the request mapping."@en ;
+    rdfs:domain schema:Action ;
+    rdfs:range xsd:decimal .
+
+sab:lastVerified a owl:DatatypeProperty ;
+    rdfs:label "last verified"@en ;
+    rdfs:comment "When a replay check of this operation or flow last succeeded."@en ;
+    rdfs:domain schema:Action ;
+    rdfs:range xsd:dateTime .
+
+sab:successes a owl:DatatypeProperty ;
+    rdfs:label "successes"@en ;
+    rdfs:comment "Successful runs since the operation or flow was learned."@en ;
+    rdfs:domain schema:Action ;
+    rdfs:range xsd:nonNegativeInteger .
+
+sab:attempts a owl:DatatypeProperty ;
+    rdfs:label "attempts"@en ;
+    rdfs:comment "Runs attempted since the operation or flow was learned."@en ;
+    rdfs:domain schema:Action ;
+    rdfs:range xsd:nonNegativeInteger .
+
+# -----------------------------------------------------------------------------
+# Properties: flow steps and bindings
+# -----------------------------------------------------------------------------
+
+sab:operation a owl:ObjectProperty ;
+    rdfs:label "operation"@en ;
+    rdfs:comment "The operation a flow step runs, or the login form operation of a password login route."@en ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( sab:FlowStep sab:LoginRoute ) ] ;
+    rdfs:range sab:Operation .
+
+sab:binding a owl:ObjectProperty ;
+    rdfs:label "binding"@en ;
+    rdfs:comment "A schema:PropertyValue whose schema:name is a parameter of the step's operation and whose schema:value is '$input.<name>', '$step<N>.<property IRI>' or a literal string."@en ;
+    rdfs:domain sab:FlowStep ;
+    rdfs:range schema:PropertyValue .
+
+# -----------------------------------------------------------------------------
+# Properties: parameters
+# -----------------------------------------------------------------------------
+
+sab:valuePath a rdf:Property ;
+    rdfs:label "value path"@en ;
+    rdfs:comment "The property path on the requested action node that supplies the parameter, in SHACL path syntax: a predicate IRI, or an RDF list of predicate IRIs for a sequence path. Absent when only a flow binding sets the parameter."@en ;
+    rdfs:domain sab:Parameter ;
+    rdfs:range rdfs:Resource .
+
+sab:range a owl:ObjectProperty ;
+    rdfs:label "range"@en ;
+    rdfs:comment "The parameter's value space: an XSD datatype, or a class whose instance (an IRI, or an identifier extracted from one) is the value."@en ;
+    rdfs:domain sab:Parameter ;
+    rdfs:range rdfs:Resource .
+
+sab:location a owl:DatatypeProperty ;
+    rdfs:label "location"@en ;
+    rdfs:comment "Where the value goes in the request: path, query, body, form or header."@en ;
+    rdfs:domain sab:Parameter ;
+    rdfs:range xsd:string .
+
+sab:option a rdf:Property ;
+    rdfs:label "options"@en ;
+    rdfs:comment "An RDF list of the allowed values, in the site's order (for example from a select element)."@en ;
+    rdfs:domain sab:Parameter ;
+    rdfs:range rdf:List .
+
+# -----------------------------------------------------------------------------
+# Properties: request templates (schema:EntryPoint)
+# -----------------------------------------------------------------------------
+
+sab:bodyTemplate a owl:DatatypeProperty ;
+    rdfs:label "body template"@en ;
+    rdfs:comment "A JSON request body with {var} placeholders; a placeholder that is a whole JSON value keeps the value's JSON type."@en ;
+    rdfs:domain schema:EntryPoint ;
+    rdfs:range xsd:string .
+
+sab:header a owl:ObjectProperty ;
+    rdfs:label "header"@en ;
+    rdfs:comment "A static request header (schema:PropertyValue with schema:name and schema:value) the site expects. Never a credential: the vault adds those."@en ;
+    rdfs:domain schema:EntryPoint ;
+    rdfs:range schema:PropertyValue .
+
+# -----------------------------------------------------------------------------
+# Properties: CSRF
+# -----------------------------------------------------------------------------
+
+sab:csrfSource a owl:ObjectProperty ;
+    rdfs:label "CSRF source"@en ;
+    rdfs:comment "Where the rule reads its token."@en ;
+    rdfs:domain sab:CsrfRule ;
+    rdfs:range sab:CsrfSource .
+
+sab:csrfTarget a owl:ObjectProperty ;
+    rdfs:label "CSRF target"@en ;
+    rdfs:comment "Where the rule sends its token."@en ;
+    rdfs:domain sab:CsrfRule ;
+    rdfs:range sab:CsrfTarget .
+
+sab:sourceKind a owl:DatatypeProperty ;
+    rdfs:label "source kind"@en ;
+    rdfs:comment "cookie (schema:name), html (schema:urlTemplate, sab:selector, sab:attribute), json (schema:urlTemplate, sab:pointer) or meta (schema:urlTemplate, schema:name)."@en ;
+    rdfs:domain sab:CsrfSource ;
+    rdfs:range xsd:string .
+
+sab:targetKind a owl:DatatypeProperty ;
+    rdfs:label "target kind"@en ;
+    rdfs:comment "header, form or query; schema:name names the header, field or parameter."@en ;
+    rdfs:domain sab:CsrfTarget ;
+    rdfs:range xsd:string .
+
+sab:selector a owl:DatatypeProperty ;
+    rdfs:label "selector"@en ;
+    rdfs:comment "A CSS selector for the HTML element that carries the token."@en ;
+    rdfs:domain sab:CsrfSource ;
+    rdfs:range xsd:string .
+
+sab:attribute a owl:DatatypeProperty ;
+    rdfs:label "attribute"@en ;
+    rdfs:comment "The HTML attribute to read instead of the element's text content."@en ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( sab:CsrfSource sab:FieldRule ) ] ;
+    rdfs:range xsd:string .
+
+sab:pointer a owl:DatatypeProperty ;
+    rdfs:label "pointer"@en ;
+    rdfs:comment "An RFC 6901 JSON pointer to the token in a JSON response."@en ;
+    rdfs:domain sab:CsrfSource ;
+    rdfs:range xsd:string .
+
+# -----------------------------------------------------------------------------
+# Properties: extraction
+# -----------------------------------------------------------------------------
+
+sab:format a owl:DatatypeProperty ;
+    rdfs:label "format"@en ;
+    rdfs:comment "The response format the extraction reads: json or html."@en ;
+    rdfs:domain sab:Extraction ;
+    rdfs:range xsd:string .
+
+sab:itemPath a owl:DatatypeProperty ;
+    rdfs:label "item path"@en ;
+    rdfs:comment "JSON: a pointer to an array or object of items. HTML: a CSS selector matching each item. Absent when the whole document is one item."@en ;
+    rdfs:domain sab:Extraction ;
+    rdfs:range xsd:string .
+
+sab:itemType a owl:ObjectProperty ;
+    rdfs:label "item type"@en ;
+    rdfs:comment "The rdf:type given to each extracted item, for example schema:Product."@en ;
+    rdfs:domain sab:Extraction ;
+    rdfs:range rdfs:Class .
+
+sab:idField a owl:DatatypeProperty ;
+    rdfs:label "id field"@en ;
+    rdfs:comment "Names the field rule whose value becomes the extracted item's IRI; without it each item is a blank node."@en ;
+    rdfs:domain sab:Extraction ;
+    rdfs:range xsd:string .
+
+sab:fieldRule a owl:ObjectProperty ;
+    rdfs:label "field rule"@en ;
+    rdfs:comment "A rule that reads one property of each extracted item; rules keep their schema:position order."@en ;
+    rdfs:domain sab:Extraction ;
+    rdfs:range sab:FieldRule .
+
+sab:fieldProperty a owl:ObjectProperty ;
+    rdfs:label "field property"@en ;
+    rdfs:comment "The predicate the field rule emits on the extracted item, for example schema:name."@en ;
+    rdfs:domain sab:FieldRule ;
+    rdfs:range rdf:Property .
+
+sab:selectorPath a owl:DatatypeProperty ;
+    rdfs:label "selector path"@en ;
+    rdfs:comment "JSON: an RFC 6901 pointer relative to the item. HTML: a CSS selector relative to the item."@en ;
+    rdfs:domain sab:FieldRule ;
+    rdfs:range xsd:string .
+
+sab:valueDatatype a owl:ObjectProperty ;
+    rdfs:label "value datatype"@en ;
+    rdfs:comment "The XSD datatype of the emitted literal, or sab:IriValue to emit a named node."@en ;
+    rdfs:domain sab:FieldRule ;
+    rdfs:range rdfs:Resource .
+
+sab:untrusted a owl:DatatypeProperty ;
+    rdfs:label "untrusted"@en ;
+    rdfs:comment "True when the field holds free text written by third parties; the executor marks such values sab:UntrustedText."@en ;
+    rdfs:domain sab:FieldRule ;
+    rdfs:range xsd:boolean .
+
+# -----------------------------------------------------------------------------
+# Properties: login routes
+# -----------------------------------------------------------------------------
+
+sab:loginMethod a owl:DatatypeProperty ;
+    rdfs:label "login method"@en ;
+    rdfs:comment "password (a form post), passkey, sso:<provider> (for example sso:google), magic-link or otp."@en ;
+    rdfs:domain sab:LoginRoute ;
+    rdfs:range xsd:string .
+
+sab:sessionCookie a owl:DatatypeProperty ;
+    rdfs:label "session cookie"@en ;
+    rdfs:comment "The name of a cookie whose presence marks a signed-in session."@en ;
+    rdfs:domain sab:LoginRoute ;
+    rdfs:range xsd:string .
+
+sab:probeUrl a owl:DatatypeProperty ;
+    rdfs:label "probe URL"@en ;
+    rdfs:comment "A URL that answers 200 only when the session is signed in."@en ;
+    rdfs:domain sab:LoginRoute ;
+    rdfs:range xsd:string .
+
+sab:refresh a owl:ObjectProperty ;
+    rdfs:label "refresh"@en ;
+    rdfs:comment "How the route's bearer token is refreshed."@en ;
+    rdfs:domain sab:LoginRoute ;
+    rdfs:range sab:RefreshRule .
+
+sab:tokenPointer a owl:DatatypeProperty ;
+    rdfs:label "token pointer"@en ;
+    rdfs:comment "An RFC 6901 JSON pointer to the new token in the refresh response."@en ;
+    rdfs:domain sab:RefreshRule ;
+    rdfs:range xsd:string .
+
+sab:expiresInPointer a owl:DatatypeProperty ;
+    rdfs:label "expires-in pointer"@en ;
+    rdfs:comment "An RFC 6901 JSON pointer to the new token's lifetime in seconds."@en ;
+    rdfs:domain sab:RefreshRule ;
+    rdfs:range xsd:string .

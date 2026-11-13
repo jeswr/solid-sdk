@@ -1,0 +1,187 @@
+# AUTHORED-BY Claude Opus 5.5
+#
+# Normative SHACL shapes for site models (@jeswr/site-model). A document written by
+# writeSiteModel conforms to these shapes (test/shapes.test.ts validates it with
+# rdf-validate-shacl). The generated model is compiled from the narrower profile in
+# codegen/site-action.codegen.shacl.ttl; its header lists each narrowing.
+
+@prefix sab:    <https://jeswr.org/ns/site-action#> .
+@prefix sabsh:  <https://jeswr.org/ns/site-action/shapes#> .
+@prefix schema: <https://schema.org/> .
+@prefix prov:   <http://www.w3.org/ns/prov#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# --- The site model --------------------------------------------------------------
+
+sabsh:SiteModelShape a sh:NodeShape ;
+  sh:targetClass sab:SiteModel ;
+  sh:property [ sh:path schema:url ; sh:name "site" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:version ; sh:name "version" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path prov:generatedAtTime ; sh:name "generatedAt" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:potentialAction ; sh:name "operations and flows" ; sh:nodeKind sh:IRI ;
+    sh:or ( [ sh:class sab:Operation ] [ sh:class sab:Flow ] ) ] ;
+  sh:property [ sh:path sab:loginRoute ; sh:name "login" ; sh:nodeKind sh:IRI ; sh:class sab:LoginRoute ] .
+
+# --- Shared provenance and labelling of operations and flows -------------------------
+
+sabsh:LearnedActionShape a sh:NodeShape ;
+  sh:property [ sh:path sab:actionType ; sh:name "actionType" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:name ; sh:name "label" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:input ; sh:name "inputs" ; sh:nodeKind sh:IRI ; sh:class sab:Parameter ] ;
+  sh:property [ sh:path sab:effect ; sh:name "effect" ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( sab:Read sab:ReversibleWrite sab:IrreversibleWrite sab:Payment ) ] ;
+  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "derivedFrom" ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path prov:generatedAtTime ; sh:name "learnedAt" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:learnMethod ; sh:name "method" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "crawl" "form" "js-analysis" "demonstration" "fallback" "manual" ) ] ;
+  sh:property [ sh:path sab:confidence ; sh:name "confidence" ; sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:minInclusive 0 ; sh:maxInclusive 1 ] ;
+  sh:property [ sh:path sab:lastVerified ; sh:name "lastVerified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:successes ; sh:name "successes" ; sh:datatype xsd:nonNegativeInteger ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:attempts ; sh:name "attempts" ; sh:datatype xsd:nonNegativeInteger ; sh:maxCount 1 ] .
+
+sabsh:OperationShape a sh:NodeShape ;
+  sh:targetClass sab:Operation ;
+  sh:node sabsh:LearnedActionShape ;
+  sh:property [ sh:path schema:target ; sh:name "request" ; sh:nodeKind sh:IRI ; sh:class schema:EntryPoint ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:session ; sh:name "session" ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( sab:NoSession sab:SignedIn ) ] ;
+  sh:property [ sh:path sab:csrfRule ; sh:name "csrf" ; sh:nodeKind sh:IRI ; sh:class sab:CsrfRule ] ;
+  sh:property [ sh:path sab:extraction ; sh:name "extraction" ; sh:nodeKind sh:IRI ; sh:class sab:Extraction ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:returnsShape ; sh:name "returnsShape" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
+
+sabsh:FlowShape a sh:NodeShape ;
+  sh:targetClass sab:Flow ;
+  sh:node sabsh:LearnedActionShape ;
+  sh:property [ sh:path sab:step ; sh:name "steps" ; sh:nodeKind sh:IRI ; sh:class sab:FlowStep ; sh:minCount 1 ] .
+
+sabsh:FlowStepShape a sh:NodeShape ;
+  sh:targetClass sab:FlowStep ;
+  sh:property [ sh:path sab:operation ; sh:name "operation" ; sh:nodeKind sh:IRI ; sh:class sab:Operation ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:binding ; sh:name "bind" ; sh:nodeKind sh:IRI ; sh:class schema:PropertyValue ] .
+
+# A header or a flow binding: a name and a string value.
+sabsh:PropertyValueShape a sh:NodeShape ;
+  sh:targetClass schema:PropertyValue ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:value ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# --- Parameters --------------------------------------------------------------------
+
+sabsh:ParameterShape a sh:NodeShape ;
+  sh:targetClass sab:Parameter ;
+  sh:property [ sh:path schema:valueName ; sh:name "name" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] ;
+  # A predicate IRI, or an RDF list of predicate IRIs (a SHACL sequence path).
+  sh:property [ sh:path sab:valuePath ; sh:name "path" ; sh:maxCount 1 ;
+    sh:or (
+      [ sh:nodeKind sh:IRI ]
+      [ sh:nodeKind sh:BlankNode ;
+        sh:property [ sh:path ( [ sh:zeroOrMorePath rdf:rest ] rdf:first ) ; sh:nodeKind sh:IRI ; sh:minCount 2 ] ]
+    ) ] ;
+  sh:property [ sh:path sab:range ; sh:name "range" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:valueRequired ; sh:name "required" ; sh:datatype xsd:boolean ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:location ; sh:name "location" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "path" "query" "body" "form" "header" ) ] ;
+  sh:property [ sh:path schema:description ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  # An RDF list of strings, possibly empty (rdf:nil).
+  sh:property [ sh:path sab:option ; sh:name "options" ; sh:maxCount 1 ;
+    sh:or (
+      [ sh:hasValue rdf:nil ]
+      [ sh:nodeKind sh:BlankNode ;
+        sh:property [ sh:path ( [ sh:zeroOrMorePath rdf:rest ] rdf:first ) ; sh:datatype xsd:string ] ]
+    ) ] ;
+  sh:property [ sh:path skos:example ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:defaultValue ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+
+# --- Requests ----------------------------------------------------------------------
+
+sabsh:EntryPointShape a sh:NodeShape ;
+  sh:targetClass schema:EntryPoint ;
+  sh:property [ sh:path schema:httpMethod ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "GET" "POST" "PUT" "PATCH" "DELETE" ) ] ;
+  sh:property [ sh:path schema:urlTemplate ; sh:datatype xsd:string ; sh:pattern "^https?://" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:contentType ; sh:datatype xsd:string ; sh:maxCount 1 ;
+    sh:in ( "application/json" "application/x-www-form-urlencoded" "multipart/form-data" ) ] ;
+  sh:property [ sh:path sab:bodyTemplate ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:header ; sh:nodeKind sh:IRI ; sh:class schema:PropertyValue ] .
+
+# --- CSRF ------------------------------------------------------------------------
+
+sabsh:CsrfRuleShape a sh:NodeShape ;
+  sh:targetClass sab:CsrfRule ;
+  sh:property [ sh:path sab:csrfSource ; sh:nodeKind sh:IRI ; sh:class sab:CsrfSource ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:csrfTarget ; sh:nodeKind sh:IRI ; sh:class sab:CsrfTarget ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] .
+
+# Exactly one source kind, with exactly the fields that kind needs.
+sabsh:CsrfSourceShape a sh:NodeShape ;
+  sh:targetClass sab:CsrfSource ;
+  sh:property [ sh:path sab:sourceKind ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "cookie" "html" "json" "meta" ) ] ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:urlTemplate ; sh:datatype xsd:string ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:selector ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:attribute ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:pointer ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:xone (
+    [ sh:property [ sh:path sab:sourceKind ; sh:hasValue "cookie" ] ;
+      sh:property [ sh:path schema:name ; sh:minCount 1 ] ]
+    [ sh:property [ sh:path sab:sourceKind ; sh:hasValue "html" ] ;
+      sh:property [ sh:path schema:urlTemplate ; sh:minCount 1 ] ;
+      sh:property [ sh:path sab:selector ; sh:minCount 1 ] ;
+      sh:property [ sh:path sab:attribute ; sh:minCount 1 ] ]
+    [ sh:property [ sh:path sab:sourceKind ; sh:hasValue "json" ] ;
+      sh:property [ sh:path schema:urlTemplate ; sh:minCount 1 ] ;
+      sh:property [ sh:path sab:pointer ; sh:minCount 1 ] ]
+    [ sh:property [ sh:path sab:sourceKind ; sh:hasValue "meta" ] ;
+      sh:property [ sh:path schema:urlTemplate ; sh:minCount 1 ] ;
+      sh:property [ sh:path schema:name ; sh:minCount 1 ] ]
+  ) .
+
+sabsh:CsrfTargetShape a sh:NodeShape ;
+  sh:targetClass sab:CsrfTarget ;
+  sh:property [ sh:path sab:targetKind ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:in ( "header" "form" "query" ) ] ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# --- Extraction --------------------------------------------------------------------
+
+sabsh:ExtractionShape a sh:NodeShape ;
+  sh:targetClass sab:Extraction ;
+  sh:property [ sh:path sab:format ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "json" "html" ) ] ;
+  sh:property [ sh:path sab:itemPath ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:itemType ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:idField ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:fieldRule ; sh:nodeKind sh:IRI ; sh:class sab:FieldRule ] .
+
+sabsh:FieldRuleShape a sh:NodeShape ;
+  sh:targetClass sab:FieldRule ;
+  sh:property [ sh:path sab:fieldProperty ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:selectorPath ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:attribute ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:valueDatatype ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:untrusted ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] .
+
+# --- Login -------------------------------------------------------------------------
+
+sabsh:LoginRouteShape a sh:NodeShape ;
+  sh:targetClass sab:LoginRoute ;
+  sh:property [ sh:path sab:loginMethod ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:operation ; sh:nodeKind sh:IRI ; sh:class sab:Operation ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:sessionCookie ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path sab:probeUrl ; sh:datatype xsd:string ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:refresh ; sh:nodeKind sh:IRI ; sh:class sab:RefreshRule ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxCount 1 ] .
+
+sabsh:RefreshRuleShape a sh:NodeShape ;
+  sh:targetClass sab:RefreshRule ;
+  sh:property [ sh:path schema:urlTemplate ; sh:datatype xsd:string ; sh:pattern "^https?://" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:tokenPointer ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:expiresInPointer ; sh:datatype xsd:string ; sh:maxCount 1 ] .
