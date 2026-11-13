@@ -463,8 +463,8 @@
    {
     "id": "E2",
     "name": "A real model in the loop",
-    "summary": "AgentDojo and ConVerse with a model as the core: with gates, without, and with each check removed.",
-    "status": "needs a model key"
+    "summary": "AgentDojo and ConVerse with a model as the core: with gates, without, and with each check removed. First run: AgentDojo with one model, five conditions.",
+    "status": "first run done"
    },
    {
     "id": "E3",

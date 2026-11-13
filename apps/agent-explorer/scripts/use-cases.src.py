@@ -693,7 +693,7 @@ METHODS = [
 PHASES = [
     ('E0', 'Runs without a model', 'Mutation, worst-case core and fault injection over the mortgage runs and the catalogue. Properties of the gates checked on generated actions.', 'next'),
     ('E1', 'AgentDojo replayed without a model', 'The benchmark publishes the tool calls that solve each task and each attack. Replaying both through the gate gives attack success under a worst-case core, the ceiling on utility, and the number of approvals.', 'first run done'),
-    ('E2', 'A real model in the loop', 'AgentDojo and ConVerse with a model as the core: with gates, without, and with each check removed.', 'needs a model key'),
+    ('E2', 'A real model in the loop', 'AgentDojo and ConVerse with a model as the core: with gates, without, and with each check removed. First run: AgentDojo with one model, five conditions.', 'first run done'),
     ('E3', 'Health and policy', 'MedAgentBench against the health profile; the tau-bench family with the organization\'s policy as its mandate.', 'later'),
     ('E4', 'Negotiation and markets', 'Negotiation and marketplace benchmarks for commitments and manipulation.', 'later'),
 ]

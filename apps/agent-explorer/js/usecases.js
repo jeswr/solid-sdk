@@ -227,6 +227,27 @@
     h += '<p style="max-width:72ch;margin-top:12px"><strong>The cost.</strong> Under standing mandates ' + (s.tasks - s.noAsk) + ' of ' + s.tasks + ' legitimate tasks stop to ask, mostly to pay a payee taken from a file or to write to someone the instruction did not name. And a person who approves everything stops nothing: for those attacks the approval is the only defense. The new rules were written after seeing these results, so they still need a test on attacks we have not looked at.</p>';
     return h;
   }
+  function secondResult() {
+    var B = AX.data.evalAgentDojoE2;
+    if (!B) return '';
+    var C = index(B.conditions);
+    var st = C.standing, ap = C['standing-approve'], ft = C.fitted, no = C.none;
+    if (!st || !ap || !ft || !no) return '';
+    function of(x) { return x.numerator + ' of ' + x.denominator; }
+    var h = '<h2 id="results-model">Second result: the same benchmark with a real model</h2>';
+    h += '<p style="max-width:72ch">The first result removed the model. This one puts a current model (' + esc(B.model) + ', ' + esc(B.effort) + ' effort) back as the core, with the same mandates, on ' + no.benign.denominator + ' tasks and ' + no.attack_success.denominator + ' pairs of task and attack chosen by seed before the run. It measures what the gates cost when the model plans its own route.</p>';
+    h += '<div class="table-wrap"><table class="data results"><thead><tr><th></th><th>Tasks done, no attack</th><th>Tasks done under attack</th><th>Attacks that succeed</th><th>Asks per task</th><th>Runs that ask</th></tr></thead><tbody>';
+    B.conditions.forEach(function (c) {
+      var gated = c.id === 'fitted' || c.id.indexOf('standing') === 0;
+      h += '<tr><td><strong>' + esc(c.label) + '</strong></td><td class="num">' + of(c.benign) + '</td><td class="num">' + of(c.under_attack) + '</td><td class="num">' + of(c.attack_success) + '</td><td class="num">' + (gated ? (c.asks / c.runs).toFixed(2) : '·') + '</td><td class="num">' + (gated ? c.runs_with_ask + ' of ' + c.runs : '·') + '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    h += '<p class="small muted" style="max-width:86ch;margin-top:8px">AgentDojo ' + esc(B.agentdojo_version) + ', suite ' + esc(B.suite_version) + ', the benchmark\'s default attack, one run per task and condition, ' + B.rows + ' runs. A few runs have no task score because the benchmark\'s checker raised an error. The principal is simulated: one refuses every ask, one approves an ask unless the call is one of the attack\'s own published calls.</p>';
+    h += '<p style="max-width:72ch;margin-top:12px"><strong>This model did not follow the attack, with or without gates.</strong> In ' + no.attacker_call_proposed + ' pairs it proposed a call that also appears in the attack\'s published solution, each one a read the user\'s own task could need. It never proposed the harmful call. So this run says nothing about protection. The first result is the evidence for that.</p>';
+    h += '<p style="max-width:72ch"><strong>What it measures is cost.</strong> Under a mandate fitted to each task\'s published solution, ' + ft.runs_with_stop + ' of ' + ft.runs + ' runs had a call stopped (' + ft.stops + ' stops, nearly all reads the solution did not use) and ' + ft.lost_vs_none + ' tasks were lost: a model takes its own route. Under standing mandates the gates asked in ' + st.runs_with_ask + ' of ' + st.runs + ' runs. When every ask was refused, ' + st.lost_vs_none + ' tasks that finish with no gate did not finish. When the asks were answered, completion matched the ungated, labelled runs.</p>';
+    h += '<p style="max-width:72ch"><strong>Every ask was one the person would have granted.</strong> All ' + ap.asks_approved + ' asks were for things the task wanted: a direct message, a channel message, an invitation, a calendar entry, an email. Read with the first result, the same questions are the whole defence when the model has been taken over and pure cost when it has not. Bringing that number down is the next piece of design work. <a href="' + AX.buildHash('specs', { doc: '60-evaluation' }) + '">Details in the plan, section 10</a>.</p>';
+    return h;
+  }
   var baseTests = R.tests;
   R.tests = function (root, p) {
     if (baseTests) baseTests(root, p); else root.innerHTML = '<div class="page"></div>';
@@ -240,6 +261,7 @@
     var nRun = U.filter(isRun).length;
     var h = '<header><p class="eyebrow">Evaluation</p><h1>How we know it works</h1><p class="lede">The design promises that an agent does only what its principal allowed, reveals no more than a task needs, relies only on what it has reason to, and leaves a record that shows who was at fault. This page is the plan for testing each promise and its cost, and the results so far. No number appears here until a run has produced it.</p></header>';
     h += firstResults();
+    h += secondResult();
     h += '<h2 id="questions">Ten questions</h2><div class="table-wrap"><table class="data"><thead><tr><th>Question</th><th>What is measured</th><th>How</th></tr></thead><tbody>';
     E.questions.forEach(function (q) {
       h += '<tr><td><strong>' + esc(q.question) + '</strong></td><td>' + esc(q.measure) + '</td><td><a href="' + AX.buildHash('tests', { at: 'method-' + q.method }) + '">' + esc(METHOD[q.method].name) + '</a></td></tr>';
