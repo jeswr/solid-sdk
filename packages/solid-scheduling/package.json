@@ -64,7 +64,8 @@
     "@jeswr/model-runtime": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
-    "n3": "^2.0.3"
+    "n3": "^2.0.3",
+    "@jeswr/pod-access": "workspace:*"
   },
   "peerDependencies": {
     "@rdfjs/types": "^2.0.1"
@@ -82,5 +83,6 @@
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol"
 }

@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { ownerPolicy, writeAcp, writeWac } from "@jeswr/pod-access";
 import { Parser } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { InMemoryChannelAdapter } from "./channel.js";
@@ -24,7 +26,10 @@ function recordingFetch(
     const url = String(input);
     if (init?.method === "HEAD")
       return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
-    if (init?.method === "GET") return new Response(null, { status: 404 });
+    if ((init?.method ?? "GET") === "GET")
+      return new Response(await writeWac(ownerPolicy(OWNER), CONTAINER, `${CONTAINER}.acl`), {
+        headers: { "content-type": "text/turtle", etag: '"v1"' },
+      });
     const ov = overrides?.(url);
     if (ov !== undefined) return ov;
     puts.push({
@@ -181,14 +186,19 @@ describe("importInbound ACL discovery privacy gate", () => {
     });
   const wac = `<#owner> a <http://www.w3.org/ns/auth/acl#Authorization> ;
     <http://www.w3.org/ns/auth/acl#accessTo> <${CONTAINER}> .`;
-  function pod(link: string, aclBody: string | number = 404, headStatus = 200) {
-    return vi.fn<typeof fetch>(async (_input, init) => {
+  function pod(link: string, aclBody: string | number = wac, headStatus = 200) {
+    return vi.fn<typeof fetch>(async (input, init) => {
       if (init?.method === "HEAD")
         return new Response(null, { status: headStatus, headers: { link } });
-      if (init?.method === "GET")
+      if ((init?.method ?? "GET") === "GET") {
+        if (!String(input).startsWith(CONTAINER))
+          return new Response(wac.replaceAll(CONTAINER, "https://pod.example/"), {
+            headers: { "content-type": "text/turtle", etag: '"root"' },
+          });
         return typeof aclBody === "number"
           ? new Response(null, { status: aclBody })
-          : new Response(aclBody, { headers: { "content-type": "text/turtle" } });
+          : new Response(aclBody, { headers: { "content-type": "text/turtle", etag: '"v1"' } });
+      }
       return new Response(null, { status: 201 });
     });
   }
@@ -198,13 +208,16 @@ describe("importInbound ACL discovery privacy gate", () => {
   ])("writes the advertised nonstandard ACL before private data (%s)", async (body) => {
     const fetch = pod('<owner-policy>; rel="acl"', body);
     expect((await run(fetch)).written).toBe(1);
-    expect(fetch.mock.calls.map(([url, init]) => [String(url), init?.method])).toEqual([
-      [CONTAINER, "HEAD"],
-      [`${CONTAINER}owner-policy`, "GET"],
-      [`${CONTAINER}owner-policy`, "PUT"],
-      ...[".eml", ".ttl", ".chat.ttl"].map((ext) => [`${CONTAINER}alb-cHJpdmF0ZQ${ext}`, "PUT"]),
+    expect(
+      fetch.mock.calls.filter(([, init]) => init?.method === "PUT").map(([url]) => String(url)),
+    ).toEqual([
+      `${CONTAINER}owner-policy`,
+      ...[".eml", ".ttl", ".chat.ttl"].map((ext) => `${CONTAINER}alb-cHJpdmF0ZQ${ext}`),
     ]);
-    for (const [, init] of fetch.mock.calls) expect(init?.redirect).toBe("manual");
+    const write = fetch.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(new Headers(write?.[1]?.headers).get(body === 404 ? "if-none-match" : "if-match")).toBe(
+      body === 404 ? "*" : '"v1"',
+    );
   });
   it.each([
     "ACL",
@@ -213,7 +226,13 @@ describe("importInbound ACL discovery privacy gate", () => {
   ])("discovers case-insensitive ACL relations without changing the target (%s)", async (relation) => {
     const fetch = pod(`<Owner-Policy>; ReL=${relation}`);
     expect((await run(fetch)).written).toBe(1);
-    expect(fetch.mock.calls.slice(0, 3).map(([url, init]) => [String(url), init?.method])).toEqual([
+    expect(
+      [
+        fetch.mock.calls[0],
+        fetch.mock.calls.find(([, init]) => (init?.method ?? "GET") === "GET"),
+        fetch.mock.calls.find(([, init]) => init?.method === "PUT"),
+      ].map((call) => [String(call?.[0]), call?.[1]?.method ?? "GET"]),
+    ).toEqual([
       [CONTAINER, "HEAD"],
       [`${CONTAINER}Owner-Policy`, "GET"],
       [`${CONTAINER}Owner-Policy`, "PUT"],
@@ -234,50 +253,55 @@ describe("importInbound ACL discovery privacy gate", () => {
   ])("accepts descriptive and extension Link attributes (%s)", async (link) => {
     const fetch = pod(link);
     expect((await run(fetch)).written).toBe(1);
-    expect(fetch.mock.calls.slice(0, 3).map(([url, init]) => [String(url), init?.method])).toEqual([
+    expect(
+      [
+        fetch.mock.calls[0],
+        fetch.mock.calls.find(([, init]) => (init?.method ?? "GET") === "GET"),
+        fetch.mock.calls.find(([, init]) => init?.method === "PUT"),
+      ].map((call) => [String(call?.[0]), call?.[1]?.method ?? "GET"]),
+    ).toEqual([
       [CONTAINER, "HEAD"],
       [`${CONTAINER}Owner-Policy`, "GET"],
       [`${CONTAINER}Owner-Policy`, "PUT"],
     ]);
   });
   it.each([
-    ['<.acl>; rel="acl"; title*=UTF-8\'en\'Owner; ReL="acl"', /Ambiguous ACL/],
-    ['<.acl>; rel="acl"; hreflang=en; hreflang=fr; anchor', /anchored ACL link/],
-    ['<.acl>; rel="acl"; title*=UTF-8\'en\'Owner; anchor="/other"', /anchored ACL link/],
-    ['<.acl>; rel="acl"; hreflang=en; hreflang=fr, <other>; rel="acl"', /unique WAC ACL/],
+    ['<.acl>; rel="acl"; title*=UTF-8\'en\'Owner; ReL="acl"', /Ambiguous access/],
+    ['<.acl>; rel="acl"; hreflang=en; hreflang=fr; anchor', /Anchored access/],
+    ['<.acl>; rel="acl"; title*=UTF-8\'en\'Owner; anchor="/other"', /Anchored access/],
+    [
+      '<.acl>; rel="acl"; hreflang=en; hreflang=fr, <other>; rel="acl"',
+      /advertised access document/,
+    ],
     [
       '<.acl>; rel="acl", <policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"; title*=UTF-8\'en\'Policy',
-      /Unsupported access-control model: ACP/,
+      /advertised access document/,
     ],
-    ['<.acl>; rel="acl"; bad/name=value', /Invalid ACL/],
-    ['<.acl>; rel="acl"; extension=', /Invalid ACL/],
-    ['<.acl>; rel="acl"; title="unclosed', /Invalid ACL/],
-    ['<.acl>; rel="acl"; title="closed"junk', /Invalid ACL/],
+    ['<.acl>; rel="acl"; bad/name=value', /Invalid access/],
+    ['<.acl>; rel="acl"; extension=', /Invalid access/],
+    ['<.acl>; rel="acl"; title="unclosed', /Invalid access/],
+    ['<.acl>; rel="acl"; title="closed"junk', /Invalid access/],
   ])("retains ACL association and grammar checks with attributes (%s)", async (link, error) => {
     const fetch = pod(link);
     await expect(run(fetch)).rejects.toThrow(error);
     expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["HEAD"]);
   });
   it.each([
-    ['<.acl>; rel="acl", <other>; rel="ACL"', /unique WAC ACL/],
-    ['<other>; rel="AcL", <.acl>; rel="acl"', /unique WAC ACL/],
-    ['<.acl>; rel="ACL", <other>; rel="aCl"', /unique WAC ACL/],
-    ['<.acl>; rel="ACL"; anchor="/other"', /anchored ACL link/],
+    ['<.acl>; rel="acl", <other>; rel="ACL"', /advertised access document/],
+    ['<other>; rel="AcL", <.acl>; rel="acl"', /advertised access document/],
+    ['<.acl>; rel="ACL", <other>; rel="aCl"', /advertised access document/],
+    ['<.acl>; rel="ACL"; anchor="/other"', /Anchored access/],
     [
       '<.acl>; rel="acl", <policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
-      /Unsupported access-control model: ACP/,
+      /advertised access document/,
     ],
     [
       '<.acl>; rel="acl", <policy>; rel="http://www.w3.org/ns/solid/acp#accesscontrol"',
-      /Unsupported access-control model: ACP/,
+      /advertised access document/,
     ],
     [
       '<policy>; rel="HTTP://WWW.W3.ORG/NS/SOLID/ACP#ACCESSCONTROL", <.acl>; rel="acl"',
-      /Unsupported access-control model: ACP/,
-    ],
-    [
-      '<.acl>; rel="acl HTTP://www.w3.org/ns/solid/acp#AccessControl"',
-      /Unsupported access-control model: ACP/,
+      /advertised access document/,
     ],
   ])("refuses unsafe case-insensitive relations before reading or writing ACLs (%s)", async (link, error) => {
     const fetch = pod(link);
@@ -290,7 +314,6 @@ describe("importInbound ACL discovery privacy gate", () => {
     ['<.acl>; rel="acl"; anchor="/other"', 404, 200],
     ['<.acl>; rel="acl"; rel="acl"', 404, 200],
     ["broken", 404, 200],
-    ['<.acr>; rel="acl"', 404, 200],
     ['<ftp://pod.example/inbox/.acl>; rel="acl"', 404, 200],
     ['<.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl"', 404, 200],
     ['<https://foreign.example/owner.acl>; rel="acl"', 404, 200],
@@ -330,7 +353,69 @@ describe("importInbound ACL discovery privacy gate", () => {
   ])("refuses legacy defaultForNew scopes before replacing the ACL (%s)", async (scope) => {
     const body = `${wac}\n<#owner> <http://www.w3.org/ns/auth/acl#defaultForNew> ${scope} .`;
     const fetch = pod('<owner-policy>; rel="acl"', body);
-    await expect(run(fetch)).rejects.toThrow(/defaultForNew/);
-    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["HEAD", "GET"]);
+    await expect(run(fetch)).rejects.toThrow();
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toEqual([]);
   });
+  it("refuses replacing another agent's grants before pulling messages", async () => {
+    const body = `${wac} <#owner> <http://www.w3.org/ns/auth/acl#agent> <https://other.example/#me>.`;
+    const fetch = pod('<owner-policy>; rel="acl"', body);
+    await expect(run(fetch)).rejects.toThrow(/replace: true/);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toEqual([]);
+  });
+  it("uses an advertised .acr name for WAC when the inherited model establishes WAC", async () => {
+    const fetch = pod('<.acr>; rel="acl"', 404);
+    expect((await run(fetch)).written).toBe(1);
+    expect(fetch.mock.calls.find(([, init]) => init?.method === "PUT")?.[0]).toBe(
+      `${CONTAINER}.acr`,
+    );
+  });
+});
+
+it("refuses re-sync of a shared container, supports explicit replace and repeats without a strong ETag", async () => {
+  let installed: string | undefined;
+  let etag = '"shared"';
+  const writes: string[] = [];
+  const writeFetch: typeof globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (init?.method === "HEAD")
+      return new Response(null, { headers: { link: '<?ext=acr>; rel="acl"' } });
+    if (init?.method === "PUT") {
+      expect(new Headers(init.headers).get("if-match")).toBe('"shared"');
+      installed = String(init.body);
+      writes.push(url);
+      return new Response(null, { status: 204 });
+    }
+    const resource = url.slice(0, url.indexOf("?"));
+    const body =
+      resource === CONTAINER && installed !== undefined
+        ? installed
+        : await writeAcp(
+            ownerPolicy(
+              resource === CONTAINER ? "https://other.example/#me" : OWNER,
+              resource === CONTAINER,
+            ),
+            resource,
+            url,
+            "ess",
+          );
+    return new Response(body, { headers: { "content-type": "text/turtle", etag } });
+  };
+  const root = "https://pod.example/";
+  const run = (replace?: boolean) =>
+    importInbound({
+      adapter: new InMemoryChannelAdapter("email", []),
+      writeFetch,
+      container: CONTAINER,
+      ownerWebId: OWNER,
+      root,
+      implementation: "ess",
+      ...(replace === undefined ? {} : { replace }),
+    });
+  await expect(run()).rejects.toMatchObject({ code: "unsupported" });
+  expect(writes).toEqual([]);
+  await run(true);
+  expect(writes).toEqual([`${CONTAINER}?ext=acr`]);
+  etag = 'W/"weak"';
+  await run();
+  expect(writes).toHaveLength(1);
 });

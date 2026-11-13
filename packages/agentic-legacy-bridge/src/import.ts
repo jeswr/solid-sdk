@@ -25,8 +25,7 @@
  * write failure THROWS (never silently loses data).
  */
 
-import { buildOwnerOnlyAclTurtle } from "./acl.js";
-import { discoverWacAcl } from "./acl-discovery.js";
+import { makeOwnerOnly, type OwnerOnlyOptions } from "@jeswr/pod-access/roles";
 import { serializeCanonical } from "./canonical.js";
 import type { ChannelAdapter, InboundRawMessage } from "./channel.js";
 import { ChannelParseError } from "./errors.js";
@@ -44,7 +43,8 @@ import {
 } from "./safe-iri.js";
 
 /** Options for {@link importInbound}. */
-export interface ImportInboundOptions {
+export interface ImportInboundOptions
+  extends Pick<OwnerOnlyOptions, "root" | "implementation" | "replace"> {
   /** The channel adapter to pull inbound messages from. */
   readonly adapter: ChannelAdapter;
   /**
@@ -198,9 +198,13 @@ export async function importInbound(options: ImportInboundOptions): Promise<Impo
 
   // Lock the container BEFORE any content lands in it.
   if (writeAcl) {
-    const aclUrl = await discoverWacAcl(options.writeFetch, container);
-    const aclTurtle = await buildOwnerOnlyAclTurtle(container, options.ownerWebId);
-    await put(options.writeFetch, aclUrl, "text/turtle", aclTurtle);
+    await makeOwnerOnly(container, options.ownerWebId, {
+      ...(options.root === undefined ? {} : { root: options.root }),
+      ...(options.implementation === undefined ? {} : { implementation: options.implementation }),
+      ...(options.replace === undefined ? {} : { replace: options.replace }),
+      fetch: options.writeFetch,
+      inherit: true,
+    });
   }
 
   const inbound = await options.adapter.pullInbound();

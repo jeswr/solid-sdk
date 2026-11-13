@@ -379,3 +379,49 @@ durable, identical-offer-only retry point, and the peer response resolves it wit
 Authored by the PSS agent — M1–M2.5a by Claude Opus 4.8 (the then-session model for this
 security-sensitive hostile-input package), the M2.6 metadata protocol by Claude Fable 5. Reviewed
 by codex via roborev (`.roborev.toml`). MIT.
+
+## Owner-only access changes (sst-9ku5)
+
+Online owner-only writes now delegate to `@jeswr/pod-access/roles` `makeOwnerOnly`.
+They discover the server's ACL/ACR Link, support WAC and CSS/ESS ACP, and refuse missing
+or ambiguous Links, unknown/mixed models, malformed/unsupported policies, unsafe URLs
+and foreign resource bindings. Targets must exist and support HEAD discovery; an
+`acl`-only Link requires model evidence in readable own or ancestor RDF. Credentialed
+URLs, resource queries/fragments and ambiguous encoded paths now refuse. The wrappers
+use the default trusted CSS dialect; pass `implementation: "ess"` for ESS, including
+server-advertised `?ext=acr` endpoints (only that exact query is accepted).
+Creation uses `If-None-Match: *`; replacement requires a strong ETag and `If-Match`.
+An existing document naming other principals now refuses instead of silently removing
+their access; explicit removal requires `replace: true`.
+Foreign inherited ACP member grants always refuse. No error is swallowed and 412 is
+never retried. Access transport now refuses redirects and disables caching; failures
+use pod-access's typed role errors (parser errors propagate).
+
+The owner receives Read/Write/Append and management; explicit Append is redundant with
+Write. Containers retain member defaults; resource writes omit defaults. Descendants'
+own policies are not rewritten. Private access is still installed before imported content.
+The exported offline WAC builders keep their signatures and graph meaning (Read/Write/
+Control and their historical defaults) but now use pod-access's policy serializer, so
+Turtle prefix spelling and authorization subject names can change. They do not perform
+server discovery or prove that a resource is private. Any `aclUrlFor` export remains a
+deprecated offline convention, and is never used to choose an online write URL.
+
+The importer already discovered WAC Links; it now also accepts supported ACP and uses
+conditional writes plus foreign-grant refusal. Its separate public `discoverWacAcl`
+compatibility API retains its existing strict WAC-only validation contract. The
+multi-identity `buildBridgeAclTurtle` privilege split is unchanged.
+
+Discovered endpoints use the helper's origin-root scope (or the wrapper's explicit `root`), rather than the old importer's container-only restriction. Advertised names
+are independent of their model: a `.acr` filename can hold established WAC. Missing own
+WAC documents now need readable ancestor model evidence; all scope and policy checks run
+again before the conditional write.
+
+`importInbound(options)` accepts `root`, `implementation` and `replace` alongside its existing options.
+Set `root` to the pod's storage root (for example `https://host/alice/`) when the pod
+lives at a sub-path; discovery stops there. Without it, discovery uses the origin root.
+An already owner-only document with the required direct/member permissions sends no PUT,
+so repeated imports also work with weak or absent ETags. Containers inherit by default;
+removing existing owner member grants through the helper requires explicit `inherit: false`.
+If the user has since shared the container, re-sync refuses unless `replace: true` explicitly
+approves removing those own-document grants. A write that changes a policy still needs a
+strong ETag; foreign additive ACP ancestor grants remain a refusal.

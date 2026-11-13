@@ -26,10 +26,9 @@ export interface Snapshot {
 }
 /**
  * Refuses (`scope`) a URL outside `root` or not in canonical form. `query` admits a query string,
- * which only read-only model detection allows on an access document (ESS addresses its ACRs as
- * `?ext=acr`); every path that writes keeps refusing it.
+ * for read-only detection. Owner-only ESS setup admits only the exact `?ext=acr` query.
  */
-export function scoped(url: string, root: string, query = false): string {
+export function scoped(url: string, root: string, query: boolean | "?ext=acr" = false): string {
   safeIri(url);
   const parsed = new URL(url);
   const base = new URL(root);
@@ -37,7 +36,7 @@ export function scoped(url: string, root: string, query = false): string {
     !/^https?:$/.test(parsed.protocol) ||
     parsed.username ||
     parsed.password ||
-    (parsed.search && !query) ||
+    (parsed.search && query !== true && parsed.search !== query) ||
     parsed.hash ||
     /%(?:2f|5c|2e|25|00)/i.test(parsed.pathname) ||
     parsed.href !== url ||
@@ -48,18 +47,56 @@ export function scoped(url: string, root: string, query = false): string {
     throw roleError("scope", url, "Access URL is outside the selected root or is not canonical");
   return url;
 }
-function links(headers: Headers, base: string, rel: string): string[] {
+/** Strict RFC 8288 association parsing shared by role edits and owner-only setup. */
+export function links(headers: Headers, base: string, rel: string): string[] {
   const result: string[] = [];
-  for (const part of (headers.get("link") ?? "").split(/,(?=\s*<)/)) {
-    const target = /^\s*<([^<>]*)>/.exec(part)?.[1];
-    if (target === undefined) continue;
+  let remaining = headers.get("link") ?? "";
+  while (remaining.trim()) {
+    const link =
+      /^\s*<([^<>]*)>((?:\s*;\s*[!#$%&'*+.^_`|~0-9A-Za-z-]+\s*(?:=\s*(?:"(?:[^"\\]|\\.)*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+))?)*)\s*(?:,|$)/.exec(
+        remaining,
+      );
+    // A valid entry consumes commas within its target and quoted parameters.
+    // For malformed entries recover at the next comma, then decide whether the
+    // broken entry actually carries the requested relation before refusing it.
+    const length = link ? link[0].length : remaining.indexOf(",") + 1 || remaining.length;
+    const entry = remaining.slice(0, length);
+    remaining = remaining.slice(length);
+    const parameters = [
+      ...entry
+        .slice(entry.indexOf(">") + 1)
+        .matchAll(
+          /;\s*([!#$%&'*+.^_`|~0-9A-Za-z-]+)\s*(?:=\s*("(?:[^"\\]|\\.)*(?:"|$)|[!#$%&'*+.^_`|~0-9A-Za-z-]+))?/g,
+        ),
+    ];
+    const value = (raw: string) =>
+      raw.startsWith('"')
+        ? raw.slice(1, raw.endsWith('"') ? -1 : undefined).replace(/\\(.)/g, "$1")
+        : raw;
+    const relTokens = parameters
+      .filter((param) => (param[1] as string).toLowerCase() === "rel")
+      .flatMap((param) => value(param[2] ?? "").split(/\s+/));
+    // Relation values match case-sensitively, like the requests-solid parser. RFC 8288
+    // compares them case-insensitively, so a case variant could name a second endpoint
+    // the server means: refuse it rather than silently pick another document.
+    if (!relTokens.includes(rel)) {
+      if (relTokens.some((token) => token.toLowerCase() === rel.toLowerCase()))
+        throw roleError("invalid-response", base, "Access Link relation casing is ambiguous");
+      continue;
+    }
+    if (!link) throw roleError("invalid-response", base, "Invalid access Link header");
     const params = new Map<string, string>();
-    for (const match of part.matchAll(/;\s*([\w-]+)\s*=\s*(?:"([^"]*)"|([^;,\s]+))/g))
-      params.set((match[1] as string).toLowerCase(), match[2] ?? (match[3] as string));
+    for (const param of parameters) {
+      const name = (param[1] as string).toLowerCase();
+      const raw = param[2] ?? "";
+      if (name === "rel" && params.has(name))
+        throw roleError("invalid-response", base, "Ambiguous access Link relation");
+      if (!params.has(name)) params.set(name, value(raw));
+    }
     if (params.has("anchor"))
       throw roleError("invalid-response", base, "Anchored access links are ambiguous");
-    if ((params.get("rel") ?? "").split(/\s+/).includes(rel))
-      result.push(new URL(target, base).href);
+    if (!link[1]) throw roleError("invalid-response", base, "Empty access Link target");
+    result.push(new URL(link[1], base).href);
   }
   return [...new Set(result)];
 }
@@ -127,11 +164,23 @@ export function mismatchedModel(error: unknown): "wac" | "acp" | undefined {
 /**
  * Own ACL or nearest WAC ancestor; ACP collects member controls through the root. With a pinned
  * `options.model`, a resource that uses the other model is refused (`unsupported`), so nothing
- * planned from this snapshot can write that model's documents.
+ * planned from this snapshot can write that model's documents. `establishedModel` is internal
+ * evidence from strict owner setup; absent documents then never use filename heuristics.
  */
-export async function load(resource: string, options: RolesOptions): Promise<Snapshot> {
+export async function load(
+  resource: string,
+  options: RolesOptions,
+  establishedModel?: "wac" | "acp",
+  accessQuery: false | "?ext=acr" = false,
+): Promise<Snapshot> {
   // Outside detection the resource's own advertised document always sets the model.
-  const snapshot = (await discover(resource, options, false)) as Snapshot;
+  const snapshot = (await discover(
+    resource,
+    options,
+    false,
+    establishedModel,
+    accessQuery,
+  )) as Snapshot;
   if (options.model !== undefined && snapshot.model !== options.model) {
     const error = roleError(
       "unsupported",
@@ -150,18 +199,22 @@ export async function load(resource: string, options: RolesOptions): Promise<Sna
  * document decides the model, so a missing or empty one never counts as WAC, and a walk that
  * finds no deciding document reports "unknown". Refuses `unsupported` when the resource advertises
  * no access document; every other failure (including mixed models, see `isMixedModel`) is thrown.
+ * Owner-only setup restricts `accessQuery` throughout the walk, including before model detection.
  */
 export async function detectModel(
   resource: string,
   options: Pick<RolesOptions, "fetch" | "root">,
+  accessQuery: boolean | "?ext=acr" = true,
 ): Promise<{ model: "wac" | "acp" | "unknown"; ownUrl: string }> {
-  const { model, ownUrl } = await discover(resource, options, true);
+  const { model, ownUrl } = await discover(resource, options, true, undefined, accessQuery);
   return { model: model ?? "unknown", ownUrl };
 }
 async function discover(
   resource: string,
   options: Pick<RolesOptions, "fetch" | "root" | "implementation">,
   detecting: boolean,
+  establishedModel?: "wac" | "acp",
+  accessQuery: boolean | "?ext=acr" = false,
 ): Promise<Omit<Snapshot, "model"> & { model: Snapshot["model"] | undefined }> {
   const root = options.root ?? `${new URL(resource).origin}/`;
   scoped(root, root);
@@ -190,7 +243,7 @@ async function discover(
     if (current === resource && endpoint === undefined)
       throw roleError("unsupported", resource, "Resource advertises no access document");
     if (endpoint !== undefined) {
-      scoped(endpoint, root, detecting);
+      scoped(endpoint, root, accessQuery);
       const response = await request(endpoint, options, {
         headers: { accept: "text/turtle, application/ld+json;q=0.9" },
       });
@@ -223,7 +276,7 @@ async function discover(
         links(head.headers, current, "type").includes(`${ACP}AccessControlResource`) ||
         links(response.headers, endpoint, "type").includes(`${ACP}AccessControlResource`) ||
         links(head.headers, current, `${ACP}accessControl`).length > 0 ||
-        (!exists && endpoint.endsWith(".acr"));
+        (!exists && establishedModel === undefined && endpoint.endsWith(".acr"));
       const wac =
         dataset.match(
           null,
@@ -231,7 +284,7 @@ async function discover(
           DataFactory.namedNode(`${ACL}Authorization`),
         ).size > 0;
       if (acp && wac) throw mixedModels(endpoint, "Mixed access-control vocabularies");
-      const detected = acp ? "acp" : "wac";
+      const detected = !exists && establishedModel ? establishedModel : acp ? "acp" : "wac";
       if (current === resource) ownUrl = endpoint;
       // Detection decides only from an existing, non-empty document; a missing or empty one says
       // nothing about the model, so the walk goes on to the nearest ancestor that does. A

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 //
 // The owner-only, fail-closed ACL helper. The positive test PARSES the generated
@@ -5,6 +6,7 @@
 // Read/Write/Control over the container + descendants, with NO public grant.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { describe, expect, it, vi } from "vitest";
 import { aclUrlFor, buildOwnerOnlyAcl, writeOwnerOnlyAcl } from "./acl.js";
 
@@ -90,22 +92,71 @@ describe("buildOwnerOnlyAcl — owner-only, fail-closed", () => {
   });
 });
 
-describe("writeOwnerOnlyAcl — injectable fetch seam (no server in unit tests)", () => {
-  it("PUTs the ACL to the container's .acl resource with the owner-only body", async () => {
-    const fetchMock = vi.fn(async () => new Response(null, { status: 201 }));
-    await writeOwnerOnlyAcl(CONTAINER, OWNER, fetchMock as unknown as typeof globalThis.fetch);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe(`${CONTAINER}.acl`);
-    expect(init.method).toBe("PUT");
-    expect(String(init.body)).toContain("acl:Read");
-    expect(String(init.body)).toContain(OWNER);
+describe("writeOwnerOnlyAcl — discovered, conditional private access", () => {
+  function pod(status = 204, existingOwner = OWNER, link = '<owner-policy>; rel="acl"') {
+    return vi.fn<typeof fetch>(async (_url, init) => {
+      if (init?.method === "HEAD") return new Response(null, { headers: { link } });
+      if (init?.method !== "PUT")
+        return new Response(
+          await writeWac(ownerPolicy(existingOwner), CONTAINER, `${CONTAINER}owner-policy`),
+          {
+            headers: { "content-type": "text/turtle", etag: '"current"' },
+          },
+        );
+      return new Response(null, { status });
+    });
+  }
+  it("writes the advertised ACL with the exact replacement validator", async () => {
+    const fetch = pod();
+    await writeOwnerOnlyAcl(CONTAINER, OWNER, fetch);
+    const writes = fetch.mock.calls.filter(([, init]) => init?.method === "PUT");
+    expect(writes).toHaveLength(1);
+    const [url, init] = writes[0] ?? [];
+    expect(url).toBe(`${CONTAINER}owner-policy`);
+    expect(new Headers(init?.headers).get("if-match")).toBe('"current"');
+    expect(String(init?.body)).toContain(`${ACL}Read`);
+    expect(String(init?.body)).toContain(OWNER);
   });
+  it.each([401, 403, 412])("refuses HTTP %s without retry", async (status) => {
+    const fetch = pod(status);
+    await expect(writeOwnerOnlyAcl(CONTAINER, OWNER, fetch)).rejects.toThrow(String(status));
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+  });
+  it("refuses missing Link and foreign grants before writing", async () => {
+    for (const fetch of [pod(204, OWNER, ""), pod(204, "https://other.example/#me")]) {
+      await expect(writeOwnerOnlyAcl(CONTAINER, OWNER, fetch)).rejects.toThrow();
+      expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toEqual([]);
+    }
+  });
+  it("writes a file without container defaults", async () => {
+    const target = `${CONTAINER}item.ttl`;
+    let body = "";
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
+      if (init?.method === "HEAD")
+        return new Response(null, { headers: { link: '<file-policy>; rel="acl"' } });
+      if (init?.method !== "PUT")
+        return new Response(await buildOwnerOnlyAcl(target, OWNER), {
+          headers: { "content-type": "text/turtle", etag: '"file-v1"' },
+        });
+      body = String(init.body);
+      return new Response(null, { status: 204 });
+    });
+    await writeOwnerOnlyAcl(target, OWNER, fetch);
+    const ds = await parseRdf(body, "text/turtle");
+    expect(ds.match(null, { termType: "NamedNode", value: `${ACL}default` } as never).size).toBe(0);
+  });
+});
 
-  it("FAIL-CLOSED: throws on a non-2xx ACL write (resource must not be treated as protected)", async () => {
-    const fetchMock = vi.fn(async () => new Response("forbidden", { status: 403 }));
-    await expect(
-      writeOwnerOnlyAcl(CONTAINER, OWNER, fetchMock as unknown as typeof globalThis.fetch),
-    ).rejects.toThrow(/ACL write failed/);
+it("forwards root and explicit replacement consent", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) => {
+    if (init?.method === "HEAD")
+      return new Response(null, { headers: { link: '<owner-policy>; rel="acl"' } });
+    if (init?.method !== "PUT")
+      return new Response(await buildOwnerOnlyAcl(CONTAINER, "https://other.example/#me"), {
+        headers: { "content-type": "text/turtle", etag: '"shared"' },
+      });
+    return new Response(null, { status: 204 });
   });
+  await writeOwnerOnlyAcl(CONTAINER, OWNER, fetch, { root: CONTAINER, replace: true });
+  expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
 });

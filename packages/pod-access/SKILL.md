@@ -224,9 +224,9 @@ Do not edit ancestor documents. Keep the HTTP body/quad/ancestor bounds, root ch
 redirect refusal and fetch-rdf remote-context refusal. No network in tests. A pinned
 `options.model` refuses (`unsupported`, before any write) a resource whose detected model
 differs (a behaviour change: these functions used to ignore it); `detectModel` is
-read-only and the only path that admits a query-addressed access document (ESS `?ext=acr`).
-Writing paths keep refusing queries. `detectModel` fails closed: only an existing, non-empty
-access document decides the model, otherwise it reports `unknown`; `isMixedModel` tags its
+read-only and admits a query-addressed access document. Owner-only ESS setup additionally
+admits the exact `?ext=acr` query within the selected root; other writing paths refuse queries.
+`detectModel` fails closed: only an existing, non-empty access document decides the model, otherwise it reports `unknown`; `isMixedModel` tags its
 mixed-model refusals, which requests-solid reports as `UnsupportedAccessModelError("unknown")`.
 
 <!-- AUTHORED-BY Codex GPT-6 -->
@@ -344,3 +344,37 @@ whole verified destination and any remaining source items. Never recreate data o
 Native moves still delegate unchanged. Keep ordering, validator races, cleanup/deletion failures,
 lockout, aborts and both WAC/ACP transports covered at 100%. README documents non-atomic ancestor
 and final-check races; never promise transactional visibility.
+
+## Owner-only setup
+
+Use `makeOwnerOnly(resourceUrl, ownerWebId, { fetch, root?, implementation?, inherit?, replace? })`
+from `@jeswr/pod-access/roles`. This is the shared online owner-only writer; reuse it instead
+of constructing ACLs in consuming packages. It uses `ownerPolicy` and the existing system
+writers and readers. `inherit` defaults true for trailing-slash containers and false for files;
+true writes direct and member access. Dropping existing owner member grants requires explicit `inherit: false`.
+Already owner-only documents with the required modes and scopes return without PUT or an
+ETag requirement. `replace` defaults false; true explicitly permits removing understood
+foreign own-document grants. It never permits foreign resource bindings or bypasses unsupported
+RDF. Always refuse foreign additive ACP ancestor member access, including with replace.
+
+Require one server-advertised Link endpoint, never derive it or the model from a suffix.
+An ACP relation/type permits creation; `rel="acl"` alone needs an own/ancestor RDF model.
+Unknown/mixed systems refuse. Reserved ACP agent IRIs can never be owner WebIDs:
+reject them before I/O, including PublicAgent/AuthenticatedAgent/OwnerAgent/CreatorAgent.
+Normalize HTTP(S) inputs; refuse credentials, resource query/
+fragment. ESS owner-only setup admits only an exact `?ext=acr` access query, with the
+same origin/root bounds; all other access queries refuse. Preserve annotations, and serialize
+the final merged dataset with `@jeswr/rdf-serialize` to validate foreign literal metadata and blank-node labels. Re-read discovery and governing
+validators immediately before persistence. Use If-None-Match: *
+for create and a strong If-Match for policy changes; never retry 401/403/412 or swallow errors.
+CSS is the default trusted implementation; callers must assert ESS explicitly. Keep this
+helper separate from access-record sealing and keys. Test WAC, CSS/ESS ACP, both scopes,
+foreign selectors, unknown models, malformed links/RDF, validators, URL normalization and
+all transport failures, with 100% coverage. Ancestor/discovery races are not transactional;
+independent descendant policies are not rewritten. The README records the five original
+call sites and exact behavior changes.
+
+The five owner-only wrappers forward optional `root`, `implementation` and `replace`; the
+three `writeOwnerOnlyAcl` functions take these in a fourth options argument. Import wrappers
+refuse re-sync of a subsequently shared container unless `replace: true`. Link parsing must
+ignore malformed unrelated entries and refuse malformed entries carrying the requested relation.
