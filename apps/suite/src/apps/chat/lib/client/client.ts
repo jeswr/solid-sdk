@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import {
@@ -8,6 +9,11 @@ import {
   isWithinPodScope,
   refuseRedirects,
 } from "@jeswr/guarded-fetch";
+import {
+  type ConcurrentMapper,
+  createConcurrentMapper,
+  mapConcurrent,
+} from "../../../../lib/parallel";
 import { encodeRef } from "../../../../lib/refs";
 import {
   ChatIoError,
@@ -17,23 +23,29 @@ import {
   createRoom as createModelRoom,
   deleteOwnMessage,
   httpIri,
+  isStrongEtag,
   loadChat,
   loadMessages,
   loadRoom,
   loadRooms,
+  type MemberContainer,
+  memberDocument,
   messageResource,
-  messageSubject,
   type Reaction,
   react,
+  reactionDocument,
   readMessages,
   readReactions,
-  readRoom,
+  type readRoom,
+  readRoomLayout,
   removeJoinedRoom,
+  removeMessage,
   roomContainer,
   saveJoinedRoom,
   saveMessageEdit,
   saveMessageTask,
   sendMessage,
+  strongEtag,
   unreact,
 } from "../model";
 import { copyMessageTask, loadProfileName, loadRoomFiles } from "../model/extras";
@@ -56,6 +68,7 @@ export interface Room {
   members: string[];
   creator: string | undefined;
   created: string | undefined;
+  memberContainers?: MemberContainer[];
   isDirect: boolean;
   lastActivity?: Date;
 }
@@ -119,6 +132,7 @@ function roomResult(url: string, room: NonNullable<ReturnType<typeof readRoom>>)
     members: room.members,
     creator: room.creator,
     created: room.created,
+    ...(room.memberContainers !== undefined ? { memberContainers: room.memberContainers } : {}),
     isDirect: room.members.length === 2 && (room.name === "" || room.name.startsWith("dm:")),
   };
 }
@@ -134,6 +148,8 @@ function slug(name: string): string {
       .replace(/-$/, "") || "room"
   );
 }
+/** Reaction sources kept for toggles; least recently loaded documents are evicted first. */
+const MAX_REACTION_SOURCES = 512;
 /** Attach cancellation without changing the RDF model's fetch seam. */
 function abortableFetch(
   fetch: typeof globalThis.fetch,
@@ -149,6 +165,11 @@ function abortableFetch(
 export class ChatClient {
   readonly fetch: typeof globalThis.fetch;
   readonly preferences: PreferencesStore;
+  private readonly readMap = createConcurrentMapper();
+  /** The open room's timeline starts before queued search and unread reads. */
+  private readonly timelineMap: ConcurrentMapper = (items, work) =>
+    this.readMap(items, work, { priority: true });
+  private readonly reactionSources = new Map<string, Map<string, Reaction[]>>();
   private readonly known = new Map<string, Message>();
   private readonly profiles = new Map<string, Promise<string>>();
   private readonly resolvedNames = new Map<string, string>();
@@ -215,10 +236,22 @@ export class ChatClient {
     if (!room) throw new ChatModelError("invalid-input");
     return roomResult(url, room);
   }
-  private remember(messages: ChatMessage[], reactions = new Map<string, Reaction[]>()): Message[] {
+  /** Empty sources are dropped, so only documents that hold reactions count toward the cap. */
+  private rememberSource(url: string, source: Map<string, Reaction[]>): void {
+    this.reactionSources.delete(url);
+    if (source.size === 0) return;
+    this.reactionSources.set(url, source);
+    for (const oldest of this.reactionSources.keys()) {
+      if (this.reactionSources.size <= MAX_REACTION_SOURCES) break;
+      this.reactionSources.delete(oldest);
+    }
+  }
+  private remember(messages: ChatMessage[], reactions?: Map<string, Reaction[]>): Message[] {
     return messages.map((message) => {
       const result = displayMessage(message);
-      result.reactions = aggregateReactions(reactions.get(message.id) ?? [], this.webId);
+      result.reactions = reactions
+        ? aggregateReactions(reactions.get(message.id) ?? [], this.webId)
+        : (this.known.get(message.id)?.reactions ?? []);
       this.known.set(result.id, result);
       return result;
     });
@@ -230,19 +263,33 @@ export class ChatClient {
       days = 7,
       since = new Date("1970-01-01T00:00:00Z"),
       signal,
+      background = false,
     }: {
       before?: Date;
       days?: number;
       since?: Date | undefined;
       signal?: AbortSignal | undefined;
+      /** Search and unread counts; the default is the interactive timeline. */
+      background?: boolean;
     } = {},
-  ) {
-    const page = await loadMessages(abortableFetch(this.fetch, signal), url, before, since, days);
+  ): Promise<{ messages: Message[]; next: Date | null; dropped?: number }> {
+    const page = await loadMessages(abortableFetch(this.fetch, signal), url, before, since, days, {
+      reader: this.webId,
+      map: background ? this.readMap : this.timelineMap,
+    });
     const reactions = new Map<string, Reaction[]>();
-    for (const document of page.documents)
-      for (const [message, found] of readReactions(document.dataset, document.url))
+    const known = new Set(page.messages.map((message) => message.id));
+    for (const document of page.documents) {
+      const source = readReactions(document.dataset, document.url, known, page.memberContainers);
+      this.rememberSource(document.url, source);
+      for (const [message, found] of source)
         reactions.set(message, [...(reactions.get(message) ?? []), ...found]);
-    return { messages: this.remember(page.messages, reactions), next: page.next };
+    }
+    return {
+      messages: this.remember(page.messages, reactions),
+      next: page.next,
+      dropped: page.dropped,
+    };
   }
   async search(
     source: string,
@@ -313,9 +360,16 @@ export class ChatClient {
               created.getTime() <= before.getTime()
                 ? created
                 : undefined;
-            const page = await this.messages(room.url, { before, days: budget, since, signal });
+            const page = await this.messages(room.url, {
+              before,
+              days: budget,
+              since,
+              signal,
+              background: true,
+            });
             signal?.throwIfAborted();
             pages[index] = page;
+            result.droppedRecords += page.dropped ?? 0;
             result.searchedRooms++;
             if (page.next) reasons.add("days");
           } catch {
@@ -412,42 +466,72 @@ export class ChatClient {
       // sendMessage re-reads the day, merging the append against the winner.
       document = await send();
     }
-    const messages = this.remember(
-      readMessages(document.dataset),
-      readReactions(document.dataset, document.url),
-    );
-    return messages.find((message) => message.id === messageSubject(room, at, id)) as Message;
+    const messages = this.remember(readMessages(document.dataset));
+    return messages.find((message) => message.id === `${document.url}#${id}`) as Message;
   }
   async react(room: string, subject: string, emoji: string): Promise<void> {
     assertWithinPodScope(this.storageUrl, roomContainer(room));
-    const url = messageResource(room, subject);
-    let document: Awaited<ReturnType<typeof loadChat>>;
+    messageResource(room, subject);
+    let resolved: Awaited<ReturnType<typeof reactionDocument>>;
     try {
-      document = await loadChat(this.fetch, room, url);
+      resolved = await reactionDocument(this.fetch, room, subject, this.webId);
     } catch (error) {
-      if (error instanceof RdfFetchError && error.status === 404)
+      if (error instanceof ChatModelError && error.code === "missing-message")
         throw new ChatClientError("missing-message");
       throw error;
     }
-    const message = readMessages(document.dataset).find((message) => message.id === subject);
+    const { context, target } = resolved;
+    let { document } = resolved;
+    const message = readMessages(target.dataset).find((message) => message.id === subject);
     if (!message || message.tombstone || message.deletedAt !== undefined)
       throw new ChatClientError("missing-message");
-    const mine = (readReactions(document.dataset, url).get(subject) ?? []).filter(
-      (reaction) => reaction.actorId === this.webId && reaction.emoji === emoji,
-    );
+    const mine = (
+      readReactions(document.dataset, document.url, new Set([subject]), context?.containers).get(
+        subject,
+      ) ?? []
+    ).filter((reaction) => reaction.actorId === this.webId && reaction.emoji === emoji);
     const input = { message: subject, actor: this.webId, at: new Date() };
     if (mine.length) {
       for (const reaction of mine) {
-        document = await unreact(this.fetch, room, {
-          ...input,
-          id: crypto.randomUUID(),
-          reaction: reaction.id,
-        });
+        if (!isStrongEtag(document.etag)) {
+          // A PATCH response often has no ETag, or a weak one: re-read before the next write,
+          // keeping the member filter so rejected statements never enter the cache.
+          const fresh = await loadChat(this.fetch, roomContainer(room), document.url);
+          document = context
+            ? { ...fresh, dataset: memberDocument(fresh.dataset, fresh.url, this.webId).dataset }
+            : fresh;
+        }
+        document = await unreact(
+          this.fetch,
+          room,
+          {
+            ...input,
+            id: crypto.randomUUID(),
+            reaction: reaction.id,
+          },
+          { ...resolved, document, condition: { ifMatch: strongEtag(document.etag) } },
+        );
       }
     } else {
-      document = await react(this.fetch, room, { ...input, id: crypto.randomUUID(), emoji });
+      document = await react(
+        this.fetch,
+        room,
+        { ...input, id: crypto.randomUUID(), emoji },
+        resolved,
+      );
     }
-    this.remember(readMessages(document.dataset), readReactions(document.dataset, url));
+    if (context)
+      document.dataset = memberDocument(document.dataset, document.url, this.webId).dataset;
+    const messages = [...readMessages(target.dataset), ...readMessages(document.dataset)];
+    const known = new Set([...this.known.keys(), ...messages.map((message) => message.id)]);
+    this.rememberSource(
+      document.url,
+      readReactions(document.dataset, document.url, known, context?.containers),
+    );
+    const reactions = new Map<string, Reaction[]>();
+    for (const source of this.reactionSources.values())
+      for (const [id, found] of source) reactions.set(id, [...(reactions.get(id) ?? []), ...found]);
+    this.remember(messages, reactions);
   }
   private own(subject: string): void {
     if (this.known.get(subject)?.author !== this.webId)
@@ -466,6 +550,14 @@ export class ChatClient {
     this.remember(
       readMessages(
         (await deleteOwnMessage(this.fetch, room, subject, this.webId, new Date())).dataset,
+      ),
+    );
+  }
+  async moderate(room: string, subject: string): Promise<void> {
+    if (!this.known.has(subject)) throw new ChatClientError("missing-message");
+    this.remember(
+      readMessages(
+        (await removeMessage(this.fetch, room, subject, this.webId, new Date())).dataset,
       ),
     );
   }
@@ -518,7 +610,7 @@ export class ChatClient {
       await this.join(url);
       return roomResult(
         url,
-        readRoom(url, document.dataset) as NonNullable<ReturnType<typeof readRoom>>,
+        (await readRoomLayout(url, document.dataset)) as NonNullable<ReturnType<typeof readRoom>>,
       );
     }
   }
@@ -553,7 +645,7 @@ export class ChatClient {
       });
       room = roomResult(
         url,
-        readRoom(url, document.dataset) as NonNullable<ReturnType<typeof readRoom>>,
+        (await readRoomLayout(url, document.dataset)) as NonNullable<ReturnType<typeof readRoom>>,
       );
     } catch (error) {
       if (!(error instanceof ChatIoError && error.status === 412)) throw error;
@@ -568,7 +660,7 @@ export class ChatClient {
           { name: "", members: people, creator: this.webId, created: new Date() },
           { resume: true },
         );
-        const resumed = readRoom(url, document.dataset);
+        const resumed = await readRoomLayout(url, document.dataset);
         if (!resumed) throw failure;
         return roomResult(url, resumed);
       });
@@ -607,9 +699,11 @@ export class ChatClient {
   }
   async unreadCounts(rooms: readonly { url: string }[]): Promise<Record<string, number>> {
     const { data } = await this.preferences.read();
-    const pairs = await Promise.all(
-      rooms.map(async ({ url }) => {
-        const page = await this.messages(url);
+    // Rooms run together: the shared read limiter is the only bound. All settle before a failure.
+    const pairs = await mapConcurrent(
+      rooms,
+      async ({ url }) => {
+        const page = await this.messages(url, { background: true });
         const messages = page.messages
           .filter(
             (message) =>
@@ -636,7 +730,8 @@ export class ChatClient {
             this.webId,
           ).unreadCount,
         ] as const;
-      }),
+      },
+      Math.max(rooms.length, 1),
     );
     return Object.fromEntries(pairs);
   }
@@ -658,7 +753,7 @@ export class ChatClient {
     }
     return pending;
   }
-  files(room: string) {
-    return loadRoomFiles(this.fetch, room);
+  async files(room: string) {
+    return (await loadRoomFiles(this.fetch, room, { reader: this.webId, map: this.readMap })).files;
   }
 }

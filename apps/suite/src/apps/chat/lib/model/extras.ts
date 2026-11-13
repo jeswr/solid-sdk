@@ -1,13 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, isWithinPodScope } from "@jeswr/guarded-fetch";
 import { buildTask } from "@jeswr/solid-task-model/task";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
-import { ensureContainer, loadChat, saveChat } from "./io";
+import { createConcurrentMapper } from "../../../../lib/parallel";
+import { ensureContainer, loadChat, loadMemberChat, type MemberReadOptions, saveChat } from "./io";
+import { readRoomLayout } from "./layout";
 import type { ChatMessage } from "./messages";
-import { roomContainer } from "./paths";
+import { roomContainer, roomIndex } from "./paths";
 import { ChatNode, NS, readText } from "./rdf";
 import { httpIri, isoDate, text } from "./validation";
 
@@ -40,23 +44,53 @@ export async function loadProfileName(
 export async function loadRoomFiles(
   fetch: typeof globalThis.fetch,
   room: string,
-): Promise<string[]> {
+  { reader, map = createConcurrentMapper() }: MemberReadOptions,
+): Promise<{ files: string[]; dropped: number }> {
   const base = roomContainer(room);
-  const document = await loadChat(fetch, base, base);
-  return [...new Container(base, document.dataset, DataFactory).contains]
-    .map((resource) => resource.id)
-    .filter((url) => {
-      try {
-        assertWithinPodScope(base, url);
-      } catch {
-        return false;
+  let layout: Awaited<ReturnType<typeof readRoomLayout>>;
+  try {
+    [layout] = await map([room], async () =>
+      readRoomLayout(room, (await loadChat(fetch, base, roomIndex(room))).dataset),
+    );
+  } catch (error) {
+    if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+  }
+  let pending: { url: string; root: string; owner: string | undefined }[] =
+    layout?.memberContainers?.map((member) => ({ ...member, root: member.url })) ?? [
+      { url: base, root: base, owner: undefined },
+    ];
+  const seen = new Set(pending.map(({ url }) => url));
+  const files: string[] = [];
+  let dropped = 0;
+  while (pending.length) {
+    const next: typeof pending = [];
+    await map(pending, async ({ url, root, owner }) => {
+      const loaded = await loadMemberChat(fetch, base, url, owner, reader, false);
+      dropped += loaded.dropped;
+      for (const resource of new Container(url, loaded.document.dataset, DataFactory).contains) {
+        try {
+          assertWithinPodScope(root, resource.id);
+        } catch {
+          continue;
+        }
+        const path = resource.id.slice(root.length);
+        if (
+          layout?.memberContainers !== undefined &&
+          /^(?:\d{4}\/|\d{4}\/\d{2}\/)$/.test(path) &&
+          !seen.has(resource.id)
+        ) {
+          seen.add(resource.id);
+          next.push({ url: resource.id, root, owner });
+        } else if (
+          !new URL(resource.id).pathname.endsWith("/") &&
+          !/\.(ttl|acl)$/.test(new URL(resource.id).pathname)
+        )
+          files.push(resource.id);
       }
-      return (
-        !new URL(url).pathname.endsWith("/") &&
-        !new URL(url).pathname.endsWith(".ttl") &&
-        !new URL(url).pathname.endsWith(".acl")
-      );
     });
+    pending = next;
+  }
+  return { files: files.sort(), dropped };
 }
 /** A participant can turn somebody else's message into a personal task without rewriting their day. */
 export async function copyMessageTask(

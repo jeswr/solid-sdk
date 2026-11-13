@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { sanitizeText } from "@jeswr/solid-chat-interop";
 
@@ -12,7 +13,8 @@ export class ChatModelError extends Error {
       | "not-author"
       | "deleted"
       | "duplicate"
-      | "missing-etag",
+      | "missing-etag"
+      | "unsafe-acl",
   ) {
     super(`Chat model: ${code}`);
   }
@@ -42,7 +44,10 @@ export function segment(value: string): string {
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) throw new ChatModelError("invalid-input");
   return value;
 }
+export function isStrongEtag(value: string | null): value is string {
+  return value !== null && /^"[^"\r\n]*"$/.test(value);
+}
 export function strongEtag(value: string | null): string {
-  if (value === null || !/^"[^"\r\n]*"$/.test(value)) throw new ChatModelError("missing-etag");
+  if (!isStrongEtag(value)) throw new ChatModelError("missing-etag");
   return value;
 }

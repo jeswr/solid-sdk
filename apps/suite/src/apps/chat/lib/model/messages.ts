@@ -89,8 +89,13 @@ export function readMessages(dataset: DatasetCore): ChatMessage[] {
   );
 }
 
-export function appendMessage(dataset: DatasetCore, room: string, input: SendInput): Store {
-  const id = messageSubject(room, input.at, input.id);
+export function appendMessage(
+  dataset: DatasetCore,
+  room: string,
+  input: SendInput,
+  container = room,
+): Store {
+  const id = messageSubject(container, input.at, input.id);
   httpIri(input.author);
   text(input.content);
   isoDate(input.at);
