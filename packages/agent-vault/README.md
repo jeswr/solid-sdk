@@ -47,8 +47,9 @@ receives only backend ids eligible for this profile. Returning `undefined` decli
 A choice requires a separate `save` permission and a matching `profileFor(ref)` binding.
 Optional saves report saved/declined/denied/failed without invalidating the successful session. Backend-supplied credentials never trigger
 that offer. `PasswordLogin` may return a `Secret<SessionCapture>` or update the shared
-executor SessionProvider and return void. Before password login the vault explicitly resets
-old session material. A callback failure marks its session stale. The OTP callback receives
+executor SessionProvider and return void. Before either login callback the vault explicitly resets
+old session material and binds `LoginRequest.transaction` to a new login generation. A callback
+failure marks only that generation stale; it cannot revoke a newer login. The OTP callback receives
 a separately permitted backend code, or `askOtp` obtains it from the person. Standalone OTP
 routes use the same seam through `InteractiveLogin`.
 
@@ -147,24 +148,49 @@ exact origin.
 
 ## Capture and keep-alive
 
-`sessionCapture(unknown)` validates and wraps the extension/popup's message.
-`acceptCapture(sessions, capture, { site, account }, now)` verifies the expected origin and
-account, allows at most 30 seconds future skew and five minutes message age, validates
-cookies/token endpoint, encrypts the bundle, then returns a host session. A missing account
-is filled only from the explicit host binding. **The host authenticates the extension
-sender, popup/tab and login transaction.** Origin metadata alone does not authenticate a
-message; the vault does not implement browser messaging or nonce/replay deduplication.
+Start a host login transaction **before the person signs in**, and retain its binding beside
+the authenticated popup/tab. `sessionCapture(unknown)` validates and wraps its later message:
+
+```ts
+const transaction = await sessions.beginLogin(site, account);
+// Open the login UI and authenticate its sender/tab against this transaction.
+const bundle = await acceptCapture(sessions, sessionCapture(message), transaction, now);
+```
+
+`beginLogin` returns `{ site, account, generation }`; never take the generation from the
+message or create the transaction when the capture arrives. `AgentVault` creates it before
+calling `passwordLogin` or `interactiveLogin` and supplies it as `request.transaction`.
+`acceptCapture` requires this binding, verifies the expected origin and account, allows at
+most 30 seconds future skew and five minutes message age, and validates cookies/token endpoint.
+Under the record lock, after key acquisition, it refuses a stale/revoked or different login
+generation. Cookie updates and refreshes within the same generation can precede a valid capture.
+A missing account is filled only from the explicit host binding. **The host authenticates
+the extension sender, popup/tab and login transaction.** Origin metadata alone does not
+authenticate a message; the vault does not implement browser messaging or nonce/replay deduplication.
 
 SessionProvider `get/update` uses site + **account id**, supplied as executor `persona`.
-Missing account refuses. Expired cookies are filtered; expired bearer sessions and stale
-sessions refuse, while encrypted refresh metadata remains available to keep-alive. Captures
+Missing account refuses. `get()` includes the record's current `revision`; executors must pass
+that value unchanged into every `update()` from that execution. After key acquisition and
+under the record lock, updates with missing or superseded revisions silently drop, as do
+updates to stale records. Accepted updates assign a new revision. `beginLogin` supplies an
+empty bundle with a revision so the executor can persist the first login cookie; an empty
+bundle alone is not an authenticated session. Expired cookies are filtered; expired bearer
+sessions and stale sessions refuse, while encrypted refresh metadata remains available to keep-alive. Captures
 accept only bearer Authorization headers derived from tokens. Cookie domains default to the
 exact host; `cookieDomains` explicitly permits trusted parent domains for RFC domain matching.
 Host-only cookies always require the exact host; IPs never suffix-match. No guessed
 public-suffix acceptance. Cookie prefixes, control characters and unrelated headers refuse.
 Every session write changes its persisted revision, including login reset, capture,
 executor updates and marking stale. Legacy records without a revision remain readable;
-their first write assigns one. Scheduler `SessionStore.commit(snapshot, cancelled)` compares
+their first host write assigns one; revisionless executor updates refuse. `store(state)` is
+an immediate host replacement: it checks any supplied snapshot revision and compares the
+record read at invocation under the lock before replacing it with a new login generation.
+Delayed stores and login resets cannot undo intervening writes or revocation. Revoking a
+missing record writes a stale tombstone so an initial pending write cannot revive it.
+Use the pre-login transaction for asynchronous captures, and pass it to
+`stale(site, account, transaction)` when cleaning up a failed login. Explicit host revocation
+uses `stale(site, account)` and applies to the current record.
+Scheduler `SessionStore.commit(snapshot, cancelled)` compares
 the snapshot revision and checks cancellation under the record lock, after key acquisition,
 then writes synchronously. Superseded snapshots are discarded, including delayed 401s.
 

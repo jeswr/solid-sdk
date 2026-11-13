@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
-import type { Cookie, SessionBundle, SessionProvider } from "@jeswr/site-executor";
+import type {
+  Cookie,
+  SessionBundle as ExecutorSessionBundle,
+  SessionProvider,
+} from "@jeswr/site-executor";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import {
@@ -40,6 +44,14 @@ export const tokensSchema = z.strictObject({
   tokenEndpoint: z.string().optional(),
 });
 export type Tokens = z.infer<typeof tokensSchema>;
+// Structural until the executor's additive revision field is available in this lane.
+export type SessionBundle = ExecutorSessionBundle & { revision?: string };
+/** Host-held binding created before starting a password or interactive login. */
+export interface LoginTransaction {
+  readonly site: string;
+  readonly account: string;
+  readonly generation: string;
+}
 const bundleSchema = z.strictObject({
   cookies: z.array(cookieSchema).max(300),
   headers: z.record(z.string(), z.string().max(8192)).optional(),
@@ -52,6 +64,7 @@ export const stateSchema = z.strictObject({
   capturedAt: z.number().finite(),
   stale: z.boolean(),
   revision: z.string().uuid().optional(),
+  generation: z.string().uuid().optional(),
 });
 export type SessionState = z.infer<typeof stateSchema>;
 export class SessionStore implements SessionProvider {
@@ -112,12 +125,59 @@ export class SessionStore implements SessionProvider {
     if (r.tokens?.tokenEndpoint) sameSiteUrl(r.site, r.tokens.tokenEndpoint);
     if (r.tokens) r.bundle.headers = { authorization: `Bearer ${r.tokens.access}` };
     r.revision = randomUUID();
+    r.generation ??= randomUUID();
     return r;
   }
+  async #replace(state: SessionState): Promise<SessionState> {
+    const input = parse(stateSchema, state);
+    const snapshot = await this.state(input.site, input.account);
+    const revision = await snapshot?.use((r) => r.revision);
+    if (input.revision !== undefined && input.revision !== revision) throw new VaultError("denied");
+    let written: SessionState | undefined;
+    await this.#records.update(
+      "sessions",
+      this.#key(input.site, input.account),
+      stateSchema,
+      (current) => {
+        if (current?.revision !== revision || !!current !== !!snapshot)
+          throw new VaultError("denied");
+        written = this.#prepare({ ...input, generation: randomUUID() });
+        return written;
+      },
+    );
+    if (!written) throw new VaultError("denied");
+    return written;
+  }
+  /** Host replacement; a superseded write refuses instead of overwriting a newer record. */
   store(state: SessionState): Promise<void> {
     return boundary(async () => {
-      const r = this.#prepare(state);
-      await this.#records.put("sessions", this.#key(r.site, r.account), stateSchema, r);
+      await this.#replace(state);
+    });
+  }
+  #sameLogin(current: SessionState | undefined, expected: LoginTransaction): boolean {
+    return (
+      !!current &&
+      !!expected.generation &&
+      current.site === origin(expected.site) &&
+      current.account === expected.account &&
+      current.generation === expected.generation
+    );
+  }
+  /** Accept only the login generation that the host bound before the browser transaction. */
+  storeCapture(state: SessionState, expected: LoginTransaction): Promise<void> {
+    return boundary(async () => {
+      const snapshot = parse(stateSchema, state);
+      if (origin(snapshot.site) !== origin(expected.site) || snapshot.account !== expected.account)
+        throw new VaultError("invalid");
+      await this.#records.update(
+        "sessions",
+        this.#key(snapshot.site, snapshot.account),
+        stateSchema,
+        (current) => {
+          if (!this.#sameLogin(current, expected) || current?.stale) throw new VaultError("denied");
+          return this.#prepare({ ...snapshot, generation: expected.generation });
+        },
+      );
     });
   }
   /** Scheduler-only commit: compare the snapshot and cancellation under the record lock. */
@@ -135,52 +195,67 @@ export class SessionStore implements SessionProvider {
       );
     });
   }
-  get(site: string, account?: string): Promise<SessionBundle | undefined> {
+  get(site: string, account?: string, generation?: string): Promise<SessionBundle | undefined> {
     return boundary(async () => {
       const state = await this.state(site, account ?? "");
       return state?.use((r) => {
-        if (r.stale || (r.tokens && r.tokens.expiresAt <= this.#now())) return undefined;
+        if (
+          r.stale ||
+          (generation !== undefined && r.generation !== generation) ||
+          (r.tokens && r.tokens.expiresAt <= this.#now())
+        )
+          return undefined;
         const cookies = r.bundle.cookies
           .filter((c) => c.expires === undefined || c.expires < 0 || c.expires * 1000 > this.#now())
           .map((c) => ({ ...c }));
-        if (!cookies.length && !r.bundle.headers) return undefined;
+        // An explicit login reset supplies a revision even before its first cookie arrives.
+        if (!cookies.length && !r.bundle.headers && r.bundle.cookies.length) return undefined;
         return opaque({
           cookies,
           ...(r.bundle.headers ? { headers: { ...r.bundle.headers } } : {}),
+          revision: r.revision,
         });
       });
     });
   }
   update(site: string, account: string | undefined, bundle: SessionBundle): Promise<void> {
     return boundary(async () => {
-      await this.#records.update("sessions", this.#key(site, account), stateSchema, (r) =>
-        this.#prepare({
-          site: origin(site),
-          account: account ?? "",
-          bundle,
-          tokens: r?.tokens,
-          capturedAt: r?.capturedAt ?? this.#now(),
-          stale: r?.stale ?? false,
-        }),
-      );
+      const { revision, ...material } = bundle;
+      await this.#records.update("sessions", this.#key(site, account), stateSchema, (r) => {
+        if (!r || r.stale || !revision || revision !== r.revision) return undefined;
+        return this.#prepare({ ...r, bundle: material });
+      });
     });
   }
   /** Explicit host login boundary; discard stale bearer metadata before executor cookie updates. */
-  beginLogin(site: string, account: string): Promise<void> {
-    return this.store({
-      site,
-      account,
-      bundle: { cookies: [] },
-      capturedAt: this.#now(),
-      stale: false,
+  beginLogin(site: string, account: string): Promise<LoginTransaction> {
+    return boundary(async () => {
+      const r = await this.#replace({
+        site,
+        account,
+        bundle: { cookies: [] },
+        capturedAt: this.#now(),
+        stale: false,
+      });
+      if (!r.generation) throw new VaultError("denied");
+      return Object.freeze({ site: r.site, account: r.account, generation: r.generation });
     });
   }
-  stale(site: string, account: string): Promise<void> {
+  stale(site: string, account: string, expected?: LoginTransaction): Promise<void> {
     return boundary(async () => {
-      await this.#records.update("sessions", this.#key(site, account), stateSchema, (r) =>
-        r ? this.#prepare({ ...r, stale: true }) : undefined,
-      );
+      await this.#records.update("sessions", this.#key(site, account), stateSchema, (r) => {
+        if (expected && !this.#sameLogin(r, expected)) return undefined;
+        return this.#prepare({
+          ...(r ?? {
+            site: origin(site),
+            account,
+            bundle: { cookies: [] },
+            capturedAt: this.#now(),
+          }),
+          stale: true,
+        });
+      });
     });
   }
 }
-export type { Cookie, SessionBundle };
+export type { Cookie };

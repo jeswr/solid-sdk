@@ -1,16 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { LoginItem, SecretBackend, SecretRef } from "./backends/types.js";
 import { acceptCapture, type SessionCapture } from "./capture.js";
 import type { PermissionPolicy } from "./permission.js";
 import { type AccountResolution, type PersonaContext, PersonaResolver } from "./persona.js";
 import type { Account, AccountRoute, Profiles } from "./profiles.js";
 import { boundary, origin, Secret, VaultError } from "./safe.js";
-import type { SessionBundle, SessionStore } from "./sessions.js";
+import type { LoginTransaction, SessionBundle, SessionStore } from "./sessions.js";
 export interface LoginRequest {
   site: string;
   account: Account;
   route: AccountRoute;
   sessions: SessionStore;
+  transaction: LoginTransaction;
 }
 export type PasswordLogin = (
   request: LoginRequest & { credentials: Secret<LoginItem>; otp: () => Promise<Secret<string>> },
@@ -68,9 +70,10 @@ export class AgentVault {
     const o = this.#options;
     const route = o.profiles.route(site, account.id);
     const matchesRoute = (bundle: SessionBundle) =>
-      !route?.sessionCookies?.length ||
-      !!bundle.headers?.authorization ||
-      route.sessionCookies.some((name) => bundle.cookies.some((c) => c.name === name));
+      !!(bundle.cookies.length || bundle.headers?.authorization) &&
+      (!route?.sessionCookies?.length ||
+        !!bundle.headers?.authorization ||
+        route.sessionCookies.some((name) => bundle.cookies.some((c) => c.name === name)));
     const existing = await o.sessions.get(site, account.id);
     if (existing && matchesRoute(existing)) return { session: existing, account };
     if (!route) throw new VaultError("missing");
@@ -121,6 +124,7 @@ export class AgentVault {
       return o.askOtp({ site, account });
     };
     let capture: Secret<SessionCapture> | undefined;
+    let transaction: LoginTransaction | undefined;
     try {
       if (route.method === "password") {
         let credential = context.credentials;
@@ -137,16 +141,20 @@ export class AgentVault {
           if (credentialSite !== site && !selected?.backend.allowsOrigin?.(site, credentialSite))
             throw new VaultError("invalid");
         });
-        await o.sessions.beginLogin(site, account.id);
+        transaction = await o.sessions.beginLogin(site, account.id);
         capture =
-          (await o.passwordLogin({ ...request, credentials: credential, otp })) || undefined;
-      } else
+          (await o.passwordLogin({ ...request, transaction, credentials: credential, otp })) ||
+          undefined;
+      } else {
+        transaction = await o.sessions.beginLogin(site, account.id);
         capture = await o.interactiveLogin({
           ...request,
+          transaction,
           ...(route.method === "otp" ? { otp: await otp() } : {}),
         });
-      if (capture) await acceptCapture(o.sessions, capture, { site, account: account.id }, o.now);
-      const session = await o.sessions.get(site, account.id);
+      }
+      if (capture) await acceptCapture(o.sessions, capture, transaction, o.now);
+      const session = await o.sessions.get(site, account.id, transaction.generation);
       if (!session || !matchesRoute(session)) throw new VaultError("missing");
       if (route.method === "password" && context.credentials && o.offerSave) {
         try {
@@ -187,7 +195,7 @@ export class AgentVault {
       }
       return { session, account };
     } catch (e) {
-      await o.sessions.stale(site, account.id);
+      if (transaction) await o.sessions.stale(site, account.id, transaction);
       throw e;
     }
   }
