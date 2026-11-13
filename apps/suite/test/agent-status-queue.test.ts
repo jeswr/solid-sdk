@@ -214,6 +214,14 @@ describe("approval queue", () => {
     expect(
       pendingApprovals([proposal], [approval()], [{ ...tx, status: "sent" }], now)[0]?.state,
     ).toBe("sent");
+    expect(
+      pendingApprovals(
+        [{ ...proposal, state: "sent" }],
+        [approval()],
+        [{ ...tx, status: "sent" }],
+        now,
+      )[0]?.state,
+    ).toBe("sent");
     expect(pendingApprovals([proposal], [], [{ ...tx, status: "sent" }], now)[0]?.state).toBe(
       "pending",
     );
