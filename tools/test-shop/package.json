@@ -1,0 +1,33 @@
+{
+  "name": "@jeswr/test-shop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small, deterministic, fictional shop (shop.test) for the semantic agent browser's profiler and executor tests.",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Claude Opus 5.5",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "test-shop": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p tools/test-shop/tsconfig.json",
+    "typecheck": "pnpm -w exec tsc -p tools/test-shop/tsconfig.json --noEmit && pnpm -w exec tsc -p tools/test-shop/tsconfig.test.json",
+    "lint": "pnpm -w exec biome check tools/test-shop",
+    "test": "pnpm -w exec vitest run --root tools/test-shop",
+    "start": "node dist/bin.js"
+  }
+}
