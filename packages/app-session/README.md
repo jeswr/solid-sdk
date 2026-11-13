@@ -8,7 +8,7 @@ credential cleanup. No mirror repository is configured.
 | Entry | Exports |
 | --- | --- |
 | `@jeswr/app-session` | `createAppPodAuth`, `publicFetch`, `isLoopbackHost`, `allowInsecureLoopback`, `appUrl`, `authFlowHolder`, `lazyElementGetCode`, `getCodeThroughHolder`, `AUTH_FLOW_ELEMENT`, `IssuerChoiceRequiredError`, `readProfile`, `deriveSession`, `signInError`, `consumeAutologinAccount`, `clearLegacyCredentials`; associated option, profile, session and legacy-key types |
-| `@jeswr/app-session/react` | `SessionProvider`, `useSession`, `LoginScreen`, `signInProviders`, `issuerChoiceProviders`, `LOOKUP_TIMEOUT_MS`; associated props and `SessionContextValue` |
+| `@jeswr/app-session/react` | `SessionProvider`, `useSession`, `SessionGate`, `LoginScreen`, `signInProviders`, `issuerChoiceProviders`, `LOOKUP_TIMEOUT_MS`; associated props (including `SessionGateProps`) and `SessionContextValue` |
 | `@jeswr/app-session/testing` | Vitest-only `fakePodAuth`, `deferred` and public identity fixtures (`identity`, `WEB_ID`, `ISSUER`, `POD_ROOT`) |
 
 Create the getter once at the application boundary. The package reads no bundler environment
@@ -17,7 +17,7 @@ React is an optional peer used by `/react`; `/testing` requires the consumer's V
 
 ```tsx
 import { createAppPodAuth } from '@jeswr/app-session';
-import { SessionProvider, LoginScreen } from '@jeswr/app-session/react';
+import { SessionProvider, SessionGate, LoginScreen } from '@jeswr/app-session/react';
 
 // Module scope: one getter for the page lifetime. Defaults to <base>clientid.jsonld and
 // <base>callback.html on the current origin, resolved on first use.
@@ -27,8 +27,12 @@ export function SignIn() {
   return (
     <SessionProvider getPodAuth={getPodAuth} appName="Example" dev={false}
       legacyCredentials={{ sessionStorage: ['example:old-flow'] }}>
-      <LoginScreen appName="Example" homeIdp="https://provider.example/"
-        homeIdpName="Home provider" knownProviders="https://provider.example/" />
+      <SessionGate appName="Example" login={
+        <LoginScreen appName="Example" homeIdp="https://provider.example/"
+          homeIdpName="Home provider" knownProviders="https://provider.example/" />
+      }>
+        <main>Signed-in application</main>
+      </SessionGate>
     </SessionProvider>
   );
 }
@@ -60,7 +64,18 @@ session. Both cases are pinned in tests.
 `LoginScreen` accepts `appName`, `knownProviders` (comma-separated addresses), `homeIdp`,
 `homeIdpName` and `dev`. Its default home is `https://idp.solid-test.jeswr.org`; remaining providers
 come from pod-auth's directory. The sign-in card stylesheet is imported by the React entry.
-Host applications retain their layout CSS and signed-in views.
+The fieldset reset is inline, so hosts need no `.login-sign-in` rule. Host applications retain
+their layout CSS and signed-in views and load suite-ui's tokens, theme, density and components
+styles for the card.
+
+`SessionGate` reads `useSession` inside `SessionProvider`. Its required props are `appName`
+(loading heading), `login` (the app's configured sign-in node) and `children` (signed-in content).
+It mounts children only when both `webId` and `session` exist. Otherwise it shows a loading card
+while restoring, while startup is neither ready nor failed, or while an identity awaits its profile;
+once signed out and settled it renders `login`. The labels are “Restoring your session…” and
+“Loading your account…”. Optional `renderLoading(label)` replaces the default `role="status"`
+text (for example, with a spinner); provide an accessible status in that renderer. Loading keeps
+the host hooks `main.login-screen[aria-busy=true] > section.login-card > h1 + p.login-sub`.
 
 Public profile reads use the captured pristine fetch with cookies omitted. Only pod-auth establishes
 identity and credential grants. Session derivation retains the existing behavior: first advertised

@@ -1,15 +1,13 @@
 // AUTHORED-BY Claude Fable 5
-//
-// App root: logged out → <jeswr-login-panel> (suite login + silent session
-// restore); logged in → the @jeswr/app-shell chrome (theme / account menu /
-// feedback) over the four access-management views. The LoginController is
-// injected from main.tsx so this component is testable with a mock controller.
+// AUTHORED-BY GPT-6.1 Sol
+// The auth provider mirrors pod-auth; the access views retain their { webId, fetch } session.
 
-import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
-import type { LoginController, SessionChangeDetail } from "@jeswr/solid-elements";
-import { LoginPanel } from "@jeswr/solid-elements/react";
-import { useMemo, useState } from "react";
+import { LoginScreen, SessionGate, useSession as useAuthSession } from "@jeswr/app-session/react";
+import { AccountControl, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import { useEffect, useMemo, useState } from "react";
+import { APP_NAME } from "../auth/pod-auth.js";
 import { type Session, SessionProvider, useSession } from "../auth/SessionContext.js";
+import { clearAgentDisplayCache } from "../lib/profile.js";
 import { DashboardView } from "./DashboardView.jsx";
 import { DataClassView } from "./DataClassView.jsx";
 import { HistoryView } from "./HistoryView.jsx";
@@ -18,37 +16,31 @@ import { useAccessData } from "./useAccessData.js";
 
 export type Tab = "dashboard" | "classes" | "inbox" | "history";
 
-export function App({ controller }: { controller: LoginController }) {
-  const [webId, setWebId] = useState<string | null>(null);
-
-  const session: Session | null = useMemo(
-    () => (webId ? { webId, fetch: controller.authenticatedFetch } : null),
-    [webId, controller],
-  );
-
-  const onSessionChange = (event: CustomEvent<SessionChangeDetail>) => {
-    setWebId(event.detail.loggedIn ? event.detail.webId : null);
-  };
-
-  if (!session) {
-    return (
-      <main className="login-screen">
-        <h1>Solid Access Manager</h1>
-        <p className="tagline">
-          See, review, grant and revoke access to your pod — in plain terms.
-        </p>
-        <LoginPanel controller={controller} onSessionChange={onSessionChange} />
-      </main>
-    );
-  }
-
+export function App() {
+  const { webId, fetch, logout } = useAuthSession();
+  // Access Manager discovers every advertised storage itself and preserves its public context.
+  const session = useMemo<Session | null>(() => (webId ? { webId, fetch } : null), [webId, fetch]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: discard cached profiles when the account or its transport changes.
+  useEffect(() => clearAgentDisplayCache, [session]);
   return (
-    <SessionProvider session={session}>
-      <Shell
-        webId={session.webId}
-        onSignOut={() => void controller.logout().then(() => setWebId(null))}
-      />
-    </SessionProvider>
+    <SessionGate
+      appName={APP_NAME}
+      login={
+        <LoginScreen
+          appName={APP_NAME}
+          knownProviders={import.meta.env.VITE_KNOWN_PROVIDERS}
+          homeIdp={import.meta.env.VITE_HOME_IDP}
+          homeIdpName={import.meta.env.VITE_HOME_IDP_NAME}
+          dev={import.meta.env.DEV}
+        />
+      }
+    >
+      {({ webId }) => (
+        <SessionProvider session={session}>
+          <Shell key={webId} webId={webId} onSignOut={() => void logout()} />
+        </SessionProvider>
+      )}
+    </SessionGate>
   );
 }
 
@@ -99,7 +91,7 @@ export function Shell({
             webId={webId}
           />
           <ThemeToggle />
-          <AccountMenu webId={webId} onSignOut={onSignOut} />
+          <AccountControl webId={webId} onSignOut={onSignOut} />
         </div>
       </header>
 

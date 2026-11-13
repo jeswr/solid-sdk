@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Fable 5 -->
+<!-- AUTHORED-BY GPT-6.1 Sol -->
 
 # Design decisions — solid-access-manager
 
@@ -17,14 +18,18 @@ shape; rejected as pure overhead until the proposal's P1
 `@jeswr/solid-access-model` extraction happens (Phase 2 follow-up: `src/lib`'s
 resolver/acl modules are written import-clean so they can lift out).
 
-## D2 — Login via `<jeswr-login-panel>` + `createReactiveAuthController`
+## D2 — Login via `@jeswr/app-session` over `@jeswr/pod-auth`
 
-The suite's keystone login surface (solid-elements `/auth` adapter over
-reactive-authentication + solid-session-restore) rather than a hand-rolled
-SessionProvider (the older pod-health pattern, ~4k lines with tests).
-First consumer of the `/auth` subexport outside solid-elements itself.
-*Alternative*: copy pod-health's webid-token-provider stack; rejected — it
-duplicates security-critical auth code this app doesn't need to own.
+The shared React session provider and two-step `SignInCard` own sign-in, explicit
+issuer selection, one restore on mount, and popup authorization. The app keeps
+only its client-identity and legacy-key adapter plus the `{ webId, fetch }` view
+context. Credentials stay bounded to the authenticated WebID's verified storage
+roots; public profiles use a pristine transport and every pod operation receives
+`auth.fetch` explicitly. The inert demo supplies its own public fixture transport.
+
+This replaces the original `<jeswr-login-panel>` / `createReactiveAuthController`
+integration and the interrupted migration's copied auth modules. Shared auth
+changes belong in app-session rather than local copies.
 
 ## D3 — Where records live: `<storage>access-manager/{grants,receipts}/`
 

@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- AUTHORED-BY Claude Fable 5 -->
-<!-- The reactive-auth popup contract: relay the authorization response to the opener. -->
+<!-- The pod-auth popup contract: relay the complete authorization response to the opener. -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -9,7 +9,7 @@
   <body>
     <p>Completing sign-in…</p>
     <script>
-      opener.postMessage(location.href);
+      if (window.opener) window.opener.postMessage(location.href, location.origin);
     </script>
   </body>
 </html>

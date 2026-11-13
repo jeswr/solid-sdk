@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Fable 5
 // DashboardView through the stubbed-fetch seam: rendering (public flagged,
@@ -22,7 +23,7 @@ async function walkAll(pod: PodStub): Promise<WalkedNode[]> {
 
 function renderDashboard(pod: PodStub, nodes: WalkedNode[], onChanged = () => {}) {
   return render(
-    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }}>
+    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }} publicFetch={pod.fetch}>
       <DashboardView nodes={nodes} storageRoot={POD} walking={false} onChanged={onChanged} />
     </SessionProvider>,
   );

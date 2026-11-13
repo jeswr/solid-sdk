@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Fable 5
 // InboxView: request rendering (requester name, class, purpose, expiry), the
@@ -33,7 +34,7 @@ function renderInbox(
   onChanged = () => {},
 ) {
   return render(
-    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }}>
+    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }} publicFetch={pod.fetch}>
       <InboxView
         inboxUrl={INBOX}
         storageRoot={POD}
@@ -139,7 +140,7 @@ describe("InboxView", () => {
   it("explains when the profile has no inbox", () => {
     const pod = buildPod();
     render(
-      <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }}>
+      <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }} publicFetch={pod.fetch}>
         <InboxView
           inboxUrl={null}
           storageRoot={POD}
