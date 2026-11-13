@@ -2773,6 +2773,31 @@ importers:
         specifier: ^3.2.6
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1)
 
+  packages/agent-browser:
+    dependencies:
+      '@jeswr/site-executor':
+        specifier: workspace:*
+        version: link:../site-executor
+      '@jeswr/site-model':
+        specifier: workspace:*
+        version: link:../site-model
+      '@jeswr/site-profiler':
+        specifier: workspace:*
+        version: link:../site-profiler
+      '@jeswr/test-shop':
+        specifier: workspace:*
+        version: link:../../tools/test-shop
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      n3:
+        specifier: ^2.1.1
+        version: 2.1.1
+    devDependencies:
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+
   packages/agent-channels:
     dependencies:
       '@jeswr/agent-model':
