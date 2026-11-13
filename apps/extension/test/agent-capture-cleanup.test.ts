@@ -82,7 +82,7 @@ it.each([
   verified(h);
 });
 
-it('refuses a delayed armed request arriving during cleanup without waiting for its report', async () => {
+it('contests a delayed armed request arriving during cleanup without waiting for its report', async () => {
   vi.useFakeTimers();
   const h = captureHarness();
   const b = h.popup();
@@ -97,18 +97,19 @@ it('refuses a delayed armed request arriving during cleanup without waiting for 
   a.cancel();
   await vi.waitFor(() => expect(h.browser.storage.local.remove).toHaveBeenCalledTimes(clears + 1));
   // The armed click was already in transit when Cancel reached the worker.
+  a.send({ type: 'requesting', lease: a.view.lease! });
   const allowed = a.allow();
   h.state.cookies = true;
   h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
   clear.resolve();
   b.load();
-  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(60000);
   expect(h.browser.permissions.request).not.toHaveBeenCalled();
   await phase(b, 'ready');
   prompt.resolve(true);
   await allowed;
   await phase(b, 'ready');
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(3);
   verified(h);
   expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
   expect(h.native.mock.calls.map(([r]) => r.type)).not.toContain('beginLogin');
@@ -128,7 +129,9 @@ it.each([
   h.native.mockImplementationOnce(() => reply.promise);
   if (stage === 'beginLogin') await a.allow();
   else a.confirm();
-  await vi.waitFor(() => expect(h.native.mock.calls.at(-1)![0].type).toBe(stage));
+  await vi.waitFor(() => expect(h.native.mock.calls.at(-1)![0].type).toBe(stage), {
+    timeout: 2500,
+  });
   a.cancel();
   b.load();
   await vi.advanceTimersByTimeAsync(0);

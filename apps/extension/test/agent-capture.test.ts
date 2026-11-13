@@ -652,7 +652,8 @@ describe('worker capture lease', () => {
   });
 });
 
-it('refuses a stale armed click without cancelling another lease that is confirming', async () => {
+it('contests a stale armed click while another lease is confirming', async () => {
+  vi.useFakeTimers();
   const h = captureHarness();
   const a = await reviewing(h);
   const oldLease = a.view.lease!;
@@ -663,12 +664,11 @@ it('refuses a stale armed click without cancelling another lease that is confirm
   // The worker revoked A, but its view's terminal update was still in transit.
   a.send({ type: 'requesting', lease: oldLease });
   a.send({ type: 'permission', lease: oldLease, granted: true });
-  expect(a.view.message).toBe('Finishing the previous sharing.');
-  expect(b.view.phase).toBe('confirming');
-  expect(h.state.cookies).toBe(true);
+  expect(a.view.message).toBe('Another sharing started. Try again.');
+  expect(b.view.phase).toBe('failed');
   b.confirm();
-  await phase(b, 'shared');
-  expect(types(h).filter((type) => type !== 'list')).toEqual(['capture']);
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(types(h).filter((type) => type !== 'list')).toEqual([]);
   restored(h);
 });
 it('consumes a permission result once and cannot repeat beginLogin', async () => {
@@ -697,7 +697,7 @@ it.each([
     h.browser.cookies.getAll.mockImplementationOnce(() => cookies.promise);
   const allowed = a.allow();
   if (stage === 'review cookie read')
-    await vi.waitFor(() => expect(h.browser.cookies.getAll).toHaveBeenCalled());
+    await vi.waitFor(() => expect(h.browser.cookies.getAll).toHaveBeenCalled(), { timeout: 2500 });
   else {
     await allowed;
     await phase(a, 'confirming');

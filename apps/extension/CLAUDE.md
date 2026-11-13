@@ -49,10 +49,18 @@ styles to `#login-form`** (the suite CSS-leak guards).
 
 `popup/agent-sign-in-view.ts` is a thin, long-lived-port view of the worker's single
 capture state machine (`background/agent-capture.ts`). The worker owns the exclusive lease,
-all tab/access checks, cookie reads, native requests and cleanup under one async mutex.
+all tab/access checks, cookie reads, native requests and bounded cleanup under one async mutex.
 Review validates the CURRENT active tab against the lease's tab/origin and existing host
 access before arming the popup's **Allow cookies and review** click. Only that click requests
-optional `cookies`, synchronously inside its gesture.
+optional `cookies`, synchronously inside its gesture. Review must receive a positive armed
+acknowledgement for its current lease within ten seconds locally; a late acknowledgement cannot
+re-arm that attempt. Every permission click posts `requesting` with the lease ID before calling
+Chrome. Any foreign, expired, invalidated, unknown or second `requesting` contests the acquisition:
+revoke cookies immediately, fail the admitted lease with "Another sharing started. Try again.",
+and run cleanup with the sixty-second abandoned-prompt fence. Accept a grant only after a quiet
+second after the latest cookie onAdded/request settlement with no foreign `requesting`. The
+contest latch is checked immediately before every cookie read and native dispatch; no reads or
+sends are allowed while contested.
 Armed views are invalidated on tab activation, lease-tab URL updates, window focus changes
 and permission additions/removals; the click checks the latest worker-pushed armed lease.
 In a sub-second race Chrome may still show the cookies prompt after authorization changes,
@@ -95,12 +103,11 @@ failed removal blocks review, permission requests and native messages and direct
 Chrome's extension settings. Worker cleanup failure sets a toolbar `!` badge.
 Request only optional `cookies` from the worker-armed popup click. The exclusive capture lease
 (review -> acquiring -> confirming -> sending -> cleaning -> idle) expires after two minutes.
-A second popup receives "Another sharing is in progress" without another request or native
-message. Success, failure, Cancel, timeout and port disconnect all remove cookie access and
+A second popup receives "Another sharing is in progress" and its sharing controls stay disabled. Success, failure, Cancel, timeout and port disconnect all remove cookie access and
 verify absence before releasing the lease. Cancellation invalidates in-flight work immediately
 and terminal views never move backwards. Removal, absence verification
-and marker writes retain the lease and mutex through completion, even after Cancel. Other
-popups show "Finishing the previous sharing" meanwhile. Each lease owns its cleanup result;
+and marker writes retain the lease and mutex through a bounded cleanup attempt, even after Cancel.
+Other popups show "Finishing the previous sharing" meanwhile. Each lease owns its cleanup result;
 an earlier failure never skips a newer lease's cleanup. An unsettled prompt waits for the
 popup's report only until disconnect or lease timeout. At that point the worker owns an
 orphaned cleanup state: immediately remove `cookies` and verify absence, retaining the lease
@@ -108,19 +115,27 @@ fence for sixty seconds after disconnect/timeout. Any onAdded cookie grant durin
 is removed immediately outside the mutex, even while another revocation is pending. This
 state never reads cookies, sends native messages or requests host access. A second popup shows
 "Finishing the previous sharing" and the existing warning with an enabled "Remove cookie
-access" retry button on removal failure. At the end of the window, join every pending
-revocation and verify absence before releasing the fence; failure retains the fence until
-cleanup succeeds. Ignore abandoned/late settlement reports. The stateless onAdded/startup
+access" retry button on removal failure. At the end of the window, join bounded revocations and
+remove-and-verify before releasing the fence, sharing one ten-second deadline for that final attempt. Every removal or verification wait
+is bounded to ten seconds. Timeout/failure enters recovery with the warning and ENABLED
+"Remove cookie access" button. A successful button retry or automatic retry clears the warning
+and releases expired fences, even when an older raw Chrome promise never settles. Ignore late
+settlements of timed-out attempts; they cannot resume verification or publish state. Ignore
+abandoned/late settlement reports. The stateless onAdded/startup
 rule removes grants arriving later. The popup checks the worker-issued lease deadline locally,
-so expired clicks are refused even with delayed worker pushes. Prompt ingress refuses another
-popup's click with "Finishing the previous sharing" without replacing or cancelling the pending
-prompt. All outstanding cleanups live in one collection keyed by lease id; any cleanup or fence
+so expired clicks are refused even with delayed worker pushes. Prompt ingress contests another
+popup's click instead of treating its grant as the admitted lease's acquisition. A foreign request
+received while idle also starts a sixty-second fence before admitting another lease. All
+outstanding cleanups live in one collection keyed by lease id; any cleanup or fence
 completion drains all expired fences after joining revocations and verifying absence. A new
 capture requires the collection to be empty and cookies verified absent. Each expiry gets one
 final removal-and-verification attempt; failure shows the warning with an enabled "Remove cookie
 access" button instead of "Finishing the previous sharing" until a retry succeeds. An already
 dispatched Chrome prompt's late grant is removed without a current acquiring lease. A replacement worker also
 removes it at start, even with cleared session storage and no marker.
+Residual: a foreign `requesting` can be delayed across ports by more than the quiet second and
+arrive after grant acceptance. Document this without adding further timing mechanisms; the
+global stateless removal rule and confirmation latch remain the backstops.
 Required `<all_urls>` stays in place and host grants never change; temporary cookie access
 is extension-wide, so exact-origin filtering and explicit confirmation still apply.
 

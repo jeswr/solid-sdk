@@ -67,9 +67,10 @@ it('admits sharing after the round-9 expired A click, B abandonment and both win
   a.port.send({ type: 'requesting', lease });
   a.port.client.disconnect();
   await vi.advanceTimersByTimeAsync(0);
-  expect(b.port.view.phase).toBe('prompt');
+  expect(b.port.view.phase).toBe('failed');
+  expect(b.text()).toBe('Another sharing started. Try again.');
   expect(h.browser.permissions.request).toHaveBeenCalledTimes(1);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals + 1);
   expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
   expect(h.native).not.toHaveBeenCalled();
 
@@ -85,7 +86,7 @@ it('admits sharing after the round-9 expired A click, B abandonment and both win
   expect(h.state).toEqual(h.before);
 });
 
-it('refuses another popup click with finishing while preserving B’s unsettled prompt', async () => {
+it('contests another popup click while B’s prompt is unsettled', async () => {
   vi.useFakeTimers();
   const h = captureHarness();
   const a = popup(h);
@@ -101,20 +102,21 @@ it('refuses another popup click with finishing while preserving B’s unsettled 
   const requests = h.browser.permissions.request.mock.calls.length;
   const removals = h.browser.permissions.remove.mock.calls.length;
   a.button('review').click();
-  expect(a.text()).toBe('Finishing the previous sharing.');
-  expect(b.port.view.phase).toBe('prompt');
+  expect(a.text()).toBe('Another sharing started. Try again.');
+  expect(b.port.view.phase).toBe('failed');
   expect(h.browser.permissions.request).toHaveBeenCalledTimes(requests);
   expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals);
   a.port.client.disconnect();
   h.state.cookies = true;
   h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
   result.resolve(true);
-  await phase(b.port, 'confirming');
-  expect(h.state.cookies).toBe(true);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals);
-  b.button('confirm').click();
-  await phase(b.port, 'shared');
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(h.browser.permissions.remove.mock.calls.length).toBeGreaterThan(removals);
+  expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
+  expect(h.native.mock.calls.every(([request]) => request.type === 'list')).toBe(true);
   expect(h.state).toEqual(h.before);
+  const c = popup(h);
+  await c.share();
 });
 
 it.each([
@@ -152,7 +154,7 @@ it.each([
   }
   expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
   expect(h.native).not.toHaveBeenCalled();
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(6);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(9);
   const next = popup(h);
   await next.share();
 });
@@ -170,6 +172,8 @@ it.each([
   const a = popup(h);
   await a.prompt();
   h.native.mockClear();
+  a.port.client.disconnect();
+  await vi.advanceTimersByTimeAsync(59000);
   const removals = new Map<string, ReturnType<typeof deferred<boolean>>>();
   const remove = h.browser.permissions.remove.getMockImplementation()!;
   for (const id of 'ABC') {
@@ -180,16 +184,13 @@ it.each([
       return remove(input);
     });
   }
-  a.port.client.disconnect();
-  await vi.advanceTimersByTimeAsync(1000);
-  h.state.cookies = true;
-  h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
-  await vi.advanceTimersByTimeAsync(29000);
-  h.state.cookies = true;
-  h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
+  for (const _id of 'ABC') {
+    h.state.cookies = true;
+    h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
+  }
   const b = popup(h);
-  await vi.advanceTimersByTimeAsync(30000);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(3);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(4);
   for (const [index, id] of [...order].entries()) {
     removals.get(id)!.resolve(true);
     await vi.advanceTimersByTimeAsync(0);
@@ -221,12 +222,12 @@ it('reverifies a grant whose failed revocation finishes during the final absence
   h.browser.permissions.remove.mockRejectedValueOnce(new Error('fixture-secret'));
   h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
   await vi.advanceTimersByTimeAsync(0);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(3);
   expect(h.state.cookies).toBe(true);
   absent.resolve(false); // This earlier observation was invalidated by the late grant.
   await vi.advanceTimersByTimeAsync(0);
   expect(h.state).toEqual(h.before);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(3);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(4);
   expect(h.browser.permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] });
   const b = popup(h);
   await b.share();

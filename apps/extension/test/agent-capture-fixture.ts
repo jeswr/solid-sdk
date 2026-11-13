@@ -52,7 +52,7 @@ export const cookie = (): chrome.cookies.Cookie => ({
   storeId: '0',
   sameSite: 'lax',
 });
-export function captureHarness() {
+export function captureHarness(asynchronous = false) {
   const state = {
     cookies: false,
     origins: ['https://shop.test:443/*', 'https://other.test:443/*'],
@@ -86,6 +86,7 @@ export function captureHarness() {
       input.origins ? input.origins.every((o) => state.origins.includes(o)) : state.cookies,
     ),
     request: vi.fn(async (_input: chrome.permissions.Permissions) => {
+      if (asynchronous) await new Promise<void>((resolve) => setTimeout(resolve, 0));
       state.cookies = true;
       permissions.onAdded.emit({ permissions: ['cookies'] });
       return true;
@@ -125,14 +126,51 @@ export function captureHarness() {
   const popup = (sender = { id: runtime.id, url: runtime.getURL('popup/popup.html') }) => {
     let closed = false;
     const states: CaptureView[] = [];
+    type Delivery = {
+      direction: 'toWorker' | 'toPopup';
+      message: CaptureIntent | CaptureView;
+      deliver(): void;
+    };
+    const deliveries: Delivery[] = [];
+    const held = new Map<Delivery['direction'], (message: Delivery['message']) => boolean>();
+    const schedule = (delivery: Delivery) => {
+      setTimeout(() => {
+        if (!held.get(delivery.direction)?.(delivery.message)) delivery.deliver();
+      }, 0);
+    };
+    const post = (
+      direction: Delivery['direction'],
+      message: Delivery['message'],
+      receive: () => void,
+    ) => {
+      if (!asynchronous) {
+        receive();
+        return;
+      }
+      const delivery: Delivery = {
+        direction,
+        message: structuredClone(message),
+        deliver: () => {
+          const index = deliveries.indexOf(delivery);
+          if (index < 0) return;
+          deliveries.splice(index, 1);
+          if (!closed) receive();
+        },
+      };
+      deliveries.push(delivery);
+      schedule(delivery);
+    };
     const worker = {
       name: CAPTURE_PERMISSION_PORT,
       sender,
       onMessage: event<unknown>(),
       onDisconnect: event<undefined>(),
       postMessage: vi.fn((view: CaptureView) => {
-        states.push(view);
-        client.onMessage.emit(view);
+        const snapshot = structuredClone(view);
+        post('toPopup', snapshot, () => {
+          states.push(snapshot);
+          client.onMessage.emit(snapshot);
+        });
       }),
       disconnect: vi.fn(() => {
         closed = true;
@@ -142,7 +180,8 @@ export function captureHarness() {
       onMessage: event<CaptureView>(),
       onDisconnect: event<undefined>(),
       postMessage: vi.fn((intent: CaptureIntent) => {
-        if (!closed) worker.onMessage.emit(intent);
+        const snapshot = structuredClone(intent);
+        if (!closed) post('toWorker', snapshot, () => worker.onMessage.emit(snapshot));
       }),
       disconnect: vi.fn(() => {
         if (closed) return;
@@ -165,6 +204,19 @@ export function captureHarness() {
       worker,
       states,
       browser: popupBrowser as unknown as typeof chrome,
+      messages: {
+        pending: deliveries,
+        hold: (
+          direction: Delivery['direction'],
+          predicate: (message: Delivery['message']) => boolean = () => true,
+        ) => held.set(direction, predicate),
+        release: (direction: Delivery['direction']) => {
+          held.delete(direction);
+          for (const delivery of deliveries)
+            if (delivery.direction === direction) schedule(delivery);
+        },
+        deliver: (index: number) => deliveries[index]?.deliver(),
+      },
       get view() {
         return states.at(-1)!;
       },
@@ -173,6 +225,12 @@ export function captureHarness() {
       start: () => client.postMessage({ type: 'start', profile: 'personal', persona: 'alex' }),
       allow: async () => {
         const lease = states.at(-1)!.lease!;
+        if (
+          states.at(-1)?.phase !== 'permission' ||
+          states.at(-1)?.armedLease !== lease ||
+          Date.now() >= states.at(-1)!.expiresAt!
+        )
+          return;
         client.postMessage({ type: 'requesting', lease });
         if (states.at(-1)?.phase !== 'permission' || states.at(-1)?.armedLease !== lease) return;
         try {
@@ -216,7 +274,7 @@ export async function phase(popup: Popup, expected: CaptureView['phase']) {
       if (popup.view?.phase !== expected)
         throw new Error(`Expected ${expected}, got ${popup.view?.phase}: ${popup.view?.message}`);
     },
-    { interval: 1 },
+    { interval: 10, timeout: 2500 },
   );
 }
 export async function reviewing(h: Harness, popup = h.popup()) {

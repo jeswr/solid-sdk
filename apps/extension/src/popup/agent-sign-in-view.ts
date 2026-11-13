@@ -47,9 +47,13 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
   // This synchronous snapshot is updated only by worker pushes; no await can precede
   // the gesture-bound request. An armed lease must match both the latest push and view.
   let validated: CaptureView | undefined;
+  let acknowledgementDeadline: number | undefined;
+  let armExpired = false;
   let expiryTimer: ReturnType<typeof setTimeout> | undefined;
   const armed = () =>
     !closed &&
+    !armExpired &&
+    acknowledgementDeadline === undefined &&
     !view.warning &&
     view.phase === 'permission' &&
     view.lease !== undefined &&
@@ -66,16 +70,27 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
     }
     view = next;
     clearTimeout(expiryTimer);
-    if (view.phase === 'permission' && view.expiresAt !== undefined) {
+    const deadline =
+      acknowledgementDeadline === undefined
+        ? view.expiresAt
+        : Math.min(acknowledgementDeadline, view.expiresAt ?? Infinity);
+    if (
+      (acknowledgementDeadline !== undefined || ['reviewing', 'permission'].includes(view.phase)) &&
+      deadline !== undefined
+    ) {
       expiryTimer = setTimeout(
         () => {
+          armExpired = true;
+          acknowledgementDeadline = undefined;
+          const lease = view.lease;
           render({
             ...view,
             phase: 'failed',
             message: 'Sharing expired. Review sign-in sharing again.',
           });
+          if (lease !== undefined) send({ type: 'cancel', lease });
         },
-        Math.max(0, view.expiresAt - Date.now()),
+        Math.max(0, deadline - Date.now()),
       );
     }
     status.textContent = view.message;
@@ -103,11 +118,31 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
     }
     remove.disabled =
       !view.warning ||
-      (!['ready', 'failed', 'cancelled', 'shared'].includes(view.phase) &&
-        !(view.phase === 'busy' && view.cleanupFailed));
+      (!view.cleanupFailed && !['ready', 'failed', 'cancelled', 'shared'].includes(view.phase));
     cancel.disabled = view.lease === undefined || terminalCapturePhase(view.phase);
   };
   port.onMessage.addListener((next: CaptureView) => {
+    if (['reviewing', 'permission'].includes(next.phase)) {
+      if (acknowledgementDeadline !== undefined && Date.now() >= acknowledgementDeadline)
+        armExpired = true;
+      if (armExpired) {
+        render({
+          ...next,
+          phase: 'failed',
+          message: 'Sharing expired. Review sign-in sharing again.',
+        });
+        if (next.lease !== undefined) send({ type: 'cancel', lease: next.lease });
+        return;
+      }
+      if (
+        next.phase === 'permission' &&
+        next.lease !== undefined &&
+        next.armedLease === next.lease &&
+        next.expiresAt !== undefined &&
+        Date.now() < next.expiresAt
+      )
+        acknowledgementDeadline = undefined;
+    }
     validated = next;
     render(next);
   });
@@ -134,6 +169,16 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
   });
   review.addEventListener('click', () => {
     if (view.phase === 'ready' && !view.warning && persona.value) {
+      armExpired = false;
+      acknowledgementDeadline = Date.now() + 10000;
+      render({
+        ...view,
+        phase: 'reviewing',
+        lease: undefined,
+        armedLease: undefined,
+        expiresAt: undefined,
+        message: 'Checking the current site…',
+      });
       send({ type: 'start', profile: profile.value, persona: persona.value });
     } else if (armed()) {
       const lease = view.lease!;
