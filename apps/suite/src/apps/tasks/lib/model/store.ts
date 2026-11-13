@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { Authorization } from "@solid/object";
+import { isDirectChild } from "../../../docs/lib/model/layout";
 import { projectMoveData } from "../detail/task-data";
+import { TaskCommentStore } from "./comments";
 import { InboxAclRecoveryError, ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";
 import { TaskMove } from "./move";
@@ -64,6 +66,9 @@ export interface StoreOptions {
 }
 /** Hook-free port of Pod Manager's one-resource-per-item productivity store. */
 export class TaskStore {
+  comments(project: StoredProject, task: StoredTask): TaskCommentStore {
+    return new TaskCommentStore(project, task, this.options.webId, this.options.fetch);
+  }
   readonly projects: string;
   private readonly io: RdfIO;
   private readonly index: TypeIndex;
@@ -474,6 +479,8 @@ export class TaskStore {
         return [...references.values()];
       },
       now,
+      (previous) =>
+        this.comments(source, item).prepareMove(`${container}comments/`, `${url}#it`, previous),
     );
   }
   /** Create, remap child/occurrence links, then delete, reconciling before compensation. */
@@ -522,6 +529,18 @@ export class TaskStore {
     const reserved = await this.io.write(project.url, dataset, { etag: current.etag });
     for (const item of await this.listTasks(container))
       await this.removeIfPresent(item.url, item.etag);
+    const comments = `${container}comments/`;
+    for (const url of await this.io.list(comments)) {
+      // Never follow foreign or nested entries advertised by an untrusted listing.
+      if (!isDirectChild(url, comments)) continue;
+      const comment = await this.io.optional(url);
+      if (!comment) continue;
+      await this.removeAcl(url);
+      await this.removeIfPresent(url, comment.etag);
+    }
+    await this.removeAcl(comments);
+    const commentContainer = await this.io.optional(comments);
+    if (commentContainer) await this.removeIfPresent(comments, commentContainer.etag);
     // Auxiliary ACLs are listed by some pods; remove them before the folder DELETE.
     await this.removeAcl(container);
     const resource = await this.io.optional(container);

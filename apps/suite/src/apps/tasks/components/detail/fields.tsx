@@ -30,6 +30,7 @@ import { humanise } from "../../lib/model/recurrence";
 import type { Reminder } from "../../lib/model/reminders";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
 import { labelColour } from "../../lib/views/label-colours";
+import { memberName } from "../../lib/views/member-name";
 import { type PriorityLevel, priorityValue, type TaskView } from "../../lib/views/types";
 import { offerNotificationPermission } from "../../state/reminders";
 import { useTasks } from "../../state/tasks-context";
@@ -281,15 +282,6 @@ function LabelsField({
       </form>
     </div>
   );
-}
-function memberName(webId: string) {
-  let displayName = webId;
-  try {
-    displayName = new URL(webId).hostname;
-  } catch {
-    /* Keep foreign IRIs renderable. */
-  }
-  return displayName;
 }
 function useMemberProfile(webId: string) {
   return { displayName: memberName(webId), loading: false };

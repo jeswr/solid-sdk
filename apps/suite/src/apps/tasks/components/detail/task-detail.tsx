@@ -17,6 +17,7 @@ import { ArrowLeft, Ellipsis, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
+import { plainTextLinks } from "@/lib/plain-text-links";
 import { encodeRef } from "@/lib/refs";
 import { duplicateTaskData } from "../../lib/detail/task-data";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
@@ -27,34 +28,8 @@ import { completeTask, deleteTask } from "../../state/actions";
 import { useTasks } from "../../state/tasks-context";
 import { TaskProgress, TreeToggle, useCollapsedTasks } from "../tree-controls";
 import { TaskAttachments } from "./attachments";
+import { TaskComments } from "./comments";
 import { ProjectFields, TaskProperties } from "./fields";
-
-function descriptionNodes(text: string) {
-  const seen = new Map<string, number>();
-  return text.split(/(https?:\/\/[^\s<>]+)/gi).map((part) => {
-    const occurrence = (seen.get(part) ?? 0) + 1;
-    seen.set(part, occurrence);
-    if (/^https?:\/\//i.test(part)) {
-      try {
-        const url = new URL(part);
-        if (url.protocol === "http:" || url.protocol === "https:")
-          return (
-            <a
-              key={`${part}-${occurrence}`}
-              href={url.href}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {part}
-            </a>
-          );
-      } catch {
-        /* Malformed URLs remain text. */
-      }
-    }
-    return part;
-  });
-}
 
 /** Saved-value changes may reconcile a submitted edit, but never a newer local draft. */
 function useDetailDraft(saved: string) {
@@ -299,7 +274,7 @@ export function TaskDetail({
         />
         {!editingDescription && description && (
           <>
-            <p className="tsk-detail-description-text">{descriptionNodes(description)}</p>
+            <p className="tsk-detail-description-text">{plainTextLinks(description)}</p>
             <Button
               variant="ghost"
               size="sm"
@@ -456,6 +431,7 @@ export function TaskDetail({
         )}
       </section>
       <TaskAttachments key={stored.url} stored={stored} />
+      <TaskComments key={`${tasks.webId} ${stored.url}`} stored={stored} project={project} />
       <TaskProperties
         stored={stored}
         project={project}
