@@ -87,6 +87,9 @@ async function fixture(adapter: string, containerContentType?: string, rdfAvaila
       : {
           root: ROOT,
           webId: "",
+          async head(target) {
+            return { acl: `${target}.acl` };
+          },
           async read(url) {
             const resource = resources[url];
             if (!resource) throw new Error(`HTTP 404 ${url}`);

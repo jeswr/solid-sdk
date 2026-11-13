@@ -15,6 +15,7 @@ function portablePod() {
   return {
     root: ROOT,
     webId: "",
+    head: vi.fn(async (target: string) => ({ acl: `${target}.acl` })),
     read: vi.fn<PodPort["read"]>(async () => ({
       body: new TextEncoder().encode("hello"),
       contentType: "text/plain",

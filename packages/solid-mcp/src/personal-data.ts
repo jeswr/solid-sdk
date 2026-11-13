@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { NanopubStore } from "@jeswr/pkg-memory";
-import { podScopedUrlOrUndefined } from "./auth.js";
+import {
+  INDEPENDENTLY_GOVERNED_AGENT_CONTAINERS,
+  PROTECTED_AGENT_CONTAINERS,
+} from "./agent-layout.js";
+import { podScopedUrlOrUndefined, requirePodScopedUrl } from "./auth.js";
 import type { PodPort } from "./pod-port.js";
-
-/** Container of the owner-written shared-context document (see context-tools.ts). */
-const SHARED_CONTEXT_CONTAINER = "agent/context/";
 
 export const PERSONAL_DATA_DENIED = "Personal data requires a purpose-limited tool";
 
@@ -66,6 +68,93 @@ function normalizedPath(path: string): string {
   return `/${segments.join("/")}`;
 }
 
+/** Auxiliary-resource suffixes whose content can govern access to their subject. */
+const AUXILIARY_SUFFIXES = [".acl", ".acr", ".meta"] as const;
+
+/**
+ * Whether `path` (normalized) is an ACL/ACR/metadata resource of the root, of an ancestor of
+ * `prefix`, or of `prefix` itself: both `container/.acl` and the slashless `container.acl` forms.
+ */
+function auxiliaryGovernsPrefix(path: string, prefix: string): boolean {
+  const segments = path.split("/").filter(Boolean);
+  const last = segments.pop();
+  if (last === undefined) return false;
+  let subject: string[];
+  if ((AUXILIARY_SUFFIXES as readonly string[]).includes(last)) subject = segments;
+  else {
+    const suffix = AUXILIARY_SUFFIXES.find((value) => last.endsWith(value));
+    if (suffix === undefined) return false;
+    subject = [...segments, last.slice(0, -suffix.length)];
+  }
+  const subjectPath = `/${subject.filter(Boolean).join("/")}`;
+  return subjectPath === "/" || prefix === subjectPath || prefix.startsWith(`${subjectPath}/`);
+}
+
+/** Per-mutation discovery, including absent areas and shared inheritance ancestors. */
+export async function governingAuxiliaries(pod: PodPort): Promise<ReadonlySet<string>> {
+  try {
+    const head = pod.head;
+    if (!head) throw new Error();
+    const root = new URL(pod.root);
+    const profile = pod.webId && podScopedUrlOrUndefined({ podRoot: pod.root }, pod.webId);
+    const areas = [
+      personalDataRoot(pod),
+      ...INDEPENDENTLY_GOVERNED_AGENT_CONTAINERS.map((path) => new URL(path, root).href),
+      ...(profile ? [profile] : []),
+    ];
+    const targets = new Set([root.href]);
+    for (const area of areas) {
+      const target = new URL(area);
+      target.hash = "";
+      targets.add(target.href);
+      for (let ancestor = new URL("./", target); ; ancestor = new URL("../", ancestor)) {
+        requirePodScopedUrl({ podRoot: root.href }, ancestor.href);
+        targets.add(ancestor.href);
+        if (ancestor.href === root.href) break;
+      }
+    }
+    const auxiliaries = new Set<string>();
+    const rootPaths = pathAliases(root);
+    // Issue the HEADs together: each mutation still rediscovers every association, but the
+    // latency is one round trip rather than one per target. Any failure denies the mutation.
+    const responses = await Promise.all([...targets].map((target) => head.call(pod, target)));
+    for (const metadata of responses) {
+      // A successful HEAD alone cannot establish the governing auxiliary resources.
+      if (!metadata.acl && !metadata.describedby?.length) throw new Error();
+      for (const association of [metadata.acl, ...(metadata.describedby ?? [])]) {
+        if (association === undefined) continue;
+        const url = new URL(association); // Portable ports promise absolute metadata.
+        requirePodScopedUrl({ podRoot: root.href }, url.href);
+        for (const path of pathAliases(url)) {
+          // Every decoding stage must remain in the pod, including double-encoded traversal.
+          if (
+            !rootPaths.some(
+              (prefix) => prefix === "/" || path === prefix || path.startsWith(`${prefix}/`),
+            )
+          )
+            throw new Error();
+          auxiliaries.add(path);
+        }
+      }
+    }
+    return auxiliaries;
+  } catch {
+    throw new Error(PERSONAL_DATA_DENIED);
+  }
+}
+
+/** Apply the same conservative URL identities to advertised associations and final aliases. */
+export function requireAuxiliaryMutationAccess(
+  url: string,
+  auxiliaries: ReadonlySet<string>,
+): void {
+  try {
+    if (pathAliases(new URL(url)).some((path) => auxiliaries.has(path))) throw new Error();
+  } catch {
+    throw new Error(PERSONAL_DATA_DENIED);
+  }
+}
+
 /** No URL or backend-supplied value may enter this diagnostic. */
 export function requireGenericPodAccess(
   pod: PodPort,
@@ -77,13 +166,13 @@ export function requireGenericPodAccess(
     const target = new URL(url, pod.root);
     const protectedRoot = new URL(personalDataRoot(pod));
     if (target.origin !== protectedRoot.origin) return; // The pod-scope guard owns this.
-    const prefixes = pathAliases(protectedRoot);
+    const prefixes = [
+      protectedRoot,
+      ...PROTECTED_AGENT_CONTAINERS.map((path) => new URL(path, pod.root)),
+    ].flatMap(pathAliases);
     // The whole profile document carries Contact data, independent of its WebID fragment.
     const profile = pod.webId && podScopedUrlOrUndefined({ podRoot: pod.root }, pod.webId);
     if (profile && (!profileDiscovery || mutation)) prefixes.push(...pathAliases(new URL(profile)));
-    // Only the owner writes the shared context that later conversations load (ADR 0004),
-    // so generic tools may read it but never create, replace or delete it or an ancestor.
-    if (mutation) prefixes.push(...pathAliases(new URL(SHARED_CONTEXT_CONTAINER, pod.root)));
     for (const path of pathAliases(target)) {
       if (
         prefixes.some(
@@ -91,7 +180,9 @@ export function requireGenericPodAccess(
             // Protect slashless container ACL/metadata aliases too.
             within(path, prefix) ||
             // Replacing/deleting an ancestor can destroy the protected subtree.
-            (mutation && prefix.startsWith(`${path}/`)),
+            (mutation && prefix.startsWith(`${path}/`)) ||
+            // An ancestor's ACL/ACR/metadata governs the protected subtree by inheritance.
+            (mutation && auxiliaryGovernsPrefix(path, prefix)),
         )
       )
         throw new Error();
