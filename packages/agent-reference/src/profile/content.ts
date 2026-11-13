@@ -118,6 +118,35 @@ export function freeStrings(
   return out;
 }
 
+/** Public parameter names are fixed too: unknown keys and open scalars can encode task data. */
+export function hasOpenPublicData(value: unknown, vocabulary: ContentVocabulary): boolean {
+  const paths = Object.keys(vocabulary).map((path) => path.split("."));
+  const visit = (item: unknown, parts: string[], arrays: boolean[]): boolean => {
+    const declaration = declarationAt(vocabulary, parts.join("."));
+    if (typeof item === "number" || (typeof item === "string" && declaration?.type === "date"))
+      return declaration?.values?.includes(item) !== true;
+    if (!item || typeof item !== "object") return false;
+    return Object.entries(item).some(([key, child]) => {
+      const next = [...parts, segment(key)];
+      const flags = [...arrays, Array.isArray(item)];
+      const named = paths.some(
+        (pattern) =>
+          pattern.length >= next.length &&
+          next.every((part, i) => pattern[i] === part || (pattern[i] === "*" && flags[i])),
+      );
+      const emptyInput =
+        next.length === 1 &&
+        key === "input" &&
+        child &&
+        typeof child === "object" &&
+        !Array.isArray(child) &&
+        Object.keys(child).length === 0;
+      return (!named && !emptyInput) || visit(child, next, flags);
+    });
+  };
+  return visit(value, [], []);
+}
+
 export const CORE_CONTENT_VOCABULARY: ContentVocabulary = {
   "operation.id": { type: "identifier" },
   "operation.version": { type: "code", values: ["0.1", "0.2", "1"] },

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Named, coherent mechanism configurations (framework parts C and D).
  *
@@ -79,7 +80,40 @@ export const CONFIG_P256 = `${AWP}config/signed-p256/0.1`;
 export const CONFIG_PUBLIC = `${AWP}config/public-readonly-ed25519/0.1`;
 export const CONFIG_SD_CANDIDATE = `${AWP}config/selective-disclosure-candidate/0.1`;
 
+export const CONFIG_PAYMENT = `${AWP}config/payment-local/0.1`;
+export const CONFIG_CORROBORATION = `${AWP}config/corroboration-local/0.1`;
+export const CONFIG_PINNED_LIST = `${AWP}config/pinned-list-local/0.1`;
+const localDefinition = (id: string, label: string): ConfigurationDefinition => ({
+  id,
+  label,
+  version: "0.1.0",
+  status: "executable",
+  requesterAuthentication: "selected",
+  integrity: {
+    status: "selected",
+    mechanism: "jws-compact",
+    alg: "EdDSA",
+    curve: "Ed25519",
+    specs: JWS_SPECS,
+  },
+  ...COMMON,
+  unsignedRequestKinds: [],
+  unresolved: [],
+});
+
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  [CONFIG_PAYMENT]: localDefinition(
+    CONFIG_PAYMENT,
+    "Local structured payments, signed bank submissions, calendar-month mandate limits; fictional bank only",
+  ),
+  [CONFIG_CORROBORATION]: localDefinition(
+    CONFIG_CORROBORATION,
+    "Signed claims with exact-value corroboration and independently configured controllers",
+  ),
+  [CONFIG_PINNED_LIST]: localDefinition(
+    CONFIG_PINNED_LIST,
+    "Introduced keys with purpose-scoped principal trust pins and no register fallback",
+  ),
   [CONFIG_ED25519]: {
     id: CONFIG_ED25519,
     version: "0.1.0",

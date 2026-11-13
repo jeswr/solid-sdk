@@ -13,6 +13,17 @@
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$"
     },
+    "sources": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+      }
+    },
     "claims": {
       "type": "array",
       "items": {
@@ -37,6 +48,24 @@
           "maxAgeDays": {
             "type": "number",
             "minimum": 0
+          },
+          "corroboration": {
+            "type": "object",
+            "properties": {
+              "sources": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 9007199254740991
+              },
+              "independent": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "sources",
+              "independent"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
@@ -74,44 +103,578 @@
     "rules": {
       "type": "array",
       "items": {
+        "anyOf": [
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "output": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "inputsFrom": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "assurances": {
+                    "default": [
+                      "recomputed"
+                    ],
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "recomputed",
+                        "by-source",
+                        "proved",
+                        "joint",
+                        "attested"
+                      ]
+                    }
+                  },
+                  "template": {
+                    "type": "string",
+                    "enum": [
+                      "sum",
+                      "count",
+                      "min",
+                      "max"
+                    ]
+                  },
+                  "params": {
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "field": {
+                        "default": "value",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "period": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string"
+                          },
+                          "end": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "completeness": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "input",
+                      "field",
+                      "period",
+                      "completeness"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "output",
+                  "inputsFrom",
+                  "assurances",
+                  "template",
+                  "params"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "output": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "inputsFrom": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "assurances": {
+                    "default": [
+                      "recomputed"
+                    ],
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "recomputed",
+                        "by-source",
+                        "proved",
+                        "joint",
+                        "attested"
+                      ]
+                    }
+                  },
+                  "template": {
+                    "type": "string",
+                    "const": "annualise-consecutive-months"
+                  },
+                  "params": {
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "months": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 120
+                      },
+                      "field": {
+                        "default": "value",
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "period": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string"
+                          },
+                          "end": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "input",
+                      "months",
+                      "field"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "output",
+                  "inputsFrom",
+                  "assurances",
+                  "template",
+                  "params"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "output": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "inputsFrom": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "assurances": {
+                    "default": [
+                      "recomputed"
+                    ],
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "recomputed",
+                        "by-source",
+                        "proved",
+                        "joint",
+                        "attested"
+                      ]
+                    }
+                  },
+                  "template": {
+                    "type": "string",
+                    "const": "ratio"
+                  },
+                  "params": {
+                    "type": "object",
+                    "properties": {
+                      "numerator": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "denominator": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "numerator",
+                      "denominator"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "output",
+                  "inputsFrom",
+                  "assurances",
+                  "template",
+                  "params"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "output": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "inputsFrom": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "assurances": {
+                    "default": [
+                      "recomputed"
+                    ],
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "recomputed",
+                        "by-source",
+                        "proved",
+                        "joint",
+                        "attested"
+                      ]
+                    }
+                  },
+                  "template": {
+                    "type": "string",
+                    "const": "threshold"
+                  },
+                  "params": {
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "lt",
+                          "lte",
+                          "eq",
+                          "gte",
+                          "gt"
+                        ]
+                      },
+                      "value": {
+                        "type": "number"
+                      },
+                      "compareWith": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "input",
+                      "operator"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "output",
+                  "inputsFrom",
+                  "assurances",
+                  "template",
+                  "params"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "output": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "inputsFrom": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "assurances": {
+                    "default": [
+                      "recomputed"
+                    ],
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "recomputed",
+                        "by-source",
+                        "proved",
+                        "joint",
+                        "attested"
+                      ]
+                    }
+                  },
+                  "template": {
+                    "type": "string",
+                    "enum": [
+                      "all-of",
+                      "any-of"
+                    ]
+                  },
+                  "params": {
+                    "type": "object",
+                    "properties": {
+                      "inputs": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    },
+                    "required": [
+                      "inputs"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "output",
+                  "inputsFrom",
+                  "assurances",
+                  "template",
+                  "params"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "version": {
+                "type": "string"
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "result": {
+                "type": "string"
+              },
+              "assurances": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "by-source",
+                    "by-agent",
+                    "attested",
+                    "proved",
+                    "joint"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "version",
+              "inputs",
+              "result",
+              "assurances"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "assessments": {
+      "default": [],
+      "type": "array",
+      "items": {
         "type": "object",
         "properties": {
           "id": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
           },
-          "version": {
-            "type": "string"
+          "rule": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
           },
-          "inputs": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "purpose": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
           },
-          "result": {
-            "type": "string"
-          },
-          "assurances": {
+          "keep": {
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "by-source",
-                "by-agent",
-                "attested",
-                "proved",
-                "joint"
-              ]
+              "const": "output"
             }
+          },
+          "discardInputsAfter": {
+            "type": "string",
+            "const": "evaluation"
           }
         },
         "required": [
           "id",
-          "version",
-          "inputs",
-          "result",
-          "assurances"
+          "rule",
+          "purpose",
+          "keep",
+          "discardInputsAfter"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "standIns": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "what": {
+            "type": "string"
+          },
+          "replacedBy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "what",
+          "replacedBy"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "trust": {
+      "type": "object",
+      "properties": {
+        "levels": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "string",
+              "const": "own-list"
+            }
+          ]
+        },
+        "onUnknown": {
+          "type": "string",
+          "const": "ask-principal"
+        }
+      },
+      "required": [
+        "levels",
+        "onUnknown"
+      ],
+      "additionalProperties": false
+    },
+    "personDecisions": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "decider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "principal"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "role"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "decider"
         ],
         "additionalProperties": false
       }
@@ -288,9 +851,13 @@
     "x-authored-by",
     "schema",
     "id",
+    "sources",
     "claims",
     "purposes",
     "rules",
+    "assessments",
+    "standIns",
+    "personDecisions",
     "decisionsForPerson",
     "modelReadings",
     "vocabulary",

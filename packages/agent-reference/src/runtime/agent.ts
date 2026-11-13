@@ -41,9 +41,12 @@ import type {
   ReasonCode,
   RepresentationAssessment,
 } from "../core/types.js";
+import { evaluateRule } from "../derive/rules.js";
+import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates/approvals.js";
 import { type GateContext, GateMemory } from "../gates/common.js";
 import { type Admission, InboundGate } from "../gates/inbound.js";
 import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
+import { periodKey } from "../gates/payment.js";
 import { type KeyAlg, type SigningKey, signCompact, verifyCompact } from "../mechanisms/jws.js";
 import {
   actionDigest,
@@ -83,6 +86,7 @@ import {
 import type {
   EffectState,
   OutboxEntry,
+  PendingAction,
   RuntimeState,
   StateStore,
   TaskState,
@@ -133,6 +137,8 @@ export interface AgentRuntimeOptions {
   readonly identity: AgentIdentity;
   /** Actor signing keys (one per algorithm). Absent for an anonymous public client. */
   readonly actorKeys?: readonly SigningKey[];
+  /** Optional source record signer, installed only by the host of an issuing source. */
+  readonly sourceKey?: SigningKey;
   readonly trust: TrustStore;
   /** Owner-signed mandate (JWS). Absent → every consequential action is denied. */
   readonly mandateJws?: string;
@@ -303,6 +309,7 @@ export class AgentRuntime {
   private admission: Admission | undefined;
   /** Set while an approved action resumes, so the core is not shown proposing it twice. */
   private resuming = false;
+  private reauthorising = false;
   /** The pilot configuration of the exchange the gates are checking now. */
   private carriage: string | undefined;
   /** Set while a task the core took from a received message is being proposed. */
@@ -312,6 +319,25 @@ export class AgentRuntime {
   private readonly protocolVocabulary: ContentVocabulary;
 
   private constructor(private readonly options: AgentRuntimeOptions) {
+    options = {
+      ...options,
+      gates: {
+        ...options.gates,
+        vocabulary: structuredClone(options.gates?.vocabulary),
+        identifiers: structuredClone(options.gates?.identifiers),
+        purposes: structuredClone(options.gates?.purposes),
+        claimSources: structuredClone(options.gates?.claimSources),
+        ...(options.gates?.reliance ? { reliance: structuredClone(options.gates.reliance) } : {}),
+        principalLimits: structuredClone(options.gates?.principalLimits),
+        rules: structuredClone(options.gates?.rules ?? []),
+        sourceAliases: structuredClone(options.gates?.sourceAliases ?? {}),
+        assessments: structuredClone(options.gates?.assessments ?? []),
+        personDecisions: structuredClone(options.gates?.personDecisions ?? []),
+        trust: structuredClone(options.gates?.trust),
+        pins: structuredClone(options.gates?.pins ?? []),
+      },
+    };
+    this.options = options;
     this.retention = { ...DEFAULT_RETENTION, ...(options.retention ?? {}) };
     this.identity = options.identity;
     this.limits = resolveLimits(options.limits);
@@ -358,7 +384,11 @@ export class AgentRuntime {
       ...(options.gates ?? {}),
       carriage: () => this.carriage,
     };
-    const memory = new GateMemory(this.state.contextItems, this.state.knownIdentifiers);
+    const memory = new GateMemory(
+      this.state.contextItems,
+      this.state.knownIdentifiers,
+      this.state.statementRefusals,
+    );
     this.gateMemory = memory;
     memory.rememberIdentifiers("*", {
       identity: this.identity,
@@ -435,6 +465,111 @@ export class AgentRuntime {
             return terms as JsonObject;
         }
         return undefined;
+      },
+      anonymousConversation: (id) => this.state.generatedConversations[id] === true,
+      recipientBound: (actor, party) =>
+        this.trust.data.keys.some(
+          (key) => key.role === "actor" && key.subject === actor && (!party || key.party === party),
+        ),
+      ...(gate.trust
+        ? {
+            recipientPinned: (party: string, purpose: string | undefined, actor?: string) => {
+              const kid = actor
+                ? this.trust.data.keys.find((key) => key.role === "actor" && key.subject === actor)
+                    ?.kid
+                : undefined;
+              return (!actor || !!kid) && this.hasTrustPin(party, purpose, kid);
+            },
+          }
+        : {}),
+      paymentSpent: (rule, currency, intent) => {
+        const key = periodKey(rule, currency, this.now());
+        const reservation = this.reauthorising
+          ? Object.values(this.state.paymentReservations).find(
+              (r) => r.digest === actionDigest(intent) && r.period === key,
+            )
+          : undefined;
+        return (this.state.paymentTotals[key] ?? 0) - (reservation?.amountMinor ?? 0);
+      },
+      consumeApproval: (intent) => {
+        if (
+          intent.action !== "pay" &&
+          !gate.personDecisions?.some((p) => p.action === intent.action) &&
+          !this.state.organisationApprovals[actionDigest(intent)]?.length
+        )
+          return;
+        const approval = this.state.approvals[actionDigest(intent)];
+        if (approval) this.state.usedApprovals[approval.id] = true;
+        for (const org of this.state.organisationApprovals[actionDigest(intent)] ?? [])
+          this.state.usedApprovals[org.id] = true;
+      },
+      reservePayment: (intent, releaseId) => {
+        if (intent.action !== "pay" || this.state.paymentReleases[releaseId]) return;
+        const decision = this.authorise(intent);
+        if (decision.outcome !== "permit")
+          throw new Error("Payment no longer authorised before reservation");
+        const mandate = this.mandate?.mandate;
+        const rule = [
+          ...(mandate?.autonomous.permissions ?? []),
+          ...(mandate?.withApproval.permissions ?? []),
+        ].find((r) => r.id === decision.matchedRule);
+        if (!rule?.id) throw new Error("Payment mandate needs an identified rule");
+        const key = periodKey(rule.id, String(intent.parameters.currency), this.now());
+        this.state.paymentTotals[key] =
+          (this.state.paymentTotals[key] ?? 0) + Math.round(Number(intent.parameters.amount) * 100);
+        this.state.paymentReleases[releaseId] = true;
+        this.state.paymentReservations[releaseId] = {
+          digest: actionDigest(intent),
+          period: key,
+          amountMinor: Math.round(Number(intent.parameters.amount) * 100),
+        };
+        this.record({
+          type: "payment-reserved",
+          releaseId,
+          rule: rule.id,
+          period: key,
+          amountMinor: Math.round(Number(intent.parameters.amount) * 100),
+          totalMinor: this.state.paymentTotals[key],
+          at: this.now(),
+        });
+        this.persist();
+      },
+      organisationApprovals: (intent, rule) =>
+        checkOrganisationApprovals({
+          intent,
+          rule,
+          approvals: (this.state.organisationApprovals[actionDigest(intent)] ?? []).filter(
+            (a) => this.reauthorising || !this.state.usedApprovals[a.id],
+          ),
+          memory,
+          task: gate.taskId ?? intent.conversation,
+          organization: this.identity.party ?? "",
+          requester:
+            gate.requester ?? this.state.conversations[intent.conversation]?.peer.party ?? "",
+          at: this.now(),
+        }),
+      personApproved: (intent, role) => {
+        if (role)
+          return (
+            checkOrganisationApprovals({
+              intent,
+              rule: { count: 1, roles: [role], distinctFromRequester: false },
+              approvals: (this.state.organisationApprovals[actionDigest(intent)] ?? []).filter(
+                (a) => this.reauthorising || !this.state.usedApprovals[a.id],
+              ),
+              memory,
+              task: gate.taskId ?? intent.conversation,
+              organization: this.identity.party ?? "",
+              requester: gate.requester ?? "",
+              at: this.now(),
+            }) === "pass"
+          );
+        const approval = this.state.approvals[actionDigest(intent)];
+        return (
+          approval?.decision === "approve" &&
+          Date.parse(approval.validUntil) > Date.parse(this.now()) &&
+          (this.reauthorising || !this.state.usedApprovals[approval.id])
+        );
       },
       demandedApproval: (intent) => {
         if (!intent.recipient) return undefined;
@@ -889,6 +1024,205 @@ export class AgentRuntime {
     });
   }
 
+  private hasTrustPin(party: string, purpose: string | undefined, kid?: string): boolean {
+    return [...(this.options.gates?.pins ?? []), ...this.state.trustPins].some(
+      (pin) =>
+        pin.party === party &&
+        pin.purpose === purpose &&
+        (!kid || pin.kid === kid) &&
+        Date.parse(pin.expiresAt) > Date.parse(this.now()),
+    );
+  }
+  pendingTrustRequests() {
+    return structuredClone(this.state.trustHolds);
+  }
+  submitTrustDecision(requestId: string, approvalJws: string): Promise<StepResult> {
+    return this.exclusive(async () => {
+      const hold = this.state.trustHolds[requestId];
+      const approval = await verifyApproval(approvalJws, {
+        trust: this.trust,
+        actor: this.identity.actor,
+        limits: this.limits,
+        at: this.now(),
+      });
+      if (
+        !hold ||
+        !approval.ok ||
+        approval.approval.actionDigest !== hold.digest ||
+        approval.approval.conversation !== hold.message.conversation ||
+        this.state.usedApprovals[approval.approval.id] ||
+        Date.parse(hold.expiresAt) <= Date.parse(this.now())
+      )
+        return this.result("rejected", { reason: "approval-denied", outbound: [] });
+      this.state.usedApprovals[approval.approval.id] = true;
+      delete this.state.trustHolds[requestId];
+      if (approval.approval.decision === "deny") {
+        this.state.trustRefusals[digestOf(hold.message)] = true;
+        this.inbound.verdictEvent("source", "fail", "The principal refused this trust decision.", {
+          reason: "source-unknown",
+        });
+        this.inbound.decisionEvent("refuse", "The held message is refused.", "source-unknown");
+        this.persist();
+        return this.result("rejected", { reason: "source-unknown", outbound: [] });
+      }
+      if (!hold.purpose || !this.options.gates?.purposes?.[hold.purpose])
+        return this.result("rejected", { reason: "purpose-not-permitted", outbound: [] });
+      this.state.trustPins.push({
+        kid: hold.kid,
+        party: hold.party,
+        purpose: hold.purpose,
+        expiresAt: hold.expiresAt,
+      });
+      this.record({
+        type: "trust-pinned",
+        requestId,
+        kid: hold.kid,
+        party: hold.party,
+        purpose: hold.purpose,
+        expiresAt: hold.expiresAt,
+        at: this.now(),
+      });
+      this.persist();
+      return this.receiveGuarded(hold.wire, { binding: hold.binding });
+    });
+  }
+
+  /** Rules see only this task's admitted statements. The core supplies a rule name, no inputs. */
+  derive(input: {
+    rule: string;
+    subject: Iri;
+    purpose: Iri;
+    assurance?: "recomputed" | "by-source";
+  }) {
+    return this.exclusive(() => this.deriveInner(input));
+  }
+  private async deriveInner(input: {
+    rule: string;
+    subject: Iri;
+    purpose: Iri;
+    assurance?: "recomputed" | "by-source";
+  }) {
+    const task = this.options.gates?.taskId;
+    if (!task) return { ok: false as const, reason: "missing-context" };
+    const source = input.assurance === "by-source";
+    const author = source ? this.identity.party : this.identity.actor;
+    const key = source ? this.options.sourceKey : this.keysByAlg.get("EdDSA");
+    const sourcePin = key
+      ? (this.trust.resolver("issuer")(key.kid) ?? this.trust.resolver("party")(key.kid))
+      : undefined;
+    if (!author || (source && (!key || sourcePin?.subject !== author)))
+      return { ok: false as const, reason: "deriver-not-accepted" };
+    const result = evaluateRule({
+      ...input,
+      rules: this.options.gates?.rules ?? [],
+      sources: this.options.gates?.sourceAliases,
+      memory: this.gateMemory,
+      reliance: this.options.gates?.reliance,
+      task,
+      deriver: author,
+      at: this.now(),
+    });
+    this.record({
+      type: "derivation",
+      rule: input.rule,
+      outcome: result.ok ? "completed" : "refused",
+      reason: result.ok ? "fit-for-use" : result.reason,
+      at: this.now(),
+    });
+    if (!result.ok) return result;
+    if (!key) return { ok: false as const, reason: "unknown-key" };
+    const jws = await signCompact(key, TYP.statement, result.statement);
+    this.registerIdentifier(String(result.statement.id));
+    this.persist();
+    return { ok: true as const, statement: result.statement, jws };
+  }
+
+  /** An internal decision is allowed only by its current agreement and every input's terms. */
+  assess(input: { assessment: string; agreement: Iri; subject: Iri }) {
+    return this.exclusive(async () => {
+      const plan = this.options.gates?.assessments?.find((p) => p.id === input.assessment);
+      const agreement = this.state.agreements[input.agreement];
+      if (!plan || !agreement) return { ok: false as const, reason: "no-agreement" };
+      const terms = agreement.terms;
+      if (
+        terms.purpose !== plan.purpose ||
+        (Array.isArray(terms.prohibitedPurposes) && terms.prohibitedPurposes.includes(plan.purpose))
+      )
+        return { ok: false as const, reason: "purpose-not-permitted" };
+      const result = await this.deriveInner({
+        rule: plan.rule,
+        purpose: plan.purpose,
+        subject: input.subject,
+      });
+      if (!result.ok) return result;
+      const d = result.statement.derivation as JsonObject;
+      const inputs = d.inputs as JsonObject[];
+      const keep = plan.keep.includes("output");
+      if (keep)
+        this.setDomain(
+          `_assessment:${plan.id}`,
+          {
+            output: result.statement.value ?? null,
+            claimType: result.statement.claimType ?? null,
+            ruleDigest: d.ruleDigest ?? null,
+            agreement: input.agreement,
+            terms: result.statement.terms ?? null,
+            asOf: result.statement.asOf ?? null,
+            validUntil: result.statement.validUntil ?? null,
+          },
+          agreement.conversation,
+        );
+      // Erase payloads, including accepted factual support. Retain only digest-level provenance.
+      const ids = new Set(inputs.map((i) => String(i.id)));
+      for (const [scope, items] of Object.entries(this.state.contextItems))
+        this.state.contextItems[scope] = items.map((item) => {
+          if (!ids.has(item.id)) return item;
+          const { statement: _payload, identifiers: _values, ...tombstone } = item;
+          return {
+            ...tombstone,
+            accepted: false,
+            kind: "memory" as const,
+            label: `Discarded input: ${item.label}`,
+          };
+        });
+      for (const id of ids) this.gateMemory.facts.delete(id);
+      for (const [scope, items] of Object.entries(this.state.contextItems))
+        this.gateMemory.contexts[scope] = items;
+      if (keep)
+        this.gateMemory.enter(this.options.gates?.taskId ?? agreement.conversation, {
+          id: this.registerIdentifier(
+            derivedUrn("assessment-output", {
+              plan: plan.id,
+              agreement: input.agreement,
+              output: result.statement.value ?? null,
+            }),
+          ),
+          digest: digestOf(result.statement.value),
+          label: `Assessment output ${plan.id}`,
+          kind: "memory",
+          accepted: false,
+          subject: input.subject,
+          source: this.identity.actor,
+          claimType: String(result.statement.claimType),
+          method: "derived",
+          asOf: String(result.statement.asOf),
+          terms: result.statement.terms as unknown as import("../gates/common.js").ItemTerms,
+        });
+      const receipt = {
+        assessment: plan.id,
+        agreement: input.agreement,
+        outputDigest: digestOf(result.statement.value),
+        kept: keep ? ["output"] : [],
+        discarded: [...ids],
+        duty: "discharged",
+        at: this.now(),
+      };
+      this.record({ type: "duty-discharged", ...receipt });
+      this.persist();
+      return { ok: true as const, receipt, ...(keep ? { statement: result.statement } : {}) };
+    });
+  }
+
   /** UNS-3: the runtime, not the core, fixes authorship, method and provenance. */
   recordReading(input: {
     task: Iri;
@@ -963,7 +1297,10 @@ export class AgentRuntime {
   }
 
   /** Check this agent's own record and show it in the trace. */
-  checkRecord(entries: readonly LedgerEntry[]): { ok: boolean } {
+  checkRecord(entries: readonly LedgerEntry[]): {
+    ok: boolean;
+    attributions: readonly { digest: string; signer: string }[];
+  } {
     const v = verifyLedger(entries);
     this.options.gates?.sink?.emit({
       part: "record",
@@ -972,7 +1309,17 @@ export class AgentRuntime {
         v.ok ? "verifies" : "does not verify"
       }.`,
     });
-    return { ok: v.ok };
+    const attributions = v.ok
+      ? entries.flatMap(({ record }) =>
+          record.type === "verification" &&
+          record.outcome === "valid" &&
+          typeof record.protectedObject === "string" &&
+          typeof record.attributedTo === "string"
+            ? [{ digest: record.protectedObject, signer: record.attributedTo }]
+            : [],
+        )
+      : [];
+    return { ok: v.ok, attributions };
   }
 
   close(): void {
@@ -1098,6 +1445,7 @@ export class AgentRuntime {
     const at = this.now();
     this.guardCapacity();
     const id = input.conversation ?? this.newId();
+    if (!input.conversation) this.state.generatedConversations[id] = true;
     if (this.state.conversations[id]) throw new Error(`conversation ${id} exists`);
     // Discovery runs under the most preferred local configuration; a peer that does not
     // accept it answers `unsupported`, so any description received implies it is shared.
@@ -1385,6 +1733,100 @@ export class AgentRuntime {
       this.reject("capacity", "replay set is full; refusing new input");
     }
     admission.passIntegrity(checked);
+    if (this.options.gates?.trust && checked.signedBy) {
+      const party = msg.from.onBehalfOf ?? msg.from.actor ?? "";
+      const purpose =
+        (msg.body as JsonObject).purpose ??
+        (msg.kind === "propose" ? msg.body.terms.purpose : undefined) ??
+        this.purposeOf(msg.conversation);
+      const scoped = this.hasTrustPin(
+        party,
+        typeof purpose === "string" ? purpose : undefined,
+        checked.signedBy.kid,
+      );
+      if (!scoped) {
+        if (this.state.trustRefusals[msgDigest]) {
+          this.inbound.verdictEvent(
+            "source",
+            "fail",
+            "The principal declined this unknown sender.",
+            { reason: "source-unknown" },
+          );
+          this.inbound.decisionEvent(
+            "refuse",
+            "The message remains outside the core.",
+            "source-unknown",
+          );
+          return this.result("rejected", { reason: "source-unknown", outbound: [] });
+        }
+        const prior = Object.values(this.state.trustHolds).find(
+          (hold) => hold.message.id === msg.id,
+        );
+        if (prior) {
+          if (digestOf(prior.message) !== msgDigest)
+            this.reject("replay-conflict", "held message id reused with different bytes");
+          return this.result("pending-approval", { reason: "source-unknown", outbound: [] });
+        }
+        for (const [id, hold] of Object.entries(this.state.trustHolds))
+          if (Date.parse(hold.expiresAt) <= Date.parse(at)) delete this.state.trustHolds[id];
+        if (Object.keys(this.state.trustHolds).length >= this.limits.maxOpenConversations)
+          this.reject("bounds-exceeded", "too many pending trust decisions");
+        const requestId = derivedUrn("trust-request", {
+          message: msgDigest,
+          kid: checked.signedBy.kid,
+        });
+        const hold = {
+          digest: digestOf({
+            requestId,
+            message: msgDigest,
+            kid: checked.signedBy.kid,
+            party,
+            purpose,
+          }),
+          message: structuredClone(msg),
+          wire: structuredClone(wire) as WireMessage,
+          binding: meta.binding ?? "unknown",
+          kid: checked.signedBy.kid,
+          party,
+          purpose: typeof purpose === "string" ? purpose : "",
+          expiresAt: msg.expiresAt,
+        };
+        this.state.trustHolds[requestId] = hold;
+        this.inbound.verdictEvent(
+          "source",
+          "ask-principal",
+          "The sender's key is in no own list accepted for this purpose.",
+          { reason: "source-unknown" },
+        );
+        this.inbound.decisionEvent(
+          "ask-principal",
+          "The runtime holds the message without showing it to the core.",
+          "source-unknown",
+        );
+        this.options.gates.sink?.emit({
+          part: "principal",
+          kind: "ask-principal",
+          reason: "source-unknown",
+          chat: {
+            who: "agent",
+            text: `Add key fingerprint ${hold.kid} for ${party}, purpose ${hold.purpose}, until ${hold.expiresAt}? Arrived through ${hold.binding}. Sender claims actor ${msg.from.actor ?? "none"}, party ${party}. Request digest ${hold.digest}.`,
+          },
+          caption:
+            "The gate built this trust question. The sender's self-description establishes no role or authority.",
+        });
+        this.record({
+          type: "trust-requested",
+          requestId,
+          digest: hold.digest,
+          kid: hold.kid,
+          party,
+          purpose: hold.purpose,
+          at,
+        });
+        this.persist();
+        return this.result("pending-approval", { reason: "source-unknown", outbound: [] });
+      }
+    }
     this.gateMemory.rememberIdentifiers(msg.conversation, msg);
     this.state.seen[msg.id] = {
       digest: msgDigest,
@@ -2019,6 +2461,7 @@ export class AgentRuntime {
     this.gateMemory.enter(task, {
       id: msg.id,
       label: `${msg.kind} from ${msg.from.actor ?? "anonymous"}`,
+      identifiers: identifiersIn(msg),
       kind: "message",
       digest: digestOf(msg),
       subject: msg.from.onBehalfOf ?? "unknown",
@@ -2301,7 +2744,7 @@ export class AgentRuntime {
     const at = this.now();
     const approvals = new Map<string, { id: Iri; decision: "approve" | "deny" }>();
     for (const [digest, a] of Object.entries(this.state.approvals)) {
-      if (Date.parse(a.validUntil) > Date.parse(at))
+      if (Date.parse(a.validUntil) > Date.parse(at) && (quiet || !this.state.usedApprovals[a.id]))
         approvals.set(digest, { id: a.id, decision: a.decision });
     }
     const revoked = this.mandate ? this.isRevoked(this.mandate) : false;
@@ -2315,9 +2758,12 @@ export class AgentRuntime {
       ...(this.options.policyEngine ? { engine: this.options.policyEngine } : {}),
     });
     let effective = decision;
-    if (!quiet) {
-      if (!this.resuming) this.outbound.propose(intent, this.proposalOrigin);
+    if (!quiet && !this.resuming) this.outbound.propose(intent, this.proposalOrigin);
+    this.reauthorising = quiet;
+    try {
       effective = this.outbound.release(intent, decision).decision;
+    } finally {
+      this.reauthorising = false;
     }
     this.record(effective);
     this.decisions.push(effective);
@@ -2382,11 +2828,13 @@ export class AgentRuntime {
   }
 
   private async runEffect(ownerId: Iri, plan: EffectPlan, basis: Iri): Promise<OutboundMessage[]> {
+    if (!this.outbound.checkEffect(plan.intent, plan.params)) return [];
     const existing = this.state.effects[plan.key];
     if (existing?.status === "concluded") return []; // idempotent: already done
     if (existing?.status === "attempting") return this.reconcileOne(existing);
     const planned = this.planEffect(ownerId, plan, basis);
     const decision = this.authorise(plan.intent);
+    if (decision.outcome === "ask-more") return [];
     if (decision.outcome === "approval-required") {
       this.park(ownerId, plan.intent, { type: "effect", plan, basis });
       return [];
@@ -2414,7 +2862,7 @@ export class AgentRuntime {
         "direct-response",
       );
     }
-    this.outbound.sealEffect(plan.intent);
+    this.outbound.sealEffect(plan.intent, plan.key);
     const attempting: EffectState = {
       ...planned,
       status: "attempting",
@@ -3163,6 +3611,76 @@ export class AgentRuntime {
     return { actionDigest: digest, intent };
   }
 
+  /** Directory roles have already passed inbound checks; approvals carry only exact action signatures. */
+  submitOrganisationApproval(jws: string): Promise<StepResult> {
+    return this.exclusive(async () => {
+      try {
+        const check = await verifyStatement(jws, {
+          trust: this.trust,
+          typ: "awp-organisation-approval+jws",
+          role: "issuer",
+          schema: organisationApprovalSchema,
+          limits: this.limits,
+          verifier: this.identity.actor,
+          at: this.now(),
+        });
+        this.record(check.verification);
+        const a = check.payload;
+        const waiting = a ? this.state.pending[a.actionDigest] : undefined;
+        if (
+          !a ||
+          !waiting ||
+          !check.signer ||
+          check.signer.subject !== a.signer ||
+          a.actor !== this.identity.actor ||
+          a.conversation !== waiting.conversation ||
+          Date.parse(a.validUntil) <= Date.parse(this.now()) ||
+          Date.parse(a.issuedAt) > Date.parse(this.now()) ||
+          this.state.usedApprovals[a.id]
+        )
+          return this.result("rejected", { reason: "not-authorised", outbound: [] });
+        const approvals = this.state.organisationApprovals[a.actionDigest] ?? [];
+        if (approvals.some((prior) => prior.id === a.id))
+          return this.result("rejected", { reason: "not-authorised", outbound: [] });
+        this.state.organisationApprovals[a.actionDigest] = [
+          ...approvals,
+          { ...a, kid: check.signer.kid, jws },
+        ];
+        this.record({
+          type: "organisation-approval",
+          id: a.id,
+          actionDigest: a.actionDigest,
+          signer: a.signer,
+          kid: check.signer.kid,
+          jws,
+          at: this.now(),
+        });
+        const decision = this.authorise(waiting.intent);
+        this.persist();
+        if (decision.outcome !== "permit")
+          return this.result(
+            decision.outcome === "approval-required" ? "pending-approval" : "rejected",
+            {
+              reason:
+                decision.outcome === "approval-required" ? "approval-required" : "not-authorised",
+              outbound: [],
+            },
+          );
+        const result = await this.resumeApproved(waiting, {
+          id: a.id,
+          actionDigest: a.actionDigest,
+          decision: "approve",
+        });
+        for (const approval of this.state.organisationApprovals[a.actionDigest] ?? [])
+          this.state.usedApprovals[approval.id] = true;
+        this.persist();
+        return result;
+      } finally {
+        this.resuming = false;
+      }
+    });
+  }
+
   /** Submit an owner approval (or denial) JWS; resumes the matching pending action. */
   submitApproval(
     jws: string,
@@ -3257,6 +3775,13 @@ export class AgentRuntime {
         outbound: [],
       });
     }
+    return this.resumeApproved(pending, a);
+  }
+
+  private async resumeApproved(
+    pending: PendingAction,
+    a: { id: Iri; actionDigest: string; decision: "approve" | "deny" },
+  ): Promise<StepResult> {
     delete this.state.pending[a.actionDigest];
     if (a.decision === "deny") this.outbound.declined(pending.intent);
     this.resuming = true;

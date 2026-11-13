@@ -142,6 +142,7 @@ export function evaluateItemTerms(
     readonly recipient?: Iri;
     readonly retentionDays?: number;
     readonly at: string;
+    readonly recipientAllowed?: (task: string) => boolean;
   },
   engine: PolicyEngine = solidOdrlEngine,
 ): TermsVerdict {
@@ -162,6 +163,43 @@ export function evaluateItemTerms(
       verdict: "pass",
       text: "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
     };
+  if (
+    need.action === "distribute" &&
+    terms.recipientMustBe &&
+    !need.recipientAllowed?.(terms.recipientMustBe.task)
+  )
+    return {
+      verdict: "fail",
+      reason: "not-authorised",
+      text: "The recipient does not satisfy the source's registration requirement.",
+    };
+  if (terms.inherited) {
+    if (
+      !Array.isArray(terms.inherited) ||
+      terms.inherited.length === 0 ||
+      terms.inherited.length > 128
+    )
+      return { verdict: "fail", reason: "indeterminate-policy", text: "Invalid inherited terms." };
+    for (const input of terms.inherited) {
+      if (
+        !input ||
+        typeof input !== "object" ||
+        typeof input.target !== "string" ||
+        !(input.terms === null || (input.terms && typeof input.terms === "object"))
+      )
+        return {
+          verdict: "fail",
+          reason: "indeterminate-policy",
+          text: "Invalid inherited terms.",
+        };
+      const result = evaluateItemTerms(
+        input.terms ?? undefined,
+        { ...need, target: input.target },
+        engine,
+      );
+      if (result.verdict !== "pass") return result;
+    }
+  }
   // The rules decide whether this use is allowed; the duties (deletion) are what the receiver
   // takes on, checked below against how long it would keep the data (CORE-IN-10).
   const { obligations: _duties, ...rules } = terms.policy;
@@ -182,7 +220,7 @@ export function evaluateItemTerms(
     };
   if (v.effect === "prohibited")
     return { verdict: "fail", reason: "prohibited", text: `Its terms forbid this (${summary}).` };
-  if (v.effect !== "permit")
+  if (v.effect !== "permit" && !(terms.inherited && !terms.policy.permissions?.length))
     return {
       verdict: "fail",
       reason: "purpose-not-permitted",

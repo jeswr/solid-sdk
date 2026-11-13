@@ -161,8 +161,29 @@ export interface RuntimeState {
   transmissions: Record<Iri, TransmissionRecord>;
   contextItems: Record<Iri, ContextItem[]>;
   knownIdentifiers: Record<Iri, string[]>;
+  generatedConversations: Record<Iri, true>;
   /** Single-use approvals remain remembered after their permitted release. */
   usedApprovals: Record<Iri, true>;
+  trustPins: { kid: string; party: string; purpose: string; expiresAt: string }[];
+  trustHolds: Record<
+    string,
+    {
+      digest: string;
+      message: import("../core/types.js").AnyMessage;
+      wire: WireMessage;
+      binding: string;
+      kid: string;
+      party: string;
+      purpose: string;
+      expiresAt: string;
+    }
+  >;
+  trustRefusals: Record<string, true>;
+  statementRefusals: Record<string, string>;
+  paymentTotals: Record<string, number>;
+  paymentReleases: Record<string, true>;
+  paymentReservations: Record<string, { digest: string; period: string; amountMinor: number }>;
+  organisationApprovals: Record<string, import("../gates/approvals.js").OrganisationApproval[]>;
 }
 
 /** Explicit conversation/task ownership. Legacy JSON without this envelope has no owner. */
@@ -195,7 +216,16 @@ export function emptyState(): RuntimeState {
     transmissions: {},
     contextItems: {},
     knownIdentifiers: {},
+    generatedConversations: {},
     usedApprovals: {},
+    organisationApprovals: {},
+    paymentTotals: {},
+    statementRefusals: {},
+    trustPins: [],
+    trustHolds: {},
+    trustRefusals: {},
+    paymentReleases: {},
+    paymentReservations: {},
   };
 }
 

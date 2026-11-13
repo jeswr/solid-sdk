@@ -29,6 +29,7 @@ for (const file of readdirSync(join(root, "scenarios"))
   const id = file.slice(0, -5);
   if (selected && selected !== id) continue;
   const { profile, scenario } = loadCase(root, id);
+  const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));
   for (const path of await runScenario(profile, scenario, { commit, compare: !record })) {
     const stem = path.path === "main" ? id : `${id}--${path.path}`;
     status.paths.push({
@@ -55,12 +56,16 @@ for (const file of readdirSync(join(root, "scenarios"))
     index.push({
       file: `${stem}--baseline.json`,
       scenario: path.trace.scenario,
-      configuration: "baseline",
+      configuration: path.trace.configuration.id,
       events: path.trace.events.length,
     });
   }
-  if (record)
-    writeFileSync(join(root, "scenarios", file), `${JSON.stringify(scenario, null, 2)}\n`);
+  if (record) {
+    original.expect = scenario.expect;
+    for (const branch of original.branches)
+      branch.outline = scenario.branches.find((b) => b.id === branch.id).outline;
+    writeFileSync(join(root, "scenarios", file), `${JSON.stringify(original, null, 2)}\n`);
+  }
 }
 writeFileSync(join(root, "scenario-runs.json"), `${JSON.stringify(status, null, 2)}\n`);
 const indexPath = join(root, "traces", "index.json");

@@ -1,0 +1,1357 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "scenario": {
+    "id": "flat-share",
+    "title": "flat-share (entirely fictional)",
+    "steps": {
+      "1": "offer",
+      "2": "unknown-sender",
+      "3": "trust-yes",
+      "4": "accepted-offer",
+      "5": "record",
+      "6": "alex-record"
+    }
+  },
+  "configuration": {
+    "id": "flat-share-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "pinned-list",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "alex-agent",
+      "name": "alex-agent",
+      "actsFor": "alex",
+      "role": "agent"
+    },
+    {
+      "id": "blair-agent",
+      "name": "blair-agent",
+      "actsFor": "blair",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "67e14700e60bdedf44cd1971d8f0cfe2ecb45c8b",
+    "core": "scripted"
+  },
+  "standIns": [],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:flat share with blair."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:authorised",
+        "text": "alex's mandate lets the agent use urn:op:flat share, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "alex's mandate covers this action."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "pinned-list",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is blair a party I can send urn:op:flat share to?",
+        "path": [
+          {
+            "at": "alex's own list",
+            "kind": "own-list",
+            "says": "blair is accepted for urn:op:flat share."
+          }
+        ],
+        "answer": "Accepted, for urn:op:flat share only."
+      },
+      "reason": "recipient-established",
+      "caption": "blair: Accepted, for urn:op:flat share only."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within alex's limits."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with alex-agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The propose message goes to blair-agent."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "alex-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-flat-share-main:alex-agent:0002",
+        "from": "alex-agent",
+        "to": "blair-agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:c7f6e69103e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From alex-agent to blair-agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+              "id": "urn:awp:engine-flat-share-main:alex-agent:0002",
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:alex-agent:agent",
+                "onBehalfOf": "urn:fictional:alex"
+              },
+              "to": {
+                "actor": "urn:fictional:blair-agent:agent",
+                "party": "urn:fictional:blair"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:edf58001ea4c7f5d58374e2ec9a4f19c344a932a745b41b515f770250b5beca9"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): alex says alex-agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:34b8517c4bf8e9a6f3844ab9adabd4a1:1794560400000",
+                "party": "urn:fictional:alex",
+                "actor": "urn:fictional:alex-agent:agent",
+                "actorKid": "nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY",
+                "operations": [
+                  "urn:op:flat-share"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:b85ff4622b4d97204740e38ef40acb2e181fe1abfd7b949d95f5b9e56a204978"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start urn:op:flat-share, with terms (round 1).",
+            "raw": {
+              "operation": {
+                "id": "urn:op:flat-share",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:flat-share",
+                "depositSplit": 0.5,
+                "moveIn": "2026-12-01"
+              },
+              "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc",
+              "round": 1
+            },
+            "digest": "sha-256:416c5e9a6659c9df6114a2211005189439a55c7978154c6f193478540adb7a12"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:flat-share.",
+            "raw": {
+              "purpose": "urn:purpose:flat-share",
+              "depositSplit": 0.5,
+              "moveIn": "2026-12-01"
+            },
+            "digest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "alex-agent sends a propose message to blair-agent."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "blair-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-flat-share-main:alex-agent:0002",
+        "from": "alex-agent",
+        "to": "blair-agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:c7f6e69103e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From alex-agent to blair-agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+              "id": "urn:awp:engine-flat-share-main:alex-agent:0002",
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:alex-agent:agent",
+                "onBehalfOf": "urn:fictional:alex"
+              },
+              "to": {
+                "actor": "urn:fictional:blair-agent:agent",
+                "party": "urn:fictional:blair"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:edf58001ea4c7f5d58374e2ec9a4f19c344a932a745b41b515f770250b5beca9"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): alex says alex-agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:34b8517c4bf8e9a6f3844ab9adabd4a1:1794560400000",
+                "party": "urn:fictional:alex",
+                "actor": "urn:fictional:alex-agent:agent",
+                "actorKid": "nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY",
+                "operations": [
+                  "urn:op:flat-share"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:b85ff4622b4d97204740e38ef40acb2e181fe1abfd7b949d95f5b9e56a204978"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start urn:op:flat-share, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:flat-share\"; \"urn:purpose:flat-share\"; \"sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:flat-share",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:flat-share",
+                "depositSplit": 0.5,
+                "moveIn": "2026-12-01"
+              },
+              "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc",
+              "round": 1
+            },
+            "digest": "sha-256:416c5e9a6659c9df6114a2211005189439a55c7978154c6f193478540adb7a12",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:flat-share"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:flat-share"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:flat-share.",
+            "raw": {
+              "purpose": "urn:purpose:flat-share",
+              "depositSplit": 0.5,
+              "moveIn": "2026-12-01"
+            },
+            "digest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A propose message from alex-agent reaches the inbound gate."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with alex-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "pinned-list",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-unknown",
+      "caption": "The sender's key is in no own list accepted for this purpose."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "source-unknown",
+      "caption": "The runtime holds the message without showing it to the core."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "blair-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "source-unknown",
+      "chat": {
+        "who": "agent",
+        "text": "Add key fingerprint nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY for urn:fictional:alex, purpose urn:purpose:flat-share, until 2026-11-13T15:00:00.000Z? Arrived through direct-local/0.1. Sender claims actor urn:fictional:alex-agent:agent, party urn:fictional:alex. Request digest sha-256:aaa718a08fa972c84bd3d776080c7663bdb6115b5a3894512eb2da43fb0e3123."
+      },
+      "caption": "The gate built this trust question. The sender's self-description establishes no role or authority."
+    },
+    {
+      "seq": 16,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-flat-share-main:alex-agent:0002",
+        "from": "alex-agent",
+        "to": "blair-agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:c7f6e69103e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From alex-agent to blair-agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+              "id": "urn:awp:engine-flat-share-main:alex-agent:0002",
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:alex-agent:agent",
+                "onBehalfOf": "urn:fictional:alex"
+              },
+              "to": {
+                "actor": "urn:fictional:blair-agent:agent",
+                "party": "urn:fictional:blair"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:edf58001ea4c7f5d58374e2ec9a4f19c344a932a745b41b515f770250b5beca9"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): alex says alex-agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:34b8517c4bf8e9a6f3844ab9adabd4a1:1794560400000",
+                "party": "urn:fictional:alex",
+                "actor": "urn:fictional:alex-agent:agent",
+                "actorKid": "nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY",
+                "operations": [
+                  "urn:op:flat-share"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:b85ff4622b4d97204740e38ef40acb2e181fe1abfd7b949d95f5b9e56a204978"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start urn:op:flat-share, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:flat-share\"; \"urn:purpose:flat-share\"; \"sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:flat-share",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:flat-share",
+                "depositSplit": 0.5,
+                "moveIn": "2026-12-01"
+              },
+              "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc",
+              "round": 1
+            },
+            "digest": "sha-256:416c5e9a6659c9df6114a2211005189439a55c7978154c6f193478540adb7a12",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:flat-share"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:flat-share"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:flat-share.",
+            "raw": {
+              "purpose": "urn:purpose:flat-share",
+              "depositSplit": 0.5,
+              "moveIn": "2026-12-01"
+            },
+            "digest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A propose message from alex-agent reaches the inbound gate."
+    },
+    {
+      "seq": 17,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with alex-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "pinned-list",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:34b8517c4bf8e9a6f3844ab9adabd4a1:1794560400000",
+        "text": "A representation statement signed with alex's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "alex signed a statement that alex-agent acts for them in this operation."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:flat share with alex."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:authorised",
+        "text": "blair's mandate lets the agent use urn:op:flat share, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "blair's mandate covers this action."
+    },
+    {
+      "seq": 25,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "pinned-list",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is alex a party I can send urn:op:flat share to?",
+        "path": [
+          {
+            "at": "blair's own list",
+            "kind": "own-list",
+            "says": "No entry for alex."
+          }
+        ],
+        "answer": "No root to ask."
+      },
+      "rule": {
+        "id": "urn:awp:engine-flat-share-main:alex-agent:0001",
+        "text": "Replies go to the verified sender of the request."
+      },
+      "reason": "recipient-established",
+      "caption": "A reply to alex's verified agent, which opened this conversation; no register lists private persons."
+    },
+    {
+      "seq": 26,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 27,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 28,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within blair's limits."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with blair-agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The accept message goes to alex-agent."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "blair-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-flat-share-main:blair-agent:0001",
+        "from": "blair-agent",
+        "to": "alex-agent",
+        "kind": "accept",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:ff98e6d2260…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From blair-agent to alex-agent; accept; signed (JWS EdDSA, pinned key kwkwJRMn97u8…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:blair-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+              "id": "urn:awp:engine-flat-share-main:blair-agent:0001",
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
+              "kind": "accept",
+              "from": {
+                "actor": "urn:fictional:blair-agent:agent",
+                "onBehalfOf": "urn:fictional:blair"
+              },
+              "to": {
+                "actor": "urn:fictional:alex-agent:agent",
+                "party": "urn:fictional:alex"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-flat-share-main:alex-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "kwkwJRMn97u8cnPX4dgnw61dJjovHA8EolLmy8MZe7E",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:265b013d6f1360c7c5db9f3708ad5d6a480837160dc4eb0b23ee6cf2ddd66899"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): blair says blair-agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:bebb30c1af085484e549ebc3867bdc4e:1794560400000",
+                "party": "urn:fictional:blair",
+                "actor": "urn:fictional:blair-agent:agent",
+                "actorKid": "kwkwJRMn97u8cnPX4dgnw61dJjovHA8EolLmy8MZe7E",
+                "operations": [
+                  "urn:op:flat-share"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:6b983954ec36a9a8f75fdb6f0ce22ed09b82541a7a50cd925db2a0857a0ca392"
+          },
+          "content": {
+            "present": true,
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id.",
+            "raw": {
+              "proposal": "urn:awp:engine-flat-share-main:alex-agent:0002",
+              "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc",
+              "agreement": "urn:awp:agreement:1848facdd7e69ff96519d67c4c429c77"
+            },
+            "digest": "sha-256:2e5e79b35c366b11ead5f44edd712f48732c2219ca57e6565c304028a6b23a6e"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Binds to the offered terms by their digest.",
+            "raw": {
+              "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc"
+            },
+            "digest": "sha-256:e260aefdf270e44167f377382c0afb1ab8b3aed723424fe911cfff84c8bce3b5"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
+              "inReplyTo": "urn:awp:engine-flat-share-main:alex-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "blair-agent sends an accept message to alex-agent."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "alex-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-flat-share-main:blair-agent:0001",
+        "from": "blair-agent",
+        "to": "alex-agent",
+        "kind": "accept",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:ff98e6d2260…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From blair-agent to alex-agent; accept; signed (JWS EdDSA, pinned key kwkwJRMn97u8…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:blair-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+              "id": "urn:awp:engine-flat-share-main:blair-agent:0001",
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
+              "kind": "accept",
+              "from": {
+                "actor": "urn:fictional:blair-agent:agent",
+                "onBehalfOf": "urn:fictional:blair"
+              },
+              "to": {
+                "actor": "urn:fictional:alex-agent:agent",
+                "party": "urn:fictional:alex"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-flat-share-main:alex-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "kwkwJRMn97u8cnPX4dgnw61dJjovHA8EolLmy8MZe7E",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:265b013d6f1360c7c5db9f3708ad5d6a480837160dc4eb0b23ee6cf2ddd66899"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): blair says blair-agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:bebb30c1af085484e549ebc3867bdc4e:1794560400000",
+                "party": "urn:fictional:blair",
+                "actor": "urn:fictional:blair-agent:agent",
+                "actorKid": "kwkwJRMn97u8cnPX4dgnw61dJjovHA8EolLmy8MZe7E",
+                "operations": [
+                  "urn:op:flat-share"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:6b983954ec36a9a8f75fdb6f0ce22ed09b82541a7a50cd925db2a0857a0ca392"
+          },
+          "content": {
+            "present": true,
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-flat-share-main:alex-agent:0002\"; \"sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc\"; \"urn:awp:agreement:1848facdd7e69ff96519d67c4c429c77\"",
+            "raw": {
+              "proposal": "urn:awp:engine-flat-share-main:alex-agent:0002",
+              "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc",
+              "agreement": "urn:awp:agreement:1848facdd7e69ff96519d67c4c429c77"
+            },
+            "digest": "sha-256:2e5e79b35c366b11ead5f44edd712f48732c2219ca57e6565c304028a6b23a6e",
+            "untrusted": [
+              {
+                "path": "proposal",
+                "text": "urn:awp:engine-flat-share-main:alex-agent:0002"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc"
+              },
+              {
+                "path": "agreement",
+                "text": "urn:awp:agreement:1848facdd7e69ff96519d67c4c429c77"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Binds to the offered terms by their digest.",
+            "raw": {
+              "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc"
+            },
+            "digest": "sha-256:e260aefdf270e44167f377382c0afb1ab8b3aed723424fe911cfff84c8bce3b5"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
+              "inReplyTo": "urn:awp:engine-flat-share-main:alex-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An accept message from blair-agent reaches the inbound gate."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with blair-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "pinned-list",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:bebb30c1af085484e549ebc3867bdc4e:1794560400000",
+        "text": "A representation statement signed with blair's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "blair signed a statement that blair-agent acts for them in this operation."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 39,
+      "step": 5,
+      "agent": "blair-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "12 entries in this agent's hash-chained record; the chain verifies."
+    },
+    {
+      "seq": 40,
+      "step": 6,
+      "agent": "alex-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "9 entries in this agent's hash-chained record; the chain verifies."
+    }
+  ]
+}

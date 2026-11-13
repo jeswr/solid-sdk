@@ -1,0 +1,1612 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "scenario": {
+    "id": "false-but-signed--branch-1",
+    "title": "false-but-signed (entirely fictional)",
+    "steps": {
+      "1": "issuer-admits",
+      "2": "request",
+      "3": "sender-delivers",
+      "4": "receiver-admits",
+      "5": "perform",
+      "6": "record",
+      "7": "issuer-record",
+      "8": "attribute-record",
+      "9": "attribute-issuer-record"
+    }
+  },
+  "configuration": {
+    "id": "false-but-signed-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "corroboration",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "lender-agent",
+      "name": "lender-agent",
+      "actsFor": "lender",
+      "role": "agent"
+    },
+    {
+      "id": "employer-agent",
+      "name": "Employer agent",
+      "actsFor": "employer",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "67e14700e60bdedf44cd1971d8f0cfe2ecb45c8b",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Employer records",
+      "replacedBy": "Fictional employer agent with its own keys and gates"
+    },
+    {
+      "what": "Tax register",
+      "replacedBy": "Fictional tax-register, issuer-only key"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "employer's annual-income statement is intact and signed with employer's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:rule:own-records",
+        "text": "employer is accepted for annual-income claims."
+      },
+      "resolution": {
+        "question": "Is employer an authority for annual-income claims about employee?",
+        "path": [
+          {
+            "at": "employer's own list",
+            "kind": "own-list",
+            "says": "employer is accepted for annual-income."
+          }
+        ],
+        "answer": "Accepted, for annual-income claims only."
+      },
+      "caption": "employer's annual-income statement: employer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "employer's annual-income statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:income",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "employer's annual-income statement: its terms allow this: ."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "corroboration",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:false-but-signed:annual-income",
+        "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "employer's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "employer's annual-income statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "employer-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:false-but-signed:false-income",
+        "label": "employer's annual-income statement",
+        "claimType": "annual-income",
+        "subject": "urn:fictional:employee",
+        "value": null,
+        "source": "urn:fictional:employer",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:income",
+          "summary": ""
+        },
+        "provenance": "signed by employer"
+      },
+      "caption": "employer's annual-income statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:income decision with employer."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:authorised",
+        "text": "lender's mandate lets the agent use urn:op:income decision, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "lender's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is employer a party I can send urn:op:income decision to?",
+        "path": [
+          {
+            "at": "lender's own list",
+            "kind": "own-list",
+            "says": "employer is accepted for urn:op:income decision."
+          }
+        ],
+        "answer": "Accepted, for urn:op:income decision only."
+      },
+      "reason": "recipient-established",
+      "caption": "employer: Accepted, for urn:op:income decision only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within lender's limits."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with lender-agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to Employer agent."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "lender-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+        "from": "lender-agent",
+        "to": "Employer agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:e01cbb4286b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From lender-agent to Employer agent; invoke; signed (JWS EdDSA, pinned key frwojrokaHd4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:lender-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+              "id": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+              "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:lender-agent:agent",
+                "onBehalfOf": "urn:fictional:lender"
+              },
+              "to": {
+                "actor": "urn:fictional:employer:agent",
+                "party": "urn:fictional:employer"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "frwojrokaHd4KedsO3CvL_5IunlWo7WNHcF6MkxmVvU",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:6bc9c080b7b6a1218909f13ca0fd228cfac2d89dc68c68fef91d4c490bd294e2"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): lender says lender-agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:3f4231a3233bb93b95ed4153b688d283:1794560400000",
+                "party": "urn:fictional:lender",
+                "actor": "urn:fictional:lender-agent:agent",
+                "actorKid": "frwojrokaHd4KedsO3CvL_5IunlWo7WNHcF6MkxmVvU",
+                "operations": [
+                  "urn:op:income-decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:aa46d32dd9241c2d0cdf50a3135fa5207f762ec1ece59d2c51322b7d4a4cf950"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:income-decision",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "income"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:false-but-signed"
+            },
+            "digest": "sha-256:a840ac29c0ba4c6185550023765efd2aeb1a73566e54378c7238d801cb5970e5"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "lender-agent sends an invoke message to Employer agent."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+        "from": "lender-agent",
+        "to": "Employer agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:e01cbb4286b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From lender-agent to Employer agent; invoke; signed (JWS EdDSA, pinned key frwojrokaHd4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:lender-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+              "id": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+              "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:lender-agent:agent",
+                "onBehalfOf": "urn:fictional:lender"
+              },
+              "to": {
+                "actor": "urn:fictional:employer:agent",
+                "party": "urn:fictional:employer"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "frwojrokaHd4KedsO3CvL_5IunlWo7WNHcF6MkxmVvU",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:6bc9c080b7b6a1218909f13ca0fd228cfac2d89dc68c68fef91d4c490bd294e2"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): lender says lender-agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:3f4231a3233bb93b95ed4153b688d283:1794560400000",
+                "party": "urn:fictional:lender",
+                "actor": "urn:fictional:lender-agent:agent",
+                "actorKid": "frwojrokaHd4KedsO3CvL_5IunlWo7WNHcF6MkxmVvU",
+                "operations": [
+                  "urn:op:income-decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:aa46d32dd9241c2d0cdf50a3135fa5207f762ec1ece59d2c51322b7d4a4cf950"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:income-decision\"; \"urn:purpose:false-but-signed\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:income-decision",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "income"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:false-but-signed"
+            },
+            "digest": "sha-256:a840ac29c0ba4c6185550023765efd2aeb1a73566e54378c7238d801cb5970e5",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:income-decision"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:false-but-signed"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from lender-agent reaches the inbound gate."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with lender-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:3f4231a3233bb93b95ed4153b688d283:1794560400000",
+        "text": "A representation statement signed with lender's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "lender signed a statement that lender-agent acts for them in this operation."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "corroboration",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 25,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This protocol message proposes no additional action."
+    },
+    {
+      "seq": 26,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is lender a party I can send urn:op:income decision to?",
+        "path": [
+          {
+            "at": "employer's own list",
+            "kind": "own-list",
+            "says": "lender is accepted for urn:op:income decision."
+          }
+        ],
+        "answer": "Accepted, for urn:op:income decision only."
+      },
+      "reason": "recipient-established",
+      "caption": "lender: Accepted, for urn:op:income decision only."
+    },
+    {
+      "seq": 27,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 28,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:income",
+        "text": "The issuer's terms: . They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "employer's annual-income statement: its terms allow this: ."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the carried statements against the conversation's purpose."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:income",
+        "text": "The issuer's terms: . They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "employer's annual-income statement: its terms allow this: ."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The message release check is complete."
+    },
+    {
+      "seq": 32,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with Employer agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 33,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The deliver message goes to lender-agent."
+    },
+    {
+      "seq": 34,
+      "step": 3,
+      "agent": "employer-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-false-but-signed-branch-1:employer-agent:0001",
+        "from": "Employer agent",
+        "to": "lender-agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:a9009373318…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Employer agent to lender-agent; deliver; signed (JWS EdDSA, pinned key by5WySidQe2B…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:employer-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+              "id": "urn:awp:engine-false-but-signed-branch-1:employer-agent:0001",
+              "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "urn:fictional:employer:agent",
+                "onBehalfOf": "urn:fictional:employer"
+              },
+              "to": {
+                "actor": "urn:fictional:lender-agent:agent",
+                "party": "urn:fictional:lender"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "by5WySidQe2BeF3P5Br8qgpACFxc5JKvXeI6wFgyKQs",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:9e40afdd44eb1984fe7d7660d95e0b36cdf53ae763b0482d76509e1a6b4d6b94"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement.",
+            "raw": {
+              "ref": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+              "basis": {
+                "kind": "invocation",
+                "invocation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002"
+              },
+              "operation": {
+                "id": "urn:op:income-decision",
+                "version": "0.1"
+              },
+              "output": {
+                "statement": "urn:scenario:false-but-signed:false-income"
+              }
+            },
+            "digest": "sha-256:37db940880b006779183a98a858c7c275698fd32b0da75ad6977021a87927c01"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: annual-income from employer.",
+            "raw": [
+              {
+                "value": 90000,
+                "currency": "GBP",
+                "id": "urn:scenario:false-but-signed:false-income",
+                "issuer": "urn:fictional:employer",
+                "subject": "urn:fictional:employee",
+                "claimType": "annual-income",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:income",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:false-but-signed:false-income"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:false-but-signed:false-income"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:853eecfd6538dc68412ce569b871aaa213b019424c69e25dba5df48087330ef9"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "invocation",
+              "invocation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002"
+            },
+            "digest": "sha-256:5b99ca1690221324704710f4fe356f648bc707139014549839c15ff7ea78875b"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-false-but-signed-branch-1:lender-agent:0002. The statements were issued by their sources and are relayed, not authored, by Employer agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001",
+              "inReplyTo": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+              "statements": [
+                {
+                  "id": "urn:scenario:false-but-signed:false-income",
+                  "issuer": "urn:fictional:employer",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "Employer agent sends a deliver message to lender-agent."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "lender-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-false-but-signed-branch-1:employer-agent:0001",
+        "from": "Employer agent",
+        "to": "lender-agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:a9009373318…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Employer agent to lender-agent; deliver; signed (JWS EdDSA, pinned key by5WySidQe2B…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:employer-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+              "id": "urn:awp:engine-false-but-signed-branch-1:employer-agent:0001",
+              "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "urn:fictional:employer:agent",
+                "onBehalfOf": "urn:fictional:employer"
+              },
+              "to": {
+                "actor": "urn:fictional:lender-agent:agent",
+                "party": "urn:fictional:lender"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "by5WySidQe2BeF3P5Br8qgpACFxc5JKvXeI6wFgyKQs",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:9e40afdd44eb1984fe7d7660d95e0b36cdf53ae763b0482d76509e1a6b4d6b94"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-false-but-signed-branch-1:lender-agent:0002\"; \"urn:awp:engine-false-but-signed-branch-1:lender-agent:0002\"; \"urn:op:income-decision\"; \"urn:scenario:false-but-signed:false-income\"",
+            "raw": {
+              "ref": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+              "basis": {
+                "kind": "invocation",
+                "invocation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002"
+              },
+              "operation": {
+                "id": "urn:op:income-decision",
+                "version": "0.1"
+              },
+              "output": {
+                "statement": "urn:scenario:false-but-signed:false-income"
+              }
+            },
+            "digest": "sha-256:37db940880b006779183a98a858c7c275698fd32b0da75ad6977021a87927c01",
+            "untrusted": [
+              {
+                "path": "ref",
+                "text": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002"
+              },
+              {
+                "path": "basis.invocation",
+                "text": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002"
+              },
+              {
+                "path": "operation.id",
+                "text": "urn:op:income-decision"
+              },
+              {
+                "path": "output.statement",
+                "text": "urn:scenario:false-but-signed:false-income"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: annual-income from employer.",
+            "raw": [
+              {
+                "value": 90000,
+                "currency": "GBP",
+                "id": "urn:scenario:false-but-signed:false-income",
+                "issuer": "urn:fictional:employer",
+                "subject": "urn:fictional:employee",
+                "claimType": "annual-income",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:income",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:false-but-signed:false-income"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:false-but-signed:false-income"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:853eecfd6538dc68412ce569b871aaa213b019424c69e25dba5df48087330ef9"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "invocation",
+              "invocation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002"
+            },
+            "digest": "sha-256:5b99ca1690221324704710f4fe356f648bc707139014549839c15ff7ea78875b"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-false-but-signed-branch-1:lender-agent:0002. The statements were issued by their sources and are relayed, not authored, by Employer agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001",
+              "inReplyTo": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
+              "statements": [
+                {
+                  "id": "urn:scenario:false-but-signed:false-income",
+                  "issuer": "urn:fictional:employer",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A deliver message from Employer agent reaches the inbound gate."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with Employer agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source-rule:employer",
+        "text": "employer is accepted for annual-income claims."
+      },
+      "resolution": {
+        "question": "Is employer an authority for annual-income claims about employee?",
+        "path": [
+          {
+            "at": "lender's own list",
+            "kind": "own-list",
+            "says": "employer is accepted for annual-income."
+          }
+        ],
+        "answer": "Accepted, for annual-income claims only."
+      },
+      "caption": "employer's annual-income statement: employer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This message asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:income",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "employer's annual-income statement: its terms allow this: ."
+    },
+    {
+      "seq": 40,
+      "step": 4,
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "corroboration",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:false-but-signed:annual-income",
+        "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "employer's annual-income statement is fit for a mortgage application: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 41,
+      "step": 4,
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 42,
+      "step": 4,
+      "agent": "lender-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:false-but-signed:false-income",
+        "label": "employer's annual-income statement",
+        "claimType": "annual-income",
+        "subject": "urn:fictional:employee",
+        "value": null,
+        "source": "urn:fictional:employer",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:income",
+          "summary": ""
+        },
+        "provenance": "signed by employer"
+      },
+      "caption": "employer's annual-income statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "lender-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:income decision with lender."
+    },
+    {
+      "seq": 44,
+      "step": 5,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:authorised",
+        "text": "lender's mandate lets the agent use urn:op:income decision, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "lender's mandate covers this action."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is lender a party I can send urn:op:income decision to?",
+        "path": [
+          {
+            "at": "lender's own list",
+            "kind": "own-list",
+            "says": "lender is accepted for urn:op:income decision."
+          }
+        ],
+        "answer": "Accepted, for urn:op:income decision only."
+      },
+      "reason": "recipient-established",
+      "caption": "lender: Accepted, for urn:op:income decision only."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 47,
+      "step": 5,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 48,
+      "step": 5,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within lender's limits."
+    },
+    {
+      "seq": 49,
+      "step": 5,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:fe1c804014508001988ada057ed32e84c401472ac0026b2744812c6487dca18c",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 50,
+      "step": 5,
+      "agent": "lender-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: use urn:op:income decision with lender."
+    },
+    {
+      "seq": 51,
+      "step": 6,
+      "agent": "lender-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "10 entries in this agent's hash-chained record; the chain verifies."
+    },
+    {
+      "seq": 52,
+      "step": 7,
+      "agent": "employer-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "10 entries in this agent's hash-chained record; the chain verifies."
+    }
+  ]
+}

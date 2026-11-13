@@ -35,26 +35,26 @@
     {
       "scenario": "false-but-signed",
       "path": "main",
-      "status": "blocked",
-      "reason": "The corroboration reliance suite is absent. Baseline source/method/age checks can accept a false signed value, but do not exercise the catalogue corroboration suite. No truth-detection claim is made."
+      "status": "runs",
+      "trace": "false-but-signed--baseline.json"
     },
     {
       "scenario": "false-but-signed",
       "path": "branch-1",
-      "status": "blocked",
-      "reason": "The corroboration reliance suite is absent. Baseline source/method/age checks can accept a false signed value, but do not exercise the catalogue corroboration suite. No truth-detection claim is made."
+      "status": "runs",
+      "trace": "false-but-signed--branch-1--baseline.json"
     },
     {
       "scenario": "flat-share",
       "path": "main",
-      "status": "blocked",
-      "reason": "The own-list resolver exists, but an unestablished identity yields lookup-failed/not-authorised, not an ask-principal with source-unknown. A trust decision by a person and a pinned-list configuration are not implemented."
+      "status": "runs",
+      "trace": "flat-share--baseline.json"
     },
     {
       "scenario": "flat-share",
       "path": "branch-1",
-      "status": "blocked",
-      "reason": "The own-list resolver exists, but an unestablished identity yields lookup-failed/not-authorised, not an ask-principal with source-unknown. A trust decision by a person and a pinned-list configuration are not implemented."
+      "status": "runs",
+      "trace": "flat-share--branch-1--baseline.json"
     },
     {
       "scenario": "health-referral",
@@ -77,68 +77,68 @@
     {
       "scenario": "master-data-change",
       "path": "main",
-      "status": "blocked",
-      "reason": "The approval verifier accepts only the local owner key. There is no independently verified staff-role approval or separation-of-duties check. Encoding an approver verdict in a script would bypass the missing gate."
+      "status": "runs",
+      "trace": "master-data-change--baseline.json"
     },
     {
       "scenario": "master-data-change",
       "path": "branch-1",
-      "status": "blocked",
-      "reason": "The approval verifier accepts only the local owner key. There is no independently verified staff-role approval or separation-of-duties check. Encoding an approver verdict in a script would bypass the missing gate."
+      "status": "runs",
+      "trace": "master-data-change--branch-1--baseline.json"
     },
     {
       "scenario": "master-data-change",
       "path": "branch-2",
-      "status": "blocked",
-      "reason": "The approval verifier accepts only the local owner key. There is no independently verified staff-role approval or separation-of-duties check. Encoding an approver verdict in a script would bypass the missing gate."
+      "status": "runs",
+      "trace": "master-data-change--branch-2--baseline.json"
     },
     {
       "scenario": "mortgage-core",
       "path": "main",
       "status": "blocked",
-      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
     },
     {
       "scenario": "mortgage-injected-fee",
       "path": "main",
       "status": "blocked",
-      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
     },
     {
       "scenario": "mortgage-main",
       "path": "main",
       "status": "blocked",
-      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
     },
     {
       "scenario": "mortgage-out-of-limit",
       "path": "main",
       "status": "blocked",
-      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
     },
     {
       "scenario": "mortgage-over-ask",
       "path": "main",
       "status": "blocked",
-      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
     },
     {
       "scenario": "pay-an-invoice",
       "path": "main",
-      "status": "blocked",
-      "reason": "The payment commitments suite and cumulative monthly spend accounting are absent. The gate does not bind a payment payee account to an accepted bank statement. A synthetic effect is not the required payment suite."
+      "status": "runs",
+      "trace": "pay-an-invoice--baseline.json"
     },
     {
       "scenario": "pay-an-invoice",
       "path": "branch-1",
-      "status": "blocked",
-      "reason": "The payment commitments suite and cumulative monthly spend accounting are absent. The gate does not bind a payment payee account to an accepted bank statement. A synthetic effect is not the required payment suite."
+      "status": "runs",
+      "trace": "pay-an-invoice--branch-1--baseline.json"
     },
     {
       "scenario": "pay-an-invoice",
       "path": "branch-2",
-      "status": "blocked",
-      "reason": "The payment commitments suite and cumulative monthly spend accounting are absent. The gate does not bind a payment payee account to an accepted bank statement. A synthetic effect is not the required payment suite."
+      "status": "runs",
+      "trace": "pay-an-invoice--branch-2--baseline.json"
     },
     {
       "scenario": "probing-counterparty",

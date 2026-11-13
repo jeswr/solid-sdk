@@ -45,9 +45,10 @@
     }
   ],
   "generated": {
-    "commit": "e0bafd2775189ecbec49b017bade7e1b489ac6a0",
+    "commit": "67e14700e60bdedf44cd1971d8f0cfe2ecb45c8b",
     "core": "scripted"
   },
+  "standIns": [],
   "events": [
     {
       "seq": 1,
@@ -2043,7 +2044,7 @@
       "agent": "person-agent",
       "part": "record",
       "kind": "record",
-      "caption": "11 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "14 entries in this agent's hash-chained record; the chain verifies."
     }
   ]
 }

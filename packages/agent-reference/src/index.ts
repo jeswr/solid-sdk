@@ -26,6 +26,13 @@ export { validateMessage } from "./core/schema.js";
 export type * from "./core/types.js";
 export { CORE_REASON_CODES } from "./core/types.js";
 export {
+  type DerivationRule,
+  evaluateRule,
+  ruleSchema,
+  validateRules,
+  verifyDerivation,
+} from "./derive/rules.js";
+export {
   CONVENTIONAL_BOOK_OP,
   classifyLink,
   extractLinks,

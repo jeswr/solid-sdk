@@ -10,6 +10,7 @@
  * moved here; the source pre-check is new and observational (the pilot's domain handlers
  * still decide what to do with a claim the gate did not accept).
  */
+
 import { z } from "zod";
 import { digestBytes, digestOf } from "../core/canonical.js";
 import type { ConversationState } from "../core/conversation.js";
@@ -25,6 +26,7 @@ import type {
   SourceAuthorityAssessment,
   VerificationResult,
 } from "../core/types.js";
+import { verifyDerivation } from "../derive/rules.js";
 import { type KeyAlg, verifyCompact } from "../mechanisms/jws.js";
 import {
   MECHANISM_ID,
@@ -105,11 +107,20 @@ type Claim = z.infer<typeof claimSchema>;
 const OUTCOME_VERDICT: Record<InboundOutcome, Verdict> = {
   admit: "pass",
   "ask-more": "ask-more",
+  "ask-principal": "ask-principal",
   refuse: "fail",
 };
 
 export class InboundGate {
   /** Authority settled per conversation (the representation statement accepted). */
+  private corroborationPool: Claim[] = [];
+  private claimFailure: { outcome: "refuse" | "ask-more"; reason: string } | undefined;
+  private getClaimFailure() {
+    return this.claimFailure;
+  }
+  setCorroborationPool(claims: Claim[]): void {
+    this.corroborationPool = claims;
+  }
   private readonly authorityByConversation = new Map<string, { id: string; party: string }>();
 
   constructor(private readonly deps: InboundDeps) {}
@@ -462,6 +473,7 @@ export class InboundGate {
       const reading = await verify("actor");
       if (
         reading.verification.outcome === "valid" &&
+        (reading.payload?.method !== "derived" || !reading.payload.derivation) &&
         (reading.payload?.method !== "model-output" ||
           typeof (reading.payload as JsonObject).originalDigest !== "string" ||
           typeof (reading.payload as JsonObject).implementation !== "string")
@@ -469,6 +481,7 @@ export class InboundGate {
         return { verdict: "fail", reason: "evidence-invalid" };
       check = reading;
     }
+    this.deps.record(check.verification);
     const s = check.payload;
     if (!s || check.verification.outcome !== "valid")
       return {
@@ -477,8 +490,22 @@ export class InboundGate {
       };
     if (check.signer?.subject !== s.issuer)
       return { verdict: "fail", reason: "evidence-invalid", claim: s };
+    if (
+      s.method === "derived" &&
+      this.deps.gate.rules?.length &&
+      (!s.derivation || typeof s.derivation !== "object" || Array.isArray(s.derivation))
+    )
+      return { verdict: "fail", reason: "derivation-not-verified", claim: s };
     // The claim's own subject, when it names one: a bank's statement relayed by the bank's
     // agent is still about the account holder.
+    // Recomputed outputs get their source authority from their admitted original inputs.
+    // The source phase below verifies the rule, exact inputs, output and inherited terms.
+    if (
+      s.method === "derived" &&
+      s.derivation &&
+      (s.derivation as JsonObject).assurance === "recomputed"
+    )
+      return { verdict: "pass", reason: "source-accepted", claim: s };
     const permittedSources = this.deps.gate.claimSources?.[s.claimType];
     if (permittedSources && !permittedSources.includes(s.issuer))
       return {
@@ -568,6 +595,70 @@ export class InboundGate {
     }
     const c = r.claim;
     const label = c ? this.labelOf(c) : "A relayed statement";
+    if (phase === "source" && c?.derivation) {
+      const derived = verifyDerivation(c as JsonObject, {
+        rules: this.deps.gate.rules ?? [],
+        sources: this.deps.gate.sourceAliases,
+        memory: this.deps.memory,
+        task: this.deps.gate.taskId ?? need.task,
+        subject: c.subject ?? subject ?? "",
+        reliance: this.deps.gate.reliance,
+        at: this.deps.now(),
+        purpose: need.purpose ?? "",
+      });
+      if (!derived.ok) {
+        cache.set(item.value, { ...r, verdict: "fail", reason: derived.reason });
+        this.verdictEvent(
+          "source",
+          "fail",
+          "The declared derivation is not accepted or could not be verified.",
+          { reason: derived.reason },
+        );
+        return false;
+      }
+      const record = c.derivation as JsonObject;
+      for (const input of (record.inputs ?? []) as JsonObject[]) {
+        const lookup = {
+          evaluator: this.deps.identity.actor,
+          source: String(input.issuer),
+          claimType: String(input.claimType),
+          subject: c.subject ?? subject,
+          at: this.deps.now(),
+        };
+        const resolution = this.deps.gate.resolver?.resolveSource(lookup);
+        const assessed = resolution ?? this.deps.trust.assessSource(lookup);
+        const permitted = this.deps.gate.claimSources?.[String(input.claimType)];
+        this.verdictEvent(
+          "source",
+          assessed.outcome === "accepted" &&
+            (!permitted || permitted.includes(String(input.issuer)))
+            ? "pass"
+            : "fail",
+          "The receiver checks each original input issuer for the claim the rule read.",
+          {
+            reason:
+              assessed.outcome === "accepted" &&
+              (!permitted || permitted.includes(String(input.issuer)))
+                ? "source-accepted"
+                : "source-not-authoritative",
+            ...(resolution ? { resolution: resolutionView(resolution) } : {}),
+          },
+        );
+        if (
+          assessed.outcome !== "accepted" ||
+          (permitted && !permitted.includes(String(input.issuer)))
+        ) {
+          cache.set(item.value, { ...r, verdict: "fail", reason: "source-not-authoritative" });
+          this.verdictEvent(
+            "source",
+            "fail",
+            "An input issuer is not accepted for the claim read by this rule.",
+            { reason: "source-not-authoritative" },
+          );
+          return false;
+        }
+      }
+    }
     if (phase === "source") {
       this.verdictEvent(
         "source",
@@ -609,6 +700,33 @@ export class InboundGate {
       termsOk.set(item.value, t.verdict === "pass");
       return t.verdict === "pass";
     }
+    if (
+      c.method === "derived" &&
+      c.derivation &&
+      typeof c.derivation === "object" &&
+      !Array.isArray(c.derivation)
+    ) {
+      for (const input of ((c.derivation as JsonObject).inputs ?? []) as JsonObject[]) {
+        const basis = fitnessOf(
+          {
+            claimType: String(input.claimType),
+            method: String(input.method),
+            asOf: String(input.asOf),
+          },
+          this.deps.gate.reliance,
+          at,
+        );
+        if (basis.verdict !== "pass") {
+          this.verdictEvent(
+            "fitness",
+            basis.verdict,
+            "Assurance cannot raise the quality of the original input's method or time.",
+            { reason: basis.reason },
+          );
+          return false;
+        }
+      }
+    }
     const f = fitnessOf(c, this.deps.gate.reliance, at);
     this.verdictEvent(
       "fitness",
@@ -623,7 +741,47 @@ export class InboundGate {
       { ...(f.reason ? { reason: f.reason } : {}), ...(f.rule ? { rule: f.rule } : {}) },
     );
     if (termsOk.get(item.value) !== true || f.verdict !== "pass") return false;
+    const corroboration = this.deps.gate.reliance?.rules.find(
+      (r) => r.claimType === c.claimType,
+    )?.corroboration;
+    if (corroboration) {
+      const comparable = (claim: JsonObject) =>
+        Object.fromEntries(
+          Object.entries(claim).filter(
+            ([key]) =>
+              !["id", "issuer", "method", "asOf", "issuedAt", "terms", "validUntil"].includes(key),
+          ),
+        );
+      const matches = this.corroborationPool.filter(
+        (candidate) =>
+          candidate.subject === c.subject &&
+          candidate.claimType === c.claimType &&
+          digestOf(comparable(candidate as JsonObject)) === digestOf(comparable(c as JsonObject)),
+      );
+      const issuers = new Set(matches.map((claim) => claim.issuer));
+      const controllers = new Set(
+        matches
+          .map((claim) => this.deps.trust.data.controllers?.[claim.issuer])
+          .filter((controller) => typeof controller === "string" && controller.length > 0),
+      );
+      const count = corroboration.independent
+        ? Math.min(issuers.size, controllers.size)
+        : issuers.size;
+      if (count < corroboration.sources) {
+        this.verdictEvent(
+          "fitness",
+          "ask-more",
+          `Need ${corroboration.sources} accepted independent sources for ${c.claimType}.`,
+          { reason: "completeness-not-established" },
+        );
+        this.claimFailure = { outcome: "ask-more", reason: "completeness-not-established" };
+        return false;
+      }
+    }
+
     const fact: AdmittedFact = {
+      admittedPurpose: need.purpose,
+      statement: c as JsonObject,
       identifiers: identifiersIn(c),
       id: c.id ?? digestOf(c),
       digest: digestOf(c),
@@ -684,7 +842,29 @@ export class InboundGate {
   ): Promise<{ admitted: number; refused: number }> {
     let admitted = 0;
     let refused = 0;
+    const candidates: Claim[] = [];
     for (const item of items) {
+      const checked = await this.assessClaim(
+        { role: "credential", format: "jws-compact", value: item.jws },
+        opts.subject,
+      );
+      if (checked.verdict !== "pass" || !checked.claim) continue;
+      const c = checked.claim;
+      if (
+        evaluateItemTerms(c.terms as ItemTerms | undefined, {
+          agent: this.deps.identity.actor,
+          action: "use",
+          target: c.id ?? "",
+          purpose: opts.purpose,
+          at: this.deps.now(),
+        }).verdict === "pass" &&
+        fitnessOf(c, this.deps.gate.reliance, this.deps.now()).verdict === "pass"
+      )
+        candidates.push(c);
+    }
+    this.corroborationPool = candidates;
+    for (const item of items) {
+      this.claimFailure = undefined;
       const ev: EvidenceItem = { role: "credential", format: "jws-compact", value: item.jws };
       const cache = new Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>();
       const r = await this.assessClaim(ev, opts.subject);
@@ -704,6 +884,10 @@ export class InboundGate {
         `${label} is intact and signed with ${this.name(r.claim?.issuer)}'s pinned key.`,
       );
       const sourceOk = await this.claimChecks(ev, opts.subject, opts, "source", cache);
+      if (!sourceOk && r.claim)
+        this.deps.memory.refusals[
+          `${this.deps.gate.taskId ?? opts.taskId ?? opts.task}|${r.claim.claimType}|${r.claim.subject ?? ""}`
+        ] = r.reason ?? "source-not-authoritative";
       this.verdictEvent(
         "authority",
         "not-applicable",
@@ -718,9 +902,9 @@ export class InboundGate {
       if (!ok) {
         refused++;
         this.decisionEvent(
-          "refuse",
+          this.getClaimFailure()?.outcome ?? "refuse",
           `${label} is refused and kept out of memory.`,
-          sourceOk ? undefined : r.reason,
+          this.getClaimFailure()?.reason ?? (sourceOk ? undefined : r.reason),
         );
         continue;
       }
@@ -1056,6 +1240,12 @@ export class Admission {
           this.claimCache,
           termsOk,
         );
+      this.gate.setCorroborationPool(
+        passed
+          .filter((item) => termsOk.get(item.value) === true)
+          .map((item) => this.claimCache.get(item.value)?.claim)
+          .filter((claim): claim is Claim => !!claim),
+      );
       for (const item of passed) {
         const r = this.claimCache.get(item.value);
         const ok = await this.gate.claimChecks(

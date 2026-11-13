@@ -3,6 +3,7 @@
 import { readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
+import { validateRules } from "../derive/rules.js";
 import {
   type DomainProfile,
   domainProfileSchema,
@@ -11,7 +12,9 @@ import {
 } from "./schema.js";
 
 export function loadProfile(path: string): DomainProfile {
-  return domainProfileSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+  const profile = domainProfileSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+  validateRules(profile.rules.filter((r) => "template" in r));
+  return profile;
 }
 export function loadScenario(path: string): Scenario {
   return scenarioSchema.parse(JSON.parse(readFileSync(path, "utf8")));
@@ -29,6 +32,7 @@ export function loadCase(
   return { profile, scenario };
 }
 export function validateReferences(profile: DomainProfile, scenario: Scenario): void {
+  validateRules(profile.rules.filter((r) => "template" in r));
   const unique = (values: readonly string[], label: string) => {
     if (new Set(values).size !== values.length) throw new Error(`duplicate ${label}`);
   };

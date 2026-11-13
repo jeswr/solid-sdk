@@ -2,23 +2,41 @@
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-profile/0.1",
   "id": "flat-share",
-  "claims": [
-    {
-      "kind": "person.identity",
-      "sources": ["urn:fictional:identity-office"],
-      "methods": ["attested"],
-      "maxAgeDays": 365
-    }
-  ],
+  "claims": [],
   "purposes": [
     {
       "id": "urn:purpose:flat-share",
-      "claims": ["person.identity"]
+      "claims": []
     }
   ],
   "rules": [],
-  "decisionsForPerson": ["trust-stranger"],
+  "decisionsForPerson": [],
   "modelReadings": [],
-  "vocabulary": {},
-  "operations": []
+  "vocabulary": {
+    "terms.purpose": {
+      "type": "identifier"
+    },
+    "terms.depositSplit": {
+      "type": "number"
+    },
+    "terms.moveIn": {
+      "type": "date"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:flat-share",
+      "version": "0.1",
+      "label": "flat-share",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:flat-share"],
+      "requiresRepresentation": true
+    }
+  ],
+  "trust": {
+    "levels": ["own-list"],
+    "onUnknown": "ask-principal"
+  }
 }

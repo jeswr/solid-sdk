@@ -67,6 +67,7 @@ export interface RelianceRule {
   readonly maxAgeDays: number;
   /** Plain words for the rule, shown with the verdict. */
   readonly text: string;
+  readonly corroboration?: { readonly sources: number; readonly independent: boolean };
 }
 
 export interface RelianceProfile {
@@ -76,6 +77,7 @@ export interface RelianceProfile {
 
 /** Terms an issuer attaches to a statement: ODRL (pilot subset) plus a deletion duty. */
 export interface ItemTerms {
+  readonly inherited?: readonly { readonly target: string; readonly terms: ItemTerms | null }[];
   readonly policy: import("@jeswr/solid-odrl").OdrlPolicy;
   /**
    * Superseded by an ODRL obligation in `policy` (`delete` with an `elapsedTime` constraint);
@@ -98,6 +100,8 @@ export interface AdmittedFact {
   readonly asOf?: string;
   readonly terms?: ItemTerms;
   readonly identifiers?: readonly string[];
+  readonly admittedPurpose?: string;
+  readonly statement?: import("../core/types.js").JsonObject;
 }
 
 /** Every item actually shown to the core, with labels retained across restarts. */
@@ -112,6 +116,7 @@ export class GateMemory {
   constructor(
     readonly contexts: Record<string, ContextItem[]> = {},
     readonly identifiers: Record<string, string[]> = {},
+    readonly refusals: Record<string, string> = {},
   ) {}
   rememberIdentifiers(scope: string, value: unknown): void {
     this.identifiers[scope] = [
@@ -164,6 +169,27 @@ export interface GateContext {
   /** The claims necessary for each declared purpose. Unknown purposes never pass. */
   readonly purposes?: Readonly<Record<Iri, readonly string[]>>;
   readonly freeTextApproval?: boolean;
+  readonly sourceAliases?: Readonly<Record<string, string>>;
+  readonly rules?: readonly import("../derive/rules.js").DerivationRule[];
+  readonly personDecisions?: readonly {
+    readonly action: string;
+    readonly decider: "principal" | { readonly role: string };
+  }[];
+  readonly requester?: string;
+  readonly trust?: { readonly levels: readonly ["own-list"]; readonly onUnknown: "ask-principal" };
+  readonly pins?: readonly {
+    readonly kid: string;
+    readonly party: string;
+    readonly purpose: string;
+    readonly expiresAt: string;
+  }[];
+  readonly assessments?: readonly {
+    readonly id: string;
+    readonly rule: string;
+    readonly purpose: string;
+    readonly keep: readonly "output"[];
+    readonly discardInputsAfter: "evaluation";
+  }[];
   /** What the agent tells its principal when a claim is admitted, if anything. */
   readonly tellPrincipal?: (statement: Readonly<Record<string, unknown>>) => string | undefined;
 }

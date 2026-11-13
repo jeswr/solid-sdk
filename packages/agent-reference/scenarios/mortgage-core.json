@@ -1582,7 +1582,7 @@
   "blocked": [
     {
       "path": "main",
-      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
     }
   ]
 }

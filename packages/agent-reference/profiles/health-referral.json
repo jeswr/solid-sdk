@@ -20,5 +20,13 @@
   "decisionsForPerson": ["clinical-relevance"],
   "modelReadings": [],
   "vocabulary": {},
-  "operations": []
+  "operations": [],
+  "personDecisions": [
+    {
+      "action": "use",
+      "decider": {
+        "role": "clinician"
+      }
+    }
+  ]
 }

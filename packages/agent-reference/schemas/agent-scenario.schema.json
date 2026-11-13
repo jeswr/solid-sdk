@@ -117,6 +117,18 @@
                 },
                 "note": {
                   "type": "string"
+                },
+                "purposes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  }
+                },
+                "expiresAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
                 }
               },
               "required": [
@@ -282,12 +294,23 @@
             "delegates"
           ],
           "additionalProperties": false
+        },
+        "controllers": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       },
       "required": [
         "introductions",
         "ownLists",
-        "sources"
+        "sources",
+        "controllers"
       ],
       "additionalProperties": false
     },
@@ -346,6 +369,18 @@
           "asOf"
         ],
         "additionalProperties": false
+      }
+    },
+    "requester": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
       }
     },
     "mandates": {
@@ -820,6 +855,189 @@
               },
               "type": {
                 "type": "string",
+                "const": "derive"
+              },
+              "rule": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "subject": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "assurance": {
+                "default": "recomputed",
+                "type": "string",
+                "enum": [
+                  "recomputed",
+                  "by-source"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "rule",
+              "subject",
+              "purpose",
+              "assurance"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "assess"
+              },
+              "assessment": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "agreement": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "subject": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "assessment",
+              "agreement",
+              "subject"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "organisation-approve"
+              },
+              "signer": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "signer"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "trust-decision"
+              },
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "approve",
+                  "deny"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "decision"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "assert"
+              },
+              "operator": {
+                "default": "equals",
+                "type": "string",
+                "enum": [
+                  "equals",
+                  "includes"
+                ]
+              },
+              "actual": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "expected": {
+                "$ref": "#/$defs/__schema0"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "operator",
+              "actual",
+              "expected"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
                 "const": "record"
               }
             },
@@ -915,6 +1133,15 @@
             "type": "string"
           },
           "change": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "profileChange": {
             "type": "object",
             "propertyNames": {
               "type": "string"
@@ -1400,7 +1627,8 @@
           "type": "string",
           "enum": [
             "proved",
-            "joint"
+            "joint",
+            "attested"
           ]
         },
         {
@@ -1438,6 +1666,7 @@
     "parties",
     "trust",
     "statements",
+    "requester",
     "mandates",
     "script",
     "inject",

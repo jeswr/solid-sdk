@@ -2,42 +2,792 @@
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-scenario/0.1",
   "id": "false-but-signed",
-  "title": "A registered source signs something false",
+  "title": "false-but-signed (entirely fictional)",
   "profile": "false-but-signed",
-  "parties": [],
+  "parties": [
+    {
+      "id": "lender",
+      "identity": "urn:fictional:lender",
+      "name": "lender",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "lender-agent",
+      "identity": "urn:fictional:lender-agent",
+      "actor": "urn:fictional:lender-agent:agent",
+      "name": "lender-agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "lender"
+    },
+    {
+      "id": "employer",
+      "identity": "urn:fictional:employer",
+      "name": "employer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "tax-register",
+      "identity": "urn:fictional:tax-register",
+      "name": "tax-register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "employee",
+      "identity": "urn:fictional:employee",
+      "name": "employee",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "employer-agent",
+      "identity": "urn:fictional:employer:agent",
+      "actor": "urn:fictional:employer:agent",
+      "name": "Employer agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "employer"
+    }
+  ],
   "trust": {
-    "introductions": [],
-    "ownLists": {},
-    "sources": {}
+    "introductions": [["lender-agent", "employer-agent"]],
+    "ownLists": {
+      "lender-agent": [
+        {
+          "party": "urn:fictional:lender",
+          "tasks": ["urn:op:income-decision"]
+        },
+        {
+          "party": "urn:fictional:employer",
+          "tasks": ["urn:op:income-decision"]
+        }
+      ],
+      "employer-agent": [
+        {
+          "party": "urn:fictional:lender",
+          "tasks": ["urn:op:income-decision"]
+        }
+      ]
+    },
+    "sources": {
+      "lender-agent": [
+        {
+          "id": "urn:source-rule:employer",
+          "version": "1",
+          "source": "urn:fictional:employer",
+          "claimTypes": ["annual-income"],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source-rule:tax-register",
+          "version": "1",
+          "source": "urn:fictional:tax-register",
+          "claimTypes": ["annual-income"],
+          "subjects": "any"
+        }
+      ],
+      "employer-agent": [
+        {
+          "id": "urn:rule:own-records",
+          "version": "1",
+          "source": "urn:fictional:employer",
+          "claimTypes": ["annual-income"],
+          "subjects": "any"
+        }
+      ]
+    },
+    "controllers": {
+      "urn:fictional:employer": "urn:controller:employer",
+      "urn:fictional:tax-register": "urn:controller:tax-register"
+    }
   },
-  "statements": [],
-  "mandates": [],
-  "script": [],
+  "statements": [
+    {
+      "id": "false-income",
+      "issuer": "employer",
+      "subject": "urn:fictional:employee",
+      "kind": "annual-income",
+      "value": {
+        "value": 90000,
+        "currency": "GBP"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:income",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:false-but-signed:false-income"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:false-but-signed:false-income"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "true-income",
+      "issuer": "tax-register",
+      "subject": "urn:fictional:employee",
+      "kind": "annual-income",
+      "value": {
+        "value": 45000,
+        "currency": "GBP"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z"
+    }
+  ],
+  "requester": {},
+  "mandates": [
+    {
+      "agent": "lender-agent",
+      "autonomous": [
+        {
+          "id": "urn:rule:authorised",
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:income-decision"
+        }
+      ],
+      "withApproval": [],
+      "prohibitions": [],
+      "standingRules": []
+    },
+    {
+      "agent": "employer-agent",
+      "autonomous": [
+        {
+          "id": "urn:rule:own-incomes",
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:income-decision"
+        }
+      ],
+      "withApproval": [],
+      "prohibitions": [],
+      "standingRules": []
+    }
+  ],
+  "script": [
+    {
+      "id": "admit-false-income-true-income",
+      "agent": "lender-agent",
+      "type": "admit",
+      "statements": ["false-income", "true-income"],
+      "purpose": "urn:purpose:false-but-signed"
+    },
+    {
+      "id": "record",
+      "agent": "lender-agent",
+      "type": "record"
+    }
+  ],
   "inject": [],
   "branches": [
     {
       "id": "branch-1",
       "what": "Nothing fails",
-      "change": {},
+      "change": {
+        "script": [
+          {
+            "id": "issuer-admits",
+            "agent": "employer-agent",
+            "type": "admit",
+            "statements": ["false-income"],
+            "purpose": "urn:purpose:false-but-signed"
+          },
+          {
+            "id": "request",
+            "agent": "lender-agent",
+            "type": "start",
+            "peer": "employer-agent",
+            "kind": "invoke",
+            "operation": "urn:op:income-decision",
+            "contents": {
+              "request": "income"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:income-decision",
+              "target": "urn:op:income-decision",
+              "purpose": "urn:purpose:false-but-signed",
+              "recipient": "urn:fictional:employer",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:false-but-signed"
+          },
+          {
+            "id": "sender-delivers",
+            "agent": "employer-agent",
+            "type": "receive",
+            "from": "lender-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "statement": "urn:scenario:false-but-signed:false-income"
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.false-income.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "receiver-admits",
+            "agent": "lender-agent",
+            "type": "receive",
+            "from": "employer-agent"
+          },
+          {
+            "id": "perform",
+            "agent": "lender-agent",
+            "type": "effect",
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:income-decision",
+              "target": "urn:op:income-decision",
+              "recipient": "urn:fictional:lender",
+              "purpose": "urn:purpose:false-but-signed",
+              "conversation": "urn:scenario:false-but-signed:task",
+              "parameters": {
+                "support": ["urn:scenario:false-but-signed:false-income"]
+              }
+            },
+            "params": {},
+            "activityType": "urn:activity:local-effect"
+          },
+          {
+            "id": "record",
+            "agent": "lender-agent",
+            "type": "record"
+          },
+          {
+            "id": "issuer-record",
+            "agent": "employer-agent",
+            "type": "record"
+          },
+          {
+            "id": "attribute-record",
+            "agent": "lender-agent",
+            "type": "assert",
+            "operator": "includes",
+            "actual": {
+              "$ref": "steps.record.attributions"
+            },
+            "expected": {
+              "digest": {
+                "$ref": "statements.false-income.wireDigest"
+              },
+              "signer": "urn:fictional:employer"
+            }
+          },
+          {
+            "id": "attribute-issuer-record",
+            "agent": "employer-agent",
+            "type": "assert",
+            "operator": "includes",
+            "actual": {
+              "$ref": "steps.issuer-record.attributions"
+            },
+            "expected": {
+              "digest": {
+                "$ref": "statements.false-income.wireDigest"
+              },
+              "signer": "urn:fictional:employer"
+            }
+          }
+        ]
+      },
+      "profileChange": {
+        "claims": [
+          {
+            "kind": "annual-income",
+            "sources": ["urn:fictional:employer", "urn:fictional:tax-register"],
+            "methods": ["recorded-by-authority"],
+            "maxAgeDays": 30
+          }
+        ]
+      },
       "expect": {
         "outcome": "go",
         "check": "source",
         "reason": "source-accepted"
       },
-      "outline": [],
-      "blocked": "The corroboration reliance suite is absent. Baseline source/method/age checks can accept a false signed value, but do not exercise the catalogue corroboration suite. No truth-detection claim is made."
+      "outline": [
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "lender-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        }
+      ]
     }
   ],
-  "expect": [],
+  "expect": [
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "ask-more",
+      "reason": "completeness-not-established"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "reason": "completeness-not-established"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "ask-more",
+      "reason": "completeness-not-established"
+    },
+    {
+      "agent": "lender-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "reason": "completeness-not-established"
+    }
+  ],
   "stress": ["source", "fitness", "evidence"],
   "suites": {
     "reliance": "corroboration"
   },
   "assurance": null,
-  "blocked": [
-    {
-      "path": "main",
-      "reason": "The corroboration reliance suite is absent. Baseline source/method/age checks can accept a false signed value, but do not exercise the catalogue corroboration suite. No truth-detection claim is made."
-    }
-  ]
+  "blocked": []
 }

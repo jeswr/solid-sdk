@@ -4,14 +4,14 @@
   "id": "pay-an-invoice",
   "claims": [
     {
-      "kind": "invoice",
-      "sources": ["urn:fictional:supplier"],
+      "kind": "payee-account",
+      "sources": ["urn:fictional:bank"],
       "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
-      "kind": "bank.account-owner",
-      "sources": ["urn:fictional:supplier-bank"],
+      "kind": "invoice",
+      "sources": ["urn:fictional:supplier"],
       "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     }
@@ -19,12 +19,58 @@
   "purposes": [
     {
       "id": "urn:purpose:pay-an-invoice",
-      "claims": ["invoice", "bank.account-owner"]
+      "claims": ["payee-account", "invoice"]
     }
   ],
   "rules": [],
   "decisionsForPerson": [],
   "modelReadings": [],
-  "vocabulary": {},
-  "operations": []
+  "vocabulary": {
+    "input.payee": {
+      "type": "identifier"
+    },
+    "input.reference": {
+      "type": "identifier"
+    },
+    "input.account": {
+      "type": "identifier",
+      "claimType": "payee-account"
+    },
+    "input.amount": {
+      "type": "number"
+    },
+    "input.currency": {
+      "type": "code",
+      "values": ["GBP"]
+    },
+    "output.status": {
+      "type": "code",
+      "values": ["submitted"]
+    },
+    "output.reference": {
+      "type": "identifier"
+    },
+    "observed.status": {
+      "type": "code",
+      "values": ["submitted"]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:payment",
+      "version": "0.1",
+      "label": "pay-an-invoice",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:pay-an-invoice"],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Payment bank and account directory",
+      "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
+    }
+  ]
 }

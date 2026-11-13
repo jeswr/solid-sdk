@@ -36,8 +36,8 @@ it("loads every declared case and preserves every catalogue branch, without clai
       }
     }
   }
-  expect(runs).toBe(3);
-  expect(blocked).toBe(28);
+  expect(runs).toBe(13);
+  expect(blocked).toBe(18);
 });
 
 it("runs both probing branches through real gates, with no later disclosure or effect after a stop", async () => {

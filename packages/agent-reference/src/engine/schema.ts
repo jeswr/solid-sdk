@@ -2,6 +2,7 @@
 /** The on-disk contract. Runtime validation and published JSON Schemas share this source. */
 import { z } from "zod";
 import { CORE_REASON_CODES } from "../core/types.js";
+import { ruleSchema } from "../derive/rules.js";
 import { INBOUND_CHECKS, OUTBOUND_CHECKS } from "../trace/types.js";
 
 const iri = z.string().regex(/^[a-z][a-z0-9+.-]*:[^\s<>"{}|\\^`]+$/i);
@@ -40,24 +41,57 @@ export const domainProfileSchema = z.strictObject({
   "x-authored-by": z.string(),
   schema: z.literal("agent-profile/0.1"),
   id: slug,
+  sources: z.record(z.string(), iri).default({}),
   claims: z.array(
     z.strictObject({
       kind: z.string(),
       sources: z.array(iri),
       methods: strings,
       maxAgeDays: z.number().nonnegative(),
+      corroboration: z
+        .strictObject({ sources: z.number().int().min(2), independent: z.boolean() })
+        .optional(),
     }),
   ),
   purposes: z.array(z.strictObject({ id: iri, claims: strings })),
   rules: z.array(
-    z.strictObject({
-      id: iri,
-      version: z.string(),
-      inputs: strings,
-      result: z.string(),
-      assurances: z.array(z.enum(["by-source", "by-agent", "attested", "proved", "joint"])),
-    }),
+    z.union([
+      ruleSchema,
+      z.strictObject({
+        id: iri,
+        version: z.string(),
+        inputs: strings,
+        result: z.string(),
+        assurances: z.array(z.enum(["by-source", "by-agent", "attested", "proved", "joint"])),
+      }),
+    ]),
   ),
+  assessments: z
+    .array(
+      z.strictObject({
+        id: iri,
+        rule: iri,
+        purpose: iri,
+        keep: z.array(z.literal("output")),
+        discardInputsAfter: z.literal("evaluation"),
+      }),
+    )
+    .default([]),
+  standIns: z.array(z.strictObject({ what: z.string(), replacedBy: z.string() })).default([]),
+  trust: z
+    .strictObject({
+      levels: z.tuple([z.literal("own-list")]),
+      onUnknown: z.literal("ask-principal"),
+    })
+    .optional(),
+  personDecisions: z
+    .array(
+      z.strictObject({
+        action: z.string(),
+        decider: z.union([z.literal("principal"), z.strictObject({ role: z.string() })]),
+      }),
+    )
+    .default([]),
   decisionsForPerson: strings,
   modelReadings: strings,
   vocabulary: z.record(z.string(), contentType),
@@ -97,6 +131,8 @@ const ownEntry = z.strictObject({
   tasks: z.array(iri),
   block: z.boolean().optional(),
   note: z.string().optional(),
+  purposes: z.array(iri).optional(),
+  expiresAt: z.iso.datetime().optional(),
 });
 const sourceRule = z.strictObject({
   id: iri,
@@ -187,6 +223,34 @@ const step = z.discriminatedUnion("type", [
     subject: iri,
     value: json,
   }),
+  z.strictObject({
+    ...base,
+    type: z.literal("derive"),
+    rule: iri,
+    subject: iri,
+    purpose: iri,
+    assurance: z.enum(["recomputed", "by-source"]).default("recomputed"),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("assess"),
+    assessment: iri,
+    agreement: json,
+    subject: iri,
+  }),
+  z.strictObject({ ...base, type: z.literal("organisation-approve"), signer: slug }),
+  z.strictObject({
+    ...base,
+    type: z.literal("trust-decision"),
+    decision: z.enum(["approve", "deny"]),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("assert"),
+    operator: z.enum(["equals", "includes"]).default("equals"),
+    actual: json,
+    expected: json,
+  }),
   z.strictObject({ ...base, type: z.literal("record") }),
   z.strictObject({
     ...base,
@@ -207,6 +271,7 @@ export const scenarioSchema = z.strictObject({
     ownLists: z.record(slug, z.array(ownEntry)),
     sources: z.record(slug, z.array(sourceRule)),
     root: root.optional(),
+    controllers: z.record(z.string(), z.string()).default({}),
   }),
   statements: z.array(
     z.strictObject({
@@ -220,6 +285,7 @@ export const scenarioSchema = z.strictObject({
       terms: object.optional(),
     }),
   ),
+  requester: z.record(slug, iri).default({}),
   mandates: z.array(
     z.strictObject({
       agent: slug,
@@ -245,6 +311,7 @@ export const scenarioSchema = z.strictObject({
       id: slug,
       what: z.string(),
       change: object,
+      profileChange: object.optional(),
       expect: expectation,
       outline: outlineSchema,
       blocked: z.string().optional(),
@@ -253,7 +320,7 @@ export const scenarioSchema = z.strictObject({
   expect: outlineSchema,
   stress: z.array(check),
   suites: z.record(z.string(), z.string()),
-  assurance: z.enum(["proved", "joint"]).nullable().default(null),
+  assurance: z.enum(["proved", "joint", "attested"]).nullable().default(null),
   blocked: blocked.default([]),
 });
 export type DomainProfile = z.infer<typeof domainProfileSchema>;

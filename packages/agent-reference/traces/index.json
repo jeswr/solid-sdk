@@ -101,6 +101,166 @@
     "events": 333
   },
   {
+    "file": "false-but-signed--baseline.json",
+    "scenario": {
+      "id": "false-but-signed",
+      "title": "false-but-signed (entirely fictional)",
+      "steps": {
+        "1": "admit-false-income-true-income",
+        "2": "record"
+      }
+    },
+    "configuration": "false-but-signed-local",
+    "events": 15
+  },
+  {
+    "file": "false-but-signed--branch-1--baseline.json",
+    "scenario": {
+      "id": "false-but-signed--branch-1",
+      "title": "false-but-signed (entirely fictional)",
+      "steps": {
+        "1": "issuer-admits",
+        "2": "request",
+        "3": "sender-delivers",
+        "4": "receiver-admits",
+        "5": "perform",
+        "6": "record",
+        "7": "issuer-record",
+        "8": "attribute-record",
+        "9": "attribute-issuer-record"
+      }
+    },
+    "configuration": "false-but-signed-local",
+    "events": 52
+  },
+  {
+    "file": "flat-share--baseline.json",
+    "scenario": {
+      "id": "flat-share",
+      "title": "flat-share (entirely fictional)",
+      "steps": {
+        "1": "offer",
+        "2": "unknown-sender",
+        "3": "trust-yes",
+        "4": "accepted-offer",
+        "5": "record",
+        "6": "alex-record"
+      }
+    },
+    "configuration": "flat-share-local",
+    "events": 40
+  },
+  {
+    "file": "flat-share--branch-1--baseline.json",
+    "scenario": {
+      "id": "flat-share--branch-1",
+      "title": "flat-share (entirely fictional)",
+      "steps": {
+        "1": "offer",
+        "2": "unknown-sender"
+      }
+    },
+    "configuration": "flat-share-local",
+    "events": 15
+  },
+  {
+    "file": "master-data-change--baseline.json",
+    "scenario": {
+      "id": "master-data-change",
+      "title": "master-data-change (entirely fictional)",
+      "steps": {
+        "1": "admit-account-role-controller-one-role-controller-two-role-requester",
+        "2": "perform",
+        "3": "first-approval",
+        "4": "second-approval",
+        "5": "erp-admits-bank-confirmation",
+        "6": "erp-receives-approved-request",
+        "7": "update",
+        "8": "updated",
+        "9": "erp-receipt",
+        "10": "finance-receives-result",
+        "11": "record",
+        "12": "erp-record"
+      }
+    },
+    "configuration": "baseline",
+    "events": 100
+  },
+  {
+    "file": "master-data-change--branch-1--baseline.json",
+    "scenario": {
+      "id": "master-data-change--branch-1",
+      "title": "master-data-change (entirely fictional)",
+      "steps": {
+        "1": "admit-account-role-controller-one-role-controller-two-role-requester",
+        "2": "perform",
+        "3": "self-approval"
+      }
+    },
+    "configuration": "baseline",
+    "events": 43
+  },
+  {
+    "file": "master-data-change--branch-2--baseline.json",
+    "scenario": {
+      "id": "master-data-change--branch-2",
+      "title": "master-data-change (entirely fictional)",
+      "steps": {
+        "1": "admit-account-role-controller-one-role-controller-two-role-requester",
+        "2": "perform"
+      }
+    },
+    "configuration": "baseline",
+    "events": 29
+  },
+  {
+    "file": "pay-an-invoice--baseline.json",
+    "scenario": {
+      "id": "pay-an-invoice",
+      "title": "pay-an-invoice (entirely fictional)",
+      "steps": {
+        "1": "admit-account-invoice",
+        "2": "bank-admits-account",
+        "3": "pay",
+        "4": "bank-receives",
+        "5": "bank-submits",
+        "6": "completed-effect",
+        "7": "bank-receipt",
+        "8": "receipt-received",
+        "9": "record",
+        "10": "bank-record"
+      }
+    },
+    "configuration": "pay-an-invoice-local",
+    "events": 76
+  },
+  {
+    "file": "pay-an-invoice--branch-1--baseline.json",
+    "scenario": {
+      "id": "pay-an-invoice--branch-1",
+      "title": "pay-an-invoice (entirely fictional)",
+      "steps": {
+        "1": "admit-account-invoice",
+        "2": "pay"
+      }
+    },
+    "configuration": "pay-an-invoice-local",
+    "events": 15
+  },
+  {
+    "file": "pay-an-invoice--branch-2--baseline.json",
+    "scenario": {
+      "id": "pay-an-invoice--branch-2",
+      "title": "pay-an-invoice (entirely fictional)",
+      "steps": {
+        "1": "admit-account-invoice",
+        "2": "pay"
+      }
+    },
+    "configuration": "pay-an-invoice-local",
+    "events": 22
+  },
+  {
     "file": "probing-counterparty--baseline.json",
     "scenario": {
       "id": "probing-counterparty",

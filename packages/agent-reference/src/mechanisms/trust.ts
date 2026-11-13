@@ -50,6 +50,7 @@ export interface TrustStoreData {
   readonly owner: Iri;
   readonly keys: readonly PinnedKey[];
   readonly sourceAuthority: readonly SourceAuthorityRule[];
+  readonly controllers?: Readonly<Record<string, string>>;
   /** Record keys are accepted only through a signed delegation by an introduced identity. */
   readonly recordKeys?: readonly {
     readonly identity: Iri;
@@ -115,6 +116,7 @@ const storeSchema = z
     owner: z.string().min(3).max(512),
     keys: z.array(pinnedKeySchema).max(1024),
     sourceAuthority: z.array(ruleSchema).max(1024),
+    controllers: z.record(z.string(), z.string()).optional(),
     recordKeys: z
       .array(
         z.strictObject({

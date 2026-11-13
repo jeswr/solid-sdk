@@ -3,12 +3,16 @@
 import type { OdrlRule } from "@jeswr/solid-odrl";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { isDeepStrictEqual } from "util";
-import { digestOf } from "../core/canonical.js";
+import { digestBytes, digestOf } from "../core/canonical.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
 import type { GateContext } from "../gates/common.js";
 import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
-import { CONFIG_ED25519 } from "../profile/configurations.js";
+import {
+  CONFIG_CORROBORATION,
+  CONFIG_PAYMENT,
+  CONFIG_PINNED_LIST,
+} from "../profile/configurations.js";
 import { idSource, testKey } from "../reference/keys.js";
 import type { AgentRuntime, OutboundMessage, StepResult } from "../runtime/agent.js";
 import type {
@@ -19,7 +23,7 @@ import type {
   OutboundPlan,
 } from "../runtime/operations.js";
 import { Cast, mandateOf, signClaim } from "../scenarios/common.js";
-import { BASELINE } from "../suites/baseline.js";
+import { BASELINE, baselineRegistry } from "../suites/baseline.js";
 import { TraceRecorder } from "../trace/recorder.js";
 import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
 import { TrustResolver } from "../trust/resolver.js";
@@ -99,12 +103,29 @@ function unsupported(profile: DomainProfile, scenario: Scenario, path: string): 
   if (scenario.assurance)
     return scenario.assurance === "proved"
       ? "needs the proof system"
-      : "needs the joint computation";
+      : scenario.assurance === "joint"
+        ? "needs the joint computation"
+        : "attested assurance is outside Brief 11";
   for (const [layer, suite] of Object.entries(scenario.suites))
-    if (BASELINE.layers[layer as keyof typeof BASELINE.layers] !== suite)
+    if (
+      BASELINE.layers[layer as keyof typeof BASELINE.layers] !== suite &&
+      (
+        { commitments: "payment", reliance: "corroboration", trust: "pinned-list" } as Record<
+          string,
+          string
+        >
+      )[layer] !== suite
+    )
       return `suite ${layer}/${suite} is not implemented by this engine`;
+  if (
+    Object.keys(scenario.suites).filter(
+      (layer) => BASELINE.layers[layer as keyof typeof BASELINE.layers] !== scenario.suites[layer],
+    ).length > 1
+  )
+    return "combined local capability configurations are not implemented";
   // These are declared for inspection, never silently interpreted as a weaker baseline rule.
-  if (profile.rules.length) return "general DER rule evaluation is not implemented";
+  if (profile.rules.some((r) => !("template" in r)))
+    return "legacy DER declaration needs an executable template";
   if (scenario.mandates.some((m) => m.standingRules.length))
     return "standing-rule execution and notification are not implemented";
   return undefined;
@@ -135,12 +156,15 @@ export async function runScenario(
     const world = scenarioSchema.parse(patch(scenario, path.change));
     if (profile.id !== world.profile) throw new Error("branch profile mismatch");
     validateReferences(profile, world);
-    const blocker = path.blocked ?? unsupported(profile, world, path.id);
+    const pathProfile = domainProfileSchema.parse(
+      patch(profile, "profileChange" in path && path.profileChange ? path.profileChange : {}),
+    );
+    const blocker = path.blocked ?? unsupported(pathProfile, world, path.id);
     if (blocker) {
       results.push({ path: path.id, blocked: blocker });
       continue;
     }
-    const trace = await runPath(profile, world, path.id, options.commit ?? "unknown");
+    const trace = await runPath(pathProfile, world, path.id, options.commit ?? "unknown");
     if (path.expect) {
       const witness = trace.events.findIndex(
         (e) => e.check === required(path.expect).check && e.reason === required(path.expect).reason,
@@ -148,7 +172,13 @@ export async function runScenario(
       const checkEvent = trace.events[witness];
       const decision = trace.events
         .slice(witness + 1)
-        .find((e) => e.kind === "decision" && e.agent === checkEvent?.agent);
+        .find(
+          (e) =>
+            e.kind === "decision" &&
+            e.agent === checkEvent?.agent &&
+            (!["go", "stop"].includes(path.expect?.outcome ?? "") ||
+              e.outcome === path.expect?.outcome),
+        );
       if (witness < 0 || decision?.outcome !== path.expect.outcome)
         throw new Error(
           `${scenario.id}/${path.id}: expected ${path.expect.check}/${path.expect.reason} -> ${path.expect.outcome}`,
@@ -187,6 +217,47 @@ async function runPath(
   path: string,
   commit: string,
 ): Promise<TraceFile> {
+  const registry = baselineRegistry();
+  registry.register({
+    layer: "commitments",
+    id: "payment",
+    name: "Local structured payments",
+    agreement: "signed-offer-acceptance",
+    summary:
+      "The local extension releases a structured payment instruction under a signed mandate, reserves cumulative limits before release, and records a signed stand-in bank submission; no settlement claim.",
+  });
+  registry.register({
+    layer: "reliance",
+    id: "corroboration",
+    name: "Exact-value corroboration",
+    enforcedAtGate: true,
+    summary:
+      "Accepted issuers with separately configured controllers must agree on the exact subject, claim, value and period; authenticity alone never establishes truth.",
+  });
+  registry.register({
+    layer: "trust",
+    id: "pinned-list",
+    name: "Scoped own-list pins",
+    anchors: "pinned",
+    summary:
+      "Reviewed verification keys require a purpose-scoped, expiring own-list pin; unknown trust is held for a digest-bound principal decision.",
+  });
+  const local =
+    scenario.suites.commitments === "payment"
+      ? CONFIG_PAYMENT
+      : scenario.suites.reliance === "corroboration"
+        ? CONFIG_CORROBORATION
+        : scenario.suites.trust === "pinned-list"
+          ? CONFIG_PINNED_LIST
+          : undefined;
+  const configuration = local
+    ? {
+        id: `${scenario.id}-local`,
+        pilotConfiguration: local,
+        layers: { ...BASELINE.layers, ...scenario.suites },
+      }
+    : BASELINE;
+  if (local) registry.configure(configuration);
   let clock = Date.parse("2026-11-13T09:00:00.000Z");
   const now = () => new Date(clock);
   const ids = idSource(`engine-${scenario.id}-${path}`);
@@ -219,17 +290,34 @@ async function runPath(
     if (!cast.agents.has(a) || !cast.agents.has(b)) throw new Error("introductions require agents");
     cast.introduce(a, b);
   }
-  const signed: Record<string, { jws: string; statement: JsonObject; evidence: EvidenceItem }> = {};
+  const sourceKeys = new Map<string, Awaited<ReturnType<typeof testKey>>>();
+  for (const party of scenario.parties.filter((p) => p.runs === "issuer-only")) {
+    const representative = agents.find((a) => a.actsFor === party.id);
+    const key = representative
+      ? cast.get(representative.id).ownerKey
+      : await testKey(`engine/${party.id}/issuer`);
+    sourceKeys.set(party.id, key);
+    for (const agent of agents)
+      if (!required(cast.trust.get(agent.id)).keys.some((k) => k.kid === key.kid))
+        cast.pinIssuer(agent.id, party.identity, key);
+  }
+  const signed: Record<
+    string,
+    { jws: string; wireDigest: string; statement: JsonObject; evidence: EvidenceItem }
+  > = {};
   for (const statement of scenario.statements) {
     const issuer = required(parties.get(statement.issuer));
     const key = cast.agents.has(issuer.id)
       ? cast.get(issuer.id).ownerKey
-      : await testKey(`engine/${issuer.id}/issuer`);
+      : required(sourceKeys.get(issuer.id));
     const issuerIdentity = issuer.actsFor
       ? required(parties.get(issuer.actsFor)).identity
       : issuer.identity;
     const payload: JsonObject = {
       ...(statement.value as JsonObject),
+      ...(typeof statement.value.subjectKeyOf === "string"
+        ? { subjectKey: required(sourceKeys.get(statement.value.subjectKeyOf)).kid }
+        : {}),
       id: `urn:scenario:${scenario.id}:${statement.id}`,
       issuer: issuerIdentity,
       subject: statement.subject,
@@ -238,9 +326,11 @@ async function runPath(
       asOf: statement.asOf,
       ...(statement.terms ? { terms: statement.terms as JsonObject } : {}),
     };
+    delete payload.subjectKeyOf;
     const jws = await signClaim(key, payload);
     signed[statement.id] = {
       jws,
+      wireDigest: digestBytes(jws),
       statement: payload,
       evidence: { role: "credential", format: "jws-compact", value: jws },
     };
@@ -268,15 +358,37 @@ async function runPath(
     now: now().toISOString(),
   });
   for (const agent of agents) {
+    cast.trust.set(agent.id, {
+      ...required(cast.trust.get(agent.id)),
+      controllers: scenario.trust.controllers,
+    });
     const trust = await TrustStore.load(cast.trust.get(agent.id));
     const mandate = required(scenario.mandates.find((m) => m.agent === agent.id));
     const gate: GateContext = {
-      configuration: BASELINE,
+      configuration,
       sink: recorder.sink(agent.id),
       taskId: task,
       name,
       vocabulary: profile.vocabulary,
       identifiers: profile.identifiers,
+      sourceAliases: profile.sources,
+      rules: profile.rules.filter((r) => "template" in r),
+      assessments: profile.assessments,
+      personDecisions: profile.personDecisions,
+      requester: scenario.requester[agent.id],
+      trust: profile.trust,
+      pins: (scenario.trust.ownLists[agent.id] ?? [])
+        .filter((entry) => !entry.block)
+        .flatMap((entry) => {
+          const peer = agents.find((p) => parties.get(p.actsFor ?? "")?.identity === entry.party);
+          if (!peer) return [];
+          return (entry.purposes ?? []).map((purpose) => ({
+            party: entry.party,
+            purpose,
+            kid: cast.get(peer.id).actorKey.kid,
+            expiresAt: entry.expiresAt ?? "1970-01-01T00:00:00Z",
+          }));
+        }),
       claimSources: Object.fromEntries(profile.claims.map((c) => [c.kind, c.sources])),
       purposes: Object.fromEntries(profile.purposes.map((p) => [p.id, p.claims])),
       reliance: {
@@ -286,6 +398,7 @@ async function runPath(
           claimType: c.kind,
           methods: c.methods,
           maxAgeDays: c.maxAgeDays,
+          ...(c.corroboration ? { corroboration: c.corroboration } : {}),
           text: `Accept ${c.kind} from ${c.sources.join(", ")} by ${c.methods.join(", ")}, at most ${c.maxAgeDays} days old.`,
         })),
       },
@@ -352,9 +465,12 @@ async function runPath(
           }),
         },
       ],
-      [CONFIG_ED25519],
+      [configuration.pilotConfiguration],
       {
         gates: gate,
+        ...(profile.rules.some((r) => "template" in r && r.assurances.includes("by-source"))
+          ? { sourceKey: cast.get(agent.id).ownerKey }
+          : {}),
         core: {
           id: "urn:agent-reference:scripted-core",
           version: digestOf(scenario),
@@ -395,7 +511,7 @@ async function runPath(
           operation: { id: operation.id, version: operation.version },
           models: operation.models,
           discover: step.discover,
-          configuration: CONFIG_ED25519,
+          configuration: configuration.pilotConfiguration,
         };
         const contents = template<JsonObject>(step.contents);
         openings.set(step.agent, step.intent);
@@ -500,6 +616,61 @@ async function runPath(
           value: template<Json>(step.value),
         });
         break;
+      case "derive":
+        result = await runtime.derive(step);
+        break;
+      case "assess":
+        result = await runtime.assess({ ...step, agreement: template<Iri>(step.agreement) });
+        break;
+      case "organisation-approve": {
+        const pending = required(runtime.pendingApprovals()[0]);
+        const signer = required(parties.get(step.signer));
+        const payload = {
+          type: "OrganisationApproval",
+          id: ids("approval")(),
+          signer: signer.identity,
+          actor: required(parties.get(step.agent)?.actor),
+          actionDigest: pending.actionDigest,
+          conversation: pending.conversation,
+          issuedAt: now().toISOString(),
+          validUntil: new Date(clock + 60_000).toISOString(),
+        };
+        result = await runtime.submitOrganisationApproval(
+          await signStatement(
+            required(sourceKeys.get(step.signer)),
+            "awp-organisation-approval+jws",
+            payload,
+          ),
+        );
+        enqueue(step.agent, result as StepResult);
+        break;
+      }
+      case "trust-decision": {
+        const [id, pending] = required(Object.entries(runtime.pendingTrustRequests())[0]);
+        const approval = await cast.approval(
+          step.agent,
+          pending.digest,
+          pending.message.conversation,
+          step.decision,
+        );
+        result = await runtime.submitTrustDecision(id, approval);
+        enqueue(step.agent, result as StepResult);
+        break;
+      }
+      case "assert": {
+        const actual = template(step.actual);
+        const expected = template(step.expected);
+        if (
+          !(step.operator === "includes"
+            ? Array.isArray(actual) && actual.some((value) => isDeepStrictEqual(value, expected))
+            : isDeepStrictEqual(actual, expected))
+        )
+          throw new Error(
+            `${step.id}: assertion differs: ${JSON.stringify(template(step.actual))}`,
+          );
+        result = true;
+        break;
+      }
       case "record":
         result = runtime.checkRecord(required(ledgers.get(step.agent)).entries());
         break;
@@ -516,7 +687,7 @@ async function runPath(
       title: scenario.title,
       steps: Object.fromEntries(scenario.script.map((step, i) => [String(i + 1), step.id])),
     },
-    configuration: { id: BASELINE.id, layers: { ...BASELINE.layers } },
+    configuration: { id: configuration.id, layers: { ...configuration.layers } },
     agents: agents.map((p) => ({
       id: p.id,
       name: p.name,
@@ -524,6 +695,7 @@ async function runPath(
       role: p.role,
     })),
     generated: { commit, core: "scripted" },
+    standIns: profile.standIns,
     events: recorder.events(),
   };
 }

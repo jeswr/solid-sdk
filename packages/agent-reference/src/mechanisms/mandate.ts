@@ -49,7 +49,7 @@ export const POLICY_EVALUATOR_ID = SOLID_ODRL_ENGINE_ID;
 
 /** The ODRL subset this pilot profile accepts. Anything else is `indeterminate`. */
 export const PILOT_ODRL_SUBSET = {
-  actions: ["use", "read", "distribute", "compensate", "transfer"],
+  actions: ["pay", "use", "read", "distribute", "compensate", "transfer"],
   leftOperands: ["dateTime", "purpose", "recipient"],
   operators: ["eq", "neq", "isAnyOf", "isNoneOf", "lt", "lteq", "gt", "gteq"],
   conflict: ["prohibit"],
@@ -81,8 +81,24 @@ const rule = z
     assigner: z.string().optional(),
     constraints: z.array(constraint).max(16).optional(),
     duties: z.array(z.unknown()).max(8).optional(),
+    approvals: z
+      .strictObject({
+        count: z.number().int().min(1).max(16),
+        roles: z.array(z.string()).min(1),
+        distinctFromRequester: z.boolean(),
+      })
+      .optional(),
+    limit: z
+      .strictObject({
+        perAction: z.number().nonnegative(),
+        perPeriod: z.number().nonnegative(),
+        period: z.literal("calendar-month"),
+        currency: z.string().regex(/^[A-Z]{3}$/),
+      })
+      .optional(),
   })
-  .strict();
+  .strict()
+  .refine((r) => !(r.approvals || r.limit) || !!r.id, "rules with approvals or limits need an id");
 const policy = z
   .object({
     id: iri,

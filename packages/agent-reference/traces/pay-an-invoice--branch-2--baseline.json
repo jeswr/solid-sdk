@@ -1,0 +1,522 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "scenario": {
+    "id": "pay-an-invoice--branch-2",
+    "title": "pay-an-invoice (entirely fictional)",
+    "steps": {
+      "1": "admit-account-invoice",
+      "2": "pay"
+    }
+  },
+  "configuration": {
+    "id": "pay-an-invoice-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "payment",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "business-agent",
+      "name": "business-agent",
+      "actsFor": "business",
+      "role": "agent"
+    },
+    {
+      "id": "bank-agent",
+      "name": "bank-agent",
+      "actsFor": "bank",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "67e14700e60bdedf44cd1971d8f0cfe2ecb45c8b",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Payment bank and account directory",
+      "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "bank's payee-account statement is intact and signed with bank's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source-rule:bank",
+        "text": "bank is accepted for payee-account claims."
+      },
+      "resolution": {
+        "question": "Is bank an authority for payee-account claims about supplier?",
+        "path": [
+          {
+            "at": "business's own list",
+            "kind": "own-list",
+            "says": "bank is accepted for payee-account."
+          }
+        ],
+        "answer": "Accepted, for payee-account claims only."
+      },
+      "caption": "bank's payee-account statement: bank is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "bank's payee-account statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "payment",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:payee-account",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "bank's payee-account statement: its terms allow this: ."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:pay-an-invoice:payee-account",
+        "text": "Accept payee-account from urn:fictional:bank by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "bank's payee-account statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "bank's payee-account statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:pay-an-invoice:account",
+        "label": "bank's payee-account statement",
+        "claimType": "payee-account",
+        "subject": "urn:fictional:supplier",
+        "value": null,
+        "source": "urn:fictional:bank",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:payee-account",
+          "summary": ""
+        },
+        "provenance": "signed by bank"
+      },
+      "caption": "bank's payee-account statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "supplier's invoice statement is intact and signed with supplier's pinned key."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source-rule:supplier",
+        "text": "supplier is accepted for invoice claims."
+      },
+      "resolution": {
+        "question": "Is supplier an authority for invoice claims about business?",
+        "path": [
+          {
+            "at": "business's own list",
+            "kind": "own-list",
+            "says": "supplier is accepted for invoice."
+          }
+        ],
+        "answer": "Accepted, for invoice claims only."
+      },
+      "caption": "supplier's invoice statement: supplier is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "supplier's invoice statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "payment",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "default-terms",
+        "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      },
+      "caption": "supplier's invoice statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:pay-an-invoice:invoice",
+        "text": "Accept invoice from urn:fictional:supplier by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "supplier's invoice statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "supplier's invoice statement is admitted."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:pay-an-invoice:invoice",
+        "label": "supplier's invoice statement",
+        "claimType": "invoice",
+        "subject": "urn:fictional:business",
+        "value": null,
+        "source": "urn:fictional:supplier",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "provenance": "signed by supplier"
+      },
+      "caption": "supplier's invoice statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to pay urn:op:payment with bank."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:monthly-payments",
+        "text": "business's mandate lets the agent pay urn:op:payment, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "business's mandate covers this action."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is bank a party I can send urn:op:payment to?",
+        "path": [
+          {
+            "at": "business's own list",
+            "kind": "own-list",
+            "says": "bank is accepted for urn:op:payment."
+          }
+        ],
+        "answer": "Accepted, for urn:op:payment only."
+      },
+      "reason": "recipient-established",
+      "caption": "bank: Accepted, for urn:op:payment only."
+    },
+    {
+      "seq": 18,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 19,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 20,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "limit-exceeded",
+      "rule": {
+        "id": "urn:rule:monthly-payments",
+        "text": "business's mandate lets the agent pay urn:op:payment, on its own. This payment exceeds the mandate's per-action or calendar-month limit."
+      },
+      "caption": "This is outside business's limits, so the gate asks business."
+    },
+    {
+      "seq": 21,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "limit-exceeded",
+      "caption": "The gate holds the action and asks business."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "chat": {
+        "who": "agent",
+        "text": "bank asks me to pay urn:op:payment with bank for urn:purpose:pay an invoice. This payment exceeds the mandate's per-action or calendar-month limit. May I go ahead?"
+      },
+      "caption": "business is asked to approve this exact action; the approval will be bound to its digest."
+    }
+  ]
+}

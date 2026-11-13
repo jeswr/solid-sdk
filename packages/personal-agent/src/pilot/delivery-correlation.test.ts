@@ -404,7 +404,12 @@ it("rejects signed, miscorrelated deliveries before committing state or dispatch
   const description = new RetailerPlansHandler(SOUTHERN.party, SOUTHERN_PLANS).description;
   const otherOperation: OperationRef = { id: "urn:unrequested-handler", version: "2" };
   const handlers: OperationHandler[] = [
-    { description, requiresRepresentation: false, onDeliver: onExpected },
+    {
+      description,
+      contentProfile: new RetailerPlansHandler(SOUTHERN.party, SOUTHERN_PLANS).contentProfile,
+      requiresRepresentation: false,
+      onDeliver: onExpected,
+    },
     {
       description: { ...description, ...otherOperation },
       requiresRepresentation: false,

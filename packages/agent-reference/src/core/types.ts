@@ -448,7 +448,12 @@ export interface ActionIntent {
   readonly conversation: Iri;
 }
 
-export type AuthorisationOutcome = "permit" | "deny" | "approval-required" | "indeterminate";
+export type AuthorisationOutcome =
+  | "permit"
+  | "deny"
+  | "approval-required"
+  | "indeterminate"
+  | "ask-more";
 
 export interface AuthorisationDecision {
   readonly type: "authorisation-decision";

@@ -8,17 +8,72 @@
       "sources": ["urn:fictional:supplier-bank"],
       "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "organization.role",
+      "sources": ["urn:fictional:directory"],
+      "methods": ["recorded-by-authority"],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:master-data-change",
-      "claims": ["bank.account-owner"]
+      "claims": ["bank.account-owner", "organization.role"]
     }
   ],
   "rules": [],
   "decisionsForPerson": [],
   "modelReadings": [],
-  "vocabulary": {},
-  "operations": []
+  "vocabulary": {
+    "input.account": {
+      "type": "identifier",
+      "claimType": "bank.account-owner"
+    },
+    "input.support.*": {
+      "type": "identifier"
+    },
+    "output.status": {
+      "type": "code",
+      "values": ["updated"]
+    },
+    "output.account": {
+      "type": "identifier",
+      "claimType": "bank.account-owner"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:master-data-change",
+      "version": "0.1",
+      "label": "master-data-change",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:master-data-change"],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [
+    {
+      "action": "use",
+      "decider": {
+        "role": "finance-controller"
+      }
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Organization directory",
+      "replacedBy": "Fictional directory, issuer-only key"
+    },
+    {
+      "what": "Supplier bank",
+      "replacedBy": "Fictional supplier-bank, issuer-only key"
+    },
+    {
+      "what": "Enterprise master-data system",
+      "replacedBy": "Fictional ERP agent with its own key, inbound and outbound gates, and local update ledger"
+    }
+  ]
 }
