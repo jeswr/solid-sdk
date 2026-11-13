@@ -13,6 +13,14 @@ import type * as React_2 from 'react';
 import { ReactNode } from 'react';
 
 // @public
+export function AccountControl(input: AccountControlProps): JSX.Element;
+
+// @public (undocumented)
+export interface AccountControlProps extends Pick<AccountMenuProps, "webId" | "displayName" | "avatarUrl" | "onSignOut"> {
+    signOutLabel?: string;
+}
+
+// @public
 export function AccountMenu(input: AccountMenuProps): React_2.JSX.Element;
 
 // @public (undocumented)

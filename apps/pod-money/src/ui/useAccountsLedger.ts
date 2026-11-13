@@ -7,10 +7,8 @@
 //
 // ── AUTH SEAM ────────────────────────────────────────────────────────────────
 // The authenticated `fetch` is INJECTED, not imported — threaded straight to
-// `readLedger`. Omit it and the data layer falls back to the global `fetch`
-// (patched by @solid/reactive-authentication in a real session). The wiring is
-// #18-gated (create-solid-app S2). See ledger.ts for the full note. Do NOT
-// hard-wire a login flow here.
+// `readLedger`. Pass pod-auth's bounded auth.fetch for authenticated reads;
+// omitting it uses the public global fetch. Do not hard-wire a login flow here.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { accountDisplayLabel, errorMessage } from "./format.js";
@@ -60,9 +58,7 @@ export interface AccountsLedgerState {
 /** Options for {@link useAccountsLedger}. */
 export interface UseAccountsLedgerOptions {
   /**
-   * The authenticated fetch. Omit to use the ambient global fetch (which
-   * @solid/reactive-authentication patches in a real session). The injectable
-   * auth seam — see the file header.
+   * The bounded authenticated fetch. Defaults to the public global fetch.
    */
   fetch?: typeof fetch;
 }
