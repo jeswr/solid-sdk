@@ -2,6 +2,181 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "requiredMethods": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "catalogueAssurance": {
+      "type": "string",
+      "enum": [
+        "proved",
+        "joint",
+        "attested"
+      ]
+    },
+    "recordedAssurance": {
+      "type": "string",
+      "enum": [
+        "proved",
+        "joint",
+        "attested"
+      ]
+    },
+    "proofCredentials": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "subject": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "statements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          }
+        },
+        "required": [
+          "method",
+          "issuer",
+          "subject",
+          "statements"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "jointSession": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+        },
+        "requester": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "finisher": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "purpose": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+        },
+        "statistic": {
+          "type": "string",
+          "enum": [
+            "count",
+            "sum",
+            "count-and-sum"
+          ]
+        },
+        "minimumGroup": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "minimumContributors": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "contributors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "computeOnly": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "threshold": {
+          "type": "object",
+          "properties": {
+            "statistic": {
+              "type": "string",
+              "enum": [
+                "count",
+                "sum"
+              ]
+            },
+            "operator": {
+              "type": "string",
+              "enum": [
+                ">=",
+                "<="
+              ]
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "statistic",
+            "operator",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        "inputs": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "method",
+        "rule",
+        "requester",
+        "finisher",
+        "purpose",
+        "statistic",
+        "minimumGroup",
+        "minimumContributors",
+        "contributors",
+        "computeOnly",
+        "inputs"
+      ],
+      "additionalProperties": false
+    },
     "x-authored-by": {
       "type": "string"
     },
@@ -1418,6 +1593,19 @@
                                   "compareWith": {
                                     "type": "string",
                                     "minLength": 1
+                                  },
+                                  "date": {
+                                    "type": "string",
+                                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                                  },
+                                  "aggregate": {
+                                    "type": "string",
+                                    "enum": [
+                                      "min",
+                                      "max",
+                                      "sum",
+                                      "count"
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -1489,10 +1677,137 @@
                                       "type": "string",
                                       "minLength": 1
                                     }
+                                  },
+                                  "conditions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "input": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "operator": {
+                                          "type": "string",
+                                          "enum": [
+                                            "gte",
+                                            "lte",
+                                            "eq",
+                                            "not-in"
+                                          ]
+                                        },
+                                        "value": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string"
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "input",
+                                        "operator",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
                                   }
                                 },
                                 "required": [
                                   "inputs"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "output",
+                              "inputsFrom",
+                              "assurances",
+                              "template",
+                              "params"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                              },
+                              "output": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "inputsFrom": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "assurances": {
+                                "default": [
+                                  "recomputed"
+                                ],
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "recomputed",
+                                    "by-source",
+                                    "proved",
+                                    "joint",
+                                    "attested"
+                                  ]
+                                }
+                              },
+                              "template": {
+                                "type": "string",
+                                "const": "membership"
+                              },
+                              "params": {
+                                "type": "object",
+                                "properties": {
+                                  "input": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "values": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "boolean"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "input",
+                                  "values"
                                 ],
                                 "additionalProperties": false
                               }
@@ -2550,6 +2865,238 @@
               },
               "type": {
                 "type": "string",
+                "const": "proof-request"
+              },
+              "rule": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "subject": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "assurances": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "proved",
+                    "attested",
+                    "joint",
+                    "recomputed",
+                    "by-source"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "rule",
+              "subject",
+              "purpose",
+              "assurances"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "prove"
+              },
+              "method": {
+                "type": "string"
+              },
+              "request": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "recipient": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "assurance": {
+                "type": "string",
+                "enum": [
+                  "attested",
+                  "proved"
+                ]
+              },
+              "proofBinds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "rule",
+                    "issuers",
+                    "subject",
+                    "fresh",
+                    "complete"
+                  ]
+                }
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "method",
+              "request",
+              "recipient",
+              "assurance",
+              "proofBinds",
+              "inputs"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "joint-action"
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "contribute",
+                  "partial",
+                  "finish"
+                ]
+              },
+              "attack": {
+                "type": "string",
+                "enum": [
+                  "unsigned",
+                  "off-roster"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "action"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "joint-send"
+              },
+              "peer": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "contribute",
+                  "partial",
+                  "outcome"
+                ]
+              },
+              "payload": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "derivedEvidence": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "peer",
+              "operation",
+              "payload",
+              "derivedEvidence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
                 "const": "facts"
               }
             },
@@ -3041,6 +3588,19 @@
                                 "compareWith": {
                                   "type": "string",
                                   "minLength": 1
+                                },
+                                "date": {
+                                  "type": "string",
+                                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                                },
+                                "aggregate": {
+                                  "type": "string",
+                                  "enum": [
+                                    "min",
+                                    "max",
+                                    "sum",
+                                    "count"
+                                  ]
                                 }
                               },
                               "required": [
@@ -3112,10 +3672,137 @@
                                     "type": "string",
                                     "minLength": 1
                                   }
+                                },
+                                "conditions": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "input": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "operator": {
+                                        "type": "string",
+                                        "enum": [
+                                          "gte",
+                                          "lte",
+                                          "eq",
+                                          "not-in"
+                                        ]
+                                      },
+                                      "value": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          },
+                                          {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "input",
+                                      "operator",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
                                 }
                               },
                               "required": [
                                 "inputs"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "output",
+                            "inputsFrom",
+                            "assurances",
+                            "template",
+                            "params"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                            },
+                            "output": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "inputsFrom": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "assurances": {
+                              "default": [
+                                "recomputed"
+                              ],
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "recomputed",
+                                  "by-source",
+                                  "proved",
+                                  "joint",
+                                  "attested"
+                                ]
+                              }
+                            },
+                            "template": {
+                              "type": "string",
+                              "const": "membership"
+                            },
+                            "params": {
+                              "type": "object",
+                              "properties": {
+                                "input": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "values": {
+                                  "minItems": 1,
+                                  "type": "array",
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "boolean"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "input",
+                                "values"
                               ],
                               "additionalProperties": false
                             }
@@ -5792,6 +6479,8 @@
     }
   },
   "required": [
+    "requiredMethods",
+    "proofCredentials",
     "x-authored-by",
     "schema",
     "id",

@@ -44,6 +44,20 @@
       "runs": "agent",
       "actor": "urn:fictional:recycled-content:receiver-agent:actor",
       "actsFor": "receiver"
+    },
+    {
+      "id": "tier-2",
+      "identity": "urn:fictional:recycled-content:tier-2",
+      "name": "Fictional independently keyed audited supply tier 2",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "tier-3",
+      "identity": "urn:fictional:recycled-content:tier-3",
+      "name": "Fictional independently keyed audited supply tier 3",
+      "role": "source",
+      "runs": "issuer-only"
     }
   ],
   "trust": {
@@ -59,7 +73,9 @@
           "party": "urn:fictional:recycled-content:receiver",
           "tasks": [
             "urn:op:recycled-content",
-            "urn:op:recycled-content:request"
+            "urn:op:recycled-content:request",
+            "urn:op:recycled-content:proof-request",
+            "urn:op:recycled-content:proof-answer"
           ]
         }
       ],
@@ -68,7 +84,9 @@
           "party": "urn:fictional:recycled-content:owner",
           "tasks": [
             "urn:op:recycled-content",
-            "urn:op:recycled-content:request"
+            "urn:op:recycled-content:request",
+            "urn:op:recycled-content:proof-request",
+            "urn:op:recycled-content:proof-answer"
           ]
         }
       ]
@@ -83,7 +101,41 @@
             "material.recycled-fraction"
           ],
           "subjects": [
-            "urn:fictional:recycled-content:owner"
+            "urn:fictional:recycled-content:owner",
+            "urn:fictional:recycled-content:lot"
+          ]
+        },
+        {
+          "id": "urn:source:recycled-content:receiver:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:recycled-content:receiver",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:recycled-content:receiver"
+          ]
+        },
+        {
+          "id": "urn:source:recycled-content:tier-2:material.recycled-fraction",
+          "version": "1",
+          "source": "urn:fictional:recycled-content:tier-2",
+          "claimTypes": [
+            "material.recycled-fraction"
+          ],
+          "subjects": [
+            "urn:fictional:recycled-content:lot"
+          ]
+        },
+        {
+          "id": "urn:source:recycled-content:tier-3:material.recycled-fraction",
+          "version": "1",
+          "source": "urn:fictional:recycled-content:tier-3",
+          "claimTypes": [
+            "material.recycled-fraction"
+          ],
+          "subjects": [
+            "urn:fictional:recycled-content:lot"
           ]
         }
       ],
@@ -96,7 +148,41 @@
             "material.recycled-fraction"
           ],
           "subjects": [
-            "urn:fictional:recycled-content:owner"
+            "urn:fictional:recycled-content:owner",
+            "urn:fictional:recycled-content:lot"
+          ]
+        },
+        {
+          "id": "urn:source:recycled-content:receiver:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:recycled-content:receiver",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:recycled-content:receiver"
+          ]
+        },
+        {
+          "id": "urn:source:recycled-content:tier-2:material.recycled-fraction",
+          "version": "1",
+          "source": "urn:fictional:recycled-content:tier-2",
+          "claimTypes": [
+            "material.recycled-fraction"
+          ],
+          "subjects": [
+            "urn:fictional:recycled-content:lot"
+          ]
+        },
+        {
+          "id": "urn:source:recycled-content:tier-3:material.recycled-fraction",
+          "version": "1",
+          "source": "urn:fictional:recycled-content:tier-3",
+          "claimTypes": [
+            "material.recycled-fraction"
+          ],
+          "subjects": [
+            "urn:fictional:recycled-content:lot"
           ]
         }
       ]
@@ -144,6 +230,126 @@
           ]
         }
       }
+    },
+    {
+      "id": "audited-tier",
+      "issuer": "tier",
+      "subject": "urn:fictional:recycled-content:lot",
+      "kind": "material.recycled-fraction",
+      "value": {
+        "value": 0.35
+      },
+      "method": "audited-by-certifier",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:recycled-content:audited-tier",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recycled-content"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recycled-content"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "audited-tier-2",
+      "issuer": "tier-2",
+      "subject": "urn:fictional:recycled-content:lot",
+      "kind": "material.recycled-fraction",
+      "value": {
+        "value": 0.4
+      },
+      "method": "audited-by-certifier",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:recycled-content:audited-tier-2",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recycled-content"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recycled-content"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "audited-tier-3",
+      "issuer": "tier-3",
+      "subject": "urn:fictional:recycled-content:lot",
+      "kind": "material.recycled-fraction",
+      "value": {
+        "value": 0.38
+      },
+      "method": "audited-by-certifier",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:recycled-content:audited-tier-3",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recycled-content"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recycled-content"
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   ],
   "mandates": [
@@ -154,6 +360,16 @@
           "type": "permission",
           "action": "distribute",
           "target": "urn:op:recycled-content"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:recycled-content:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:recycled-content:proof-answer"
         }
       ],
       "withApproval": []
@@ -165,12 +381,152 @@
           "type": "permission",
           "action": "use",
           "target": "urn:op:recycled-content:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:recycled-content:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:recycled-content:proof-answer"
         }
       ],
       "withApproval": []
     }
   ],
-  "script": [],
+  "script": [
+    {
+      "id": "private-inputs",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "audited-tier",
+        "audited-tier-2",
+        "audited-tier-3"
+      ],
+      "subject": "urn:fictional:recycled-content:lot",
+      "purpose": "urn:purpose:recycled-content"
+    },
+    {
+      "id": "fresh-request",
+      "agent": "receiver-agent",
+      "type": "proof-request",
+      "rule": "urn:rule:recycled-content:proof",
+      "subject": "urn:fictional:recycled-content:lot",
+      "purpose": "urn:purpose:recycled-content",
+      "assurances": [
+        "attested"
+      ]
+    },
+    {
+      "id": "send-request",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "invoke",
+      "operation": "urn:op:recycled-content:proof-request",
+      "contents": {
+        "items": [
+          {
+            "$ref": "steps.fresh-request.statement.id"
+          }
+        ]
+      },
+      "intent": {
+        "action": "use",
+        "target": "urn:op:recycled-content:proof-request",
+        "operation": "urn:op:recycled-content:proof-request",
+        "recipient": "urn:fictional:recycled-content:owner",
+        "purpose": "urn:purpose:recycled-content",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:recycled-content",
+      "derivedEvidence": [
+        {
+          "$ref": "steps.fresh-request.jws"
+        }
+      ]
+    },
+    {
+      "id": "receive-request",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent"
+    },
+    {
+      "id": "prove-answer",
+      "agent": "owner-agent",
+      "type": "prove",
+      "method": "sparq-authrdf/1",
+      "request": {
+        "$ref": "steps.fresh-request.request"
+      },
+      "recipient": "urn:fictional:recycled-content:receiver",
+      "assurance": "attested",
+      "proofBinds": [
+        "rule",
+        "issuers",
+        "fresh",
+        "complete"
+      ],
+      "inputs": [
+        "audited-tier",
+        "audited-tier-2",
+        "audited-tier-3"
+      ]
+    },
+    {
+      "id": "send-answer",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:recycled-content:proof-answer",
+      "contents": {
+        "items": [
+          {
+            "$ref": "steps.prove-answer.statement.id"
+          }
+        ]
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:recycled-content:proof-answer",
+        "operation": "urn:op:recycled-content:proof-answer",
+        "recipient": "urn:fictional:recycled-content:receiver",
+        "purpose": "urn:purpose:recycled-content",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:recycled-content",
+      "derivedEvidence": [
+        {
+          "$ref": "steps.prove-answer.jws"
+        }
+      ]
+    },
+    {
+      "id": "receive-answer",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    },
+    {
+      "id": "receiver-facts",
+      "agent": "receiver-agent",
+      "type": "facts"
+    },
+    {
+      "id": "check-answer",
+      "agent": "receiver-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.receiver-facts.0.value"
+      },
+      "expected": true
+    }
+  ],
   "inject": [],
   "branches": [
     {
@@ -195,7 +551,13 @@
         ],
         "traceSteps": {
           "1": "The certifier’s agent checks the signed statements."
-        }
+        },
+        "requiredMethods": [],
+        "proofCredentials": [],
+        "stress": [
+          "source",
+          "fitness"
+        ]
       },
       "expect": {
         "outcome": "ask-more",
@@ -257,21 +619,518 @@
       }
     }
   ],
-  "expect": [],
-  "stress": [
-    "source",
-    "fitness"
-  ],
-  "suites": {
-    "authenticity": "zk-query-proof"
-  },
-  "assurance": "proved",
-  "blocked": [
+  "expect": [
     {
-      "path": "main",
-      "reason": "needs a proof system"
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
     }
   ],
+  "stress": [
+    "source",
+    "fitness",
+    "disclosure"
+  ],
+  "suites": {},
+  "assurance": "attested",
+  "blocked": [],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -280,7 +1139,42 @@
     {
       "what": "Proof-free supplier-quality preflight",
       "replacedBy": "The tier’s real signature verifies its self-declaration, but the input profile requires an audited method; no chain proof or 30-percent predicate proof is constructed"
+    },
+    {
+      "what": "The confidential supply-chain calculation",
+      "replacedBy": "Each of three independently keyed tiers certifies the same fictional lot at its stage. The installed conservative rule tests the minimum certified stage fraction against 30%; it does not calculate an unmodelled mass balance."
     }
   ],
-  "traceSteps": {}
+  "traceSteps": {},
+  "requiredMethods": [
+    "sparq-authrdf/1"
+  ],
+  "catalogueAssurance": "proved",
+  "recordedAssurance": "attested",
+  "proofCredentials": [
+    {
+      "method": "sparq-authrdf/1",
+      "issuer": "tier",
+      "subject": "urn:fictional:recycled-content:lot",
+      "statements": [
+        "audited-tier"
+      ]
+    },
+    {
+      "method": "sparq-authrdf/1",
+      "issuer": "tier-2",
+      "subject": "urn:fictional:recycled-content:lot",
+      "statements": [
+        "audited-tier-2"
+      ]
+    },
+    {
+      "method": "sparq-authrdf/1",
+      "issuer": "tier-3",
+      "subject": "urn:fictional:recycled-content:lot",
+      "statements": [
+        "audited-tier-3"
+      ]
+    }
+  ]
 }

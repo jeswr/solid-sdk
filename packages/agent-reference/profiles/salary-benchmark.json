@@ -3,14 +3,182 @@
   "schema": "agent-profile/0.1",
   "id": "salary-benchmark",
   "parties": {
-    "party-1": "Six employers",
-    "party-2": "A sector body"
+    "contributor-1": "Fictional contributor-1",
+    "contributor-1-agent": "Fictional contributor-1 agent",
+    "contributor-2": "Fictional contributor-2",
+    "contributor-2-agent": "Fictional contributor-2 agent",
+    "contributor-3": "Fictional contributor-3",
+    "contributor-3-agent": "Fictional contributor-3 agent",
+    "contributor-4": "Fictional contributor-4",
+    "contributor-4-agent": "Fictional contributor-4 agent",
+    "contributor-5": "Fictional contributor-5",
+    "contributor-5-agent": "Fictional contributor-5 agent",
+    "contributor-6": "Fictional contributor-6",
+    "contributor-6-agent": "Fictional contributor-6 agent",
+    "computer": "Fictional computer",
+    "computer-agent": "Fictional computer agent",
+    "requester": "Fictional requester",
+    "requester-agent": "Fictional requester agent"
   },
-  "claims": [],
-  "purposes": [],
-  "rules": [],
+  "claims": [
+    {
+      "kind": "joint.message",
+      "sources": [
+        "urn:fictional:salary-benchmark:contributor-1",
+        "urn:fictional:salary-benchmark:contributor-2",
+        "urn:fictional:salary-benchmark:contributor-3",
+        "urn:fictional:salary-benchmark:contributor-4",
+        "urn:fictional:salary-benchmark:contributor-5",
+        "urn:fictional:salary-benchmark:contributor-6",
+        "urn:fictional:salary-benchmark:computer",
+        "urn:fictional:salary-benchmark:requester"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "joint.count",
+      "sources": [
+        "urn:fictional:salary-benchmark:contributor-1",
+        "urn:fictional:salary-benchmark:contributor-2",
+        "urn:fictional:salary-benchmark:contributor-3",
+        "urn:fictional:salary-benchmark:contributor-4",
+        "urn:fictional:salary-benchmark:contributor-5",
+        "urn:fictional:salary-benchmark:contributor-6"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "joint.sum",
+      "sources": [
+        "urn:fictional:salary-benchmark:contributor-1",
+        "urn:fictional:salary-benchmark:contributor-2",
+        "urn:fictional:salary-benchmark:contributor-3",
+        "urn:fictional:salary-benchmark:contributor-4",
+        "urn:fictional:salary-benchmark:contributor-5",
+        "urn:fictional:salary-benchmark:contributor-6"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "salary-benchmark.total",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:salary-benchmark",
+      "claims": [
+        "joint.message",
+        "joint.count",
+        "joint.sum",
+        "salary-benchmark.total"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:salary-benchmark:aggregate",
+      "template": "sum",
+      "params": {
+        "input": "joint.sum",
+        "period": {
+          "start": "2026-10-01",
+          "end": "2026-10-31"
+        },
+        "completeness": "joint.roster-complete"
+      },
+      "output": "salary-benchmark.total",
+      "inputsFrom": [
+        "urn:fictional:salary-benchmark:contributor-1",
+        "urn:fictional:salary-benchmark:contributor-2",
+        "urn:fictional:salary-benchmark:contributor-3",
+        "urn:fictional:salary-benchmark:contributor-4",
+        "urn:fictional:salary-benchmark:contributor-5",
+        "urn:fictional:salary-benchmark:contributor-6"
+      ],
+      "assurances": [
+        "joint"
+      ]
+    }
+  ],
+  "acceptedJoint": [
+    {
+      "rule": "urn:rule:salary-benchmark:aggregate",
+      "method": "sparq-aggregate/1",
+      "minimumContributors": 3,
+      "purposes": [
+        "urn:purpose:salary-benchmark"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
-  "vocabulary": {},
-  "operations": []
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:joint:open",
+      "version": "0.1",
+      "label": "A jointly verified computation message",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:salary-benchmark"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:joint:contribute",
+      "version": "0.1",
+      "label": "A jointly verified computation message",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:salary-benchmark"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:joint:partial",
+      "version": "0.1",
+      "label": "A jointly verified computation message",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:salary-benchmark"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:joint:outcome",
+      "version": "0.1",
+      "label": "A jointly verified computation message",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:salary-benchmark"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
 }

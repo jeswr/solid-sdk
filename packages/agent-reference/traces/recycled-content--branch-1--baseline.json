@@ -26,6 +26,14 @@
     {
       "id": "receiver-agent",
       "name": "The certifier’s agent"
+    },
+    {
+      "id": "tier-2",
+      "name": "Fictional independently keyed audited supply tier 2"
+    },
+    {
+      "id": "tier-3",
+      "name": "Fictional independently keyed audited supply tier 3"
     }
   ],
   "scenario": {
@@ -66,10 +74,14 @@
     }
   ],
   "generated": {
-    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Planned proof method sparq-authrdf/1",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -77,6 +89,10 @@
     {
       "what": "Proof-free supplier-quality preflight",
       "replacedBy": "The tier’s real signature verifies its self-declaration, but the input profile requires an audited method; no chain proof or 30-percent predicate proof is constructed"
+    },
+    {
+      "what": "The confidential supply-chain calculation",
+      "replacedBy": "Each of three independently keyed tiers certifies the same fictional lot at its stage. The installed conservative rule tests the minimum certified stage fraction against 30%; it does not calculate an unmodelled mass balance."
     }
   ],
   "events": [
@@ -204,7 +220,7 @@
       "reason": "method-not-accepted",
       "rule": {
         "id": "urn:profile:recycled-content:material.recycled-fraction",
-        "text": "Accept material.recycled-fraction from urn:fictional:recycled-content:tier by audited-by-certifier, at most 30 days old."
+        "text": "Accept material.recycled-fraction from urn:fictional:recycled-content:tier, urn:fictional:recycled-content:tier-2, urn:fictional:recycled-content:tier-3 by audited-by-certifier, at most 30 days old."
       },
       "caption": "The supplying tier's material.recycled-fraction statement was not produced in a way urn:scenario:recycled-content:task accepts."
     },
@@ -217,7 +233,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "method-not-accepted",
-      "caption": "Required claim: material.recycled-fraction. Accepted sources: urn:fictional:recycled-content:tier. Accepted methods: audited-by-certifier."
+      "caption": "Required claim: material.recycled-fraction. Accepted sources: urn:fictional:recycled-content:tier, urn:fictional:recycled-content:tier-2, urn:fictional:recycled-content:tier-3. Accepted methods: audited-by-certifier."
     }
   ]
 }

@@ -3,14 +3,176 @@
   "schema": "agent-profile/0.1",
   "id": "cohort-count",
   "parties": {
-    "party-1": "Several hospitals",
-    "party-2": "A research group"
+    "contributor-1": "Fictional contributor-1",
+    "contributor-1-agent": "Fictional contributor-1 agent",
+    "contributor-2": "Fictional contributor-2",
+    "contributor-2-agent": "Fictional contributor-2 agent",
+    "contributor-3": "Fictional contributor-3",
+    "contributor-3-agent": "Fictional contributor-3 agent",
+    "contributor-4": "Fictional contributor-4",
+    "contributor-4-agent": "Fictional contributor-4 agent",
+    "contributor-5": "Fictional contributor-5",
+    "contributor-5-agent": "Fictional contributor-5 agent",
+    "computer": "Fictional computer",
+    "computer-agent": "Fictional computer agent",
+    "requester": "Fictional requester",
+    "requester-agent": "Fictional requester agent"
   },
-  "claims": [],
-  "purposes": [],
-  "rules": [],
+  "claims": [
+    {
+      "kind": "joint.message",
+      "sources": [
+        "urn:fictional:cohort-count:contributor-1",
+        "urn:fictional:cohort-count:contributor-2",
+        "urn:fictional:cohort-count:contributor-3",
+        "urn:fictional:cohort-count:contributor-4",
+        "urn:fictional:cohort-count:contributor-5",
+        "urn:fictional:cohort-count:computer",
+        "urn:fictional:cohort-count:requester"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "joint.count",
+      "sources": [
+        "urn:fictional:cohort-count:contributor-1",
+        "urn:fictional:cohort-count:contributor-2",
+        "urn:fictional:cohort-count:contributor-3",
+        "urn:fictional:cohort-count:contributor-4",
+        "urn:fictional:cohort-count:contributor-5"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "joint.sum",
+      "sources": [
+        "urn:fictional:cohort-count:contributor-1",
+        "urn:fictional:cohort-count:contributor-2",
+        "urn:fictional:cohort-count:contributor-3",
+        "urn:fictional:cohort-count:contributor-4",
+        "urn:fictional:cohort-count:contributor-5"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "cohort-count.total",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:cohort-count",
+      "claims": [
+        "joint.message",
+        "joint.count",
+        "joint.sum",
+        "cohort-count.total"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:cohort-count:aggregate",
+      "template": "sum",
+      "params": {
+        "input": "joint.count",
+        "period": {
+          "start": "2026-10-01",
+          "end": "2026-10-31"
+        },
+        "completeness": "joint.roster-complete"
+      },
+      "output": "cohort-count.total",
+      "inputsFrom": [
+        "urn:fictional:cohort-count:contributor-1",
+        "urn:fictional:cohort-count:contributor-2",
+        "urn:fictional:cohort-count:contributor-3",
+        "urn:fictional:cohort-count:contributor-4",
+        "urn:fictional:cohort-count:contributor-5"
+      ],
+      "assurances": [
+        "joint"
+      ]
+    }
+  ],
+  "acceptedJoint": [
+    {
+      "rule": "urn:rule:cohort-count:aggregate",
+      "method": "sparq-aggregate/1",
+      "minimumContributors": 3,
+      "purposes": [
+        "urn:purpose:cohort-count"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
-  "vocabulary": {},
-  "operations": []
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:joint:open",
+      "version": "0.1",
+      "label": "A jointly verified computation message",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:cohort-count"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:joint:contribute",
+      "version": "0.1",
+      "label": "A jointly verified computation message",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:cohort-count"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:joint:partial",
+      "version": "0.1",
+      "label": "A jointly verified computation message",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:cohort-count"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:joint:outcome",
+      "version": "0.1",
+      "label": "A jointly verified computation message",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:cohort-count"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
 }

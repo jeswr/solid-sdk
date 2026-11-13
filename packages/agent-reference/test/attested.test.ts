@@ -28,7 +28,9 @@ it("runs both previously blocked attested main paths and retains the joint-compu
   const { profile, scenario } = loadCase(root, "cohort-count");
   const jointPaths = await runScenario(profile, scenario);
   for (const path of jointPaths) {
-    expect(path.blocked).toBe("needs joint computation");
+    expect(path.blocked).toBe(
+      "needs joint computation: needs the sparq-aggregate/1 package, which is not installed",
+    );
     expect(path.trace).toBeUndefined();
   }
 });

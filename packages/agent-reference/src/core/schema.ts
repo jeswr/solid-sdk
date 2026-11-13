@@ -95,21 +95,28 @@ const bodies = {
   indeterminate: z.strictObject({ ref: id, reason, detail }),
 } satisfies Record<MessageKind, z.ZodType>;
 
-const evidenceItem = z.strictObject({
-  role: z.enum([
-    "representation",
-    "approval",
-    "credential",
-    "grant",
-    "membership",
-    "authorisation",
-  ]),
-  format: z.string().min(1).max(64),
-  value: z
-    .string()
-    .min(1)
-    .max(16 * 1024),
-});
+const evidenceItem = z
+  .strictObject({
+    role: z.enum([
+      "representation",
+      "approval",
+      "credential",
+      "grant",
+      "membership",
+      "authorisation",
+    ]),
+    format: z.string().min(1).max(64),
+    value: z
+      .string()
+      .min(1)
+      .max(2 * 1024 * 1024),
+  })
+  .refine(
+    (item) =>
+      item.value.length <= 16 * 1024 ||
+      (item.role === "credential" && item.format === "derivation+jws"),
+    "large evidence requires the explicit derivation format",
+  );
 
 const envelope = z.strictObject({
   profile: id,

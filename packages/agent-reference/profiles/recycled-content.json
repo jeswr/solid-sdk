@@ -13,10 +13,30 @@
     {
       "kind": "material.recycled-fraction",
       "sources": [
-        "urn:fictional:recycled-content:tier"
+        "urn:fictional:recycled-content:tier",
+        "urn:fictional:recycled-content:tier-2",
+        "urn:fictional:recycled-content:tier-3"
       ],
       "methods": [
         "audited-by-certifier"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "recycled-content.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:recycled-content:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
       ],
       "maxAgeDays": 30
     }
@@ -25,11 +45,33 @@
     {
       "id": "urn:purpose:recycled-content",
       "claims": [
-        "material.recycled-fraction"
+        "material.recycled-fraction",
+        "recycled-content.answer",
+        "derivation.request"
       ]
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "id": "urn:rule:recycled-content:proof",
+      "template": "threshold",
+      "params": {
+        "input": "material.recycled-fraction",
+        "operator": "gte",
+        "value": 0.3,
+        "aggregate": "min"
+      },
+      "output": "recycled-content.answer",
+      "inputsFrom": [
+        "urn:fictional:recycled-content:tier",
+        "urn:fictional:recycled-content:tier-2",
+        "urn:fictional:recycled-content:tier-3"
+      ],
+      "assurances": [
+        "attested"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
@@ -73,6 +115,30 @@
         "urn:purpose:recycled-content"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:recycled-content:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:recycled-content"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:recycled-content:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:recycled-content"
+      ],
+      "requiresRepresentation": true
     }
   ],
   "actionClaims": [
@@ -81,6 +147,34 @@
       "claims": [
         "material.recycled-fraction"
       ]
+    },
+    {
+      "action": "urn:op:recycled-content:proof-answer",
+      "claims": [
+        "recycled-content.answer"
+      ]
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:recycled-content:proof",
+      "method": "sparq-authrdf/1",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh",
+        "complete"
+      ],
+      "purposes": [
+        "urn:purpose:recycled-content"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Planned proof method sparq-authrdf/1",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
     }
   ]
 }

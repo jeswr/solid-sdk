@@ -34,6 +34,7 @@ const termsShape = z
       .passthrough(),
     deleteWithinDays: z.number().nonnegative().optional(),
     recipientMustBe: z.object({ task: z.string(), label: z.string() }).optional(),
+    minimumGroup: z.number().int().positive().optional(),
   })
   .passthrough();
 
@@ -101,7 +102,10 @@ export function unsupportedTerms(terms: ItemTerms): boolean {
   const p = terms.policy;
   if (
     Object.keys(terms).some(
-      (key) => !["policy", "inherited", "deleteWithinDays", "recipientMustBe"].includes(key),
+      (key) =>
+        !["policy", "inherited", "deleteWithinDays", "recipientMustBe", "minimumGroup"].includes(
+          key,
+        ),
     )
   )
     return true;
@@ -233,6 +237,7 @@ export function evaluateItemTerms(
     readonly purpose?: Iri;
     readonly recipient?: Iri;
     readonly retentionDays?: number;
+    readonly minimumGroup?: number;
     readonly at: string;
     readonly recipientAllowed?: (task: string) => boolean;
   },
@@ -260,6 +265,16 @@ export function evaluateItemTerms(
     return {
       verdict: "pass",
       text: "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
+    };
+  if (
+    need.action === "distribute" &&
+    terms.minimumGroup !== undefined &&
+    (need.minimumGroup === undefined || need.minimumGroup < terms.minimumGroup)
+  )
+    return {
+      verdict: "fail",
+      reason: "prohibited",
+      text: "The source permits only an aggregate meeting its minimum group size.",
     };
   if (
     need.action === "distribute" &&

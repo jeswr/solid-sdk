@@ -41,6 +41,65 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "licence.years",
+      "sources": [
+        "urn:fictional:insurance-quote:licensing"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "licence.points",
+      "sources": [
+        "urn:fictional:insurance-quote:licensing"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "claims.five-year-count",
+      "sources": [
+        "urn:fictional:insurance-quote:claims-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30,
+      "completeness": "claims.five-year-complete"
+    },
+    {
+      "kind": "insurance-quote.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:insurance-quote:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "claims.five-year-complete",
+      "sources": [
+        "urn:fictional:insurance-quote:claims-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
@@ -48,7 +107,13 @@
       "id": "urn:purpose:insurance-quote",
       "claims": [
         "claims.list",
-        "claims.completeness"
+        "claims.completeness",
+        "insurance-quote.answer",
+        "derivation.request",
+        "licence.years",
+        "licence.points",
+        "claims.five-year-count",
+        "claims.five-year-complete"
       ]
     },
     {
@@ -58,7 +123,50 @@
       ]
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "id": "urn:rule:insurance-quote:proof",
+      "template": "all-of",
+      "params": {
+        "inputs": [
+          "licence.years",
+          "licence.points",
+          "claims.five-year-count",
+          "claims.five-year-complete"
+        ],
+        "conditions": [
+          {
+            "input": "licence.years",
+            "operator": "gte",
+            "value": 5
+          },
+          {
+            "input": "licence.points",
+            "operator": "lte",
+            "value": 3
+          },
+          {
+            "input": "claims.five-year-count",
+            "operator": "eq",
+            "value": 0
+          },
+          {
+            "input": "claims.five-year-complete",
+            "operator": "eq",
+            "value": true
+          }
+        ]
+      },
+      "output": "insurance-quote.answer",
+      "inputsFrom": [
+        "urn:fictional:insurance-quote:claims-register",
+        "urn:fictional:insurance-quote:licensing"
+      ],
+      "assurances": [
+        "attested"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
@@ -104,6 +212,60 @@
         "urn:purpose:insurance-quote"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:insurance-quote:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:insurance-quote:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:insurance-quote:proof",
+      "method": "sparq-authrdf/1",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh",
+        "complete"
+      ],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Planned proof method sparq-authrdf/1",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:insurance-quote:proof-answer",
+      "claims": [
+        "insurance-quote.answer"
+      ]
     }
   ]
 }

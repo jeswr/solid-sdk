@@ -51,19 +51,77 @@ export const ruleSchema = z.discriminatedUnion("template", [
         operator: z.enum(["lt", "lte", "eq", "gte", "gt"]),
         value: z.number().optional(),
         compareWith: name.optional(),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        aggregate: z.enum(["min", "max", "sum", "count"]).optional(),
       })
       .refine(
-        (p) => (p.value === undefined) !== (p.compareWith === undefined),
+        (p) => [p.value, p.compareWith, p.date].filter((v) => v !== undefined).length === 1,
         "exactly one comparison operand",
       ),
   }),
   z.strictObject({
     ...common,
     template: z.enum(["all-of", "any-of"]),
-    params: z.strictObject({ inputs: z.array(name).min(1) }),
+    params: z.strictObject({
+      inputs: z.array(name).min(1),
+      conditions: z
+        .array(
+          z.strictObject({
+            input: name,
+            operator: z.enum(["gte", "lte", "eq", "not-in"]),
+            value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+          }),
+        )
+        .optional(),
+    }),
+  }),
+  z.strictObject({
+    ...common,
+    template: z.literal("membership"),
+    params: z.strictObject({
+      input: name,
+      values: z.array(z.union([z.string(), z.number(), z.boolean()])).min(1),
+    }),
   }),
 ]);
 export type DerivationRule = z.infer<typeof ruleSchema>;
+/** A closed SELECT counterpart of the installed rule; the holder never chooses its text. */
+export function queryFor(rule: DerivationRule): string {
+  const term = (value: string | number | boolean) =>
+    typeof value === "string" ? JSON.stringify(value) : String(value);
+  const predicate = (kind: string) => `<urn:claim:${encodeURIComponent(kind)}>`;
+  const p = rule.params;
+  if (rule.template === "threshold" && "operator" in p) {
+    const operand = p.compareWith
+      ? "?other"
+      : p.date
+        ? `${term(p.date)}^^<http://www.w3.org/2001/XMLSchema#date>`
+        : term(p.value as number);
+    if (p.aggregate)
+      return `SELECT DISTINCT ((${p.aggregate.toUpperCase()}(?value) ${{ lt: "<", lte: "<=", eq: "=", gte: ">=", gt: ">" }[p.operator]} ${operand}) AS ?result) WHERE { ?subject ${predicate(p.input)} ?value . }`;
+    return `SELECT DISTINCT ?result WHERE { ?subject ${predicate(p.input)} ?value . ${p.compareWith ? `?subject ${predicate(p.compareWith)} ?other . ` : ""}BIND((?value ${{ lt: "<", lte: "<=", eq: "=", gte: ">=", gt: ">" }[p.operator]} ${operand}) AS ?result) }`;
+  }
+  if ("inputs" in p) {
+    if (p.conditions) {
+      const parts = p.conditions.map((c, i) =>
+        c.operator === "not-in"
+          ? `BIND(NOT EXISTS { ?subject ${predicate(c.input)} ?excluded${i} . FILTER(?excluded${i} IN (${(c.value as string[]).map(term).join(", ")})) } AS ?test${i})`
+          : `?subject ${predicate(c.input)} ?v${i} . BIND((?v${i} ${{ gte: ">=", lte: "<=", eq: "=" }[c.operator]} ${term(c.value as string | number | boolean)}) AS ?test${i})`,
+      );
+      return `SELECT DISTINCT ?result WHERE { ${parts.join(" ")} BIND((${p.conditions.map((_, i) => `?test${i}`).join(rule.template === "all-of" ? " && " : " || ")}) AS ?result) }`;
+    }
+    const patterns = p.inputs.map((kind, i) => `?subject ${predicate(kind)} ?v${i} .`).join(" ");
+    return `SELECT DISTINCT ?result WHERE { ${patterns} BIND((${p.inputs.map((_, i) => `?v${i}`).join(rule.template === "all-of" ? " && " : " || ")}) AS ?result) }`;
+  }
+  if ("values" in p)
+    return `SELECT DISTINCT ?result WHERE { ?subject ${predicate(p.input)} ?value . BIND((?value IN (${p.values.map(term).join(", ")})) AS ?result) }`;
+  if (["sum", "count", "min", "max"].includes(rule.template) && "input" in p)
+    return `SELECT DISTINCT (${rule.template.toUpperCase()}(?value) AS ?result) WHERE { ?subject ${predicate(p.input)} ?value . }`;
+  throw new Error(`No proof query compiler for ${rule.template}`);
+}
 export function ruleInputs(r: DerivationRule): string[] {
   const p = r.params;
   if ("inputs" in p) return p.inputs;
@@ -142,19 +200,26 @@ export function evaluateRule(options: {
     seen.add(r.id);
     const inputs: ContextItem[] = [];
     const chain: JsonObject[] = [];
-    const pool = memory
-      .context(task)
-      .filter(
-        (i) =>
-          i.accepted === true &&
-          memory.facts.get(i.id)?.digest === i.digest &&
-          i.subject === subject &&
-          i.statement &&
-          (!options.reliance ||
-            fitnessOf({ ...i.statement, claimType: i.claimType }, options.reliance, at).verdict ===
-              "pass") &&
-          (!i.statement.validUntil || Date.parse(String(i.statement.validUntil)) > Date.parse(at)),
-      );
+    const pool = memory.context(task).filter(
+      (i) =>
+        i.accepted === true &&
+        memory.facts.get(i.id)?.digest === i.digest &&
+        i.subject === subject &&
+        i.statement &&
+        (!options.reliance ||
+          fitnessOf(
+            {
+              ...i.statement,
+              claimType: i.claimType,
+              method:
+                i.method ??
+                (typeof i.statement.method === "string" ? i.statement.method : undefined),
+            },
+            options.reliance,
+            at,
+          ).verdict === "pass") &&
+        (!i.statement.validUntil || Date.parse(String(i.statement.validUntil)) > Date.parse(at)),
+    );
     const get = (kind: string): JsonObject[] | undefined => {
       const dependency = rules.find((rule) => rule.output === kind || rule.id === kind);
       if (dependency) {
@@ -186,15 +251,48 @@ export function evaluateRule(options: {
     let value: number | boolean | undefined;
     const p = r.params;
     if ("inputs" in p) {
-      const values = p.inputs.map(scalar);
+      const values = p.conditions
+        ? p.conditions.map((c) => {
+            const claims = get(c.input);
+            if (claims?.length !== 1) return undefined;
+            const v = claims[0]?.value;
+            if (c.operator === "not-in")
+              return (
+                Array.isArray(v) && v.every((item) => !(c.value as string[]).includes(String(item)))
+              );
+            if (typeof v === "number" && typeof c.value === "number")
+              return c.operator === "gte"
+                ? v >= c.value
+                : c.operator === "lte"
+                  ? v <= c.value
+                  : v === c.value;
+            return c.operator === "eq" ? v === c.value : undefined;
+          })
+        : p.inputs.map(scalar);
       if (values.every((v) => typeof v === "boolean"))
         value = r.template === "all-of" ? values.every(Boolean) : values.some(Boolean);
     } else if ("numerator" in p) {
       const n = scalar(p.numerator),
         d = scalar(p.denominator);
       if (typeof n === "number" && typeof d === "number" && d !== 0) value = n / d;
+    } else if ("values" in p) {
+      const values = get(p.input);
+      if (values?.length === 1) value = p.values.some((v) => v === values[0]?.value);
     } else if ("operator" in p) {
-      const a = scalar(p.input),
+      const aggregateValues = p.aggregate ? get(p.input)?.map((c) => c.value) : undefined;
+      const numbers = aggregateValues?.every((v) => typeof v === "number")
+        ? (aggregateValues as number[])
+        : undefined;
+      const a =
+          p.aggregate && numbers?.length
+            ? p.aggregate === "count"
+              ? numbers.length
+              : p.aggregate === "sum"
+                ? numbers.reduce((a, b) => a + b, 0)
+                : p.aggregate === "min"
+                  ? Math.min(...numbers)
+                  : Math.max(...numbers)
+            : scalar(p.input),
         b = p.value ?? (p.compareWith ? scalar(p.compareWith) : undefined);
       if (typeof a === "number" && typeof b === "number")
         value = { lt: a < b, lte: a <= b, eq: a === b, gte: a >= b, gt: a > b }[p.operator];
@@ -387,7 +485,7 @@ export function verifyDerivation(
     !Number.isFinite(Date.parse(String(d.at))) ||
     Date.parse(String(d.at)) > Date.parse(options.at) ||
     (typeof statement.value !== "number" && typeof statement.value !== "boolean") ||
-    ["threshold", "all-of", "any-of"].includes(rule.template) !==
+    ["threshold", "all-of", "any-of", "membership"].includes(rule.template) !==
       (typeof statement.value === "boolean")
   )
     return { ok: false, reason: "derivation-not-verified" };

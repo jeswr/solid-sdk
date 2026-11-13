@@ -132,6 +132,7 @@ export async function mapCodeClaim(
       rule: table.id,
       version: table.version,
       mappingDigest: digestOf(table),
+      originalId: String(original.id ?? digestOf(original)),
       originalDigest: digestOf(original),
       originalSource: String(original.issuer),
       originalQuality: {
@@ -206,6 +207,12 @@ export async function mapCodeClaim(
     d.deriver = route.registry;
     d.attestation = recordJws;
   }
+  statement.id = `urn:mapped:${digestOf({ original: digestOf(original), mapping: digestOf(table), code: entry.to }).slice(8)}`;
+  if (original.terms)
+    statement.terms = {
+      policy: { id: `urn:mapped-terms:${digestOf(statement.id).slice(8)}` },
+      inherited: [{ target: String(original.id ?? digestOf(original)), terms: original.terms }],
+    };
   options.record({
     type: "code-mapping-derivation",
     statement,

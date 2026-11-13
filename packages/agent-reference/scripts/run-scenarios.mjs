@@ -8,7 +8,10 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { fileURLToPath } from "url";
+import { availableAdapters } from "../dist/derive/adapters/index.js";
+import { ProofCache } from "../dist/derive/cache.js";
 import { loadCase } from "../dist/engine/load.js";
+import { assertPublishable } from "../dist/engine/publication.js";
 import { runScenario } from "../dist/engine/run.js";
 import { outlineOf } from "../dist/trace/types.js";
 
@@ -17,6 +20,7 @@ const record = process.argv.includes("--record-outlines");
 const selected = process.argv.find((arg) => arg.startsWith("--scenario="))?.slice(11);
 const status = { "x-authored-by": "Codex GPT-6", schema: "agent-scenario-runs/0.1", paths: [] };
 const index = [];
+const registry = await availableAdapters();
 let commit = "unknown";
 try {
   commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
@@ -30,7 +34,13 @@ for (const file of readdirSync(join(root, "scenarios"))
   if (selected && selected !== id) continue;
   const { profile, scenario } = loadCase(root, id);
   const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));
-  for (const path of await runScenario(profile, scenario, { commit, compare: !record })) {
+  for (const path of await runScenario(profile, scenario, {
+    commit,
+    compare: !record,
+    registry,
+    proofCache: new ProofCache(join(root, "proofs")),
+  })) {
+    assertPublishable(path);
     const stem = path.path === "main" ? id : `${id}--${path.path}`;
     status.paths.push({
       scenario: id,

@@ -59,7 +59,9 @@
           "party": "urn:fictional:trial-eligibility:receiver",
           "tasks": [
             "urn:op:trial-eligibility",
-            "urn:op:trial-eligibility:request"
+            "urn:op:trial-eligibility:request",
+            "urn:op:trial-eligibility:proof-request",
+            "urn:op:trial-eligibility:proof-answer"
           ]
         }
       ],
@@ -68,7 +70,9 @@
           "party": "urn:fictional:trial-eligibility:owner",
           "tasks": [
             "urn:op:trial-eligibility",
-            "urn:op:trial-eligibility:request"
+            "urn:op:trial-eligibility:request",
+            "urn:op:trial-eligibility:proof-request",
+            "urn:op:trial-eligibility:proof-answer"
           ]
         }
       ]
@@ -96,6 +100,61 @@
           "subjects": [
             "urn:fictional:trial-eligibility:owner"
           ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:practice:trial.age",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "trial.age"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:practice:trial.diagnosis",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "trial.diagnosis"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:practice:trial.medications",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "trial.medications"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:receiver:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:receiver",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:receiver"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:practice:trial.medication-complete",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "trial.medication-complete"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
         }
       ],
       "receiver-agent": [
@@ -116,6 +175,61 @@
           "source": "urn:fictional:trial-eligibility:practice",
           "claimTypes": [
             "medication.completeness"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:practice:trial.age",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "trial.age"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:practice:trial.diagnosis",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "trial.diagnosis"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:practice:trial.medications",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "trial.medications"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:receiver:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:receiver",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:receiver"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:practice:trial.medication-complete",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "trial.medication-complete"
           ],
           "subjects": [
             "urn:fictional:trial-eligibility:owner"
@@ -219,6 +333,178 @@
           ]
         }
       }
+    },
+    {
+      "id": "age",
+      "issuer": "practice",
+      "subject": "urn:fictional:trial-eligibility:owner",
+      "kind": "trial.age",
+      "value": {
+        "value": 45
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:trial-eligibility:age",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "diagnosis",
+      "issuer": "practice",
+      "subject": "urn:fictional:trial-eligibility:owner",
+      "kind": "trial.diagnosis",
+      "value": {
+        "value": "condition-a"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:trial-eligibility:diagnosis",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "complete-medication-snapshot",
+      "issuer": "practice",
+      "subject": "urn:fictional:trial-eligibility:owner",
+      "kind": "trial.medications",
+      "value": {
+        "value": [
+          "medicine-a"
+        ],
+        "period": {
+          "start": "2026-11-01",
+          "end": "2026-11-13"
+        }
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:trial-eligibility:complete-medication-snapshot",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "proof-complete-snapshot",
+      "issuer": "practice",
+      "subject": "urn:fictional:trial-eligibility:owner",
+      "kind": "trial.medication-complete",
+      "value": {
+        "value": true,
+        "complete": true,
+        "forClaim": "trial.medications",
+        "period": {
+          "start": "2026-11-01",
+          "end": "2026-11-13"
+        }
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:trial-eligibility:proof-complete-snapshot",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   ],
   "mandates": [
@@ -229,6 +515,16 @@
           "type": "permission",
           "action": "distribute",
           "target": "urn:op:trial-eligibility"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:trial-eligibility:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:trial-eligibility:proof-answer"
         }
       ],
       "withApproval": []
@@ -240,12 +536,154 @@
           "type": "permission",
           "action": "use",
           "target": "urn:op:trial-eligibility:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:trial-eligibility:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:trial-eligibility:proof-answer"
         }
       ],
       "withApproval": []
     }
   ],
-  "script": [],
+  "script": [
+    {
+      "id": "private-inputs",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "proof-complete-snapshot",
+        "age",
+        "diagnosis",
+        "complete-medication-snapshot"
+      ],
+      "subject": "urn:fictional:trial-eligibility:owner",
+      "purpose": "urn:purpose:trial-eligibility"
+    },
+    {
+      "id": "fresh-request",
+      "agent": "receiver-agent",
+      "type": "proof-request",
+      "rule": "urn:rule:trial-eligibility:proof",
+      "subject": "urn:fictional:trial-eligibility:owner",
+      "purpose": "urn:purpose:trial-eligibility",
+      "assurances": [
+        "attested"
+      ]
+    },
+    {
+      "id": "send-request",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "invoke",
+      "operation": "urn:op:trial-eligibility:proof-request",
+      "contents": {
+        "items": [
+          {
+            "$ref": "steps.fresh-request.statement.id"
+          }
+        ]
+      },
+      "intent": {
+        "action": "use",
+        "target": "urn:op:trial-eligibility:proof-request",
+        "operation": "urn:op:trial-eligibility:proof-request",
+        "recipient": "urn:fictional:trial-eligibility:owner",
+        "purpose": "urn:purpose:trial-eligibility",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:trial-eligibility",
+      "derivedEvidence": [
+        {
+          "$ref": "steps.fresh-request.jws"
+        }
+      ]
+    },
+    {
+      "id": "receive-request",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent"
+    },
+    {
+      "id": "prove-answer",
+      "agent": "owner-agent",
+      "type": "prove",
+      "method": "sparq-authrdf/1",
+      "request": {
+        "$ref": "steps.fresh-request.request"
+      },
+      "recipient": "urn:fictional:trial-eligibility:receiver",
+      "assurance": "attested",
+      "proofBinds": [
+        "rule",
+        "issuers",
+        "fresh",
+        "complete"
+      ],
+      "inputs": [
+        "age",
+        "diagnosis",
+        "complete-medication-snapshot",
+        "proof-complete-snapshot"
+      ]
+    },
+    {
+      "id": "send-answer",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:trial-eligibility:proof-answer",
+      "contents": {
+        "items": [
+          {
+            "$ref": "steps.prove-answer.statement.id"
+          }
+        ]
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:trial-eligibility:proof-answer",
+        "operation": "urn:op:trial-eligibility:proof-answer",
+        "recipient": "urn:fictional:trial-eligibility:receiver",
+        "purpose": "urn:purpose:trial-eligibility",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:trial-eligibility",
+      "derivedEvidence": [
+        {
+          "$ref": "steps.prove-answer.jws"
+        }
+      ]
+    },
+    {
+      "id": "receive-answer",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    },
+    {
+      "id": "receiver-facts",
+      "agent": "receiver-agent",
+      "type": "facts"
+    },
+    {
+      "id": "check-answer",
+      "agent": "receiver-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.receiver-facts.0.value"
+      },
+      "expected": true
+    }
+  ],
   "inject": [],
   "branches": [
     {
@@ -270,7 +708,13 @@
         ],
         "traceSteps": {
           "1": "The volunteer’s agent checks the signed statements."
-        }
+        },
+        "requiredMethods": [],
+        "proofCredentials": [],
+        "stress": [
+          "source",
+          "fitness"
+        ]
       },
       "expect": {
         "outcome": "ask-more",
@@ -382,21 +826,580 @@
       ]
     }
   ],
-  "expect": [],
-  "stress": [
-    "source",
-    "fitness"
-  ],
-  "suites": {
-    "authenticity": "zk-query-proof"
-  },
-  "assurance": "proved",
-  "blocked": [
+  "expect": [
     {
-      "path": "main",
-      "reason": "needs a proof system"
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
     }
   ],
+  "stress": [
+    "source",
+    "fitness",
+    "disclosure"
+  ],
+  "suites": {},
+  "assurance": "attested",
+  "blocked": [],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -407,5 +1410,23 @@
       "replacedBy": "The branch runs only source, terms, method and completeness checks on the practice’s signed list; no eligibility proof is made or disclosed"
     }
   ],
-  "traceSteps": {}
+  "traceSteps": {},
+  "requiredMethods": [
+    "sparq-authrdf/1"
+  ],
+  "catalogueAssurance": "proved",
+  "recordedAssurance": "attested",
+  "proofCredentials": [
+    {
+      "method": "sparq-authrdf/1",
+      "issuer": "practice",
+      "subject": "urn:fictional:trial-eligibility:owner",
+      "statements": [
+        "age",
+        "diagnosis",
+        "complete-medication-snapshot",
+        "proof-complete-snapshot"
+      ]
+    }
+  ]
 }

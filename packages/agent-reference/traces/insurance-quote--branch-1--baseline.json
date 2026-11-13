@@ -73,10 +73,14 @@
     }
   ],
   "generated": {
-    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Planned proof method sparq-authrdf/1",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -435,7 +439,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:b3d0a0db7b3…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:74a0bd5aaf8…; never trusted."
         },
         "layers": {
           "header": {
@@ -463,7 +467,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:a3bf2806fc8c2685f86d78c6062afa8377d21cfa3b6ef655da9f797cf316b1a8"
+            "digest": "sha-256:3828d45e4ee2c7f4d056b9b607493b5578c3b366629e2bdbbd1689d034a054f3"
           },
           "authority": {
             "present": true,
@@ -477,14 +481,16 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:insurance-quote",
-                  "urn:op:insurance-quote:request"
+                  "urn:op:insurance-quote:request",
+                  "urn:op:insurance-quote:proof-request",
+                  "urn:op:insurance-quote:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:785bb59190569696e4a9eedcf14870a23a65f91ccd8f006b41352f54cddac148"
+            "digest": "sha-256:8f749977c0f4fb4b9f865df6eb322e84b5565a7d8c616cc130cace2d817cc3c5"
           },
           "content": {
             "present": true,
@@ -554,7 +560,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:b3d0a0db7b3…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:74a0bd5aaf8…; never trusted."
         },
         "layers": {
           "header": {
@@ -582,7 +588,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:a3bf2806fc8c2685f86d78c6062afa8377d21cfa3b6ef655da9f797cf316b1a8"
+            "digest": "sha-256:3828d45e4ee2c7f4d056b9b607493b5578c3b366629e2bdbbd1689d034a054f3"
           },
           "authority": {
             "present": true,
@@ -596,14 +602,16 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:insurance-quote",
-                  "urn:op:insurance-quote:request"
+                  "urn:op:insurance-quote:request",
+                  "urn:op:insurance-quote:proof-request",
+                  "urn:op:insurance-quote:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:785bb59190569696e4a9eedcf14870a23a65f91ccd8f006b41352f54cddac148"
+            "digest": "sha-256:8f749977c0f4fb4b9f865df6eb322e84b5565a7d8c616cc130cace2d817cc3c5"
           },
           "content": {
             "present": true,

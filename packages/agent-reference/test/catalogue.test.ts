@@ -162,7 +162,9 @@ it("requires currently accepted completeness for the exact list, subject and per
   }
   const { profile, scenario } = loadCase(root, "trial-eligibility");
   const paths = await runScenario(profile, scenario);
-  expect(paths[0]).toMatchObject({ blocked: "needs a proof system" });
+  expect(paths[0]).toMatchObject({
+    blocked: "needs a proof system: needs the sparq-authrdf/1 package, which is not installed",
+  });
   expect(paths[0]?.trace).toBeUndefined();
   expect(paths[1]?.actual).toMatchObject({
     outcome: "ask-more",

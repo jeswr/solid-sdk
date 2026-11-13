@@ -65,14 +65,18 @@
           "party": "urn:fictional:candidate",
           "tasks": [
             "urn:op:right-to-work",
-            "urn:op:employment-evidence-request"
+            "urn:op:employment-evidence-request",
+            "urn:op:right-to-work:proof-request",
+            "urn:op:right-to-work:proof-answer"
           ]
         },
         {
           "party": "urn:fictional:employer",
           "tasks": [
             "urn:op:right-to-work",
-            "urn:op:employment-evidence-request"
+            "urn:op:employment-evidence-request",
+            "urn:op:right-to-work:proof-request",
+            "urn:op:right-to-work:proof-answer"
           ]
         }
       ],
@@ -81,14 +85,18 @@
           "party": "urn:fictional:candidate",
           "tasks": [
             "urn:op:right-to-work",
-            "urn:op:employment-evidence-request"
+            "urn:op:employment-evidence-request",
+            "urn:op:right-to-work:proof-request",
+            "urn:op:right-to-work:proof-answer"
           ]
         },
         {
           "party": "urn:fictional:employer",
           "tasks": [
             "urn:op:right-to-work",
-            "urn:op:employment-evidence-request"
+            "urn:op:employment-evidence-request",
+            "urn:op:right-to-work:proof-request",
+            "urn:op:right-to-work:proof-answer"
           ]
         }
       ]
@@ -118,6 +126,17 @@
           "subjects": [
             "urn:fictional:candidate"
           ]
+        },
+        {
+          "id": "urn:source:right-to-work:employer:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:employer",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:employer"
+          ]
         }
       ],
       "employer-agent": [
@@ -143,6 +162,17 @@
           ],
           "subjects": [
             "urn:fictional:candidate"
+          ]
+        },
+        {
+          "id": "urn:source:right-to-work:employer:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:employer",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:employer"
           ]
         }
       ]
@@ -260,6 +290,47 @@
           ]
         }
       }
+    },
+    {
+      "id": "proof-validity",
+      "issuer": "immigration-office",
+      "subject": "urn:fictional:candidate",
+      "kind": "work.valid-until",
+      "value": {
+        "value": "2027-06-01",
+        "datatype": "http://www.w3.org/2001/XMLSchema#date"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:right-to-work:proof-validity",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:right-to-work"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:right-to-work"
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   ],
   "mandates": [
@@ -270,6 +341,16 @@
           "type": "permission",
           "action": "use",
           "target": "urn:op:right-to-work"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:right-to-work:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:right-to-work:proof-answer"
         }
       ],
       "withApproval": []
@@ -286,6 +367,16 @@
           "type": "permission",
           "action": "use",
           "target": "urn:op:employment-evidence-request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:right-to-work:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:right-to-work:proof-answer"
         }
       ],
       "withApproval": []
@@ -418,7 +509,9 @@
           "2": "The candidate’s agent checks the incoming message and prepares a response.",
           "3": "The candidate’s agent checks and admits the signed statements.",
           "4": "The candidate’s agent sends a signed request."
-        }
+        },
+        "requiredMethods": [],
+        "proofCredentials": []
       },
       "expect": {
         "outcome": "stop",
@@ -774,14 +867,548 @@
     {
       "id": "hidden-validity-proof",
       "what": "Show valid until at least a date while hiding the actual date",
-      "change": {},
+      "change": {
+        "requiredMethods": [
+          "sparq-zk-result/5"
+        ],
+        "catalogueAssurance": "proved",
+        "recordedAssurance": "attested",
+        "proofCredentials": [
+          {
+            "method": "sparq-zk-result/5",
+            "issuer": "immigration-office",
+            "subject": "urn:fictional:candidate",
+            "statements": [
+              "proof-validity"
+            ],
+            "status": {
+              "list": "urn:fictional:status:right-to-work:immigration-office",
+              "index": 0,
+              "version": 1,
+              "active": true
+            }
+          }
+        ],
+        "assurance": "attested",
+        "suites": {},
+        "script": [
+          {
+            "id": "private-inputs",
+            "agent": "candidate-agent",
+            "type": "admit",
+            "statements": [
+              "proof-validity"
+            ],
+            "subject": "urn:fictional:candidate",
+            "purpose": "urn:purpose:right-to-work"
+          },
+          {
+            "id": "fresh-request",
+            "agent": "employer-agent",
+            "type": "proof-request",
+            "rule": "urn:rule:right-to-work:proof",
+            "subject": "urn:fictional:candidate",
+            "purpose": "urn:purpose:right-to-work",
+            "assurances": [
+              "attested"
+            ]
+          },
+          {
+            "id": "send-request",
+            "agent": "employer-agent",
+            "type": "start",
+            "peer": "candidate-agent",
+            "kind": "invoke",
+            "operation": "urn:op:right-to-work:proof-request",
+            "contents": {
+              "items": [
+                {
+                  "$ref": "steps.fresh-request.statement.id"
+                }
+              ]
+            },
+            "intent": {
+              "action": "use",
+              "target": "urn:op:right-to-work:proof-request",
+              "operation": "urn:op:right-to-work:proof-request",
+              "recipient": "urn:fictional:candidate",
+              "purpose": "urn:purpose:right-to-work",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:right-to-work",
+            "derivedEvidence": [
+              {
+                "$ref": "steps.fresh-request.jws"
+              }
+            ]
+          },
+          {
+            "id": "receive-request",
+            "agent": "candidate-agent",
+            "type": "receive",
+            "from": "employer-agent"
+          },
+          {
+            "id": "prove-answer",
+            "agent": "candidate-agent",
+            "type": "prove",
+            "method": "sparq-zk-result/5",
+            "request": {
+              "$ref": "steps.fresh-request.request"
+            },
+            "recipient": "urn:fictional:employer",
+            "assurance": "attested",
+            "proofBinds": [
+              "rule",
+              "issuers",
+              "fresh"
+            ],
+            "inputs": [
+              "proof-validity"
+            ]
+          },
+          {
+            "id": "send-answer",
+            "agent": "candidate-agent",
+            "type": "start",
+            "peer": "employer-agent",
+            "kind": "invoke",
+            "operation": "urn:op:right-to-work:proof-answer",
+            "contents": {
+              "items": [
+                {
+                  "$ref": "steps.prove-answer.statement.id"
+                }
+              ]
+            },
+            "intent": {
+              "action": "distribute",
+              "target": "urn:op:right-to-work:proof-answer",
+              "operation": "urn:op:right-to-work:proof-answer",
+              "recipient": "urn:fictional:employer",
+              "purpose": "urn:purpose:right-to-work",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:right-to-work",
+            "derivedEvidence": [
+              {
+                "$ref": "steps.prove-answer.jws"
+              }
+            ]
+          },
+          {
+            "id": "receive-answer",
+            "agent": "employer-agent",
+            "type": "receive",
+            "from": "candidate-agent"
+          },
+          {
+            "id": "receiver-facts",
+            "agent": "employer-agent",
+            "type": "facts"
+          },
+          {
+            "id": "check-answer",
+            "agent": "employer-agent",
+            "type": "assert",
+            "actual": {
+              "$ref": "steps.receiver-facts.0.value"
+            },
+            "expected": true
+          }
+        ],
+        "traceSteps": {},
+        "stress": [
+          "source",
+          "fitness",
+          "disclosure"
+        ]
+      },
       "expect": {
         "outcome": "ask-more",
         "check": "authority",
         "reason": "assurance-insufficient"
       },
-      "outline": [],
-      "blocked": "Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates."
+      "outline": [
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "candidate-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        }
+      ]
     }
   ],
   "expect": [

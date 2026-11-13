@@ -19,12 +19,44 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "identity.birth-date",
+      "sources": [
+        "urn:fictional:age-check:identity-issuer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "age-check.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:age-check:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:age-check",
-      "claims": []
+      "claims": [
+        "age-check.answer",
+        "derivation.request",
+        "identity.birth-date"
+      ]
     },
     {
       "id": "urn:purpose:identity-management",
@@ -33,7 +65,24 @@
       ]
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "id": "urn:rule:age-check:proof",
+      "template": "threshold",
+      "params": {
+        "input": "identity.birth-date",
+        "operator": "lte",
+        "date": "2008-11-13"
+      },
+      "output": "age-check.answer",
+      "inputsFrom": [
+        "urn:fictional:age-check:identity-issuer"
+      ],
+      "assurances": [
+        "attested"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
@@ -77,6 +126,59 @@
         "urn:purpose:age-check"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:age-check:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:age-check"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:age-check:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:age-check"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:age-check:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:age-check"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:age-check:proof-answer",
+      "claims": [
+        "age-check.answer"
+      ]
     }
   ]
 }

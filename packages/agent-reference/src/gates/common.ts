@@ -86,6 +86,7 @@ export interface RelianceProfile {
 
 /** Terms an issuer attaches to a statement: ODRL (pilot subset) plus a deletion duty. */
 export interface ItemTerms {
+  readonly minimumGroup?: number;
   readonly inherited?: readonly { readonly target: string; readonly terms: ItemTerms | null }[];
   readonly policy: import("@jeswr/solid-odrl").OdrlPolicy;
   /**
@@ -99,6 +100,13 @@ export interface ItemTerms {
 
 /** A fact the inbound gate admitted, with its labels (shared with the outbound gate). */
 export interface AdmittedFact {
+  /** The unmodified source statement and its proof, beside a locally mapped fact. */
+  readonly original?: {
+    readonly id: string;
+    readonly digest: string;
+    readonly statement: import("../core/types.js").JsonObject;
+    readonly evidence: import("../core/types.js").EvidenceItem;
+  };
   readonly supersededBy?: string;
   readonly disputedWith?: readonly string[];
   readonly id: string;
@@ -192,6 +200,44 @@ export class GateMemory {
 }
 
 export interface GateContext {
+  readonly proofCache?: import("../derive/cache.js").ProofCache;
+  readonly generateProofs?: boolean;
+  readonly proofCredentials?: readonly {
+    credential: import("../core/types.js").JsonObject;
+    statement: string;
+    digest: string;
+  }[];
+  readonly proofSystems?: ReadonlyMap<string, import("../derive/verifiers.js").ProofSystem>;
+  readonly jointProtocols?: ReadonlyMap<string, import("../derive/verifiers.js").JointProtocol>;
+  readonly acceptedProofs?: readonly {
+    rule: string;
+    method: string;
+    assurance: "proved" | "attested";
+    binds: readonly import("../derive/verifiers.js").ProofBinds[];
+    purposes: readonly string[];
+  }[];
+  readonly acceptedJoint?: readonly {
+    rule: string;
+    method: string;
+    minimumContributors: number;
+    purposes: readonly string[];
+  }[];
+  readonly proofIssuerKeys?: readonly {
+    issuer: string;
+    key: import("../core/types.js").JsonObject;
+    claimTypes: readonly string[];
+  }[];
+  readonly proofStatusPolicy?: import("../core/types.js").JsonObject;
+  readonly proofDatasets?: readonly {
+    format: "engine-credential-digests/1";
+    rule: string;
+    credentialDigests: readonly string[];
+    commitment: string;
+  }[];
+  /** Runtime-owned durable requests, never populated from received evidence. */
+  readonly derivedRequests?: Record<string, import("../derive/verifiers.js").DerivedRequest>;
+  readonly fixedJointSessions?: Record<string, import("../derive/verifiers.js").FixedJointSession>;
+  readonly saveDerivationState?: () => void;
   readonly attestedDerivers?: readonly {
     readonly deriver: string;
     readonly rule: string;

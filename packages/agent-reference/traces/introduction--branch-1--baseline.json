@@ -68,10 +68,14 @@
     }
   ],
   "generated": {
-    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -269,7 +273,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:ba479b11485…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:68e16bd70c7…; never trusted."
         },
         "layers": {
           "header": {
@@ -297,7 +301,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:6bf8503d39bed4a9e7c5b4653c12d91a7fde2f480b1e72f3893f5fdb275bbe3f"
+            "digest": "sha-256:506550fa9ac44cef6d5d23451dea8749a5c9479d08e261203203126e98d04057"
           },
           "authority": {
             "present": true,
@@ -311,14 +315,16 @@
                 "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
                 "operations": [
                   "urn:op:introduction",
-                  "urn:op:introduction:request"
+                  "urn:op:introduction:request",
+                  "urn:op:introduction:proof-request",
+                  "urn:op:introduction:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:21da5dafb3da01c7d3139a30fe2c9204f2e7a9966b2a49542222d06b649fe28b"
+            "digest": "sha-256:d8da3e0c26335562a975af80a029f6cf5011c604d79b1a2a5f112eebd53fc802"
           },
           "content": {
             "present": true,
@@ -437,7 +443,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:ba479b11485…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:68e16bd70c7…; never trusted."
         },
         "layers": {
           "header": {
@@ -465,7 +471,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:6bf8503d39bed4a9e7c5b4653c12d91a7fde2f480b1e72f3893f5fdb275bbe3f"
+            "digest": "sha-256:506550fa9ac44cef6d5d23451dea8749a5c9479d08e261203203126e98d04057"
           },
           "authority": {
             "present": true,
@@ -479,14 +485,16 @@
                 "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
                 "operations": [
                   "urn:op:introduction",
-                  "urn:op:introduction:request"
+                  "urn:op:introduction:request",
+                  "urn:op:introduction:proof-request",
+                  "urn:op:introduction:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:21da5dafb3da01c7d3139a30fe2c9204f2e7a9966b2a49542222d06b649fe28b"
+            "digest": "sha-256:d8da3e0c26335562a975af80a029f6cf5011c604d79b1a2a5f112eebd53fc802"
           },
           "content": {
             "present": true,
@@ -656,7 +664,7 @@
           {
             "at": "The second person's own list",
             "kind": "own-list",
-            "says": "no rule recognises this source"
+            "says": "source is recognised, but not for this claim type/subject/period"
           }
         ],
         "answer": "Not accepted for identity.verified."

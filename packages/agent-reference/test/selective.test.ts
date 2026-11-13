@@ -22,7 +22,9 @@ it("runs ordinary right-to-work disclosure and passport refusal, leaving the hid
     outcome: "stop",
     reason: "excessive-scope",
   });
-  expect(paths[2]?.blocked).toContain("real proof system");
+  expect(paths[2]?.blocked).toBe(
+    "needs a proof system: needs the sparq-zk-result/5 package, which is not installed",
+  );
   expect(paths[2]?.trace).toBeUndefined();
   const trace = JSON.stringify(paths[0]?.trace);
   expect(trace).not.toContain("fictional-passport-image");

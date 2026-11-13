@@ -7,146 +7,1383 @@
   "profile": "platform-income",
   "parties": [
     {
-      "id": "owner",
-      "identity": "urn:fictional:platform-income:owner",
-      "name": "The self-employed worker",
+      "id": "contributor-1",
+      "identity": "urn:fictional:platform-income:contributor-1",
+      "name": "Fictional contributor-1",
       "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "receiver",
-      "identity": "urn:fictional:platform-income:receiver",
-      "name": "The lender",
-      "role": "source",
-      "runs": "issuer-only"
-    },
-    {
-      "id": "tax-authority",
-      "identity": "urn:fictional:platform-income:tax-authority",
-      "name": "The fictional tax authority",
-      "role": "source",
-      "runs": "issuer-only"
-    },
-    {
-      "id": "owner-agent",
-      "identity": "urn:fictional:platform-income:owner-agent",
-      "name": "The self-employed worker’s agent",
+      "id": "contributor-1-agent",
+      "identity": "urn:fictional:platform-income:contributor-1:agent",
+      "actor": "urn:fictional:platform-income:contributor-1:actor",
+      "actsFor": "contributor-1",
+      "name": "Fictional contributor-1 agent",
       "role": "agent",
-      "runs": "agent",
-      "actor": "urn:fictional:platform-income:owner-agent:actor",
-      "actsFor": "owner"
+      "runs": "agent"
     },
     {
-      "id": "receiver-agent",
-      "identity": "urn:fictional:platform-income:receiver-agent",
-      "name": "The lender’s agent",
+      "id": "contributor-2",
+      "identity": "urn:fictional:platform-income:contributor-2",
+      "name": "Fictional contributor-2",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "contributor-2-agent",
+      "identity": "urn:fictional:platform-income:contributor-2:agent",
+      "actor": "urn:fictional:platform-income:contributor-2:actor",
+      "actsFor": "contributor-2",
+      "name": "Fictional contributor-2 agent",
       "role": "agent",
-      "runs": "agent",
-      "actor": "urn:fictional:platform-income:receiver-agent:actor",
-      "actsFor": "receiver"
+      "runs": "agent"
     },
     {
-      "id": "platform-1",
-      "identity": "urn:fictional:platform-income:platform-1",
-      "name": "Fictional work platform 1",
+      "id": "contributor-3",
+      "identity": "urn:fictional:platform-income:contributor-3",
+      "name": "Fictional contributor-3",
       "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "platform-2",
-      "identity": "urn:fictional:platform-income:platform-2",
-      "name": "Fictional work platform 2",
+      "id": "contributor-3-agent",
+      "identity": "urn:fictional:platform-income:contributor-3:agent",
+      "actor": "urn:fictional:platform-income:contributor-3:actor",
+      "actsFor": "contributor-3",
+      "name": "Fictional contributor-3 agent",
+      "role": "agent",
+      "runs": "agent"
+    },
+    {
+      "id": "contributor-4",
+      "identity": "urn:fictional:platform-income:contributor-4",
+      "name": "Fictional contributor-4",
       "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "platform-3",
-      "identity": "urn:fictional:platform-income:platform-3",
-      "name": "Fictional work platform 3",
+      "id": "contributor-4-agent",
+      "identity": "urn:fictional:platform-income:contributor-4:agent",
+      "actor": "urn:fictional:platform-income:contributor-4:actor",
+      "actsFor": "contributor-4",
+      "name": "Fictional contributor-4 agent",
+      "role": "agent",
+      "runs": "agent"
+    },
+    {
+      "id": "computer",
+      "identity": "urn:fictional:platform-income:computer",
+      "name": "Fictional computer",
       "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "platform-4",
-      "identity": "urn:fictional:platform-income:platform-4",
-      "name": "Fictional work platform 4",
+      "id": "computer-agent",
+      "identity": "urn:fictional:platform-income:computer:agent",
+      "actor": "urn:fictional:platform-income:computer:actor",
+      "actsFor": "computer",
+      "name": "Fictional computer agent",
+      "role": "agent",
+      "runs": "agent"
+    },
+    {
+      "id": "requester",
+      "identity": "urn:fictional:platform-income:requester",
+      "name": "Fictional requester",
       "role": "source",
       "runs": "issuer-only"
+    },
+    {
+      "id": "requester-agent",
+      "identity": "urn:fictional:platform-income:requester:agent",
+      "actor": "urn:fictional:platform-income:requester:actor",
+      "actsFor": "requester",
+      "name": "Fictional requester agent",
+      "role": "agent",
+      "runs": "agent"
     }
   ],
   "trust": {
     "introductions": [
       [
-        "owner-agent",
-        "receiver-agent"
+        "contributor-1-agent",
+        "contributor-2-agent"
+      ],
+      [
+        "contributor-1-agent",
+        "contributor-3-agent"
+      ],
+      [
+        "contributor-1-agent",
+        "contributor-4-agent"
+      ],
+      [
+        "contributor-1-agent",
+        "computer-agent"
+      ],
+      [
+        "contributor-1-agent",
+        "requester-agent"
+      ],
+      [
+        "contributor-2-agent",
+        "contributor-3-agent"
+      ],
+      [
+        "contributor-2-agent",
+        "contributor-4-agent"
+      ],
+      [
+        "contributor-2-agent",
+        "computer-agent"
+      ],
+      [
+        "contributor-2-agent",
+        "requester-agent"
+      ],
+      [
+        "contributor-3-agent",
+        "contributor-4-agent"
+      ],
+      [
+        "contributor-3-agent",
+        "computer-agent"
+      ],
+      [
+        "contributor-3-agent",
+        "requester-agent"
+      ],
+      [
+        "contributor-4-agent",
+        "computer-agent"
+      ],
+      [
+        "contributor-4-agent",
+        "requester-agent"
+      ],
+      [
+        "computer-agent",
+        "requester-agent"
       ]
     ],
     "ownLists": {
-      "owner-agent": [
+      "contributor-1-agent": [
         {
-          "party": "urn:fictional:platform-income:receiver",
+          "party": "urn:fictional:platform-income:contributor-2",
           "tasks": [
-            "urn:op:platform-income",
-            "urn:op:platform-income:request"
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-3",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-4",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:computer",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:requester",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
           ]
         }
       ],
-      "receiver-agent": [
+      "contributor-2-agent": [
         {
-          "party": "urn:fictional:platform-income:owner",
+          "party": "urn:fictional:platform-income:contributor-1",
           "tasks": [
-            "urn:op:platform-income",
-            "urn:op:platform-income:request"
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-3",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-4",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:computer",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:requester",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        }
+      ],
+      "contributor-3-agent": [
+        {
+          "party": "urn:fictional:platform-income:contributor-1",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-2",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-4",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:computer",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:requester",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        }
+      ],
+      "contributor-4-agent": [
+        {
+          "party": "urn:fictional:platform-income:contributor-1",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-2",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-3",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:computer",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:requester",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        }
+      ],
+      "computer-agent": [
+        {
+          "party": "urn:fictional:platform-income:contributor-1",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-2",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-3",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-4",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:requester",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        }
+      ],
+      "requester-agent": [
+        {
+          "party": "urn:fictional:platform-income:contributor-1",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-2",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-3",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:contributor-4",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
+          ]
+        },
+        {
+          "party": "urn:fictional:platform-income:computer",
+          "tasks": [
+            "urn:op:joint:open",
+            "urn:op:joint:contribute",
+            "urn:op:joint:partial",
+            "urn:op:joint:outcome"
           ]
         }
       ]
     },
     "sources": {
-      "owner-agent": [
+      "contributor-1-agent": [
         {
-          "id": "urn:source:platform-income:income.platform-list",
+          "id": "urn:source:platform-income:contributor-1:joint.message",
           "version": "1",
-          "source": "urn:fictional:platform-income:owner",
+          "source": "urn:fictional:platform-income:contributor-1",
           "claimTypes": [
-            "income.platform-list"
+            "joint.message"
           ],
           "subjects": [
-            "urn:fictional:platform-income:owner"
+            "urn:fictional:platform-income:contributor-1"
           ]
         },
         {
-          "id": "urn:source:platform-income:income.completeness",
+          "id": "urn:source:platform-income:contributor-2:joint.message",
           "version": "1",
-          "source": "urn:fictional:platform-income:tax-authority",
+          "source": "urn:fictional:platform-income:contributor-2",
           "claimTypes": [
-            "income.completeness"
+            "joint.message"
           ],
           "subjects": [
-            "urn:fictional:platform-income:owner"
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:computer:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:computer",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:computer"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:requester:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:requester",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:requester"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
           ]
         }
       ],
-      "receiver-agent": [
+      "contributor-2-agent": [
         {
-          "id": "urn:source:platform-income:income.platform-list",
+          "id": "urn:source:platform-income:contributor-1:joint.message",
           "version": "1",
-          "source": "urn:fictional:platform-income:owner",
+          "source": "urn:fictional:platform-income:contributor-1",
           "claimTypes": [
-            "income.platform-list"
+            "joint.message"
           ],
           "subjects": [
-            "urn:fictional:platform-income:owner"
+            "urn:fictional:platform-income:contributor-1"
           ]
         },
         {
-          "id": "urn:source:platform-income:income.completeness",
+          "id": "urn:source:platform-income:contributor-2:joint.message",
           "version": "1",
-          "source": "urn:fictional:platform-income:tax-authority",
+          "source": "urn:fictional:platform-income:contributor-2",
           "claimTypes": [
-            "income.completeness"
+            "joint.message"
           ],
           "subjects": [
-            "urn:fictional:platform-income:owner"
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:computer:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:computer",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:computer"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:requester:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:requester",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:requester"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        }
+      ],
+      "contributor-3-agent": [
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:computer:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:computer",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:computer"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:requester:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:requester",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:requester"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        }
+      ],
+      "contributor-4-agent": [
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:computer:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:computer",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:computer"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:requester:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:requester",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:requester"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        }
+      ],
+      "computer-agent": [
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:computer:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:computer",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:computer"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:requester:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:requester",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:requester"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        }
+      ],
+      "requester-agent": [
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:computer:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:computer",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:computer"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:requester:joint.message",
+          "version": "1",
+          "source": "urn:fictional:platform-income:requester",
+          "claimTypes": [
+            "joint.message"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:requester"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-1:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-1",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-1"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-2:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-2",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-2"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-3:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-3",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-3"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.count",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.count"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
+          ]
+        },
+        {
+          "id": "urn:source:platform-income:contributor-4:joint.sum",
+          "version": "1",
+          "source": "urn:fictional:platform-income:contributor-4",
+          "claimTypes": [
+            "joint.sum"
+          ],
+          "subjects": [
+            "urn:fictional:platform-income:contributor-4"
           ]
         }
       ]
@@ -154,32 +1391,22 @@
   },
   "statements": [
     {
-      "id": "supplied-platforms",
-      "issuer": "owner",
-      "subject": "urn:fictional:platform-income:owner",
-      "kind": "income.platform-list",
+      "id": "contributor-1-count",
+      "issuer": "contributor-1",
+      "subject": "urn:fictional:platform-income:contributor-1",
+      "kind": "joint.count",
       "value": {
-        "items": [
-          "urn:fictional:platform-income:platform-1",
-          "urn:fictional:platform-income:platform-2",
-          "urn:fictional:platform-income:platform-3",
-          "urn:fictional:platform-income:platform-4"
-        ],
-        "period": {
-          "start": "2026-10-01",
-          "end": "2026-10-31"
-        }
+        "value": 1
       },
-      "method": "self-reported",
+      "method": "recorded-by-authority",
       "asOf": "2026-11-13T09:00:00.000Z",
       "terms": {
         "policy": {
-          "id": "urn:terms:platform-income:supplied-platforms",
+          "id": "urn:terms:platform-income:contributor-1-count",
           "permissions": [
             {
               "type": "permission",
               "action": "use",
-              "target": "urn:scenario:platform-income:supplied-platforms",
               "constraints": [
                 {
                   "leftOperand": "purpose",
@@ -191,7 +1418,6 @@
             {
               "type": "permission",
               "action": "distribute",
-              "target": "urn:scenario:platform-income:supplied-platforms",
               "constraints": [
                 {
                   "leftOperand": "purpose",
@@ -201,35 +1427,1076 @@
               ]
             }
           ]
-        }
+        },
+        "minimumGroup": 1
+      }
+    },
+    {
+      "id": "contributor-1-sum",
+      "issuer": "contributor-1",
+      "subject": "urn:fictional:platform-income:contributor-1",
+      "kind": "joint.sum",
+      "value": {
+        "value": 2000
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:platform-income:contributor-1-sum",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            }
+          ]
+        },
+        "minimumGroup": 1
+      }
+    },
+    {
+      "id": "contributor-2-count",
+      "issuer": "contributor-2",
+      "subject": "urn:fictional:platform-income:contributor-2",
+      "kind": "joint.count",
+      "value": {
+        "value": 1
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:platform-income:contributor-2-count",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            }
+          ]
+        },
+        "minimumGroup": 1
+      }
+    },
+    {
+      "id": "contributor-2-sum",
+      "issuer": "contributor-2",
+      "subject": "urn:fictional:platform-income:contributor-2",
+      "kind": "joint.sum",
+      "value": {
+        "value": 3000
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:platform-income:contributor-2-sum",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            }
+          ]
+        },
+        "minimumGroup": 1
+      }
+    },
+    {
+      "id": "contributor-3-count",
+      "issuer": "contributor-3",
+      "subject": "urn:fictional:platform-income:contributor-3",
+      "kind": "joint.count",
+      "value": {
+        "value": 1
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:platform-income:contributor-3-count",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            }
+          ]
+        },
+        "minimumGroup": 1
+      }
+    },
+    {
+      "id": "contributor-3-sum",
+      "issuer": "contributor-3",
+      "subject": "urn:fictional:platform-income:contributor-3",
+      "kind": "joint.sum",
+      "value": {
+        "value": 2500
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:platform-income:contributor-3-sum",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            }
+          ]
+        },
+        "minimumGroup": 1
+      }
+    },
+    {
+      "id": "contributor-4-count",
+      "issuer": "contributor-4",
+      "subject": "urn:fictional:platform-income:contributor-4",
+      "kind": "joint.count",
+      "value": {
+        "value": 1
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:platform-income:contributor-4-count",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            }
+          ]
+        },
+        "minimumGroup": 1
+      }
+    },
+    {
+      "id": "contributor-4-sum",
+      "issuer": "contributor-4",
+      "subject": "urn:fictional:platform-income:contributor-4",
+      "kind": "joint.sum",
+      "value": {
+        "value": 4000
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:platform-income:contributor-4-sum",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:platform-income"
+                }
+              ]
+            }
+          ]
+        },
+        "minimumGroup": 1
       }
     }
   ],
   "mandates": [
     {
-      "agent": "owner-agent",
+      "agent": "contributor-1-agent",
       "autonomous": [
         {
           "type": "permission",
-          "action": "distribute",
-          "target": "urn:op:platform-income"
+          "action": "use",
+          "target": "urn:op:joint:open"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:contribute"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:partial"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:outcome"
         }
       ],
       "withApproval": []
     },
     {
-      "agent": "receiver-agent",
+      "agent": "contributor-2-agent",
       "autonomous": [
         {
           "type": "permission",
           "action": "use",
-          "target": "urn:op:platform-income:request"
+          "target": "urn:op:joint:open"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:contribute"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:partial"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:outcome"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "contributor-3-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:open"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:contribute"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:partial"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:outcome"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "contributor-4-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:open"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:contribute"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:partial"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:outcome"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "computer-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:open"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:contribute"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:partial"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:outcome"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "requester-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:open"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:contribute"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:partial"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:joint:outcome"
         }
       ],
       "withApproval": []
     }
   ],
-  "script": [],
+  "script": [
+    {
+      "id": "inputs-contributor-1-agent",
+      "agent": "contributor-1-agent",
+      "type": "admit",
+      "statements": [
+        "contributor-1-count",
+        "contributor-1-sum"
+      ],
+      "purpose": "urn:purpose:platform-income"
+    },
+    {
+      "id": "inputs-contributor-2-agent",
+      "agent": "contributor-2-agent",
+      "type": "admit",
+      "statements": [
+        "contributor-2-count",
+        "contributor-2-sum"
+      ],
+      "purpose": "urn:purpose:platform-income"
+    },
+    {
+      "id": "inputs-contributor-3-agent",
+      "agent": "contributor-3-agent",
+      "type": "admit",
+      "statements": [
+        "contributor-3-count",
+        "contributor-3-sum"
+      ],
+      "purpose": "urn:purpose:platform-income"
+    },
+    {
+      "id": "inputs-contributor-4-agent",
+      "agent": "contributor-4-agent",
+      "type": "admit",
+      "statements": [
+        "contributor-4-count",
+        "contributor-4-sum"
+      ],
+      "purpose": "urn:purpose:platform-income"
+    },
+    {
+      "id": "open-requester-agent-to-contributor-1-agent",
+      "agent": "requester-agent",
+      "type": "joint-send",
+      "peer": "contributor-1-agent",
+      "operation": "open",
+      "payload": {}
+    },
+    {
+      "id": "receive-open-requester-agent-to-contributor-1-agent",
+      "agent": "contributor-1-agent",
+      "type": "receive",
+      "from": "requester-agent"
+    },
+    {
+      "id": "open-requester-agent-to-contributor-2-agent",
+      "agent": "requester-agent",
+      "type": "joint-send",
+      "peer": "contributor-2-agent",
+      "operation": "open",
+      "payload": {}
+    },
+    {
+      "id": "receive-open-requester-agent-to-contributor-2-agent",
+      "agent": "contributor-2-agent",
+      "type": "receive",
+      "from": "requester-agent"
+    },
+    {
+      "id": "open-requester-agent-to-contributor-3-agent",
+      "agent": "requester-agent",
+      "type": "joint-send",
+      "peer": "contributor-3-agent",
+      "operation": "open",
+      "payload": {}
+    },
+    {
+      "id": "receive-open-requester-agent-to-contributor-3-agent",
+      "agent": "contributor-3-agent",
+      "type": "receive",
+      "from": "requester-agent"
+    },
+    {
+      "id": "open-requester-agent-to-contributor-4-agent",
+      "agent": "requester-agent",
+      "type": "joint-send",
+      "peer": "contributor-4-agent",
+      "operation": "open",
+      "payload": {}
+    },
+    {
+      "id": "receive-open-requester-agent-to-contributor-4-agent",
+      "agent": "contributor-4-agent",
+      "type": "receive",
+      "from": "requester-agent"
+    },
+    {
+      "id": "open-requester-agent-to-computer-agent",
+      "agent": "requester-agent",
+      "type": "joint-send",
+      "peer": "computer-agent",
+      "operation": "open",
+      "payload": {}
+    },
+    {
+      "id": "receive-open-requester-agent-to-computer-agent",
+      "agent": "computer-agent",
+      "type": "receive",
+      "from": "requester-agent"
+    },
+    {
+      "id": "contribution-contributor-1-agent",
+      "agent": "contributor-1-agent",
+      "type": "joint-action",
+      "action": "contribute"
+    },
+    {
+      "id": "contribute-contributor-1-agent-to-contributor-2-agent",
+      "agent": "contributor-1-agent",
+      "type": "joint-send",
+      "peer": "contributor-2-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-1-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-1-agent.shares.urn:fictional:platform-income:contributor-2"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-1-agent-to-contributor-2-agent",
+      "agent": "contributor-2-agent",
+      "type": "receive",
+      "from": "contributor-1-agent"
+    },
+    {
+      "id": "contribute-contributor-1-agent-to-contributor-3-agent",
+      "agent": "contributor-1-agent",
+      "type": "joint-send",
+      "peer": "contributor-3-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-1-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-1-agent.shares.urn:fictional:platform-income:contributor-3"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-1-agent-to-contributor-3-agent",
+      "agent": "contributor-3-agent",
+      "type": "receive",
+      "from": "contributor-1-agent"
+    },
+    {
+      "id": "contribute-contributor-1-agent-to-contributor-4-agent",
+      "agent": "contributor-1-agent",
+      "type": "joint-send",
+      "peer": "contributor-4-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-1-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-1-agent.shares.urn:fictional:platform-income:contributor-4"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-1-agent-to-contributor-4-agent",
+      "agent": "contributor-4-agent",
+      "type": "receive",
+      "from": "contributor-1-agent"
+    },
+    {
+      "id": "contribute-contributor-1-agent-to-computer-agent",
+      "agent": "contributor-1-agent",
+      "type": "joint-send",
+      "peer": "computer-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-1-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-1-agent.shares.urn:fictional:platform-income:computer"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-1-agent-to-computer-agent",
+      "agent": "computer-agent",
+      "type": "receive",
+      "from": "contributor-1-agent"
+    },
+    {
+      "id": "contribution-contributor-2-agent",
+      "agent": "contributor-2-agent",
+      "type": "joint-action",
+      "action": "contribute"
+    },
+    {
+      "id": "contribute-contributor-2-agent-to-contributor-1-agent",
+      "agent": "contributor-2-agent",
+      "type": "joint-send",
+      "peer": "contributor-1-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-2-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-2-agent.shares.urn:fictional:platform-income:contributor-1"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-2-agent-to-contributor-1-agent",
+      "agent": "contributor-1-agent",
+      "type": "receive",
+      "from": "contributor-2-agent"
+    },
+    {
+      "id": "contribute-contributor-2-agent-to-contributor-3-agent",
+      "agent": "contributor-2-agent",
+      "type": "joint-send",
+      "peer": "contributor-3-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-2-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-2-agent.shares.urn:fictional:platform-income:contributor-3"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-2-agent-to-contributor-3-agent",
+      "agent": "contributor-3-agent",
+      "type": "receive",
+      "from": "contributor-2-agent"
+    },
+    {
+      "id": "contribute-contributor-2-agent-to-contributor-4-agent",
+      "agent": "contributor-2-agent",
+      "type": "joint-send",
+      "peer": "contributor-4-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-2-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-2-agent.shares.urn:fictional:platform-income:contributor-4"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-2-agent-to-contributor-4-agent",
+      "agent": "contributor-4-agent",
+      "type": "receive",
+      "from": "contributor-2-agent"
+    },
+    {
+      "id": "contribute-contributor-2-agent-to-computer-agent",
+      "agent": "contributor-2-agent",
+      "type": "joint-send",
+      "peer": "computer-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-2-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-2-agent.shares.urn:fictional:platform-income:computer"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-2-agent-to-computer-agent",
+      "agent": "computer-agent",
+      "type": "receive",
+      "from": "contributor-2-agent"
+    },
+    {
+      "id": "contribution-contributor-3-agent",
+      "agent": "contributor-3-agent",
+      "type": "joint-action",
+      "action": "contribute"
+    },
+    {
+      "id": "contribute-contributor-3-agent-to-contributor-1-agent",
+      "agent": "contributor-3-agent",
+      "type": "joint-send",
+      "peer": "contributor-1-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-3-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-3-agent.shares.urn:fictional:platform-income:contributor-1"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-3-agent-to-contributor-1-agent",
+      "agent": "contributor-1-agent",
+      "type": "receive",
+      "from": "contributor-3-agent"
+    },
+    {
+      "id": "contribute-contributor-3-agent-to-contributor-2-agent",
+      "agent": "contributor-3-agent",
+      "type": "joint-send",
+      "peer": "contributor-2-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-3-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-3-agent.shares.urn:fictional:platform-income:contributor-2"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-3-agent-to-contributor-2-agent",
+      "agent": "contributor-2-agent",
+      "type": "receive",
+      "from": "contributor-3-agent"
+    },
+    {
+      "id": "contribute-contributor-3-agent-to-contributor-4-agent",
+      "agent": "contributor-3-agent",
+      "type": "joint-send",
+      "peer": "contributor-4-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-3-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-3-agent.shares.urn:fictional:platform-income:contributor-4"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-3-agent-to-contributor-4-agent",
+      "agent": "contributor-4-agent",
+      "type": "receive",
+      "from": "contributor-3-agent"
+    },
+    {
+      "id": "contribute-contributor-3-agent-to-computer-agent",
+      "agent": "contributor-3-agent",
+      "type": "joint-send",
+      "peer": "computer-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-3-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-3-agent.shares.urn:fictional:platform-income:computer"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-3-agent-to-computer-agent",
+      "agent": "computer-agent",
+      "type": "receive",
+      "from": "contributor-3-agent"
+    },
+    {
+      "id": "contribution-contributor-4-agent",
+      "agent": "contributor-4-agent",
+      "type": "joint-action",
+      "action": "contribute"
+    },
+    {
+      "id": "contribute-contributor-4-agent-to-contributor-1-agent",
+      "agent": "contributor-4-agent",
+      "type": "joint-send",
+      "peer": "contributor-1-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-4-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-4-agent.shares.urn:fictional:platform-income:contributor-1"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-4-agent-to-contributor-1-agent",
+      "agent": "contributor-1-agent",
+      "type": "receive",
+      "from": "contributor-4-agent"
+    },
+    {
+      "id": "contribute-contributor-4-agent-to-contributor-2-agent",
+      "agent": "contributor-4-agent",
+      "type": "joint-send",
+      "peer": "contributor-2-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-4-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-4-agent.shares.urn:fictional:platform-income:contributor-2"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-4-agent-to-contributor-2-agent",
+      "agent": "contributor-2-agent",
+      "type": "receive",
+      "from": "contributor-4-agent"
+    },
+    {
+      "id": "contribute-contributor-4-agent-to-contributor-3-agent",
+      "agent": "contributor-4-agent",
+      "type": "joint-send",
+      "peer": "contributor-3-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-4-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-4-agent.shares.urn:fictional:platform-income:contributor-3"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-4-agent-to-contributor-3-agent",
+      "agent": "contributor-3-agent",
+      "type": "receive",
+      "from": "contributor-4-agent"
+    },
+    {
+      "id": "contribute-contributor-4-agent-to-computer-agent",
+      "agent": "contributor-4-agent",
+      "type": "joint-send",
+      "peer": "computer-agent",
+      "operation": "contribute",
+      "payload": {
+        "contribution": {
+          "$ref": "steps.contribution-contributor-4-agent.contribution"
+        },
+        "share": {
+          "$ref": "steps.contribution-contributor-4-agent.shares.urn:fictional:platform-income:computer"
+        }
+      }
+    },
+    {
+      "id": "receive-contribute-contributor-4-agent-to-computer-agent",
+      "agent": "computer-agent",
+      "type": "receive",
+      "from": "contributor-4-agent"
+    },
+    {
+      "id": "partial-contributor-1-agent",
+      "agent": "contributor-1-agent",
+      "type": "joint-action",
+      "action": "partial"
+    },
+    {
+      "id": "partial-contributor-1-agent-to-computer-agent",
+      "agent": "contributor-1-agent",
+      "type": "joint-send",
+      "peer": "computer-agent",
+      "operation": "partial",
+      "payload": {
+        "partial": {
+          "$ref": "steps.partial-contributor-1-agent.partial"
+        }
+      }
+    },
+    {
+      "id": "receive-partial-contributor-1-agent-to-computer-agent",
+      "agent": "computer-agent",
+      "type": "receive",
+      "from": "contributor-1-agent"
+    },
+    {
+      "id": "partial-contributor-2-agent",
+      "agent": "contributor-2-agent",
+      "type": "joint-action",
+      "action": "partial"
+    },
+    {
+      "id": "partial-contributor-2-agent-to-computer-agent",
+      "agent": "contributor-2-agent",
+      "type": "joint-send",
+      "peer": "computer-agent",
+      "operation": "partial",
+      "payload": {
+        "partial": {
+          "$ref": "steps.partial-contributor-2-agent.partial"
+        }
+      }
+    },
+    {
+      "id": "receive-partial-contributor-2-agent-to-computer-agent",
+      "agent": "computer-agent",
+      "type": "receive",
+      "from": "contributor-2-agent"
+    },
+    {
+      "id": "partial-contributor-3-agent",
+      "agent": "contributor-3-agent",
+      "type": "joint-action",
+      "action": "partial"
+    },
+    {
+      "id": "partial-contributor-3-agent-to-computer-agent",
+      "agent": "contributor-3-agent",
+      "type": "joint-send",
+      "peer": "computer-agent",
+      "operation": "partial",
+      "payload": {
+        "partial": {
+          "$ref": "steps.partial-contributor-3-agent.partial"
+        }
+      }
+    },
+    {
+      "id": "receive-partial-contributor-3-agent-to-computer-agent",
+      "agent": "computer-agent",
+      "type": "receive",
+      "from": "contributor-3-agent"
+    },
+    {
+      "id": "partial-contributor-4-agent",
+      "agent": "contributor-4-agent",
+      "type": "joint-action",
+      "action": "partial"
+    },
+    {
+      "id": "partial-contributor-4-agent-to-computer-agent",
+      "agent": "contributor-4-agent",
+      "type": "joint-send",
+      "peer": "computer-agent",
+      "operation": "partial",
+      "payload": {
+        "partial": {
+          "$ref": "steps.partial-contributor-4-agent.partial"
+        }
+      }
+    },
+    {
+      "id": "receive-partial-contributor-4-agent-to-computer-agent",
+      "agent": "computer-agent",
+      "type": "receive",
+      "from": "contributor-4-agent"
+    },
+    {
+      "id": "partial-computer-agent",
+      "agent": "computer-agent",
+      "type": "joint-action",
+      "action": "partial"
+    },
+    {
+      "id": "finish",
+      "agent": "computer-agent",
+      "type": "joint-action",
+      "action": "finish"
+    },
+    {
+      "id": "outcome-computer-agent-to-requester-agent",
+      "agent": "computer-agent",
+      "type": "joint-send",
+      "peer": "requester-agent",
+      "operation": "outcome",
+      "payload": {
+        "outcome": {
+          "$ref": "steps.finish.outcome"
+        },
+        "contributions": {
+          "$ref": "steps.finish.contributions"
+        }
+      },
+      "derivedEvidence": [
+        {
+          "$ref": "steps.finish.jws"
+        }
+      ]
+    },
+    {
+      "id": "receive-outcome-computer-agent-to-requester-agent",
+      "agent": "requester-agent",
+      "type": "receive",
+      "from": "computer-agent"
+    },
+    {
+      "id": "requester-facts",
+      "agent": "requester-agent",
+      "type": "facts"
+    },
+    {
+      "id": "check-verified-total",
+      "agent": "requester-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.requester-facts.1.value"
+      },
+      "expected": 11500
+    }
+  ],
   "inject": [],
   "branches": [
     {
@@ -253,7 +2520,236 @@
         ],
         "traceSteps": {
           "1": "The lender’s agent checks the signed statements."
-        }
+        },
+        "requiredMethods": [],
+        "parties": [
+          {
+            "id": "owner",
+            "identity": "urn:fictional:platform-income:owner",
+            "name": "The self-employed worker",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          {
+            "id": "receiver",
+            "identity": "urn:fictional:platform-income:receiver",
+            "name": "The lender",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          {
+            "id": "tax-authority",
+            "identity": "urn:fictional:platform-income:tax-authority",
+            "name": "The fictional tax authority",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          {
+            "id": "owner-agent",
+            "identity": "urn:fictional:platform-income:owner-agent",
+            "name": "The self-employed worker’s agent",
+            "role": "agent",
+            "runs": "agent",
+            "actor": "urn:fictional:platform-income:owner-agent:actor",
+            "actsFor": "owner"
+          },
+          {
+            "id": "receiver-agent",
+            "identity": "urn:fictional:platform-income:receiver-agent",
+            "name": "The lender’s agent",
+            "role": "agent",
+            "runs": "agent",
+            "actor": "urn:fictional:platform-income:receiver-agent:actor",
+            "actsFor": "receiver"
+          },
+          {
+            "id": "platform-1",
+            "identity": "urn:fictional:platform-income:platform-1",
+            "name": "Fictional work platform 1",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          {
+            "id": "platform-2",
+            "identity": "urn:fictional:platform-income:platform-2",
+            "name": "Fictional work platform 2",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          {
+            "id": "platform-3",
+            "identity": "urn:fictional:platform-income:platform-3",
+            "name": "Fictional work platform 3",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          {
+            "id": "platform-4",
+            "identity": "urn:fictional:platform-income:platform-4",
+            "name": "Fictional work platform 4",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        ],
+        "trust": {
+          "introductions": [
+            [
+              "owner-agent",
+              "receiver-agent"
+            ]
+          ],
+          "ownLists": {
+            "owner-agent": [
+              {
+                "party": "urn:fictional:platform-income:receiver",
+                "tasks": [
+                  "urn:op:platform-income",
+                  "urn:op:platform-income:request"
+                ]
+              }
+            ],
+            "receiver-agent": [
+              {
+                "party": "urn:fictional:platform-income:owner",
+                "tasks": [
+                  "urn:op:platform-income",
+                  "urn:op:platform-income:request"
+                ]
+              }
+            ]
+          },
+          "sources": {
+            "owner-agent": [
+              {
+                "id": "urn:source:platform-income:income.platform-list",
+                "version": "1",
+                "source": "urn:fictional:platform-income:owner",
+                "claimTypes": [
+                  "income.platform-list"
+                ],
+                "subjects": [
+                  "urn:fictional:platform-income:owner"
+                ]
+              },
+              {
+                "id": "urn:source:platform-income:income.completeness",
+                "version": "1",
+                "source": "urn:fictional:platform-income:tax-authority",
+                "claimTypes": [
+                  "income.completeness"
+                ],
+                "subjects": [
+                  "urn:fictional:platform-income:owner"
+                ]
+              }
+            ],
+            "receiver-agent": [
+              {
+                "id": "urn:source:platform-income:income.platform-list",
+                "version": "1",
+                "source": "urn:fictional:platform-income:owner",
+                "claimTypes": [
+                  "income.platform-list"
+                ],
+                "subjects": [
+                  "urn:fictional:platform-income:owner"
+                ]
+              },
+              {
+                "id": "urn:source:platform-income:income.completeness",
+                "version": "1",
+                "source": "urn:fictional:platform-income:tax-authority",
+                "claimTypes": [
+                  "income.completeness"
+                ],
+                "subjects": [
+                  "urn:fictional:platform-income:owner"
+                ]
+              }
+            ]
+          }
+        },
+        "statements": [
+          {
+            "id": "supplied-platforms",
+            "issuer": "owner",
+            "subject": "urn:fictional:platform-income:owner",
+            "kind": "income.platform-list",
+            "value": {
+              "items": [
+                "urn:fictional:platform-income:platform-1",
+                "urn:fictional:platform-income:platform-2",
+                "urn:fictional:platform-income:platform-3",
+                "urn:fictional:platform-income:platform-4"
+              ],
+              "period": {
+                "start": "2026-10-01",
+                "end": "2026-10-31"
+              }
+            },
+            "method": "self-reported",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:platform-income:supplied-platforms",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:platform-income:supplied-platforms",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:platform-income"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:platform-income:supplied-platforms",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:platform-income"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "mandates": [
+          {
+            "agent": "owner-agent",
+            "autonomous": [
+              {
+                "type": "permission",
+                "action": "distribute",
+                "target": "urn:op:platform-income"
+              }
+            ],
+            "withApproval": []
+          },
+          {
+            "agent": "receiver-agent",
+            "autonomous": [
+              {
+                "type": "permission",
+                "action": "use",
+                "target": "urn:op:platform-income:request"
+              }
+            ],
+            "withApproval": []
+          }
+        ],
+        "stress": [
+          "source",
+          "fitness"
+        ]
       },
       "expect": {
         "outcome": "ask-more",
@@ -316,33 +2812,4059 @@
           "verdict": "ask-more",
           "reason": "completeness-not-established"
         }
-      ]
+      ],
+      "profileChange": {
+        "x-authored-by": "Codex GPT-6",
+        "schema": "agent-profile/0.1",
+        "id": "platform-income",
+        "parties": {
+          "owner": "The self-employed worker",
+          "receiver": "The lender",
+          "tax-authority": "The fictional tax authority",
+          "owner-agent": "The self-employed worker’s agent",
+          "receiver-agent": "The lender’s agent",
+          "platform-1": "Fictional work platform 1",
+          "platform-2": "Fictional work platform 2",
+          "platform-3": "Fictional work platform 3",
+          "platform-4": "Fictional work platform 4"
+        },
+        "claims": [
+          {
+            "kind": "income.platform-list",
+            "sources": [
+              "urn:fictional:platform-income:owner"
+            ],
+            "methods": [
+              "self-reported"
+            ],
+            "maxAgeDays": 30,
+            "completeness": "income.completeness"
+          },
+          {
+            "kind": "income.completeness",
+            "sources": [
+              "urn:fictional:platform-income:tax-authority"
+            ],
+            "methods": [
+              "recorded-by-authority"
+            ],
+            "maxAgeDays": 30
+          }
+        ],
+        "purposes": [
+          {
+            "id": "urn:purpose:platform-income",
+            "claims": [
+              "income.platform-list",
+              "income.completeness"
+            ]
+          }
+        ],
+        "rules": [],
+        "decisionsForPerson": [],
+        "modelReadings": [],
+        "vocabulary": {
+          "input.items.*": {
+            "type": "identifier"
+          },
+          "input.request": {
+            "type": "code",
+            "values": [
+              "income.platform-list",
+              "income.completeness"
+            ]
+          },
+          "output.status": {
+            "type": "code",
+            "values": [
+              "received"
+            ]
+          }
+        },
+        "operations": [
+          {
+            "id": "urn:op:platform-income",
+            "version": "0.1",
+            "label": "Proving income from several platforms",
+            "pattern": "invoke",
+            "access": "represented",
+            "models": [],
+            "purposes": [
+              "urn:purpose:platform-income"
+            ],
+            "requiresRepresentation": true
+          },
+          {
+            "id": "urn:op:platform-income:request",
+            "version": "0.1",
+            "label": "Request the needed information",
+            "pattern": "invoke",
+            "access": "represented",
+            "models": [],
+            "purposes": [
+              "urn:purpose:platform-income"
+            ],
+            "requiresRepresentation": true
+          }
+        ]
+      }
     }
   ],
-  "expect": [],
-  "stress": [
-    "source",
-    "fitness"
-  ],
-  "suites": {
-    "data-access": "aggregate-mpc"
-  },
-  "assurance": "joint",
-  "blocked": [
+  "expect": [
     {
-      "path": "main",
-      "reason": "needs joint computation"
-    }
-  ],
-  "standIns": [
-    {
-      "what": "Outside organizations and data sources",
-      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
     },
     {
-      "what": "Completeness-only preflight",
-      "replacedBy": "A worker-signed list of the four supplied platforms and a configured but absent tax-authority completeness statement; no platform values or joint total are supplied"
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-1-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-2-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-3-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contributor-4-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "computer-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "requester-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
     }
   ],
-  "traceSteps": {}
+  "stress": [
+    "data-terms",
+    "disclosure"
+  ],
+  "suites": {},
+  "assurance": "joint",
+  "catalogueAssurance": "joint",
+  "recordedAssurance": "joint",
+  "requiredMethods": [
+    "sparq-aggregate/1"
+  ],
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Joint protocol participants",
+      "replacedBy": "Independently keyed fictional data holders, a compute-only party and a requester. Direct signed messages traverse both gates. Only test doubles are installed, so this creates no catalogue run or trace."
+    }
+  ],
+  "jointSession": {
+    "method": "sparq-aggregate/1",
+    "rule": "urn:rule:platform-income:aggregate",
+    "requester": "requester-agent",
+    "finisher": "computer-agent",
+    "purpose": "urn:purpose:platform-income",
+    "statistic": "sum",
+    "minimumGroup": 1,
+    "minimumContributors": 3,
+    "contributors": [
+      "contributor-1-agent",
+      "contributor-2-agent",
+      "contributor-3-agent",
+      "contributor-4-agent"
+    ],
+    "computeOnly": [
+      "computer-agent"
+    ],
+    "inputs": {
+      "contributor-1-agent": [
+        "contributor-1-count",
+        "contributor-1-sum"
+      ],
+      "contributor-2-agent": [
+        "contributor-2-count",
+        "contributor-2-sum"
+      ],
+      "contributor-3-agent": [
+        "contributor-3-count",
+        "contributor-3-sum"
+      ],
+      "contributor-4-agent": [
+        "contributor-4-count",
+        "contributor-4-sum"
+      ]
+    }
+  }
 }

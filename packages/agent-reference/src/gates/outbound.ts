@@ -12,7 +12,7 @@ import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selectiv
  */
 
 import type { OdrlRule } from "@jeswr/solid-odrl";
-import { digestOf } from "../core/canonical.js";
+import { canonicalJson, digestOf } from "../core/canonical.js";
 import type {
   ActionIntent,
   AnyMessage,
@@ -20,6 +20,7 @@ import type {
   Iri,
   JsonObject,
 } from "../core/types.js";
+import { ruleInputs } from "../derive/rules.js";
 import { actionDigest, type OwnerMandate } from "../mechanisms/mandate.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
 import { configurationById } from "../profile/configurations.js";
@@ -206,6 +207,162 @@ export class OutboundGate {
     );
     this.decide("stop", "Required effect evidence is unavailable or withdrawn.", reason);
     return verdicts;
+  }
+
+  private narrowerAnswer(
+    claim: JsonObject,
+    purpose: string | undefined,
+    recipient: string | undefined,
+  ): string | undefined {
+    if (!purpose || !recipient || claim.method === "derived") return undefined;
+    const held = this.deps.memory.context(this.deps.gate.taskId ?? "*");
+    for (const fact of held) {
+      if (
+        !fact.accepted ||
+        fact.source !== recipient ||
+        this.deps.memory.facts.get(fact.id)?.digest !== fact.digest
+      )
+        continue;
+      if (fact.claimType === "derivation.request") {
+        const request = fact.statement?.value as JsonObject | undefined;
+        if (request?.purpose !== purpose || !Array.isArray(request.assurances)) continue;
+        const rule = this.deps.gate.rules?.find(
+          (r) => r.id === request.rule && digestOf(r) === request.ruleDigest,
+        );
+        if (!rule || !ruleInputs(rule).includes(String(claim.claimType))) continue;
+        if (
+          this.deps.gate.acceptedProofs?.some(
+            (a) =>
+              a.rule === rule.id &&
+              a.purposes.includes(purpose) &&
+              Array.isArray(request.assurances) &&
+              request.assurances.includes(a.assurance) &&
+              this.deps.gate.proofSystems?.has(a.method),
+          )
+        )
+          return "a proof of the requested result";
+      }
+      if (
+        fact.claimType === "joint.message" &&
+        ["joint.count", "joint.sum"].includes(String(claim.claimType))
+      ) {
+        const message = fact.statement?.value as JsonObject | undefined;
+        const fixed = this.deps.gate.fixedJointSessions?.[String(message?.sessionId)];
+        if (
+          fixed &&
+          fixed.purpose === purpose &&
+          message?.session &&
+          digestOf(message.session) === digestOf(fixed.session) &&
+          this.deps.gate.acceptedJoint?.some(
+            (a) =>
+              a.rule === fixed.rule && a.method === fixed.method && a.purposes.includes(purpose),
+          ) &&
+          this.deps.gate.jointProtocols?.has(fixed.method)
+        )
+          return "a joint contribution to the fixed session";
+      }
+    }
+    return undefined;
+  }
+
+  /** DER-21/22/23 before an opaque proof, contribution, partial or numeric release. */
+  checkDerivationRelease(input: {
+    subject: string;
+    purpose: string;
+    recipient: string;
+    inputs: readonly string[];
+    way: "proof" | "joint contribution" | "joint partial" | "joint outcome";
+    minimumGroup?: number;
+    evidenceOk?: boolean;
+    partyAtFault?: string;
+    suppressed?: boolean;
+    record?: JsonObject;
+  }): boolean {
+    const verdicts: CheckVerdict[] = [];
+    this.verdict(
+      verdicts,
+      input.subject,
+      "disclosure",
+      "pass",
+      `The gate chooses ${input.way}, revealing only the answer or committed contribution instead of attaching private inputs.`,
+      {
+        reason: "minimal-disclosure",
+        rule: {
+          id: "DER-21",
+          text: "Prefer the least revealing way accepted by the request and profile.",
+        },
+      },
+    );
+    for (const id of input.inputs) {
+      const item = this.deps.memory.facts.get(id);
+      for (const action of ["use", "distribute"] as const) {
+        const t = evaluateItemTerms(item?.terms, {
+          agent: this.deps.identity.actor,
+          action,
+          target: id,
+          purpose: input.purpose,
+          recipient: input.recipient,
+          minimumGroup: input.minimumGroup,
+          at: this.deps.now(),
+        });
+        const ok = !!item && t.verdict === "pass";
+        this.verdict(
+          verdicts,
+          input.subject,
+          "data-terms",
+          ok ? "pass" : "fail",
+          `Each input must permit derivation for this purpose and recipient: ${id}. ${t.text}`,
+          { reason: ok ? "terms-allow" : "prohibited", rule: { id: "DER-22", text: t.text } },
+        );
+        if (!ok) {
+          this.decide("stop", "An input's data terms prohibit this derivation.", "prohibited");
+          return false;
+        }
+      }
+    }
+    if (input.suppressed) {
+      this.verdict(
+        verdicts,
+        input.subject,
+        "data-terms",
+        "fail",
+        "The verified outcome is below the minimum group or has too few contributors; no number is released.",
+        {
+          reason: "prohibited",
+          rule: { id: "DER-22", text: "Minimum group size is a term of the data." },
+        },
+      );
+      this.decide(
+        "stop",
+        "Only the verifiable refusal outcome may go to the requester.",
+        "prohibited",
+      );
+      return false;
+    }
+    const ok = input.evidenceOk !== false;
+    this.verdict(
+      verdicts,
+      input.subject,
+      "evidence",
+      ok ? "pass" : "fail",
+      ok
+        ? "The evidence record retains the derivation and every contribution."
+        : `A contribution does not verify; party at fault: ${input.partyAtFault ?? "unknown"}.`,
+      {
+        reason: ok ? "evidence-complete" : "derivation-not-verified",
+        rule: {
+          id: "DER-23",
+          text: "Retain the derivation record, input references and contributions.",
+        },
+      },
+    );
+    if (!ok)
+      this.decide(
+        "stop",
+        "Joint evidence failed before a partial or total left.",
+        "derivation-not-verified",
+      );
+    return ok;
   }
 
   private findRule(id: string | undefined): { rule: OdrlRule; withApproval: boolean } | undefined {
@@ -422,7 +579,10 @@ export class OutboundGate {
           taskItems.some((i) => i.id === f.id && i.accepted && i.digest === f.digest) &&
           !!f.statement &&
           fitnessOf(
-            f.statement as unknown as import("./quality.js").QualityClaim,
+            {
+              ...f.statement,
+              method: f.method ?? f.statement.method,
+            } as unknown as import("./quality.js").QualityClaim,
             ctx.reliance,
             this.deps.now(),
           ).verdict === "pass" &&
@@ -1486,6 +1646,29 @@ export class OutboundGate {
       if (!isClaimEvidence(evidence)) continue;
       try {
         const claim = unverifiedEvidenceClaim(evidence);
+        const narrower = this.narrowerAnswer(claim, purpose, intent.recipient);
+        if (narrower) {
+          this.verdict(
+            verdicts,
+            digest,
+            "disclosure",
+            "fail",
+            `The request and profile allow ${narrower}; the gate chooses it because attaching this private input reveals more.`,
+            {
+              reason: "excessive-scope",
+              rule: {
+                id: "DER-21",
+                text: "Prefer an available proof or joint contribution to disclosing its private inputs.",
+              },
+            },
+          );
+          this.decide(
+            "stop",
+            "The private input is held for the less revealing answer.",
+            "excessive-scope",
+          );
+          return finish("stop", "excessive-scope");
+        }
         const fact = this.deps.memory.facts.get(String(claim.id));
         if (claim.terms) {
           const checked = evaluateItemTerms(claim.terms as unknown as ItemTerms, {
@@ -1887,12 +2070,66 @@ export class OutboundGate {
         recipient: intent.recipient,
         at: this.deps.now(),
       });
+      const explicitlyProhibits = (source: ItemTerms | undefined, target: string): boolean => {
+        if (!source) return false;
+        if (source.inherited?.some((i) => explicitlyProhibits(i.terms ?? undefined, i.target)))
+          return true;
+        if (!Array.isArray(source.policy?.prohibitions) || !source.policy.prohibitions.length)
+          return false;
+        return (
+          evaluateItemTerms(
+            { policy: { ...source.policy, permissions: [], obligations: [] } },
+            {
+              agent: this.deps.identity.actor,
+              action: "distribute",
+              target,
+              purpose: intent.purpose,
+              recipient: intent.recipient,
+              at: this.deps.now(),
+            },
+            this.deps.policyEngine ?? solidOdrlEngine,
+          ).reason === "prohibited"
+        );
+      };
+      const value = item.statement?.value;
+      const literal =
+        value === undefined ? undefined : typeof value === "string" ? value : canonicalJson(value);
+      const prohibited =
+        approved &&
+        literal !== undefined &&
+        literal.length >= 4 &&
+        text.toLowerCase().includes(literal.toLowerCase()) &&
+        explicitlyProhibits(item.terms, item.id);
+      if (prohibited) {
+        this.verdict(
+          verdicts,
+          subject,
+          "data-terms",
+          "fail",
+          `The approved text repeats ${item.label}'s value verbatim, and its source explicitly prohibits this recipient or purpose. The principal cannot approve past that prohibition.`,
+          {
+            reason: "prohibited",
+            rule: {
+              id: "UNS-9",
+              text: "Exact-text review cannot waive a source's explicit prohibition on the item itself.",
+            },
+          },
+        );
+        this.decide(
+          "stop",
+          "The source's explicit prohibition stops this email before release.",
+          "prohibited",
+        );
+        return verdicts;
+      }
       this.verdict(
         verdicts,
         subject,
         "data-terms",
         terms.verdict === "pass" || approved ? "pass" : "ask-principal",
-        `The exact email needs a person to review this item's restrictions: ${item.label}.`,
+        approved
+          ? `The principal reviewed this exact text against ${item.label}'s restriction: ${terms.text} The approval confirms these bytes after that review.`
+          : `The exact email needs a person to review this item's restrictions: ${item.label}.`,
         {
           reason: approved
             ? "approval-given"

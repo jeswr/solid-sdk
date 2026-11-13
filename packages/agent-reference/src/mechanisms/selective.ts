@@ -157,4 +157,5 @@ export async function verifySelectivePresentation(
   };
 }
 export const isClaimEvidence = (item: EvidenceItem) =>
-  item.role === "credential" && ["jws-compact", "selective-disclosure+jws"].includes(item.format);
+  item.role === "credential" &&
+  ["jws-compact", "selective-disclosure+jws", "derivation+jws"].includes(item.format);

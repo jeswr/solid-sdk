@@ -60,7 +60,7 @@
     }
   ],
   "generated": {
-    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
     "core": "scripted"
   },
   "standIns": [
@@ -245,7 +245,7 @@
       "part": "memory",
       "kind": "store",
       "fact": {
-        "id": "urn:scenario:care-abroad:medicine",
+        "id": "urn:mapped:45c14be1034c9b68c3ef7fc5edcad42a6f87c6df2fe20234f2aaaa40f75f3300",
         "label": "A home practice's medicine.code statement",
         "claimType": "medicine.code",
         "subject": "urn:fictional:care-abroad:party-1",
@@ -259,6 +259,7 @@
             "rule": "urn:fictional:care-abroad:mapping-table",
             "version": "1",
             "mappingDigest": "sha-256:d2b5210072b902791b4f1e5026134ff059405a88e754a0400ab4dc305ed95a4e",
+            "originalId": "urn:scenario:care-abroad:medicine",
             "originalDigest": "sha-256:ff238b1693cc964796bd661019fbd5faf209736f57eae0d7aad73356b0e8da4a",
             "originalSource": "urn:fictional:care-abroad:party-2",
             "originalQuality": {
@@ -294,8 +295,8 @@
         "method": "derived",
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
-          "id": "urn:fictional:care-abroad:medicine-terms",
-          "summary": "use for urn:purpose:care abroad; share for urn:purpose:care abroad"
+          "id": "urn:mapped-terms:301d7a12b46c7dfbaf79263e0a1fd3b0d571637954ff81662440d36758b58e08",
+          "summary": ""
         },
         "provenance": "Locally mapped; original signed by A home practice"
       },

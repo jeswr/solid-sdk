@@ -19,12 +19,66 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "income.monthly",
+      "sources": [
+        "urn:fictional:tenancy-application:employer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "tenancy-application.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:tenancy-application:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "rental.entitled",
+      "sources": [
+        "urn:fictional:tenancy-application:rental-authority"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "rental.reference",
+      "sources": [
+        "urn:fictional:tenancy-application:landlord"
+      ],
+      "methods": [
+        "person-opinion"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:tenancy-application",
-      "claims": []
+      "claims": [
+        "tenancy-application.answer",
+        "derivation.request",
+        "income.monthly",
+        "rental.entitled",
+        "rental.reference"
+      ]
     },
     {
       "id": "urn:purpose:tenant-finances",
@@ -33,7 +87,24 @@
       ]
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "id": "urn:rule:tenancy-application:proof",
+      "template": "threshold",
+      "params": {
+        "input": "income.monthly",
+        "operator": "gte",
+        "value": 3000
+      },
+      "output": "tenancy-application.answer",
+      "inputsFrom": [
+        "urn:fictional:tenancy-application:employer"
+      ],
+      "assurances": [
+        "attested"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
@@ -108,6 +179,59 @@
         "urn:purpose:tenancy-application"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:tenancy-application:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:tenancy-application:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:tenancy-application:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:tenancy-application:proof-answer",
+      "claims": [
+        "tenancy-application.answer"
+      ]
     }
   ]
 }

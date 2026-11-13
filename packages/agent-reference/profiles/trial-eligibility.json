@@ -30,6 +30,65 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "trial.age",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "trial.diagnosis",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "trial.medications",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30,
+      "completeness": "trial.medication-complete"
+    },
+    {
+      "kind": "trial-eligibility.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:trial-eligibility:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "trial.medication-complete",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
@@ -37,11 +96,67 @@
       "id": "urn:purpose:trial-eligibility",
       "claims": [
         "medication.list",
-        "medication.completeness"
+        "medication.completeness",
+        "trial-eligibility.answer",
+        "derivation.request",
+        "trial.age",
+        "trial.diagnosis",
+        "trial.medications",
+        "trial.medication-complete"
       ]
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "id": "urn:rule:trial-eligibility:proof",
+      "template": "all-of",
+      "params": {
+        "inputs": [
+          "trial.age",
+          "trial.diagnosis",
+          "trial.medications",
+          "trial.medication-complete"
+        ],
+        "conditions": [
+          {
+            "input": "trial.age",
+            "operator": "gte",
+            "value": 18
+          },
+          {
+            "input": "trial.age",
+            "operator": "lte",
+            "value": 65
+          },
+          {
+            "input": "trial.diagnosis",
+            "operator": "eq",
+            "value": "condition-a"
+          },
+          {
+            "input": "trial.medications",
+            "operator": "not-in",
+            "value": [
+              "excluded-x",
+              "excluded-y"
+            ]
+          },
+          {
+            "input": "trial.medication-complete",
+            "operator": "eq",
+            "value": true
+          }
+        ]
+      },
+      "output": "trial-eligibility.answer",
+      "inputsFrom": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "assurances": [
+        "attested"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
@@ -86,6 +201,60 @@
         "urn:purpose:trial-eligibility"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:trial-eligibility:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:trial-eligibility:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:trial-eligibility:proof",
+      "method": "sparq-authrdf/1",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh",
+        "complete"
+      ],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Planned proof method sparq-authrdf/1",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:trial-eligibility:proof-answer",
+      "claims": [
+        "trial-eligibility.answer"
+      ]
     }
   ]
 }

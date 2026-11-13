@@ -82,17 +82,13 @@
     }
   ],
   "generated": {
-    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
     "core": "scripted"
   },
   "standIns": [
     {
-      "what": "Outside organizations and data sources",
-      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
-    },
-    {
-      "what": "Completeness-only preflight",
-      "replacedBy": "A worker-signed list of the four supplied platforms and a configured but absent tax-authority completeness statement; no platform values or joint total are supplied"
+      "what": "Joint protocol participants",
+      "replacedBy": "Independently keyed fictional data holders, a compute-only party and a requester. Direct signed messages traverse both gates. Only test doubles are installed, so this creates no catalogue run or trace."
     }
   ],
   "events": [

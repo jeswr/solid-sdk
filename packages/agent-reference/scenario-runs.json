@@ -7,7 +7,7 @@
       "useCase": "age-check",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system"
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "age-check",
@@ -279,7 +279,7 @@
       "useCase": "cohort-count",
       "path": "main",
       "status": "blocked",
-      "reason": "needs joint computation"
+      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
     },
     {
       "scenario": "cohort-count",
@@ -287,7 +287,7 @@
       "path": "branch-1",
       "what": "The result would cover fewer than the minimum number of patients",
       "status": "blocked",
-      "reason": "needs joint computation"
+      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
     },
     {
       "scenario": "cohort-count",
@@ -295,7 +295,7 @@
       "path": "branch-2",
       "what": "One hospital does not attest its input",
       "status": "blocked",
-      "reason": "needs joint computation"
+      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
     },
     {
       "scenario": "consent-for-a-child",
@@ -464,7 +464,7 @@
       "useCase": "degree-recognition",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system"
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "degree-recognition",
@@ -1279,7 +1279,7 @@
       "useCase": "insurance-quote",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system"
+      "reason": "needs a proof system: needs the sparq-authrdf/1 package, which is not installed"
     },
     {
       "scenario": "insurance-quote",
@@ -1322,7 +1322,7 @@
       "useCase": "introduction",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system"
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "introduction",
@@ -2193,7 +2193,7 @@
       "useCase": "platform-income",
       "path": "main",
       "status": "blocked",
-      "reason": "needs joint computation"
+      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
     },
     {
       "scenario": "platform-income",
@@ -2639,7 +2639,7 @@
       "useCase": "recycled-content",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system"
+      "reason": "needs a proof system: needs the sparq-authrdf/1 package, which is not installed"
     },
     {
       "scenario": "recycled-content",
@@ -2888,7 +2888,7 @@
       "path": "hidden-validity-proof",
       "what": "Show valid until at least a date while hiding the actual date",
       "status": "blocked",
-      "reason": "Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates."
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "salary-account-change",
@@ -2963,7 +2963,7 @@
       "useCase": "salary-benchmark",
       "path": "main",
       "status": "blocked",
-      "reason": "Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result."
+      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
     },
     {
       "scenario": "salary-benchmark",
@@ -2971,7 +2971,7 @@
       "path": "branch-1",
       "what": "Only two employers contribute",
       "status": "blocked",
-      "reason": "Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result."
+      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
     },
     {
       "scenario": "sell-a-car",
@@ -3310,7 +3310,7 @@
       "useCase": "tenancy-application",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system"
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "tenancy-application",
@@ -3353,7 +3353,7 @@
       "useCase": "trial-eligibility",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system"
+      "reason": "needs a proof system: needs the sparq-authrdf/1 package, which is not installed"
     },
     {
       "scenario": "trial-eligibility",
@@ -3444,7 +3444,7 @@
       "useCase": "visa-application",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system"
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "visa-application",

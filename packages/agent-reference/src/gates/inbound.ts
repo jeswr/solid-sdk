@@ -28,6 +28,7 @@ import type {
   VerificationResult,
 } from "../core/types.js";
 import { verifyDerivation } from "../derive/rules.js";
+import { opaqueDerivation, verifyOpaqueDerivation } from "../derive/verification.js";
 import { AuthorityChainChecks } from "../mechanisms/authority-chain.js";
 import { type KeyAlg, verifyCompact } from "../mechanisms/jws.js";
 import { OrganizationChecks } from "../mechanisms/organizations.js";
@@ -680,6 +681,7 @@ export class InboundGate {
     verdict: Verdict;
     reason?: string;
     claim?: Claim;
+    methodOverride?: string;
     resolution?: Resolution;
     rule?: { id: string; text: string };
   }> {
@@ -766,7 +768,7 @@ export class InboundGate {
     if (
       s.method === "derived" &&
       s.derivation &&
-      (s.derivation as JsonObject).assurance === "recomputed"
+      ((s.derivation as JsonObject).assurance === "recomputed" || opaqueDerivation(s as JsonObject))
     )
       return { verdict: "pass", reason: "source-accepted", claim: s };
     const about = s.subject ?? subject;
@@ -892,8 +894,47 @@ export class InboundGate {
       r = await this.assessClaim(item, subject);
       cache.set(item.value, r);
     }
-    const c = r.claim;
+    let c = r.claim;
     let label = c ? this.labelOf(c) : "A relayed statement";
+    if (phase === "source" && c?.derivation && opaqueDerivation(c as JsonObject)) {
+      const result = await verifyOpaqueDerivation({
+        statement: c as JsonObject,
+        gate: this.deps.gate,
+        purpose: need.purpose ?? "",
+        acceptsSource: (issuer, kind) => {
+          const lookup = {
+            evaluator: this.deps.identity.actor,
+            source: issuer,
+            claimType: kind,
+            subject: c?.subject ?? subject,
+            at: this.deps.now(),
+          };
+          const assessed =
+            this.deps.gate.resolver?.resolveSource(lookup) ?? this.deps.trust.assessSource(lookup);
+          const permitted = this.deps.gate.claimSources?.[kind];
+          return assessed.outcome === "accepted" && (!permitted || permitted.includes(issuer));
+        },
+        event: (event) =>
+          this.verdictEvent("source", event.ok ? "pass" : "fail", event.text, {
+            reason: event.reason,
+            rule: { id: event.clause, text: event.text },
+          }),
+      });
+      if (!result.ok) {
+        cache.set(item.value, { ...r, verdict: "fail", reason: result.reason });
+        this.failedClaim(c, result.reason, need.taskId ?? need.task);
+        return false;
+      }
+      c = result.statement as Claim;
+      cache.set(item.value, {
+        ...r,
+        claim: c,
+        verdict: "pass",
+        reason: "source-accepted",
+        ...(result.reportedBySubject ? { methodOverride: "reported-by-subject" } : {}),
+      });
+      return true;
+    }
     if (phase === "source" && c?.derivation) {
       const derived = verifyDerivation(c as JsonObject, {
         rules: this.deps.gate.rules ?? [],
@@ -981,6 +1022,7 @@ export class InboundGate {
       return r.verdict === "pass";
     }
     if (!c || r.verdict !== "pass") return false;
+    const receivedClaim = c;
     const at = this.deps.now();
     const terms = c.terms as ItemTerms | undefined;
     if (phase === "terms") {
@@ -1034,7 +1076,11 @@ export class InboundGate {
         }
       }
     }
-    const f = fitnessOf(c, this.deps.gate.reliance, at);
+    const f = fitnessOf(
+      { ...c, method: r.methodOverride ?? c.method },
+      this.deps.gate.reliance,
+      at,
+    );
     this.verdictEvent(
       "fitness",
       f.verdict,
@@ -1053,18 +1099,18 @@ export class InboundGate {
       return false;
     }
     const completeness = this.deps.gate.reliance?.rules.find(
-      (r) => r.claimType === c.claimType,
+      (r) => r.claimType === receivedClaim.claimType,
     )?.completeness;
     if (
       completeness &&
       !this.corroborationPool.some(
         (candidate) =>
           candidate.claimType === completeness &&
-          candidate.subject === c.subject &&
+          candidate.subject === receivedClaim.subject &&
           candidate.complete === true &&
-          candidate.forClaim === c.claimType &&
+          candidate.forClaim === receivedClaim.claimType &&
           this.deps.memory.facts.get(candidate.id ?? "")?.digest === digestOf(candidate) &&
-          digestOf(candidate.period ?? null) === digestOf(c.period ?? null),
+          digestOf(candidate.period ?? null) === digestOf(receivedClaim.period ?? null),
       )
     ) {
       this.verdictEvent(
@@ -1078,7 +1124,7 @@ export class InboundGate {
       return false;
     }
     const corroboration = this.deps.gate.reliance?.rules.find(
-      (r) => r.claimType === c.claimType,
+      (r) => r.claimType === receivedClaim.claimType,
     )?.corroboration;
     if (corroboration) {
       const comparable = (claim: JsonObject) =>
@@ -1090,8 +1136,8 @@ export class InboundGate {
         );
       const matches = this.corroborationPool.filter(
         (candidate) =>
-          candidate.subject === c.subject &&
-          candidate.claimType === c.claimType &&
+          candidate.subject === receivedClaim.subject &&
+          candidate.claimType === receivedClaim.claimType &&
           digestOf(comparable(candidate as JsonObject)) === digestOf(comparable(c as JsonObject)),
       );
       const issuers = new Set(matches.map((claim) => claim.issuer));
@@ -1117,6 +1163,7 @@ export class InboundGate {
     }
 
     let mapped = false;
+    let original: AdmittedFact["original"];
     if (
       this.deps.gate.codeMappings &&
       typeof c.codeList === "string" &&
@@ -1158,7 +1205,16 @@ export class InboundGate {
         });
         return false;
       }
-      Object.assign(c, result.statement);
+      original = {
+        id: c.id ?? digestOf(c),
+        digest: digestOf(c),
+        statement: structuredClone(c as JsonObject),
+        evidence: structuredClone(item),
+      };
+      c = result.statement as Claim;
+      const originalRecord = { type: "mapping-original", mapped: c.id, original };
+      this.deps.record(originalRecord);
+      cache.set(item.value, { ...r, claim: c });
       mapped = true;
       label = this.labelOf(c);
       this.verdictEvent(
@@ -1169,6 +1225,7 @@ export class InboundGate {
       );
     }
     const fact: AdmittedFact = {
+      ...(original ? { original } : {}),
       admittedPurpose: need.purpose,
       statement: c as JsonObject,
       identifiers: identifiersIn(c),
@@ -1178,9 +1235,9 @@ export class InboundGate {
       claimType: c.claimType,
       source: c.issuer,
       subject: c.subject ?? "unknown",
-      ...(c.method ? { method: c.method } : {}),
+      ...((r.methodOverride ?? c.method) ? { method: r.methodOverride ?? c.method } : {}),
       ...(c.asOf ? { asOf: c.asOf } : {}),
-      ...(terms ? { terms } : {}),
+      ...(c.terms ? { terms: c.terms as ItemTerms } : {}),
     };
     this.deps.memory.facts.set(fact.id, fact);
     if (mapped)
@@ -1199,6 +1256,7 @@ export class InboundGate {
   /** The memory event for an admitted claim, labelled with source, method, age and terms. */
   storeEvent(c: Claim, chat?: string): void {
     const terms = c.terms as ItemTerms | undefined;
+    const method = this.deps.memory.facts.get(c.id ?? digestOf(c))?.method ?? c.method;
     this.emit({
       part: "memory",
       kind: "store",
@@ -1217,7 +1275,7 @@ export class InboundGate {
               (c as JsonObject).level ??
               null),
         source: c.issuer,
-        ...(c.method ? { method: c.method } : {}),
+        ...(method ? { method } : {}),
         ...(c.asOf ? { asOf: c.asOf } : {}),
         ...(c.period ? { period: c.period } : {}),
         ...(terms ? { terms: { id: terms.policy.id, summary: termsSummary(terms) } } : {}),
@@ -1332,7 +1390,7 @@ export class InboundGate {
         continue;
       }
       this.decisionEvent("admit", `${label} is admitted.`);
-      const claim = r.claim as Claim;
+      const claim = (cache.get(item.jws)?.claim ?? r.claim) as Claim;
       this.storeEvent(claim);
       const fact = this.deps.memory.facts.get(claim.id ?? digestOf(claim));
       if (fact)
@@ -1722,7 +1780,10 @@ export class Admission {
           termsOk,
         );
         if (!ok) this.claimsAdmitted = false;
-        else if (r?.claim) admitted.push(r.claim);
+        else {
+          const claim = this.claimCache.get(item.value)?.claim ?? r?.claim;
+          if (claim) admitted.push(claim);
+        }
       }
       this.admittedClaims = admitted;
     }

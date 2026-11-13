@@ -25,13 +25,28 @@ export {
 export { validateMessage } from "./core/schema.js";
 export type * from "./core/types.js";
 export { CORE_REASON_CODES } from "./core/types.js";
+export { availableAdapters } from "./derive/adapters/index.js";
+export { ProofCache, proofRequestDigest } from "./derive/cache.js";
 export {
   type DerivationRule,
   evaluateRule,
+  queryFor,
   ruleSchema,
   validateRules,
   verifyDerivation,
 } from "./derive/rules.js";
+export {
+  type Adapter,
+  type DerivedRequest,
+  type FixedJointSession,
+  type JointOutcome,
+  type JointProtocol,
+  type ProofBinds,
+  type ProofSystem,
+  type SessionParams,
+  type VerifierRegistry,
+  verifierRegistry,
+} from "./derive/verifiers.js";
 export {
   CONVENTIONAL_BOOK_OP,
   classifyLink,
@@ -47,6 +62,7 @@ export {
   scenarioSchema,
 } from "./engine/schema.js";
 export { mandateWithUnsupportedTerm, personalMandate, schedulingMandate } from "./mandates.js";
+export { JOINT_OPERATIONS, JointParty } from "./mechanisms/joint.js";
 export {
   generateSigningKey,
   type KeyAlg,

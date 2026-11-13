@@ -687,3 +687,146 @@ Final manifest: **166 paths = 151 executable + 15 blocked; 141 runs, 10 disagree
 | git diff --check | Passed. |
 
 No commit, network operation, dependency addition, personal-agent suite, coverage or full-workspace gate was performed. Source fixtures, actors, organizations, datasets, documents and effects are fictional. Outside-system limitations remain explicit in the per-part interpretations and standIns: no live banking/escrow settlement, distributed provider transaction, calendar connector, SMTP service, federation discovery, VC wire interoperability, proof system or joint-computation protocol is claimed. Refused evidence remains excluded from handlers; labels and reasons only are available through ctx.refusedEvidence(). All changes remain in the working tree.
+
+## Brief 21
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Work is offline, uncommitted, and confined to this worktree. Existing trace changes were present at session start. No evaluation trees, maintained outlines, previous report sections, dependencies or other lane are edited.
+
+**Part 1 — interfaces and discovery.** Added the complete `ProofSystem`, `JointProtocol`, `SessionParams`, `JointOutcome` and method-keyed registry contracts in `src/derive/verifiers.ts`, with optional registry fields in `GateContext`. The adapter entry point exports an empty adapter list and probes both optional JavaScript packages and the configured native executable. Opaque module loading is reported separately from verifier registration: there is no invented API call or real adapter today. The table in that file identifies all three deliveries and their roles. Node 24 TypeScript compilation passed; **200 reference tests pass**; scenarios remain **141 runs, 10 disagrees, 15 blocked**.
+
+**Part 2 — gate and runtime seam.** Added ordered source-phase proof checks with DER references: accepted rule/digest/output, installed method and purpose policy, requested assurance, receiver-owned query/policy/nonce verification and exact value comparison, confirmed binding checks, limited attestation/fallback reporting, and independent authority lookup for every issuer key across every input kind. Unknown or consumed nonces yield replay-conflict; unsuccessful proofs leave them available. The runtime writes requests before returning them for transmission and uses its existing seeded identifier source for nonces. Added SELECT DISTINCT compilation for numeric/date thresholds, boolean conjunction/disjunction and membership, plus aggregate SELECTs. Added exact-request proof caching and the offline `proofs` command; native-hour proofs are generated ahead of runtime. Outbound checks record the chosen narrow disclosure, apply every input's use/sharing terms and retain evidence; suppressed joint outcomes stop numbers at data terms. The durable per-party joint state machine uses ordinary signed agent operations for open, contribution/share, partial and outcome, and never runs another party's function. The engine wiring and complete scenario exercises follow in Part 3. At this checkpoint **217 reference tests pass** and scenarios remain **141 runs, 10 disagrees, 15 blocked**. No maintained outline changed.
+
+**Part 3 — complete test worlds and recording boundary.** All fifteen requested paths now have independently keyed parties, method-issued credentials or local joint inputs, installed rules, receiver-created requests, accepted limited assurances, session rosters, purpose/terms policy and executable scripts. Introduction runs both directions; visa and tenancy also convey the separately attributed supporting statements. Cohort uses five hospitals, platform income four contributors, and salary benchmarking six employers plus a separately keyed compute-only party. Every protocol message goes through the actual sender and receiver runtimes; each party alone calls its own protocol functions. Test-only HMAC proofs and plain additive/signed joint doubles live exclusively under `test/doubles/` and explicitly establish no real proof or privacy. Actual adapter calls are tracked, even if a scenario omitted a method declaration. Both the ordinary engine and the artifact writer refuse test-double publication. Missing adapters keep all fifteen rows blocked with the required leading blocker words and exact method name. New scenario expectation arrays are test-derived review artifacts; no maintained outline file or trace for these fifteen was written. Large proof wrappers use an explicit `derivation+jws` encoding (2 MiB evidence limit) and opt-in 4 MiB envelope/50,000-node/depth-32 bounds; ordinary evidence retains its 16 KiB bound. File-store tests restart both a holder runtime and its joint state between contribution and partial, and restart the receiver around nonce issuance, consumption and replay. At this checkpoint **243 reference tests pass**; scenarios remain **141 runs, 10 disagrees, 15 blocked**. The fifteen-path table, native preparation limitation and complete adapter checklist are below after the review fixes.
+
+**Part 4 — review fixes.** Mapping no longer uses `Object.assign` on the received claim. The mapped statement has a distinct digest-derived ID and names the original by both ID and digest. Its admitted fact retains the original statement and exact evidence object beside it, including across state snapshots, and the ledger records that association. Inherited terms continue to target the original item. Admission and memory events select the new mapped object; no issuer signature is attached to its rewritten bytes. The regression verifies the stored original against its issuer's actual JWS and compares the verified payload/digest. Exact email approval still permits reviewed text, with event text saying the principal reviewed these exact bytes against this item's restriction. An approved text repeating a source-prohibited value now stops at data terms/prohibited before the adapter/outbox can send it. Tests cover case-insensitive strings, numeric values, canonical object text, default terms, non-repetition and the four-character threshold. The last full checkpoint after these fixes was **249 reference tests passing** with scenarios **141 runs, 10 disagrees, 15 blocked**; additional seam adversarial checks and final static validation are recorded below.
+
+**The fifteen paths, with doubles only.** Every row below executes its entire declared script through the real gates/runtime. “Admit” means the narrow statement passed admission, not that a visa, tenancy, meeting or insurance contract was granted. The external catalogue specifies no main-path outcome/reason/check for these cases, so no such expectation is invented. Every proof record is `attested`; the original request for `proved` remains in `catalogueAssurance`, and the implemented choice is separately `recordedAssurance`. All these rows remain `blocked` in the real manifest.
+
+| Use case / path | End to end with doubles | Actual decision / reason / check | Catalogue comparison |
+|---|---|---|---|
+| degree-recognition / main | Yes | admit / fit-for-use / fitness | Main decision unspecified; degree-membership answer admitted. |
+| introduction / main | Yes, both directions | admit / fit-for-use / fitness | Main decision unspecified; two identity-provider answers admitted, with no assertion of character or safety. |
+| visa-application / main | Yes | admit / fit-for-use / fitness | Main decision unspecified; funds threshold plus separately attributed employer opinion and self-reported itinerary admitted. |
+| tenancy-application / main | Yes | admit / fit-for-use / fitness | Main decision unspecified; income threshold, rental entitlement and landlord opinion admitted. |
+| age-check / main | Yes | admit / fit-for-use / fitness | Main decision unspecified; date predicate admitted. No unlinkability claim. |
+| right-to-work / hidden-validity-proof | Yes | admit / fit-for-use / fitness | **Disagrees with the retained scenario expectation** ask-more / assurance-insufficient / authority. Its expectation is untouched. The catalogue names this additional path as blocked, without an outcome. The branch comparison also records no non-passing divergence from the ordinary-disclosure main. |
+| insurance-quote / main | Yes, ending in the source challenge | ask-more / source-not-authoritative / source | **Does not produce the intended usable quote.** No explicit catalogue main decision exists, so the comparator does not label a main-path mismatch. DER-18 refuses the limited proof's combined issuer table; see below. |
+| trial-eligibility / main | Yes | admit / fit-for-use / fitness | Main decision unspecified; age/diagnosis/excluded-medicine tests and source-signed completeness admitted. |
+| recycled-content / main | Yes | admit / fit-for-use / fitness | Main decision unspecified; conservative minimum of three audited stage fractions exceeds 30%. |
+| cohort-count / main | Yes | admit / fit-for-use / fitness | Main decision unspecified; verified count **30**. |
+| cohort-count / branch-1 | Yes | stop / prohibited / data-terms | **Matches**. The requester receives a verifiable below-minimum outcome, not a number. |
+| cohort-count / branch-2 | Yes | stop / derivation-not-verified / evidence | **Matches**. The compute party detects the unsigned hospital contribution and records the party at fault before a partial leaves. |
+| platform-income / main | Yes | admit / fit-for-use / fitness | Main decision unspecified; supplied-platform total **11500**, without claiming all platforms are covered. |
+| salary-benchmark / main | Yes | admit / fit-for-use / fitness | Main decision unspecified; count **75**, sum **3120000**, giving mean **41600**. |
+| salary-benchmark / branch-1 | Yes | stop / prohibited / data-terms | **Matches**. The fixed two-contributor roster cannot meet the minimum of three; only the verifiable refusal goes to the requester. |
+
+Insurance's licensing key is accepted for licensing facts and the register's key for claims facts. Neither planned proof binds each issuer to each fact. Applying the brief literally therefore requires both keys to be authoritative for all those kinds, which they are not. The gate asks for better evidence; neither issuer's authority was widened to force success. The run records the failed source check and excludes the result from factual support. The hidden-validity branch's old expectation is likewise not rewritten to match its new, explicitly accepted limited attestation.
+
+**Interpretations and implementation boundaries.**
+
+- `JsonValue` is the existing core `Json` type. Verifier input/output and protocol JSON are opaque; the engine never infers a real backend API from an installed module. Literal optional imports deliberately suppress only TypeScript's absent-module diagnostic, not a verification failure. Runtime discovery still finds no adapter. The layer guard requires those imports to be string literals.
+- Query predicates are the fixed encoding `urn:claim:<percent-encoded claim kind>`. Numbers, booleans, membership, canonical dates and bounded conjunction/disjunction conditions compile to receiver-owned `SELECT DISTINCT` text. Restricted `NOT EXISTS` implements the authenticated-RDF medication exclusion. The recycling rule uses the minimum certified fraction for the same fictional lot across three independently keyed tiers; it is a conservative stage guarantee, not an invented mass-balance calculation. Actual backend query admission and RDF encoding cannot be validated before delivery; a real adapter must refuse unsupported queries rather than substitute another query or a signed boolean.
+- Tenancy uses one payroll statement and a fixed GBP 3000 threshold, three times the stated GBP 1000 rent. No sum is assigned to the limited result relation. Opinions and itineraries keep their distinct authorship/method; admitting them does not convert prose into an automated judgement. Direct local trust/source rules replace live federation discovery. Named/pseudonymous fictional actors are used for the gate fixtures; anonymity, cross-merchant unlinkability and holder binding are not established.
+- Source-signed completeness is admitted before the medication/claims snapshot that relies on it. A canonical credential-digest agreement is independently fixed in receiver policy for the doubles. Its format is explicitly `engine-credential-digests/1`; it is **not** a native authenticated-RDF dataset commitment.
+- **Stopped native preparation:** the supplied `ProofSystem` interface has no dataset-commit/preparation call, while the planned native CLI requires `commit` over native signed hashes, policy and salt before the verifier can agree the dataset. With opaque credentials and no delivered CLI, the engine cannot compute or translate that native commitment. No native commitment or native `complete` binding is fabricated. A native adapter must receive an independently agreed native commitment in receiver-owned policy, or a preparation interface must be added under review. Consequently the claim that *only* three thin adapters remain is not yet justified for the native verifier-agreed datasets. The canonical double-only agreement does not close this gap.
+- Receiver nonce records bind rule ID/digest, subject, purpose, query, policy and accepted assurances. Issuance is saved before transmission. Source verification consumes the nonce only after successful proof/binding/source checks; later terms or fitness refusal does not undo successful proof verification. Unsuccessful verification leaves it pending. Restarts retain consumption, and seeded identifier reuse cannot overwrite a prior nonce. Two independent complete engine runs produce identical nonce-bearing events. Future adapters must also make synthetic issuance reproducible from their key seed, or persist the issued credentials; random reissuance must cause an exact cache miss, never a relaxed match.
+- Step 2 requires a registered verifier and matching proof policy, with the explicit accepted-attester fallback of step 6. Insufficient confirmed bindings then fall back to an accepted attester or the `reported-by-subject` reliance label. That label is stored separately from the holder's immutable signed bytes; subsequent fitness/derivation checks use the gate's label. A proof never gains a subject binding from the outer signature.
+- DER-21 holds raw inputs when an actually admitted request and installed profile permit a narrower proof or joint contribution. Each input's existing use and distribution terms must permit the purpose/recipient; proof output terms inherit those restrictions. `minimumGroup` is an explicit local item-term field, enforced before raw sharing or joint participation. No new interpreter for lighter `derive`/`aggregate`/`anonymize` ODRL grants was added; unfamiliar policy actions continue to fail closed. This is a conservative restriction of the existing policy subset.
+- The profile's semantic rule digest and the protocol's digest of fixed `SessionParams` are distinct. The receiver stores their association before the open message and compares the entire session, roster and protocol digest. The compute-only party is explicitly on that roster. Contributions, received shares, partials and outcomes survive restart. Repeated local contribution/partial calls reuse their saved values. A sender-boundary check verifies outgoing outcome evidence again, so a core-substituted numeric outcome cannot bypass `finish`'s refusal. No `simulateSession` call exists.
+- Toy proofs share an HMAC key and prove nothing. Toy shares are plaintext and provide no privacy. Their totals use the signed partial sums, and their verifier checks every roster signature, share binding, partial and total; a missing input never becomes a smaller valid total. Real aggregation still does not prove the holders' counts are true, guarantee delivery, prevent excessive collusion or solve repeated-query inference. No such guarantee is claimed.
+- Email's canonical comparison uses the string itself for strings and canonical JSON for other values, case-insensitively, at length four or more. It requires an actually matching explicit policy prohibition, including inherited ones. Default/no-permission terms still go to exact-text review. Mapping's locally interpreted fact and source original have separate identities and digests, and the original proof remains available in gate-held state/audit for later verification.
+
+**Reason codes.** No new core reason code was added. The specialist label `input-not-attested` is not a core reason: it maps to `derivation-not-verified`, retaining the backend explanation and party at fault. There is no `proof-cache-miss` code; an unavailable precomputed native proof uses `evidence-missing`. There is no `less-disclosing-method-available` code; attempted raw input release uses `excessive-scope` at disclosure with a DER-21 explanation. Unissued/consumed nonces use the existing `replay-conflict`; unsupported policy terms keep `unsupported-term`.
+
+**What each real adapter must supply.** The exact common TypeScript contracts are in `src/derive/verifiers.ts`; the signatures below are repeated so this report is self-contained. All implementations advertise `kind: "real"` only when they actually call a real verifier over real evidence. Discovery alone never registers one.
+
+```ts
+type ProofBinds = "rule" | "issuers" | "subject" | "fresh" | "complete";
+type ProofOK = { ok: true; released: JsonValue; binds: readonly ProofBinds[];
+  issuerKeys: readonly JsonObject[] };
+type ProofFail = { ok: false; reason: string };
+issuerKeygen(seed: Uint8Array): Promise<{ publicKey: JsonObject; secretKey: JsonObject }>;
+issue(input: { issuerKey: JsonObject; subject: Iri; claims: JsonObject;
+  status?: JsonObject }): Promise<JsonObject>;
+prove(input: { query: string; credentials: readonly JsonObject[];
+  policy: JsonObject; nonce: string }):
+  Promise<{ presentation: JsonObject; result: JsonValue }>;
+verify(input: { expectedQuery: string; presentation: JsonObject;
+  policy: JsonObject; nonce: string }): Promise<ProofOK | ProofFail>;
+```
+
+| Method | Function | Required real behaviour |
+|---|---|---|
+| `sparq-zk-result/5` | `issuerKeygen` | Map the seed to the delivered test-issuer key generator; return actual Baby Jubjub/commitment public and secret material in JSON, with fixture issuance reproducibility. |
+| same | `issue` | Encode the declared claim values/datatypes into the delivered method-bound v5 credential format and actually issue them, including the supplied status reference. Preserve the issuer identity/key association independently in receiver trust. |
+| same | `prove` | Call the offline WASM/Noir/bb successful-result implementation over the exact compiled query, issued credentials, receiver policy and nonce. Include hidden numeric/date members where needed. Normalize its released result to the exact statement value without exposing hidden inputs. |
+| same | `verify` | Reconstruct the expected public inputs from **receiver-owned** query, key/status policy and nonce, call the real verifier, and report its actual public issuer keys and released value. Maximum bindings are `rule`, `issuers`, `fresh`; never `subject`. Translate backend failures to `ok:false`, without replacing verification with a Boolean attestation. The engine owns durable nonce consumption. |
+| `sparq-authrdf/1` | `issuerKeygen` | Supply the actual Ed25519/RDFC issuer keys required by the native issuance format, seeded reproducibly for these synthetic fixtures. The delivered CLI key-format/issuance contract must be checked; no undocumented keygen command is assumed. |
+| same | `issue` | Call the native `issue` implementation or its actual library equivalent to produce signed authenticated-RDF credentials, not package JWS credentials relabelled as RDFC. |
+| same | `prove` | Invoke `authrdf_cli` through `execFile`, with real `r0vm`/guest pins, exact query, policy/key table, native dataset authority and nonce; return the genuine presentation and normalized released value. This runs in the `proofs` preparation command, not an hour-long synchronous scenario action. |
+| same | `verify` | Call native verification now over the exact receiver request. Report actual issuer-table keys and `rule`, `issuers`, `fresh`, plus `complete` **only** for an independently agreed native `VerifierAgreed` commitment. Never report subject/status binding. Use an isolated backend nonce-check store as needed so the engine's durable consume-after-success rule remains authoritative. Reject the engine-only fixture commitment until the native preparation gap above is resolved. |
+
+The joint adapter has these exact types:
+
+```ts
+interface SessionParams {
+  sessionId: string;
+  statistic: "count" | "sum" | "count-and-sum";
+  minimumGroup: number;
+  minimumContributors: number;
+  threshold?: { statistic: "count" | "sum"; operator: ">=" | "<="; value: number };
+  roster: readonly { party: string; publicKeys: JsonObject; computeOnly?: boolean }[];
+}
+type JointOutcome =
+  | { type: "release"; count?: number; sum?: number; evidence: JsonObject }
+  | { type: "threshold-verdict"; verdict: boolean; evidence: JsonObject }
+  | { type: "below-minimum-group"; evidence: JsonObject }
+  | { type: "too-few-contributors"; evidence: JsonObject };
+generateKeys(seed: Uint8Array): Promise<{ publicKeys: JsonObject; secretKeys: JsonObject }>;
+newSession(params: SessionParams): Promise<{ session: JsonObject; ruleDigest: string }>;
+contribute(input: { session: JsonObject; party: string; secretKeys: JsonObject;
+  count: number; sum: number }):
+  Promise<{ contribution: JsonObject; shares: Record<string, JsonObject> }>;
+receiveAndPartial(input: { session: JsonObject; party: string; secretKeys: JsonObject;
+  contributions: readonly JsonObject[]; shares: readonly JsonObject[] }):
+  Promise<{ ok: true; partial: JsonObject }
+    | { ok: false; reason: string; partyAtFault?: string }>;
+finish(input: { session: JsonObject; contributions: readonly JsonObject[];
+  partials: readonly JsonObject[] }): Promise<JointOutcome>;
+verifyOutcome(input: { session: JsonObject; outcome: JointOutcome;
+  contributions: readonly JsonObject[] }):
+  Promise<{ ok: true; contributors: readonly string[] }
+    | { ok: false; reason: string; partyAtFault?: string }>;
+```
+
+| `sparq-aggregate/1` function | Required real behaviour |
+|---|---|
+| `generateKeys` | Produce the delivered Ed25519/X25519 key material, keep secrets with that party, and expose only public keys in the receiver-fixed roster. |
+| `newSession` | Normalize the public session and its SHA-256 rule digest over all session parameters, including thresholds, minima and compute-only roster entries. |
+| `contribute` | Make real Pedersen commitments/range proofs, additive shares and one encrypted share per other roster party, and sign the complete contribution using this party's own roster key. Normalize `party` attribution for the message handler. |
+| `receiveAndPartial` | Check **every** contribution and this party's received shares, then produce only this party's signed partial; otherwise return the actual reason and party at fault. Never invoke another party's function. |
+| `finish` | Combine actual verified contributions and partials. Normalize the four delivered outcome variants to the union above. Refusals contain no numeric total; threshold verdicts reveal only their Boolean result. |
+| `verifyOutcome` | Verify every roster signature, range proof and commitment opening, the outcome's session/digest and the complete contributor set. Missing/unsigned/off-roster contributions fail, never reduce a total. Report the actual contributing party IDs. |
+
+The joint adapter also supplies one explicit `assumption` sentence describing the delivered semi-honest privacy/collusion limit; it is included in the signed derivation record. Each future adapter is wired through the currently empty list in `src/derive/adapters/index.ts`. The external native preparation gap, actual backend format/query compatibility, and real cryptographic/performance checks remain unavailable; no tarball was installed, no native process/proof was fabricated, and no synthetic result was published as a real run.
+
+**Final validation (Node 24).** All final checks below passed. The final source review also separated the weaker reliance label from signed statement bytes, deduplicated public issuer-key policy entries, fixed the layer guard's literal-import requirement without adding package declarations or dependencies, and added negative-data and sender-boundary substitution tests. The double-driven expectation arrays compare exactly through the actual gates; they remain scenario test data, not published trace artifacts.
+
+| Check | Result |
+|---|---|
+| `pnpm --filter @jeswr/agent-reference test` | **257 passed**, 36 files; no skips or disabled tests. |
+| Package typecheck | Passed. |
+| Package build | Passed, including schema drift, retained trace generation and all real-adapter scenario gating. |
+| Package lint | Passed; 4 warnings and 14 informational diagnostics, no errors. |
+| Required scenarios command | **151 executable paths: 141 agree, 10 disagree; 15 blocked.** |
+| `pnpm --filter @jeswr/agent-reference run proofs` | Passed as preparation/discovery: all nine proof-dependent paths, including the hidden right-to-work branch, report the precise missing method. No proof cache file was generated. |
+| Adapter discovery | `loaded: []`, zero proof systems and zero joint protocols. |
+| Agent-layer guard | Passed. |
+| Maintained outline audit | All **151** initial outline files are byte-for-byte unchanged. |
+| Manifest/artifact audit | Exactly **166** rows: **141 runs, 10 disagrees, 15 blocked**. None of the fifteen blocked paths has a trace file. |
+| Scope/report audit | All changes are inside agent-reference; no evaluation tree, tracked dist or other-lane edit; all pre-Brief-21 report bytes are preserved. |
+| `git diff --check` | Passed. |
+
+Reproduction logs are `/tmp/brief21-part{1,2,3,4}-tests.log`, the corresponding scenario logs, and `/tmp/brief21-final-{tests,build,typecheck,lint,scenarios,layers}.log`; proof discovery is in `/tmp/brief21-proofs-command.log`. The per-path double-run observations are in `/tmp/brief21-path-results.json`. No commit, dependency installation, network call, personal-agent suite, coverage or full-workspace gate was performed. All changes remain uncommitted. Real adapters and native commitment preparation remain explicitly unavailable as described above; there is no claim that these fifteen paths have run with real cryptographic evidence.

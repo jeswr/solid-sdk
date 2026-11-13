@@ -112,3 +112,123 @@ function required<T>(value: T | undefined | null): T {
     throw new Error("required capability value is missing");
   return value;
 }
+it("keeps the issuer-signed original beside a new mapped object, with its id, digest and verifiable proof", async () => {
+  const { InboundGate, claimSchema } = await import("../src/gates/inbound.js"),
+    { GateMemory } = await import("../src/gates/common.js"),
+    { DEFAULT_LIMITS } = await import("../src/core/limits.js"),
+    { digestOf } = await import("../src/core/canonical.js"),
+    { testKey } = await import("../src/reference/keys.js"),
+    { TrustStore } = await import("../src/mechanisms/trust.js"),
+    { LocalDocumentResolver } = await import("../src/mechanisms/organizations.js"),
+    { signStatement, verifyStatement, TYP } = await import("../src/mechanisms/statements.js");
+  const { profile, scenario } = loadCase(join(import.meta.dirname, ".."), "care-abroad"),
+    table = required(scenario.mappingTables[0]).value,
+    clinical = required(scenario.statements[0]),
+    at = "2026-11-13T09:00:00.000Z";
+  const source = await testKey("mapping/original-source"),
+    registry = await testKey("mapping/registry"),
+    issuer = "urn:fictional:care-abroad:party-2",
+    subject = required(clinical.subject);
+  const pin = (key: typeof source, subject: string) => ({
+    kid: key.kid,
+    alg: key.alg,
+    publicJwk: key.publicJwk,
+    role: "issuer" as const,
+    subject,
+  });
+  const trust = await TrustStore.load({
+    version: 1,
+    owner: "urn:clinic",
+    keys: [pin(source, issuer), pin(registry, table.issuer)],
+    sourceAuthority: [
+      {
+        id: "urn:clinical-source",
+        version: "1",
+        source: issuer,
+        claimTypes: [clinical.kind],
+        subjects: [subject],
+      },
+      {
+        id: "urn:mapping-source",
+        version: "1",
+        source: table.issuer,
+        claimTypes: ["code-mapping"],
+        subjects: [table.fromList],
+      },
+    ],
+  });
+  const original = {
+    ...clinical.value,
+    id: "urn:scenario:care-abroad:medicine",
+    issuer,
+    subject,
+    claimType: clinical.kind,
+    method: clinical.method,
+    asOf: at,
+    terms: clinical.terms,
+  };
+  const jws = await signStatement(source, TYP.statement, original),
+    memory = new GateMemory();
+  const resolver = new LocalDocumentResolver({
+    [table.id]: await signStatement(registry, "awp-code-mapping-table+jws", table),
+    [table.status.ref]: await signStatement(
+      registry,
+      "awp-status-list+jws",
+      required(scenario.documents[0]).value,
+    ),
+  });
+  const gate = new InboundGate({
+    identity: { actor: "urn:clinic" },
+    trust,
+    limits: DEFAULT_LIMITS,
+    now: () => at,
+    record: () => {},
+    memory,
+    agreementTerms: () => undefined,
+    gate: {
+      codeMappings: {
+        policy: { ...required(profile.codeMappings), assurance: "recomputed" },
+        resolver,
+      },
+      reliance: {
+        id: "urn:reliance",
+        rules: profile.claims.map((c) => ({
+          id: `urn:reliance:${c.kind}`,
+          claimType: c.kind,
+          methods: c.methods,
+          maxAgeDays: c.maxAgeDays,
+          text: "Mapping quality.",
+        })),
+      },
+    },
+  });
+  expect(
+    await gate.admitStatements([{ jws }], { task: "urn:task", purpose: "urn:purpose:care-abroad" }),
+  ).toEqual({ admitted: 1, refused: 0 });
+  const mapped = required([...memory.facts.values()][0]),
+    saved = required(mapped.original);
+  expect(mapped.id).not.toBe(original.id);
+  expect(saved.statement).toEqual(original);
+  expect(saved).toMatchObject({
+    id: original.id,
+    digest: digestOf(original),
+    evidence: { value: jws },
+  });
+  expect(mapped.statement?.derivation).toMatchObject({
+    originalId: original.id,
+    originalDigest: saved.digest,
+  });
+  const checked = await verifyStatement(saved.evidence.value, {
+    trust,
+    typ: TYP.statement,
+    role: "issuer",
+    schema: claimSchema,
+    limits: DEFAULT_LIMITS,
+    verifier: "urn:clinic",
+    at,
+  });
+  expect(checked.verification.outcome).toBe("valid");
+  expect(checked.payload).toEqual(saved.statement);
+  expect(digestOf(checked.payload)).toBe(saved.digest);
+  expect(memory.context("*")[0]?.original?.evidence.value).toBe(jws);
+});

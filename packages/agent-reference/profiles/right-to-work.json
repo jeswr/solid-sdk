@@ -42,6 +42,24 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "right-to-work.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:employer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
@@ -49,11 +67,31 @@
       "id": "urn:purpose:right-to-work",
       "claims": [
         "work.entitled",
-        "degree"
+        "degree",
+        "right-to-work.answer",
+        "derivation.request",
+        "work.valid-until"
       ]
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "id": "urn:rule:right-to-work:proof",
+      "template": "threshold",
+      "params": {
+        "input": "work.valid-until",
+        "operator": "gte",
+        "date": "2026-11-13"
+      },
+      "output": "right-to-work.answer",
+      "inputsFrom": [
+        "urn:fictional:immigration-office"
+      ],
+      "assurances": [
+        "attested"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
@@ -64,6 +102,9 @@
         "degree",
         "passport.scan"
       ]
+    },
+    "input.items.*": {
+      "type": "identifier"
     }
   },
   "operations": [
@@ -90,12 +131,40 @@
         "urn:purpose:right-to-work"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:right-to-work:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:right-to-work:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ],
+      "requiresRepresentation": true
     }
   ],
   "standIns": [
     {
       "what": "Immigration authority and university credential issuance",
       "replacedBy": "Separately keyed fictional issuer-only sources issuing salted-digest credentials; ordinary disclosure only, no hidden-value proofs"
+    },
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
     }
   ],
   "parties": {
@@ -105,5 +174,28 @@
     "university": "The fictional university",
     "candidate-agent": "The candidate’s agent",
     "employer-agent": "The employer’s agent"
-  }
+  },
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:right-to-work:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ]
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:right-to-work:proof-answer",
+      "claims": [
+        "right-to-work.answer"
+      ]
+    }
+  ]
 }

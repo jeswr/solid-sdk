@@ -66,7 +66,9 @@
           "party": "urn:fictional:insurance-quote:receiver",
           "tasks": [
             "urn:op:insurance-quote",
-            "urn:op:insurance-quote:request"
+            "urn:op:insurance-quote:request",
+            "urn:op:insurance-quote:proof-request",
+            "urn:op:insurance-quote:proof-answer"
           ]
         }
       ],
@@ -75,7 +77,9 @@
           "party": "urn:fictional:insurance-quote:owner",
           "tasks": [
             "urn:op:insurance-quote",
-            "urn:op:insurance-quote:request"
+            "urn:op:insurance-quote:request",
+            "urn:op:insurance-quote:proof-request",
+            "urn:op:insurance-quote:proof-answer"
           ]
         }
       ]
@@ -114,6 +118,61 @@
           "subjects": [
             "urn:fictional:insurance-quote:owner"
           ]
+        },
+        {
+          "id": "urn:source:insurance-quote:licensing:licence.years",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:licensing",
+          "claimTypes": [
+            "licence.years"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:owner"
+          ]
+        },
+        {
+          "id": "urn:source:insurance-quote:licensing:licence.points",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:licensing",
+          "claimTypes": [
+            "licence.points"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:owner"
+          ]
+        },
+        {
+          "id": "urn:source:insurance-quote:claims-register:claims.five-year-count",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:claims-register",
+          "claimTypes": [
+            "claims.five-year-count"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:owner"
+          ]
+        },
+        {
+          "id": "urn:source:insurance-quote:receiver:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:receiver",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:receiver"
+          ]
+        },
+        {
+          "id": "urn:source:insurance-quote:claims-register:claims.five-year-complete",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:claims-register",
+          "claimTypes": [
+            "claims.five-year-complete"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:owner"
+          ]
         }
       ],
       "receiver-agent": [
@@ -145,6 +204,61 @@
           "source": "urn:fictional:insurance-quote:claims-register",
           "claimTypes": [
             "claims.completeness"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:owner"
+          ]
+        },
+        {
+          "id": "urn:source:insurance-quote:licensing:licence.years",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:licensing",
+          "claimTypes": [
+            "licence.years"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:owner"
+          ]
+        },
+        {
+          "id": "urn:source:insurance-quote:licensing:licence.points",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:licensing",
+          "claimTypes": [
+            "licence.points"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:owner"
+          ]
+        },
+        {
+          "id": "urn:source:insurance-quote:claims-register:claims.five-year-count",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:claims-register",
+          "claimTypes": [
+            "claims.five-year-count"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:owner"
+          ]
+        },
+        {
+          "id": "urn:source:insurance-quote:receiver:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:receiver",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:insurance-quote:receiver"
+          ]
+        },
+        {
+          "id": "urn:source:insurance-quote:claims-register:claims.five-year-complete",
+          "version": "1",
+          "source": "urn:fictional:insurance-quote:claims-register",
+          "claimTypes": [
+            "claims.five-year-complete"
           ],
           "subjects": [
             "urn:fictional:insurance-quote:owner"
@@ -289,6 +403,176 @@
           ]
         }
       }
+    },
+    {
+      "id": "years",
+      "issuer": "licensing",
+      "subject": "urn:fictional:insurance-quote:owner",
+      "kind": "licence.years",
+      "value": {
+        "value": 12
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:insurance-quote:years",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:insurance-quote"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:insurance-quote"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "points",
+      "issuer": "licensing",
+      "subject": "urn:fictional:insurance-quote:owner",
+      "kind": "licence.points",
+      "value": {
+        "value": 0
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:insurance-quote:points",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:insurance-quote"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:insurance-quote"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "claims-total",
+      "issuer": "claims-register",
+      "subject": "urn:fictional:insurance-quote:owner",
+      "kind": "claims.five-year-count",
+      "value": {
+        "value": 0,
+        "period": {
+          "start": "2021-11-13",
+          "end": "2026-11-13"
+        }
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:insurance-quote:claims-total",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:insurance-quote"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:insurance-quote"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "proof-complete-snapshot",
+      "issuer": "claims-register",
+      "subject": "urn:fictional:insurance-quote:owner",
+      "kind": "claims.five-year-complete",
+      "value": {
+        "value": true,
+        "complete": true,
+        "forClaim": "claims.five-year-count",
+        "period": {
+          "start": "2021-11-13",
+          "end": "2026-11-13"
+        }
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:insurance-quote:proof-complete-snapshot",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:insurance-quote"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:insurance-quote"
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   ],
   "mandates": [
@@ -299,6 +583,16 @@
           "type": "permission",
           "action": "distribute",
           "target": "urn:op:insurance-quote"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:insurance-quote:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:insurance-quote:proof-answer"
         }
       ],
       "withApproval": []
@@ -310,12 +604,145 @@
           "type": "permission",
           "action": "use",
           "target": "urn:op:insurance-quote:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:insurance-quote:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:insurance-quote:proof-answer"
         }
       ],
       "withApproval": []
     }
   ],
-  "script": [],
+  "script": [
+    {
+      "id": "private-inputs",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "proof-complete-snapshot",
+        "years",
+        "points",
+        "claims-total"
+      ],
+      "subject": "urn:fictional:insurance-quote:owner",
+      "purpose": "urn:purpose:insurance-quote"
+    },
+    {
+      "id": "fresh-request",
+      "agent": "receiver-agent",
+      "type": "proof-request",
+      "rule": "urn:rule:insurance-quote:proof",
+      "subject": "urn:fictional:insurance-quote:owner",
+      "purpose": "urn:purpose:insurance-quote",
+      "assurances": [
+        "attested"
+      ]
+    },
+    {
+      "id": "send-request",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "invoke",
+      "operation": "urn:op:insurance-quote:proof-request",
+      "contents": {
+        "items": [
+          {
+            "$ref": "steps.fresh-request.statement.id"
+          }
+        ]
+      },
+      "intent": {
+        "action": "use",
+        "target": "urn:op:insurance-quote:proof-request",
+        "operation": "urn:op:insurance-quote:proof-request",
+        "recipient": "urn:fictional:insurance-quote:owner",
+        "purpose": "urn:purpose:insurance-quote",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:insurance-quote",
+      "derivedEvidence": [
+        {
+          "$ref": "steps.fresh-request.jws"
+        }
+      ]
+    },
+    {
+      "id": "receive-request",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent"
+    },
+    {
+      "id": "prove-answer",
+      "agent": "owner-agent",
+      "type": "prove",
+      "method": "sparq-authrdf/1",
+      "request": {
+        "$ref": "steps.fresh-request.request"
+      },
+      "recipient": "urn:fictional:insurance-quote:receiver",
+      "assurance": "attested",
+      "proofBinds": [
+        "rule",
+        "issuers",
+        "fresh",
+        "complete"
+      ],
+      "inputs": [
+        "years",
+        "points",
+        "claims-total",
+        "proof-complete-snapshot"
+      ]
+    },
+    {
+      "id": "send-answer",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:insurance-quote:proof-answer",
+      "contents": {
+        "items": [
+          {
+            "$ref": "steps.prove-answer.statement.id"
+          }
+        ]
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:insurance-quote:proof-answer",
+        "operation": "urn:op:insurance-quote:proof-answer",
+        "recipient": "urn:fictional:insurance-quote:receiver",
+        "purpose": "urn:purpose:insurance-quote",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:insurance-quote",
+      "derivedEvidence": [
+        {
+          "$ref": "steps.prove-answer.jws"
+        }
+      ]
+    },
+    {
+      "id": "receive-answer",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    },
+    {
+      "id": "receiver-facts",
+      "agent": "receiver-agent",
+      "type": "facts"
+    }
+  ],
   "inject": [],
   "branches": [
     {
@@ -399,7 +826,14 @@
           "2": "The insurer’s agent sends the signed request.",
           "3": "The driver’s agent checks the message and prepares a response.",
           "4": "The driver’s agent sends the signed request."
-        }
+        },
+        "requiredMethods": [],
+        "proofCredentials": [],
+        "stress": [
+          "source",
+          "disclosure",
+          "fitness"
+        ]
       },
       "expect": {
         "outcome": "stop",
@@ -650,7 +1084,14 @@
         ],
         "traceSteps": {
           "1": "The insurer’s agent checks the signed statements."
-        }
+        },
+        "requiredMethods": [],
+        "proofCredentials": [],
+        "stress": [
+          "source",
+          "disclosure",
+          "fitness"
+        ]
       },
       "expect": {
         "outcome": "ask-more",
@@ -762,22 +1203,624 @@
       ]
     }
   ],
-  "expect": [],
-  "stress": [
-    "source",
-    "disclosure",
-    "fitness"
-  ],
-  "suites": {
-    "authenticity": "zk-query-proof"
-  },
-  "assurance": "proved",
-  "blocked": [
+  "expect": [
     {
-      "path": "main",
-      "reason": "needs a proof system"
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "fail",
+      "reason": "source-not-authoritative"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "reason": "source-not-authoritative"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
     }
   ],
+  "stress": [
+    "source",
+    "fitness",
+    "disclosure"
+  ],
+  "suites": {},
+  "assurance": "attested",
+  "blocked": [],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -788,5 +1831,30 @@
       "replacedBy": "Actual source/terms/disclosure and completeness checks run before proof construction; no age/risk/absence proof or quote based on one is made"
     }
   ],
-  "traceSteps": {}
+  "traceSteps": {},
+  "requiredMethods": [
+    "sparq-authrdf/1"
+  ],
+  "catalogueAssurance": "proved",
+  "recordedAssurance": "attested",
+  "proofCredentials": [
+    {
+      "method": "sparq-authrdf/1",
+      "issuer": "claims-register",
+      "subject": "urn:fictional:insurance-quote:owner",
+      "statements": [
+        "claims-total",
+        "proof-complete-snapshot"
+      ]
+    },
+    {
+      "method": "sparq-authrdf/1",
+      "issuer": "licensing",
+      "subject": "urn:fictional:insurance-quote:owner",
+      "statements": [
+        "years",
+        "points"
+      ]
+    }
+  ]
 }

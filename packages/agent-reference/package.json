@@ -42,7 +42,8 @@
     "lint": "biome check src test scripts",
     "test": "vitest run",
     "scenarios": "node scripts/run-scenarios.mjs",
-    "schemas": "node scripts/export-schemas.mjs"
+    "schemas": "node scripts/export-schemas.mjs",
+    "proofs": "node scripts/generate-proofs.mjs"
   },
   "dependencies": {
     "@jeswr/solid-odrl": "workspace:*",

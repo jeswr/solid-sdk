@@ -70,13 +70,17 @@
     }
   ],
   "generated": {
-    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
     "core": "scripted"
   },
   "standIns": [
     {
       "what": "Immigration authority and university credential issuance",
       "replacedBy": "Separately keyed fictional issuer-only sources issuing salted-digest credentials; ordinary disclosure only, no hidden-value proofs"
+    },
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
     }
   ],
   "events": [
@@ -669,7 +673,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:ebce7c4fa4d…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:c4280cd1955…; never trusted."
         },
         "layers": {
           "header": {
@@ -697,7 +701,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:a5c15f529ad3cc48f20814e61d239559589786c7b214a98517bc76c976b6f37a"
+            "digest": "sha-256:8d624dd44ede5444b7b82bfbe9645106493412ed1db531d61aef0236525aad89"
           },
           "authority": {
             "present": true,
@@ -711,14 +715,16 @@
                 "actorKid": "7aoE51jwfA-k2KurYWnAz9rwd7AVcNtQMRIdcG8-afQ",
                 "operations": [
                   "urn:op:right-to-work",
-                  "urn:op:employment-evidence-request"
+                  "urn:op:employment-evidence-request",
+                  "urn:op:right-to-work:proof-request",
+                  "urn:op:right-to-work:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:832dcd7d9c5e4319a94a095ce07a33b2bc6377a4b9fc13bd4d19010fc5ecea69"
+            "digest": "sha-256:8898b4ab49ae90f98c1cb3b72240a0ab0231d473be8c9538ab827a603d683f95"
           },
           "content": {
             "present": true,
@@ -857,7 +863,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:ebce7c4fa4d…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:c4280cd1955…; never trusted."
         },
         "layers": {
           "header": {
@@ -885,7 +891,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:a5c15f529ad3cc48f20814e61d239559589786c7b214a98517bc76c976b6f37a"
+            "digest": "sha-256:8d624dd44ede5444b7b82bfbe9645106493412ed1db531d61aef0236525aad89"
           },
           "authority": {
             "present": true,
@@ -899,14 +905,16 @@
                 "actorKid": "7aoE51jwfA-k2KurYWnAz9rwd7AVcNtQMRIdcG8-afQ",
                 "operations": [
                   "urn:op:right-to-work",
-                  "urn:op:employment-evidence-request"
+                  "urn:op:employment-evidence-request",
+                  "urn:op:right-to-work:proof-request",
+                  "urn:op:right-to-work:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:832dcd7d9c5e4319a94a095ce07a33b2bc6377a4b9fc13bd4d19010fc5ecea69"
+            "digest": "sha-256:8898b4ab49ae90f98c1cb3b72240a0ab0231d473be8c9538ab827a603d683f95"
           },
           "content": {
             "present": true,

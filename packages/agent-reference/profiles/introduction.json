@@ -19,17 +19,56 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "introduction.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:introduction:receiver",
+        "urn:fictional:introduction:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:introduction",
       "claims": [
-        "identity.verified"
+        "identity.verified",
+        "introduction.answer",
+        "derivation.request"
       ]
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "id": "urn:rule:introduction:proof",
+      "template": "membership",
+      "params": {
+        "input": "identity.verified",
+        "values": [
+          true
+        ]
+      },
+      "output": "introduction.answer",
+      "inputsFrom": [
+        "urn:fictional:introduction:identity-provider"
+      ],
+      "assurances": [
+        "attested"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
@@ -73,6 +112,30 @@
         "urn:purpose:introduction"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:introduction:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:introduction"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:introduction:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:introduction"
+      ],
+      "requiresRepresentation": true
     }
   ],
   "personMayRelyOn": [
@@ -84,6 +147,33 @@
       "claims": [
         "identity.verified"
       ]
+    },
+    {
+      "action": "urn:op:introduction:proof-answer",
+      "claims": [
+        "introduction.answer"
+      ]
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:introduction:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:introduction"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
     }
   ]
 }

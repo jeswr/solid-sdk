@@ -7,6 +7,10 @@ import { isDeepStrictEqual } from "util";
 import { ScriptedMailbox } from "../bindings/email.js";
 import { digestBytes, digestContent, digestOf } from "../core/canonical.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
+import { availableAdapters } from "../derive/adapters/index.js";
+import type { ProofCache } from "../derive/cache.js";
+import type { DerivedRequest, FixedJointSession, VerifierRegistry } from "../derive/verifiers.js";
+import { DERIVATION_LIMITS, registryForRun } from "../derive/verifiers.js";
 import { SyntheticPaymentRail, underwritingTermsFor } from "../domains/mortgage.js";
 import {
   PURPOSE_STORE_RELEASE_CONDITION,
@@ -22,6 +26,7 @@ import {
 import { issueMappingAttestation } from "../mechanisms/code-mapping.js";
 import { LocalDatasetHolder } from "../mechanisms/dataset-query.js";
 import { LocalForum, RECORD_LIMITS } from "../mechanisms/forum.js";
+import { JOINT_OPERATIONS, JointParty } from "../mechanisms/joint.js";
 import { LocalDocumentResolver } from "../mechanisms/organizations.js";
 import { LocalResourceHolder, type ResourceReference } from "../mechanisms/references.js";
 import {
@@ -80,6 +85,7 @@ function required<T>(value: T | undefined): T {
 }
 
 export interface PathResult {
+  readonly usedTestDouble?: boolean;
   readonly path: string;
   readonly trace?: TraceFile;
   readonly blocked?: string;
@@ -146,11 +152,21 @@ function difference(expected: readonly OutlineEntry[], actual: readonly OutlineE
   return undefined;
 }
 
-function unsupported(profile: DomainProfile, scenario: Scenario, path: string): string | undefined {
+function unsupported(
+  profile: DomainProfile,
+  scenario: Scenario,
+  path: string,
+  verifiers: VerifierRegistry,
+): string | undefined {
+  for (const method of scenario.requiredMethods) {
+    if (!verifiers.proofSystems.has(method) && !verifiers.jointProtocols.has(method))
+      return `${method === "sparq-aggregate/1" ? "needs joint computation" : "needs a proof system"}: needs the ${method} package, which is not installed`;
+  }
   const named = scenario.blocked.find((b) => b.path === path || b.path === "*");
   if (named) return named.reason;
   if (
     scenario.assurance &&
+    !scenario.requiredMethods.length &&
     !(
       scenario.assurance === "attested" &&
       (profile.rules.some((r) => r.assurances.includes("attested")) ||
@@ -162,6 +178,7 @@ function unsupported(profile: DomainProfile, scenario: Scenario, path: string): 
       : scenario.assurance === "joint"
         ? "needs joint computation"
         : "needs attestation";
+  if (scenario.requiredMethods.length) return undefined;
   for (const [layer, suite] of Object.entries(scenario.suites))
     if (
       BASELINE.layers[layer as keyof typeof BASELINE.layers] !== suite &&
@@ -222,10 +239,18 @@ function unsupported(profile: DomainProfile, scenario: Scenario, path: string): 
 export async function runScenario(
   profileInput: unknown,
   scenarioInput: unknown,
-  options: { commit?: string; compare?: boolean } = {},
+  options: {
+    commit?: string;
+    compare?: boolean;
+    registry?: VerifierRegistry;
+    testOnly?: boolean;
+    proofCache?: ProofCache;
+    generateProofs?: boolean;
+  } = {},
 ): Promise<PathResult[]> {
   const profile = domainProfileSchema.parse(profileInput);
   const scenario = scenarioSchema.parse(scenarioInput);
+  const verifiers = options.registry ?? (await availableAdapters());
   if (profile.id !== scenario.profile) throw new Error("profile/scenario id mismatch");
   validateReferences(profile, scenario);
   const paths = [
@@ -240,6 +265,7 @@ export async function runScenario(
     ...scenario.branches,
   ];
   const results: PathResult[] = [];
+  const exercisedStress = new Set<Scenario["stress"][number]>();
   for (const path of paths) {
     const world = scenarioSchema.parse(patch(scenario, path.change));
     if (profile.id !== world.profile) throw new Error("branch profile mismatch");
@@ -248,13 +274,35 @@ export async function runScenario(
       patch(profile, "profileChange" in path && path.profileChange ? path.profileChange : {}),
     );
     validateReferences(pathProfile, world);
-    const blocker = path.blocked ?? unsupported(pathProfile, world, path.id);
+    const blocker = path.blocked ?? unsupported(pathProfile, world, path.id, verifiers);
     if (blocker) {
       results.push({ path: path.id, blocked: blocker });
       continue;
     }
-    const trace = await runPath(pathProfile, world, path.id, options.commit ?? "unknown");
-    if (path.expect) {
+    const usedTestDouble = world.requiredMethods.some(
+      (method) =>
+        (verifiers.proofSystems.get(method) ?? verifiers.jointProtocols.get(method))?.kind ===
+        "test-double",
+    );
+    if (usedTestDouble && !options.testOnly)
+      throw new Error(
+        "The engine refuses test-double verifiers outside an explicit in-memory test run; no runs row or trace may be written.",
+      );
+    for (const check of world.stress) exercisedStress.add(check);
+    const tracked = registryForRun(verifiers, options.testOnly);
+    const trace = await runPath(
+      pathProfile,
+      world,
+      path.id,
+      options.commit ?? "unknown",
+      tracked.registry,
+      options,
+    );
+    if (tracked.usedTestDouble() && !options.testOnly)
+      throw new Error(
+        "The engine refuses a test-double verification attempt, including one caught as a verifier failure; no artifact may be written.",
+      );
+    if (path.expect && !world.requiredMethods.length) {
       const witness = trace.events.findIndex(
         (e) => e.check === required(path.expect).check && e.reason === required(path.expect).reason,
       );
@@ -305,18 +353,29 @@ export async function runScenario(
         : decisions.find((e) => !["pass", "admit", "go"].includes(e.outcome ?? ""));
     const noDivergence = path.id !== "main" && !!mainTrace && !firstFailure;
     const judged = firstFailure ?? decisions.at(-1);
+    const judgedReason =
+      judged?.reason ??
+      (world.requiredMethods.length && judged
+        ? trace.events
+            .slice(0, judged.seq - 1)
+            .findLast((e) => e.agent === judged.agent && e.kind === "check" && e.reason)?.reason
+        : undefined);
     const check =
       judged &&
       trace.events
         .slice(0, judged.seq - 1)
         .findLast(
-          (e) => e.agent === judged.agent && e.kind === "check" && e.reason === judged.reason,
+          (e) => e.agent === judged.agent && e.kind === "check" && e.reason === judgedReason,
         )?.check;
     const actual =
-      !firstFailure && path.expect
+      !firstFailure && path.expect && !world.requiredMethods.length
         ? { outcome: path.expect.outcome, reason: path.expect.reason, check: path.expect.check }
-        : judged?.outcome && judged.reason
-          ? { outcome: judged.outcome, reason: judged.reason, ...(check ? { check } : {}) }
+        : judged?.outcome && judgedReason
+          ? {
+              outcome: judged.outcome,
+              reason: judgedReason,
+              ...(check ? { check } : {}),
+            }
           : undefined;
     const consequences = firstFailure
       ? decisions
@@ -335,6 +394,7 @@ export async function runScenario(
         : undefined);
     results.push({
       path: path.id,
+      ...(tracked.usedTestDouble() ? { usedTestDouble: true } : {}),
       trace,
       actual,
       expected,
@@ -352,7 +412,7 @@ export async function runScenario(
   }
   const events = results.flatMap((result) => result.trace?.events ?? []);
   if (events.length)
-    for (const check of scenario.stress) {
+    for (const check of exercisedStress) {
       if (!events.some((event) => event.check === check))
         throw new Error(`${scenario.id}: stress check ${check} was not exercised`);
     }
@@ -364,6 +424,8 @@ async function runPath(
   scenario: Scenario,
   path: string,
   commit: string,
+  verifiers: VerifierRegistry,
+  options: { proofCache?: ProofCache; generateProofs?: boolean },
 ): Promise<TraceFile> {
   const registry = withPublicRead(baselineRegistry());
   registry.register({
@@ -620,6 +682,63 @@ async function runPath(
   }
   for (const agent of agents)
     for (const rule of scenario.trust.sources[agent.id] ?? []) cast.rule(agent.id, rule);
+  const proofIssuerKeys: NonNullable<GateContext["proofIssuerKeys"]>[number][] = [];
+  const proofCredentials: NonNullable<GateContext["proofCredentials"]>[number][] = [];
+  for (const spec of scenario.proofCredentials) {
+    const system = verifiers.proofSystems.get(spec.method);
+    if (!system || !scenario.requiredMethods.includes(spec.method)) continue;
+    const issuer = required(parties.get(spec.issuer));
+    const keys = await system.issuerKeygen(
+      new TextEncoder().encode(`engine/${issuer.identity}/${spec.method}`),
+    );
+    const statements = spec.statements.map((id) => required(signed[id]).statement);
+    const credential = await system.issue({
+      issuerKey: keys.secretKey,
+      subject: spec.subject,
+      claims: { statements },
+      ...(spec.status ? { status: spec.status } : {}),
+    });
+    const knownKey = proofIssuerKeys.find(
+      (k) => k.issuer === issuer.identity && digestOf(k.key) === digestOf(keys.publicKey),
+    );
+    if (knownKey)
+      knownKey.claimTypes = [
+        ...new Set([...knownKey.claimTypes, ...statements.map((s) => String(s.claimType))]),
+      ];
+    else
+      proofIssuerKeys.push({
+        issuer: issuer.identity,
+        key: keys.publicKey,
+        claimTypes: statements.map((s) => String(s.claimType)),
+      });
+    for (const statement of statements)
+      proofCredentials.push({
+        credential,
+        statement: String(statement.id),
+        digest: digestOf(statement),
+      });
+  }
+  const proofDatasets = profile.acceptedProofs
+    .filter((a) => a.binds.includes("complete"))
+    .map((a) => {
+      const credentialDigests = [
+        ...new Set(proofCredentials.map((c) => digestOf(c.credential))),
+      ].sort();
+      return {
+        format: "engine-credential-digests/1" as const,
+        rule: a.rule,
+        credentialDigests,
+        commitment: digestOf({ rule: a.rule, credentialDigests }),
+      };
+    });
+  const proofStatusPolicy: JsonObject = {
+    snapshots: scenario.proofCredentials
+      .filter((c) => c.status)
+      .map((c) => ({
+        issuer: required(parties.get(c.issuer)).identity,
+        status: c.status as JsonObject,
+      })),
+  };
   for (const credential of scenario.selectiveCredentials) {
     const issuer = required(parties.get(credential.issuer));
     const first = required(signed[required(credential.statements[0])]).statement;
@@ -1042,6 +1161,41 @@ async function runPath(
     scenario.stores.map((s) => [s.id, new PurposeBoundStore(s.organization, s.roles, now)]),
   );
   const runtimes = new Map<string, AgentRuntime>();
+  const jointParties = new Map<string, JointParty>();
+  const jointKeys = new Map<
+    string,
+    Awaited<ReturnType<import("../derive/verifiers.js").JointProtocol["generateKeys"]>>
+  >();
+  let jointFixed: FixedJointSession | undefined;
+  if (scenario.jointSession && scenario.requiredMethods.includes(scenario.jointSession.method)) {
+    const spec = scenario.jointSession,
+      protocol = required(verifiers.jointProtocols.get(spec.method));
+    for (const id of [...spec.contributors, ...spec.computeOnly])
+      jointKeys.set(
+        id,
+        await protocol.generateKeys(new TextEncoder().encode(`engine/${scenario.id}/${id}`)),
+      );
+    const made = await protocol.newSession({
+      sessionId: `urn:session:${scenario.id}:${path}`,
+      statistic: spec.statistic,
+      minimumGroup: spec.minimumGroup,
+      minimumContributors: spec.minimumContributors,
+      ...(spec.threshold ? { threshold: spec.threshold } : {}),
+      roster: [...spec.contributors, ...spec.computeOnly].map((id) => ({
+        party: cast.get(id).identity.party ?? cast.get(id).identity.actor,
+        publicKeys: required(jointKeys.get(id)).publicKeys,
+        ...(spec.computeOnly.includes(id) ? { computeOnly: true } : {}),
+      })),
+    });
+    jointFixed = {
+      method: spec.method,
+      rule: spec.rule,
+      session: made.session,
+      ruleDigest: made.ruleDigest,
+      purpose: spec.purpose,
+      assurances: ["joint"],
+    };
+  }
   const ledgers = new Map<string, MemoryLedger>();
   const outputs: Record<string, unknown> = {};
   const queue: Array<{ from: string; out: OutboundMessage }> = [];
@@ -1090,6 +1244,15 @@ async function runPath(
         )
       : [];
     const gate: GateContext = {
+      ...verifiers,
+      acceptedProofs: profile.acceptedProofs,
+      acceptedJoint: profile.acceptedJoint,
+      proofIssuerKeys,
+      proofCredentials,
+      proofDatasets,
+      proofStatusPolicy,
+      proofCache: options.proofCache,
+      generateProofs: options.generateProofs,
       ...(profile.codeMappings?.receivers.includes(agent.actor ?? "")
         ? { codeMappings: { policy: profile.codeMappings, resolver } }
         : {}),
@@ -1232,7 +1395,22 @@ async function runPath(
             intentForProposal: intent,
             intentForInvoke: intent,
             onProposal: reply,
-            onInvoke: reply,
+            onInvoke: async (ctx, _body, evidence) => {
+              if (JOINT_OPERATIONS.includes(op.id) && jointParties.has(agent.id)) {
+                const envelope = evidence
+                  .map(unverifiedEvidenceClaim)
+                  .find((c) => c.claimType === "joint.message");
+                if (!envelope || envelope.issuer !== ctx.peer.party)
+                  return { type: "refuse", reason: "derivation-not-verified" };
+                await required(jointParties.get(agent.id)).receive(
+                  ctx,
+                  op.id,
+                  envelope.value as JsonObject,
+                );
+                return { type: "none" };
+              }
+              return reply(ctx);
+            },
             onDeliver: reply,
             onReceipt: reply,
             onAgreement: (ctx, agreement) =>
@@ -1372,6 +1550,7 @@ async function runPath(
       {
         gates: gate,
         ...(profile.forum ? { limits: RECORD_LIMITS } : {}),
+        ...(scenario.requiredMethods.length ? { limits: DERIVATION_LIMITS } : {}),
         disclosureChecks: Object.fromEntries(
           scenario.stores.map((store) => [
             `${PURPOSE_STORE_RELEASE_CONDITION}/${store.id}`,
@@ -1393,7 +1572,9 @@ async function runPath(
         ...(profile.rules.some(
           (r) =>
             "template" in r &&
-            (r.assurances.includes("by-source") || r.assurances.includes("attested")),
+            (r.assurances.includes("by-source") ||
+              r.assurances.includes("attested") ||
+              r.assurances.includes("joint")),
         )
           ? { sourceKey: cast.get(agent.id).ownerKey }
           : {}),
@@ -1405,6 +1586,27 @@ async function runPath(
       },
     );
     runtimes.set(agent.id, created.runtime);
+    if (jointFixed && scenario.jointSession) {
+      created.runtime.fixJointSession(jointFixed);
+      const spec = scenario.jointSession;
+      jointParties.set(
+        agent.id,
+        new JointParty({
+          party: cast.get(agent.id).identity.party ?? "",
+          requester: cast.get(spec.requester).identity.party ?? "",
+          protocol: required(verifiers.jointProtocols.get(spec.method)),
+          secretKeys: jointKeys.get(agent.id)?.secretKeys ?? {},
+          fixed: jointFixed,
+          runtime: () => required(runtimes.get(agent.id)),
+          store: new MemoryStateStore(),
+          inputs: (spec.inputs[agent.id] ?? []).map((id) =>
+            String(required(signed[id]).statement.id),
+          ),
+          purpose: spec.purpose,
+          recipient: cast.get(spec.requester).identity.party ?? "",
+        }),
+      );
+    }
     ledgers.set(agent.id, created.ledger);
   }
   const outsideSystems = new Map<string, Map<string, JsonObject>>();
@@ -1477,6 +1679,97 @@ async function runPath(
           },
         });
         result = capabilityAnswers[request] ?? null;
+        break;
+      }
+      case "proof-request":
+        {
+          const request = runtime.issueDerivationRequest(step);
+          result = {
+            request,
+            ...(await runtime.protocolStatement(
+              "derivation.request",
+              request as unknown as JsonObject,
+              step.purpose,
+            )),
+          };
+        }
+        break;
+      case "prove":
+        result = await runtime.proveDerived({
+          ...step,
+          request: template<DerivedRequest>(step.request),
+          inputs: step.inputs.map((id) => String(required(signed[id]).statement.id)),
+        });
+        break;
+      case "joint-action": {
+        const party = required(jointParties.get(step.agent));
+        if (step.action === "contribute") {
+          const made = await party.contribute();
+          if (made.ok && step.attack === "unsigned") delete made.contribution.signature;
+          if (made.ok && step.attack === "off-roster") made.contribution.signature = "off-roster";
+          result = made;
+        } else if (step.action === "partial") result = await party.partial();
+        else {
+          const finished = await party.finish();
+          result = finished;
+          if (finished.ok && scenario.jointSession && jointFixed) {
+            const record = {
+              method: scenario.jointSession.method,
+              session: jointFixed.session,
+              outcome: finished.outcome,
+              contributions: finished.contributions,
+              parties: (jointFixed.session.roster as JsonObject[]).map((p) => p.party),
+              assumption: party.options.protocol.assumption,
+            } as unknown as JsonObject;
+            result = {
+              ...finished,
+              ...(await runtime.jointResult(scenario.jointSession.rule, record)),
+            };
+          }
+        }
+        break;
+      }
+      case "joint-send": {
+        const peer = required(parties.get(step.peer)),
+          operation = `urn:op:joint:${step.operation}`,
+          spec = required(scenario.jointSession);
+        const payload = template<JsonObject>(step.payload);
+        const input: JsonObject = {
+          sessionId: required(jointFixed).session.sessionId as string,
+          ...(step.operation === "open"
+            ? { session: required(jointFixed).session, ruleDigest: required(jointFixed).ruleDigest }
+            : {}),
+          ...payload,
+        };
+        const envelope = await runtime.protocolStatement("joint.message", input, spec.purpose);
+        openings.set(step.agent, {
+          action: "use",
+          target: operation,
+          operation,
+          recipient: cast.get(step.peer).identity.party,
+          purpose: spec.purpose,
+          parameters: {},
+          conversation: "urn:pending",
+        });
+        result = await runtime.startInvocation({
+          peer: { actor: required(peer.actor), party: cast.get(step.peer).identity.party },
+          operation: { id: operation, version: "0.1" },
+          input: { items: [String(envelope.statement.id)] },
+          evidence: [
+            { role: "credential", format: "derivation+jws", value: envelope.jws },
+            ...step.derivedEvidence.map((jws) => ({
+              role: "credential" as const,
+              format: "derivation+jws",
+              value: template<string>(jws),
+            })),
+          ],
+          purpose: spec.purpose,
+          basis: { kind: "represented" },
+          models: [],
+          discover: false,
+          configuration: configuration.pilotConfiguration,
+        });
+        enqueue(step.agent, result as StepResult);
         break;
       }
       case "admit-derived":
@@ -1728,7 +2021,7 @@ async function runPath(
             ...step.evidence.map((id) => required(signed[id]).evidence),
             ...step.derivedEvidence.map((jws) => ({
               role: "credential" as const,
-              format: "jws-compact",
+              format: scenario.requiredMethods.length ? "derivation+jws" : "jws-compact",
               value: template<string>(jws),
             })),
           ],

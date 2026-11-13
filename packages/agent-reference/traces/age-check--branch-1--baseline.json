@@ -69,10 +69,14 @@
     }
   ],
   "generated": {
-    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -431,7 +435,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:f8ea06b6ee7…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:1fd9e64d853…; never trusted."
         },
         "layers": {
           "header": {
@@ -459,7 +463,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:a7af1d3864a0fde1a0d2e7626a3b508a43539bec13a3838da8fbe864e5c4ebbd"
+            "digest": "sha-256:72b475a3c02771335c99d190d0cad02402782c46ec5ba5c7d343bc7517bafdfa"
           },
           "authority": {
             "present": true,
@@ -473,14 +477,16 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:age-check",
-                  "urn:op:age-check:request"
+                  "urn:op:age-check:request",
+                  "urn:op:age-check:proof-request",
+                  "urn:op:age-check:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:f29dba4d5690c79867dc0ca80382b5b1a6de0a395856cc12a9692d6abf0dfe75"
+            "digest": "sha-256:c35d5fc2a08720ca50abdb24345ad3c7c38a581a5047ac84a064f31f9b1679b7"
           },
           "content": {
             "present": true,
@@ -550,7 +556,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:f8ea06b6ee7…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:1fd9e64d853…; never trusted."
         },
         "layers": {
           "header": {
@@ -578,7 +584,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:a7af1d3864a0fde1a0d2e7626a3b508a43539bec13a3838da8fbe864e5c4ebbd"
+            "digest": "sha-256:72b475a3c02771335c99d190d0cad02402782c46ec5ba5c7d343bc7517bafdfa"
           },
           "authority": {
             "present": true,
@@ -592,14 +598,16 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:age-check",
-                  "urn:op:age-check:request"
+                  "urn:op:age-check:request",
+                  "urn:op:age-check:proof-request",
+                  "urn:op:age-check:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:f29dba4d5690c79867dc0ca80382b5b1a6de0a395856cc12a9692d6abf0dfe75"
+            "digest": "sha-256:c35d5fc2a08720ca50abdb24345ad3c7c38a581a5047ac84a064f31f9b1679b7"
           },
           "content": {
             "present": true,

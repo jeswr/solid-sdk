@@ -31,6 +31,13 @@ async function fixture() {
     ),
     [op, "urn:op:email-bind"],
   );
+  cast.rule("a", {
+    id: "urn:source:private",
+    version: "1",
+    source: "urn:owner",
+    claimTypes: ["private.secret"],
+    subjects: ["urn:owner"],
+  });
   const a = cast.get("a"),
     pin = await signStatement(a.ownerKey, "awp-email-endpoint-pin+jws", {
       type: "EmailEndpointPin",
@@ -66,6 +73,18 @@ async function fixture() {
     {
       gates: {
         taskId: "urn:task",
+        reliance: {
+          id: "urn:private-reliance",
+          rules: [
+            {
+              id: "urn:private-quality",
+              claimType: "private.secret",
+              methods: ["recorded-by-authority"],
+              maxAgeDays: 1,
+              text: "Source-signed private context.",
+            },
+          ],
+        },
         trust: { levels: ["own-list"], onUnknown: "ask-principal" },
         resolver: new TrustResolver({
           principal: "owner",
@@ -225,3 +244,87 @@ function required<T>(value: T | undefined | null): T {
     throw new Error("required capability value is missing");
   return value;
 }
+async function privateContext(
+  f: Awaited<ReturnType<typeof fixture>>,
+  value: import("../src/core/types.js").Json = "SECRET-1234",
+  explicit = true,
+) {
+  const statement = {
+    id: "urn:private:item",
+    issuer: "urn:owner",
+    subject: "urn:owner",
+    claimType: "private.secret",
+    method: "recorded-by-authority",
+    asOf: "2026-11-13T09:00:00.000Z",
+    value,
+    ...(explicit
+      ? {
+          terms: {
+            policy: {
+              id: "urn:private:terms",
+              permissions: [{ type: "permission", action: "use" }],
+              prohibitions: [
+                {
+                  type: "prohibition",
+                  action: "distribute",
+                  constraints: [
+                    { leftOperand: "recipient", operator: "eq", rightOperand: address },
+                    { leftOperand: "purpose", operator: "eq", rightOperand: purpose },
+                  ],
+                },
+              ],
+            },
+          },
+        }
+      : {}),
+  };
+  const jws = await signStatement(f.cast.get("a").ownerKey, "awp-statement+jws", statement);
+  expect(await f.runtime.admitStatements([{ jws }], { task: "urn:task", purpose })).toEqual({
+    admitted: 1,
+    refused: 0,
+  });
+}
+it("describes exact-text review against the item's restriction when the approved text does not repeat the item", async () => {
+  const f = await fixture();
+  await privateContext(f);
+  await f.send();
+  await f.approve();
+  expect(f.mailbox.inbox()).toHaveLength(1);
+  const event = f.recorder
+    .events()
+    .findLast((e) => e.check === "data-terms" && e.reason === "approval-given");
+  expect(event?.caption).toContain("reviewed this exact text against");
+  expect(event?.caption).toContain("restriction");
+});
+it.each([
+  ["SECRET-1234", "The reference is secret-1234."],
+  [1234, "The reference is 1234."],
+  [{ b: 2, a: 1 }, 'The reference is {"a":1,"b":2}.'],
+] as const)("stops approved verbatim disclosure of %j under an explicit recipient/purpose prohibition", async (value, text) => {
+  const f = await fixture();
+  await privateContext(f, value);
+  await f.send("urn:restricted-email", text);
+  await f.approve();
+  expect(f.mailbox.inbox()).toEqual([]);
+  expect(f.recorder.events().findLast((e) => e.kind === "decision")).toMatchObject({
+    outcome: "stop",
+    reason: "prohibited",
+  });
+  expect(
+    f.recorder
+      .events()
+      .some((e) => e.check === "data-terms" && e.verdict === "fail" && e.reason === "prohibited"),
+  ).toBe(true);
+});
+it("retains exact-text review for default terms and the specified four-character comparison threshold", async () => {
+  for (const [value, text, explicit] of [
+    ["SECRET-1234", "Reference: SECRET-1234", false],
+    ["ABC", "Reference: abc", true],
+  ] as const) {
+    const f = await fixture();
+    await privateContext(f, value, explicit);
+    await f.send("urn:default-email", text);
+    await f.approve();
+    expect(f.mailbox.inbox()).toHaveLength(1);
+  }
+});

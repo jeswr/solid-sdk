@@ -20,17 +20,67 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "education.degree-code",
+      "sources": [
+        "urn:fictional:degree-recognition:university"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "degree-recognition.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:degree-recognition:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:degree-recognition",
       "claims": [
-        "education.degree"
+        "education.degree",
+        "degree-recognition.answer",
+        "derivation.request",
+        "education.degree-code"
       ]
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "id": "urn:rule:degree-recognition:proof",
+      "template": "membership",
+      "params": {
+        "input": "education.degree-code",
+        "values": [
+          "BSc",
+          "MSc"
+        ]
+      },
+      "output": "degree-recognition.answer",
+      "inputsFrom": [
+        "urn:fictional:degree-recognition:university"
+      ],
+      "assurances": [
+        "attested"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
@@ -74,6 +124,30 @@
         "urn:purpose:degree-recognition"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:degree-recognition:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:degree-recognition:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ],
+      "requiresRepresentation": true
     }
   ],
   "actionClaims": [
@@ -82,6 +156,33 @@
       "claims": [
         "education.degree"
       ]
+    },
+    {
+      "action": "urn:op:degree-recognition:proof-answer",
+      "claims": [
+        "degree-recognition.answer"
+      ]
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:degree-recognition:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
     }
   ]
 }

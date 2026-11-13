@@ -20,17 +20,76 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "visa-application.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:visa-application:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "employment.letter",
+      "sources": [
+        "urn:fictional:visa-application:employer"
+      ],
+      "methods": [
+        "person-opinion"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "travel.itinerary",
+      "sources": [
+        "urn:fictional:visa-application:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:visa-application",
       "claims": [
-        "funds.balance"
+        "funds.balance",
+        "visa-application.answer",
+        "derivation.request",
+        "employment.letter",
+        "travel.itinerary"
       ]
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "id": "urn:rule:visa-application:proof",
+      "template": "threshold",
+      "params": {
+        "input": "funds.balance",
+        "operator": "gte",
+        "value": 10000
+      },
+      "output": "visa-application.answer",
+      "inputsFrom": [
+        "urn:fictional:visa-application:bank"
+      ],
+      "assurances": [
+        "attested"
+      ]
+    }
+  ],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
@@ -74,6 +133,30 @@
         "urn:purpose:visa-application"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:visa-application:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:visa-application:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
     }
   ],
   "actionClaims": [
@@ -82,6 +165,33 @@
       "claims": [
         "funds.balance"
       ]
+    },
+    {
+      "action": "urn:op:visa-application:proof-answer",
+      "claims": [
+        "visa-application.answer"
+      ]
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:visa-application:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
     }
   ]
 }

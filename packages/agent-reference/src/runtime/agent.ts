@@ -1,5 +1,18 @@
 // AUTHORED-BY Codex GPT-6
-
+/**
+ * The pilot agent runtime: one deterministic engine shared by every scenario.
+ *
+ * Inbound pipeline (each step has an explicit outcome and a ledger record):
+ *   bounds → integrity + pinned-key attribution → schema → sender/key binding →
+ *   configuration/alg match → audience → time window → replay → profile/configuration
+ *   acceptance → conversation state machine → operation + terms validation →
+ *   representation assessment → domain handler (proposer) → owner-mandate authorisation
+ *   (executor) → effects (write-ahead, idempotent, reconcilable) → signed outbound.
+ *
+ * Integrity success, representation acceptance, source authority and authorisation are
+ * four different records; none implies another.
+ */
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { AsyncLocalStorage } from "async_hooks";
 import type { JWK } from "jose";
 import { emailEnvelopeSchema, emailPinSchema } from "../bindings/email.js";
@@ -29,13 +42,16 @@ import type {
   ReasonCode,
   RepresentationAssessment,
 } from "../core/types.js";
-import { evaluateRule } from "../derive/rules.js";
+import { evaluateRule, queryFor } from "../derive/rules.js";
+import { proofPolicy } from "../derive/verification.js";
+import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/verifiers.js";
 import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates/approvals.js";
 import { type GateContext, GateMemory } from "../gates/common.js";
 import { type Admission, InboundGate } from "../gates/inbound.js";
 import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
 import { periodKey } from "../gates/payment.js";
 import { evaluateItemTerms, fitnessOf } from "../gates/quality.js";
+import { jointPayloadSchema } from "../mechanisms/joint.js";
 import { type KeyAlg, type SigningKey, signCompact, verifyCompact } from "../mechanisms/jws.js";
 import {
   actionDigest,
@@ -97,20 +113,7 @@ import type {
 } from "../store/state.js";
 import { domainValue } from "../store/state.js";
 import { peekWire } from "../trace/packet.js";
-/**
- * The pilot agent runtime: one deterministic engine shared by every scenario.
- *
- * Inbound pipeline (each step has an explicit outcome and a ledger record):
- *   bounds → integrity + pinned-key attribution → schema → sender/key binding →
- *   configuration/alg match → audience → time window → replay → profile/configuration
- *   acceptance → conversation state machine → operation + terms validation →
- *   representation assessment → domain handler (proposer) → owner-mandate authorisation
- *   (executor) → effects (write-ahead, idempotent, reconcilable) → signed outbound.
- *
- * Integrity success, representation acceptance, source authority and authorisation are
- * four different records; none implies another.
- */
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+
 import { DutyExecutor, type DutyRule, deadlineMissed, dutyRuleSchema } from "./duties.js";
 import {
   type AgreementPlan,
@@ -434,6 +437,8 @@ export class AgentRuntime {
     for (const e of options.effects ?? []) this.effectAdapters.set(e.id, e);
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
+    this.state.domain.derivedRequests ??= {};
+    this.state.domain.fixedJointSessions ??= {};
     const originalSink = options.gates?.sink;
     const recordChecks: Record<string, string[]> = {};
     const auditSink = {
@@ -475,6 +480,15 @@ export class AgentRuntime {
         rules: [...this.contentProfiles.values()].flatMap((p) => p.reliance?.rules ?? []),
       },
       ...(options.gates ?? {}),
+      derivedRequests: this.state.domain.derivedRequests as unknown as Record<
+        string,
+        DerivedRequest
+      >,
+      fixedJointSessions: this.state.domain.fixedJointSessions as unknown as Record<
+        string,
+        FixedJointSession
+      >,
+      saveDerivationState: () => this.persist(),
       carriage: () => this.carriage,
       sink: auditSink,
     };
@@ -1378,6 +1392,279 @@ export class AgentRuntime {
   }
 
   /** Rules see only this task's admitted statements. The core supplies a rule name, no inputs. */
+  issueDerivationRequest(input: {
+    rule: string;
+    subject: string;
+    purpose: string;
+    assurances: DerivedRequest["assurances"];
+  }): DerivedRequest {
+    const rule = this.options.gates?.rules?.find((r) => r.id === input.rule);
+    if (!rule) throw new Error("rule-not-accepted");
+    const gate = this.options.gates ?? {};
+    const requests = this.state.domain.derivedRequests as unknown as Record<string, DerivedRequest>;
+    let nonce = this.newId();
+    for (let attempts = 0; requests[nonce]; attempts++) {
+      if (attempts >= 32) throw new Error("replay-conflict");
+      nonce = this.newId();
+    }
+    const request: DerivedRequest = {
+      ...input,
+      ruleDigest: digestOf(rule),
+      nonce,
+      query: queryFor(rule),
+      consumed: false,
+      policy: proofPolicy(gate, rule, (source, claimType) => {
+        const query = {
+          evaluator: this.identity.actor,
+          source,
+          claimType,
+          subject: input.subject,
+          at: this.now(),
+        };
+        return (
+          (gate.resolver?.resolveSource(query) ?? this.trust.assessSource(query)).outcome ===
+            "accepted" &&
+          (!gate.claimSources?.[claimType] || gate.claimSources[claimType].includes(source))
+        );
+      }),
+    };
+    (this.state.domain.derivedRequests as unknown as Record<string, DerivedRequest>)[
+      request.nonce
+    ] = structuredClone(request);
+    this.persist(); // Before the caller can send this nonce.
+    return structuredClone(request);
+  }
+  async protocolStatement(
+    claimType: "derivation.request" | "joint.message",
+    value: JsonObject,
+    purpose: string,
+  ) {
+    if (!this.options.sourceKey || !this.identity.party) throw new Error("unknown-key");
+    const statement: JsonObject = {
+      id: this.newId(),
+      issuer: this.identity.party,
+      subject: this.identity.party,
+      claimType,
+      method: "recorded-by-authority",
+      asOf: this.now(),
+      value,
+      terms: {
+        policy: {
+          id: this.newId(),
+          permissions: [
+            {
+              type: "permission",
+              action: "use",
+              constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: purpose }],
+            },
+            {
+              type: "permission",
+              action: "distribute",
+              constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: purpose }],
+            },
+          ],
+        },
+      },
+    };
+    return { statement, jws: await signCompact(this.options.sourceKey, TYP.statement, statement) };
+  }
+  fixJointSession(fixed: FixedJointSession): void {
+    const sessions = this.state.domain.fixedJointSessions as unknown as Record<
+      string,
+      FixedJointSession
+    >;
+    const id = String(fixed.session.sessionId);
+    if (sessions[id] && digestOf(sessions[id]) !== digestOf(fixed))
+      throw new Error("replay-conflict");
+    sessions[id] = structuredClone(fixed);
+    this.persist();
+  }
+  async jointResult(ruleId: string, joint: JsonObject) {
+    const rule = this.options.gates?.rules?.find((r) => r.id === ruleId);
+    const protocol = this.options.gates?.jointProtocols?.get(String(joint.method));
+    const session = joint.session as JsonObject,
+      outcome = joint.outcome as unknown as import("../derive/verifiers.js").JointOutcome;
+    const fixed = (
+      this.state.domain.fixedJointSessions as unknown as Record<string, FixedJointSession>
+    )[String(session.sessionId)];
+    if (!rule || !protocol || !fixed || digestOf(session) !== digestOf(fixed.session))
+      return { ok: false as const, reason: "derivation-not-verified" };
+    const checked = await protocol.verifyOutcome({
+      session,
+      outcome,
+      contributions: joint.contributions as JsonObject[],
+    });
+    if (!checked.ok || !["release", "threshold-verdict"].includes(outcome.type))
+      return { ok: false as const, reason: "derivation-not-verified" };
+    const value =
+      outcome.type === "threshold-verdict"
+        ? outcome.verdict
+        : outcome.type === "release"
+          ? session.statistic === "count"
+            ? outcome.count
+            : session.statistic === "sum"
+              ? outcome.sum
+              : { count: outcome.count, sum: outcome.sum }
+          : undefined;
+    if (value === undefined) return { ok: false as const, reason: "derivation-not-verified" };
+    const issuer = this.identity.party ?? this.identity.actor;
+    const statement: JsonObject = {
+      id: this.newId(),
+      issuer,
+      subject: String(session.sessionId),
+      claimType: rule.output,
+      method: "derived",
+      asOf: this.now(),
+      value: value as Json,
+      derivation: {
+        rule: rule.id,
+        ruleDigest: digestOf(rule),
+        assurance: "joint",
+        deriver: issuer,
+        outputDigest: digestOf(value),
+        at: this.now(),
+        joint,
+        inputs: [],
+      },
+    };
+    if (!this.options.sourceKey) return { ok: false as const, reason: "unknown-key" };
+    const jws = await signCompact(this.options.sourceKey, TYP.statement, statement);
+    this.record({ type: "joint-derivation", statement });
+    this.persist();
+    return { ok: true as const, statement, jws };
+  }
+  derivationRelease(
+    input: Parameters<import("../gates/outbound.js").OutboundGate["checkDerivationRelease"]>[0],
+  ): boolean {
+    const ok = this.outbound.checkDerivationRelease(input);
+    this.record({ type: "derivation-evidence", ...input, at: this.now() });
+    this.persist();
+    return ok;
+  }
+  proveDerived(input: {
+    method: string;
+    request: DerivedRequest;
+    recipient: string;
+    assurance: "attested" | "proved";
+    proofBinds: readonly ProofBinds[];
+    inputs: readonly string[];
+  }) {
+    return this.exclusive(async () => {
+      const system = this.options.gates?.proofSystems?.get(input.method),
+        gate = this.options.gates;
+      const rule = gate?.rules?.find(
+        (r) => r.id === input.request.rule && digestOf(r) === input.request.ruleDigest,
+      );
+      if (
+        !system ||
+        !rule ||
+        !rule.assurances.includes(input.assurance) ||
+        !input.request.assurances.includes(input.assurance)
+      )
+        return { ok: false as const, reason: "assurance-insufficient" };
+      const receivedRequest = [...this.gateMemory.facts.values()].some(
+        (f) =>
+          f.claimType === "derivation.request" &&
+          f.source === input.recipient &&
+          digestOf(f.statement?.value) === digestOf(input.request),
+      );
+      if (!receivedRequest) return { ok: false as const, reason: "missing-context" };
+      const facts = input.inputs.map((id) => this.gateMemory.facts.get(id));
+      const credentials = input.inputs.map(
+        (id) =>
+          gate?.proofCredentials?.find(
+            (c) => c.statement === id && c.digest === this.gateMemory.facts.get(id)?.digest,
+          )?.credential,
+      );
+      if (
+        facts.some((f) => !f || f.subject !== input.request.subject) ||
+        !credentials.length ||
+        credentials.some((c) => !c)
+      )
+        return { ok: false as const, reason: "derivation-not-verified" };
+      if (
+        !this.derivationRelease({
+          subject: input.request.nonce,
+          purpose: input.request.purpose,
+          recipient: input.recipient,
+          inputs: input.inputs,
+          way: "proof",
+        })
+      )
+        return { ok: false as const, reason: "prohibited" };
+      const args = {
+        query: queryFor(rule),
+        policy: input.request.policy,
+        nonce: input.request.nonce,
+        credentials: [
+          ...new Map((credentials as JsonObject[]).map((c) => [digestOf(c), c])).values(),
+        ],
+      };
+      let proof = gate?.proofCache?.read(input.method, args);
+      const cached = !!proof;
+      if (!proof) {
+        if (input.method === "sparq-authrdf/1" && !gate?.generateProofs)
+          return { ok: false as const, reason: "evidence-missing" };
+        proof = await system.prove(args);
+        if (gate?.generateProofs && system.kind === "real")
+          gate.proofCache?.write(input.method, args, proof);
+      }
+      gate?.sink?.emit({
+        part: "outbound-gate",
+        kind: "check",
+        check: "evidence",
+        verdict: "pass",
+        reason: "evidence-complete",
+        rule: { id: "DER-23", text: "The receiver verifies this evidence now." },
+        caption: cached
+          ? "The proof was generated earlier from exactly the same query, policy, nonce and credential digests; the receiver verifies it now."
+          : "The holder generated evidence for this exact request; the receiver must verify it.",
+      });
+      const issuer = this.identity.party ?? this.identity.actor;
+      const statement: JsonObject = {
+        id: this.newId(),
+        issuer,
+        subject: input.request.subject,
+        claimType: rule.output,
+        method: "derived",
+        value: proof.result,
+        asOf: facts.map((f) => f?.asOf ?? this.now()).sort()[0] ?? this.now(),
+        terms: {
+          policy: { id: this.newId() },
+          inherited: facts.map((f) => ({ target: f?.id ?? "", terms: f?.terms ?? null })),
+        } as unknown as JsonObject,
+        derivation: {
+          rule: rule.id,
+          ruleDigest: digestOf(rule),
+          params: rule.params,
+          assurance: input.assurance,
+          proof: {
+            method: input.method,
+            presentation: proof.presentation,
+            nonce: input.request.nonce,
+          },
+          proofBinds: [...input.proofBinds],
+          deriver: issuer,
+          at: this.now(),
+          outputDigest: digestOf(proof.result),
+          inputs: facts.map((f) => ({
+            id: f?.id ?? "",
+            digest: f?.digest ?? "",
+            issuer: f?.source ?? "",
+            claimType: f?.claimType ?? "",
+            method: f?.method ?? "",
+            asOf: f?.asOf ?? this.now(),
+          })),
+        },
+      };
+      const key = this.options.sourceKey;
+      if (!key) return { ok: false as const, reason: "unknown-key" };
+      const jws = await signCompact(key, TYP.statement, statement);
+      this.record({ type: "proof-derivation", statement, requestDigest: digestOf(args), cached });
+      this.persist();
+      return { ok: true as const, statement, jws };
+    });
+  }
   derive(input: {
     rule: string;
     subject: Iri;
@@ -3530,7 +3817,10 @@ export class AgentRuntime {
     const current = (f: import("../gates/common.js").AdmittedFact) =>
       !!f.statement &&
       fitnessOf(
-        f.statement as unknown as import("../gates/quality.js").QualityClaim,
+        {
+          ...f.statement,
+          method: f.method ?? f.statement.method,
+        } as unknown as import("../gates/quality.js").QualityClaim,
         this.options.gates?.reliance,
         this.now(),
       ).verdict === "pass" &&
@@ -4188,8 +4478,13 @@ export class AgentRuntime {
         approval?.decision === "approve" &&
         Date.parse(approval.validUntil) > Date.parse(this.now()) &&
         !this.state.usedApprovals[approval.id];
-      for (const verdict of this.outbound.checkEmailContext(plan.intent, email.data.text, approved))
-        this.record(verdict);
+      const contextVerdicts = this.outbound.checkEmailContext(
+        plan.intent,
+        email.data.text,
+        approved,
+      );
+      for (const verdict of contextVerdicts) this.record(verdict);
+      if (contextVerdicts.some((verdict) => verdict.verdict === "fail")) return [];
     }
     if (this.effectAdapters.get(plan.adapter)?.releasesRecord) {
       if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
@@ -5618,6 +5913,72 @@ export class AgentRuntime {
           }),
         );
       }
+    }
+    for (const evidence of message.evidence ?? []) {
+      if (!isClaimEvidence(evidence)) continue;
+      const claim = unverifiedEvidenceClaim(evidence);
+      if (claim.claimType !== "joint.message") continue;
+      const parsed = jointPayloadSchema.safeParse(claim.value);
+      let ok = parsed.success,
+        partyAtFault: string | undefined;
+      if (parsed.success && "outcome" in parsed.data) {
+        const fixed = (
+          this.state.domain.fixedJointSessions as unknown as Record<string, FixedJointSession>
+        )[parsed.data.sessionId];
+        const protocol = fixed && this.options.gates?.jointProtocols?.get(fixed.method);
+        const entry =
+          fixed &&
+          this.options.gates?.acceptedJoint?.find(
+            (a) =>
+              a.rule === fixed.rule &&
+              a.method === fixed.method &&
+              a.purposes.includes(fixed.purpose),
+          );
+        ok = !!fixed && !!protocol && !!entry;
+        if (fixed && protocol && entry) {
+          try {
+            const checked = await protocol.verifyOutcome({
+              session: fixed.session,
+              outcome: parsed.data.outcome,
+              contributions: parsed.data.contributions,
+            });
+            const suppressed = ["below-minimum-group", "too-few-contributors"].includes(
+              parsed.data.outcome.type,
+            );
+            ok =
+              checked.ok &&
+              (suppressed || new Set(checked.contributors).size >= entry.minimumContributors);
+            if (!checked.ok) partyAtFault = checked.partyAtFault;
+          } catch {
+            ok = false;
+          }
+        }
+      }
+      if (!ok) {
+        this.outbound.checkDerivationRelease({
+          subject: message.id,
+          purpose: opts.intent?.purpose ?? this.purposeOf(conv.id) ?? "",
+          recipient: conv.peer.party ?? "",
+          inputs: [],
+          way: "joint outcome",
+          evidenceOk: false,
+          ...(partyAtFault ? { partyAtFault } : {}),
+          record: claim,
+        });
+        throw new MessageReleaseError(
+          this.result("rejected", {
+            reason: "derivation-not-verified",
+            conversation: conv.id,
+            outbound: [],
+          }),
+        );
+      }
+      this.record({
+        type: "joint-message-evidence",
+        message: message.id,
+        statement: claim,
+        verified: true,
+      });
     }
     for (const part of message.content ?? []) {
       const binding = [...this.gateMemory.facts.values()].find(

@@ -44,6 +44,27 @@ const outlineEntry = z.strictObject({
 });
 export const outlineSchema = z.array(outlineEntry);
 const baseDomainProfileSchema = z.strictObject({
+  acceptedProofs: z
+    .array(
+      z.strictObject({
+        rule: iri,
+        method: z.string(),
+        assurance: z.enum(["proved", "attested"]),
+        binds: z.array(z.enum(["rule", "issuers", "subject", "fresh", "complete"])),
+        purposes: z.array(iri),
+      }),
+    )
+    .default([]),
+  acceptedJoint: z
+    .array(
+      z.strictObject({
+        rule: iri,
+        method: z.string(),
+        minimumContributors: z.number().int().positive(),
+        purposes: z.array(iri),
+      }),
+    )
+    .default([]),
   "x-authored-by": z.string(),
   schema: z.literal("agent-profile/0.1"),
   codeMappings: mappingPolicySchema.optional(),
@@ -266,6 +287,38 @@ const root = z.strictObject({
 });
 const base = { id: slug, agent: slug, atStep: z.number().int().positive().optional() };
 const step = z.discriminatedUnion("type", [
+  z.strictObject({
+    ...base,
+    type: z.literal("proof-request"),
+    rule: iri,
+    subject: iri,
+    purpose: iri,
+    assurances: z.array(z.enum(["proved", "attested", "joint", "recomputed", "by-source"])),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("prove"),
+    method: z.string(),
+    request: json,
+    recipient: iri,
+    assurance: z.enum(["attested", "proved"]),
+    proofBinds: z.array(z.enum(["rule", "issuers", "subject", "fresh", "complete"])),
+    inputs: strings,
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("joint-action"),
+    action: z.enum(["contribute", "partial", "finish"]),
+    attack: z.enum(["unsigned", "off-roster"]).optional(),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("joint-send"),
+    peer: slug,
+    operation: z.enum(["open", "contribute", "partial", "outcome"]),
+    payload: object,
+    derivedEvidence: z.array(json).default([]),
+  }),
   z.strictObject({ ...base, type: z.literal("facts") }),
   z.strictObject({
     ...base,
@@ -527,6 +580,42 @@ const step = z.discriminatedUnion("type", [
 ]);
 const blocked = z.array(z.strictObject({ path: z.string(), reason: z.string() }));
 export const scenarioSchema = z.strictObject({
+  requiredMethods: strings.default([]),
+  catalogueAssurance: z.enum(["proved", "joint", "attested"]).optional(),
+  recordedAssurance: z.enum(["proved", "joint", "attested"]).optional(),
+  proofCredentials: z
+    .array(
+      z.strictObject({
+        method: z.string(),
+        issuer: slug,
+        subject: iri,
+        statements: strings,
+        status: object.optional(),
+      }),
+    )
+    .default([]),
+  jointSession: z
+    .strictObject({
+      method: z.string(),
+      rule: iri,
+      requester: slug,
+      finisher: slug,
+      purpose: iri,
+      statistic: z.enum(["count", "sum", "count-and-sum"]),
+      minimumGroup: z.number().int().nonnegative(),
+      minimumContributors: z.number().int().positive(),
+      contributors: strings,
+      computeOnly: strings.default([]),
+      threshold: z
+        .strictObject({
+          statistic: z.enum(["count", "sum"]),
+          operator: z.enum([">=", "<="]),
+          value: z.number(),
+        })
+        .optional(),
+      inputs: z.record(slug, strings),
+    })
+    .optional(),
   "x-authored-by": z.string(),
   schema: z.literal("agent-scenario/0.1"),
   id: slug,

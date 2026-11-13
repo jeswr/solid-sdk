@@ -26,6 +26,18 @@
     {
       "id": "receiver-agent",
       "name": "The letting agency’s agent"
+    },
+    {
+      "id": "employer",
+      "name": "The separately keyed fictional payroll employer"
+    },
+    {
+      "id": "landlord",
+      "name": "The independently keyed previous landlord"
+    },
+    {
+      "id": "rental-authority",
+      "name": "The independently keyed rental entitlement issuer"
     }
   ],
   "scenario": {
@@ -69,10 +81,14 @@
     }
   ],
   "generated": {
-    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Planned proof method sparq-zk-result/5",
+      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -80,6 +96,10 @@
     {
       "what": "Proof-free tenancy preflights",
       "replacedBy": "The actual agency request cannot authorize raw statements, and a fresh signed negotiation hits the real runtime round cap; no income/rent proof is fabricated"
+    },
+    {
+      "what": "The income/rent rule",
+      "replacedBy": "One payroll employer signs monthly GBP income; the fixed rule asks whether it is at least three times the GBP 1000 monthly rent. It does not ask the result relation to sum bank statements."
     }
   ],
   "events": [
@@ -431,7 +451,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:f6cbb763f24…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:770b1f254cc…; never trusted."
         },
         "layers": {
           "header": {
@@ -459,7 +479,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:3ec1c40bf7a58137195a314d720abb5a78959def3df102dbc471e9d852957a8c"
+            "digest": "sha-256:8ed844cbf6cce80c97ca5f6165d863b2ce47470382605e9ee194e0eb4d9a7d4c"
           },
           "authority": {
             "present": true,
@@ -474,14 +494,16 @@
                 "operations": [
                   "urn:op:tenancy-application",
                   "urn:op:tenancy-application:request",
-                  "urn:op:tenancy-application:raw"
+                  "urn:op:tenancy-application:raw",
+                  "urn:op:tenancy-application:proof-request",
+                  "urn:op:tenancy-application:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+            "digest": "sha-256:287a7475436529e10b25bb151d55bb8abc4a1319cd910e786d4adf171e1bee26"
           },
           "content": {
             "present": true,
@@ -551,7 +573,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:f6cbb763f24…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:770b1f254cc…; never trusted."
         },
         "layers": {
           "header": {
@@ -579,7 +601,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:3ec1c40bf7a58137195a314d720abb5a78959def3df102dbc471e9d852957a8c"
+            "digest": "sha-256:8ed844cbf6cce80c97ca5f6165d863b2ce47470382605e9ee194e0eb4d9a7d4c"
           },
           "authority": {
             "present": true,
@@ -594,14 +616,16 @@
                 "operations": [
                   "urn:op:tenancy-application",
                   "urn:op:tenancy-application:request",
-                  "urn:op:tenancy-application:raw"
+                  "urn:op:tenancy-application:raw",
+                  "urn:op:tenancy-application:proof-request",
+                  "urn:op:tenancy-application:proof-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+            "digest": "sha-256:287a7475436529e10b25bb151d55bb8abc4a1319cd910e786d4adf171e1bee26"
           },
           "content": {
             "present": true,
