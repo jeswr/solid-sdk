@@ -68,6 +68,79 @@ function transport(longReviews = false) {
 }
 
 describe("host login and real executor composition (in-process transport)", () => {
+  it("merges host cookie declarations with vault and current-model declarations after rebuilds", async () => {
+    const model = modelFixture();
+    const sessions = new InMemorySessions();
+    const cookieContext = {
+      model: { operations: [] },
+      declaredNames: ["ticket"],
+      loginCookieNames: ["permit"],
+    };
+    const values = ["Ab4xYz", "Cd6wVu", "Ef8rTu", "Gh7jKl", "Jk9mNo"];
+    sessions.set(model.site, undefined, {
+      credentialCookies: ["badge"],
+      cookies: ["ticket", "permit", "badge", "current", "updated"].map((name, index) => ({
+        name,
+        value: `"${values[index]}"`,
+        domain: "shop.test",
+        path: "/",
+        httpOnly: false,
+      })),
+    });
+    model.login = [{ method: "passkey", sessionCookies: ["current"] }];
+    const executor = createTaskExecutor({ model, sessions, cookieContext });
+    const request = {
+      node: "urn:request",
+      types: ["https://schema.org/UnknownAction"],
+      values: () => [],
+    };
+    await executor.execute(request);
+    expect(executor.redact?.(values.join(" "))).toBe(
+      "[redacted] [redacted] [redacted] [redacted] Jk9mNo",
+    );
+    const rebuilt = executor.withModel?.({
+      ...model,
+      login: [{ method: "passkey", sessionCookies: ["updated"] }],
+    });
+    expect(rebuilt).toBeDefined();
+    await rebuilt?.execute(request);
+    expect(rebuilt?.redact?.(values.join(" "))).toBe(
+      "[redacted] [redacted] [redacted] [redacted] [redacted]",
+    );
+    expect(cookieContext.model).toEqual({ operations: [] });
+    expect(cookieContext.declaredNames).toEqual(["ticket"]);
+  });
+
+  it("retains host cookie context when remembering cookies after password login", async () => {
+    const model = modelFixture();
+    const sessions = new InMemorySessions();
+    const fixture = transport();
+    sessions.set(model.site, undefined, {
+      credentialCookies: ["badge"],
+      cookies: [
+        { name: "ticket", value: '"Ab4xYz"', domain: "shop.test", path: "/" },
+        { name: "permit", value: '"Cd6wVu"', domain: "shop.test", path: "/" },
+        { name: "badge", value: '"Ef8rTu"', domain: "shop.test", path: "/" },
+      ],
+    });
+    await loginWithPassword(
+      model,
+      createExecutorFetch({
+        model,
+        sessions,
+        fetch: fixture.fetch,
+        cookieContext: { declaredNames: ["ticket"], loginCookieNames: ["permit"] },
+      }),
+      {
+        username: "alex@example.test",
+        password: fixture.password,
+      },
+    );
+    // This executor has no declarations of its own: login must populate the shared secret set.
+    const executor = createTaskExecutor({ model, sessions });
+    expect(executor.redact?.("Ab4xYz Cd6wVu Ef8rTu")).toBe("[redacted] [redacted] [redacted]");
+  });
+
   it.each([
     "verified",
     "no probe",

@@ -66,7 +66,7 @@ export function createFallback(options: FallbackOptions): Fallback {
       const driver = await BrowserDriver.create({
         ...options,
         site: input.model.site,
-        cookieContext: { model: input.model },
+        cookieContext: { ...options.cookieContext, model: input.model },
         persona: input.persona ?? options.persona,
         approver: input.approver,
         maxApprovals: input.maxApprovals,
@@ -141,6 +141,7 @@ export function createFallback(options: FallbackOptions): Fallback {
             else
               executor = createTaskExecutor({
                 model: learning.model,
+                cookieContext: { ...options.cookieContext, model: learning.model },
                 sessions: options.sessions,
                 persona: input.persona ?? options.persona,
                 fetch: options.transport,

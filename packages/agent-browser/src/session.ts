@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import {
+  type CookieSecretContext,
   cookiesFor,
   createApprovalGate,
   createExecutor,
@@ -36,8 +37,21 @@ function redact(values: Set<string>, text: string): string {
   return secretRedactor(values)(text);
 }
 
+function cookieContext(
+  model: SiteModel,
+  context: CookieSecretContext | undefined,
+  declaredNames: readonly string[] = [],
+): CookieSecretContext {
+  return {
+    ...context,
+    model,
+    declaredNames: [...(context?.declaredNames ?? []), ...declaredNames],
+  };
+}
+
 export interface ExecutorFetchOptions {
   model: SiteModel;
+  cookieContext?: CookieSecretContext;
   sessions: SessionProvider;
   persona?: string;
   fetch?: ExecutorOptions["fetch"];
@@ -102,7 +116,11 @@ export async function loginWithPassword(
     if (result.status !== "done" && !(uncertain && route.probeUrl)) throw new Error();
     const bundle = await executorFetch.sessions.get(executorFetch.site, executorFetch.persona);
     for (const c of bundle?.cookies ?? [])
-      registerCookieSecrets(values, c, { model, declaredNames: bundle?.credentialCookies });
+      registerCookieSecrets(
+        values,
+        c,
+        cookieContext(model, executorFetch.cookieContext, bundle?.credentialCookies),
+      );
     const cookies = cookiesFor(
       bundle?.cookies ?? [],
       new URL(route.probeUrl ?? model.site),
@@ -138,7 +156,9 @@ export async function loginWithPassword(
 }
 
 /** Expose the existing gate's decision methods without changing the executor contract. */
-export function createTaskExecutor(options: Omit<ExecutorOptions, "gate">): TaskExecutor {
+export function createTaskExecutor(
+  options: Omit<ExecutorOptions, "gate"> & Pick<ExecutorFetchOptions, "cookieContext">,
+): TaskExecutor {
   const gate = createApprovalGate();
   const executor = createExecutor({ ...options, gate });
   const values = secretSet(options.sessions, options.model.site, options.persona);
@@ -152,10 +172,11 @@ export function createTaskExecutor(options: Omit<ExecutorOptions, "gate">): Task
       const remember = async () => {
         const bundle = await options.sessions.get(siteOrigin(options.model.site), options.persona);
         for (const c of bundle?.cookies ?? [])
-          registerCookieSecrets(values, c, {
-            model: options.model,
-            declaredNames: bundle?.credentialCookies,
-          });
+          registerCookieSecrets(
+            values,
+            c,
+            cookieContext(options.model, options.cookieContext, bundle?.credentialCookies),
+          );
         for (const v of Object.values(bundle?.headers ?? {})) {
           rememberSessionHeader(values, v);
         }

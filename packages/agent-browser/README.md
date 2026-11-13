@@ -286,6 +286,10 @@ history. Enable with SAB_LIVE_FORUM_URL; see the harness README for the command.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Cookie intake and learning use the executor's shared classifier/registration and redactor.
+Host `cookieContext` declarations are merged with the current model at fallback creation,
+learning and executor rebuilds. Pass the same context to `createExecutorFetch` and
+`createTaskExecutor` for host session redaction; host names and vault `credentialCookies`
+are combined without dropping `loginCookieNames` or other context fields.
 HttpOnly, login-set/changed, model/vault-declared and common session-named cookies are credentials
 from four characters, using the shared `MIN_REDACTION_LENGTH` floor. Other cookies need a logical payload of at least eight characters;
 a preference `1` does not mask item IDs. Register wire, unquoted, percent-decoded and
@@ -305,3 +309,7 @@ executor's Uncertain outcome and repeat guard.
 `test/fallback-review-r3.test.ts` covers numeric credential discovery before snapshots/trace,
 rejection of unresolved credential constants before replay, retained host executor options
 and custom factories across learning, and visible per-value snapshot truncation.
+
+`test/fallback-review-r4.test.ts` uses `createFallback` and real Chromium to check declared
+and login-cookie redaction in both snapshot forms, rejection before read replay, and
+retained context after learning with both fallback-created and host executors.
