@@ -9,7 +9,6 @@ import {
 } from '@jeswr/agent-vault/browser';
 import {
   CAPTURE_PERMISSION_PORT,
-  capturePermissions,
   releaseCapturePermissions,
 } from '../shared/agent-capture-permissions';
 
@@ -20,16 +19,17 @@ export function installNativeVaultBridge(browser = chrome): void {
     !sender.tab &&
     sender.url === browser.runtime.getURL('popup/popup.html');
   const leases = new Set<chrome.runtime.Port>();
-  const releasedOrigins = new Set<string>();
-  const removePermissions = (origins: string[]) => {
-    void releaseCapturePermissions(browser.permissions, origins).catch(() => {
-      /* no browser diagnostics */
+  const removePermissions = () => {
+    void releaseCapturePermissions(browser.permissions).catch(() => {
+      // Popup destruction can prevent its warning from rendering. Leave a visible toolbar warning.
+      void browser.action.setBadgeText({ text: '!' }).catch(() => {
+        /* no browser diagnostics */
+      });
     });
   };
   // A permission prompt may finish after Chrome destroys the popup and its JS context.
   browser.permissions.onAdded.addListener((permissions) => {
-    if (!leases.size && permissions.permissions?.includes('cookies'))
-      removePermissions([...new Set([...releasedOrigins, ...(permissions.origins ?? [])])]);
+    if (!leases.size && permissions.permissions?.includes('cookies')) removePermissions();
   });
   browser.runtime.onConnect.addListener((connected) => {
     if (connected.name !== CAPTURE_PERMISSION_PORT) return;
@@ -37,20 +37,19 @@ export function installNativeVaultBridge(browser = chrome): void {
       connected.disconnect();
       return;
     }
-    let origins: string[] = [];
+    let active = false;
     let closed = false;
     const cleanup = () => {
       if (closed) return;
       closed = true;
       leases.delete(connected);
-      for (const origin of origins) releasedOrigins.add(origin);
-      removePermissions(origins);
+      removePermissions();
     };
     connected.onMessage.addListener((message: unknown) => {
       try {
         if (
           closed ||
-          origins.length ||
+          active ||
           !message ||
           typeof message !== 'object' ||
           Object.keys(message).join(',') !== 'site' ||
@@ -58,7 +57,8 @@ export function installNativeVaultBridge(browser = chrome): void {
           typeof message.site !== 'string'
         )
           throw 0;
-        origins = capturePermissions(captureOrigin(message.site)).origins;
+        captureOrigin(message.site);
+        active = true;
         leases.add(connected);
       } catch {
         cleanup();

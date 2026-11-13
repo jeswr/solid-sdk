@@ -20,19 +20,30 @@ function fixture() {
     onConnect: { addListener: vi.fn() },
     lastError: undefined,
   };
+  const state = {
+    origins: ['https://shop.test:443/*', 'https://other.test:443/*'],
+    cookies: false,
+  };
+  const before = structuredClone(state);
   const permissions = {
-    remove: vi.fn(async (_permissions: chrome.permissions.Permissions) => true),
+    contains: vi.fn(async (_permissions: chrome.permissions.Permissions) => state.cookies),
+    remove: vi.fn(async (input: chrome.permissions.Permissions) => {
+      if (input.origins) state.origins = state.origins.filter((o) => !input.origins!.includes(o));
+      if (input.permissions?.includes('cookies')) state.cookies = false;
+      return true;
+    }),
     onAdded: { addListener: vi.fn() },
   };
-  installNativeVaultBridge({ runtime, permissions } as unknown as typeof chrome);
+  const action = { setBadgeText: vi.fn(async () => {}) };
+  installNativeVaultBridge({ runtime, permissions, action } as unknown as typeof chrome);
   const listener = runtime.onMessage.addListener.mock.calls[0][0];
   const sender = { id: runtime.id, url: runtime.getURL('popup/popup.html') };
-  return { runtime, port, listener, sender, permissions };
+  return { runtime, port, listener, sender, permissions, state, before, action };
 }
 const request = { type: 'AGENT_VAULT', request: { type: 'list', site: 'https://shop.test' } };
 describe('native host trust boundary', () => {
-  it('removes cookies and selected origin on popup close, including a late permission grant', async () => {
-    const { runtime, sender, permissions } = fixture();
+  it('restores the original permission state on popup close, including a late permission grant', async () => {
+    const { runtime, sender, permissions, state, before } = fixture();
     const popup = {
       name: CAPTURE_PERMISSION_PORT,
       sender,
@@ -42,23 +53,34 @@ describe('native host trust boundary', () => {
     };
     runtime.onConnect.addListener.mock.calls[0][0](popup);
     popup.onMessage.addListener.mock.calls[0][0]({ site: 'https://shop.test' });
+    state.cookies = true;
     permissions.onAdded.addListener.mock.calls[0][0]({ permissions: ['cookies'] });
     expect(permissions.remove).not.toHaveBeenCalled();
     // Popup destruction prevents its finally from running; the worker owns this cleanup.
     popup.onDisconnect.addListener.mock.calls[0][0]();
     expect(permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
-    expect(permissions.remove).toHaveBeenCalledWith({ origins: ['https://shop.test:443/*'] });
+    await vi.runAllTimersAsync();
+    expect(state).toEqual(before);
+    expect(permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] });
+    expect(permissions.remove).toHaveBeenCalledTimes(1);
     permissions.remove.mockClear();
+    state.cookies = true;
     permissions.onAdded.addListener.mock.calls[0][0]({ permissions: ['cookies'] });
     expect(permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
-    expect(permissions.remove).toHaveBeenCalledWith({ origins: ['https://shop.test:443/*'] });
+    await vi.runAllTimersAsync();
+    expect(state).toEqual(before);
+    expect(permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] });
+    expect(permissions.remove).toHaveBeenCalledTimes(1);
+    expect(runtime.connectNative).not.toHaveBeenCalled();
   });
-  it('removes cookie authority on popup close even when Chrome rejects required-host removal', async () => {
-    const { runtime, sender, permissions } = fixture();
-    permissions.remove.mockImplementation(async (input) => {
-      if (input.origins) throw new Error('You cannot remove required permissions.');
-      return true;
-    });
+  it.each([
+    'rejects',
+    'still present',
+  ])('shows a toolbar warning when popup-close cookie removal %s', async (failure) => {
+    const { runtime, sender, permissions, state, before, action } = fixture();
+    state.cookies = true;
+    if (failure === 'rejects') permissions.remove.mockRejectedValue(new Error('fixture-secret'));
+    else permissions.remove.mockResolvedValue(true);
     const popup = {
       name: CAPTURE_PERMISSION_PORT,
       sender,
@@ -70,8 +92,10 @@ describe('native host trust boundary', () => {
     popup.onMessage.addListener.mock.calls[0][0]({ site: 'https://shop.test' });
     popup.onDisconnect.addListener.mock.calls[0][0]();
     expect(permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
-    expect(permissions.remove).toHaveBeenCalledWith({ origins: ['https://shop.test:443/*'] });
-    await Promise.resolve();
+    await vi.runAllTimersAsync();
+    expect(permissions.contains).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(action.setBadgeText).toHaveBeenCalledWith({ text: '!' });
+    expect(state.origins).toEqual(before.origins);
   });
   it('denies content scripts permission-cleanup ports', () => {
     const { runtime, sender } = fixture();

@@ -104,7 +104,9 @@ it.each([
   }
 });
 
-it.each([0o720, 0o702])("rejects writable ancestors (mode %o) for either directory", (mode) => {
+it.each([
+  0o720, 0o702, 0o1777,
+])("rejects writable ancestors (mode %o) for either directory", (mode) => {
   const { dir } = setup();
   const unsafe = join(dir, "unsafe");
   const leaf = join(unsafe, "leaf");

@@ -429,20 +429,21 @@ describe("flows", () => {
     expect(shop.state.orders).toEqual([
       { id: 1000, sid: SID, delivery: "express", items: [{ sku: "TR-20", qty: 1 }] },
     ]);
-    // Product quote retry, add, fresh total and retry, CSRF, payment and receipt.
-    expect(r.requests).toBe(8);
+    // CSRF is inserted before each payment approval check, including its retry.
+    expect(r.requests).toBe(9);
     expect(shop.requests.map((q) => `${q.method} ${q.url}`)).toEqual([
       "GET /api/search?q=Trail%20Runner&page=1",
       "GET /api/search?q=Trail%20Runner&page=1",
       "POST /api/cart/items",
       "GET /api/total?delivery=express&amount=20.0&currency=GBP",
+      "GET /checkout",
       "GET /api/total?delivery=express&amount=20.0&currency=GBP",
       "GET /checkout",
       "POST /checkout",
       "GET /orders/1000",
     ]);
-    expect(shop.requests[7]?.body).toBe("");
-    expect(shop.requests[6]?.body).toBe(
+    expect(shop.requests[8]?.body).toBe("");
+    expect(shop.requests[7]?.body).toBe(
       `delivery=express&amount=20.0&currency=GBP&csrf_token=${CSRF}`,
     );
     expect(r.outcome).toEqual({

@@ -38,6 +38,32 @@ export interface CompiledRequest {
     origin: string;
     names: string[];
   };
+  /** Concrete path segments, named by each template variable that contributes to them. */
+  pathFields?: [string, string][];
+}
+
+/** Locate path variables on the expanded URL, including embedded and shortened uses. */
+function pathFields(
+  template: string,
+  values: Record<string, string>,
+  url: URL,
+): [string, string][] {
+  const markers = Object.fromEntries(
+    Object.keys(values).map((name, index) => [name, `sab_path_marker_${index}_end`]),
+  );
+  // Removing prefix modifiers only in the probe keeps markers recognizable.
+  const probe = new URL(expandTemplate(template.replace(/:\d+(?=[,*}])/g, ""), markers), url);
+  const segments = url.pathname.split("/");
+  return probe.pathname
+    .split("/")
+    .flatMap((segment, index) =>
+      Object.entries(markers).flatMap(([name, marker]) =>
+        Array.from({ length: segment.split(marker).length - 1 }, (): [string, string] => [
+          name,
+          decodeURIComponent(segments[index] ?? ""),
+        ]),
+      ),
+    );
 }
 
 /** Headers a site model may never set: credentials and transport framing belong to the executor. */
@@ -311,6 +337,7 @@ export function compileOperation(
     url,
     headers,
     csrf: operation.csrf ?? [],
+    pathFields: pathFields(request.urlTemplate, present, url),
   };
   if (pathTokenNames.length)
     compiled.pathTokens = {

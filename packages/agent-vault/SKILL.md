@@ -87,7 +87,9 @@ Native messaging and real-browser capture:
   No bundle or credential may appear in a reply, error, diagnostic or stdout log.
 - Only the browser-attested popup can use the worker's native bridge. Page/content-script
   messages cannot list vault accounts, initiate login, read cookies or capture. Review is
-  explicit, requests exactly the selected origin, and confirms site/count/persona separately.
+  explicit, checks existing host access before any native message and again on review,
+  and rechecks before sending the separately confirmed site/count/persona capture.
+  Never request or remove a host origin.
 - Exact host by default; parent cookieDomains require operator configuration, PSL checks
   including private suffixes, and matching SessionStore options. Never widen to a sibling or
   guess the last two labels. Preserve flags; refuse partitioned cookies until the contract
@@ -106,12 +108,20 @@ Native messaging and real-browser capture:
   shell interpolation of arguments, or credentials in argv. Keep a bounded native-endian
   frame parser, strict JSON schemas, sequential dispatch and bounded output.
 - Require existing private output/store directories. Reject `..`, symlinked ancestors and
-  group/world-writable ancestors (including sticky temporary directories); resolve each
+  group/world-writable ancestors (including sticky temporary directories). Every ancestor
+  through the filesystem root must belong to the effective uid or uid 0; the private leaf
+  must belong to the effective uid. Resolve each
   once with realpath and write only relative to that canonical path, exclusively at 0600
   for config/manifest and 0700 for the launcher. Never validate one path and write another.
-- `cookies` is optional. Request it with the selected origin on the review gesture, remove
-  both in finally after the snapshot, and retain worker onDisconnect/late-grant cleanup
-  when the popup disappears during a permission prompt. Keep required host access intact.
+- `cookies` is optional. Check permissions.contains for the exact origin first; withheld
+  access refuses without a permission request or native message and tells the person to
+  allow the extension on this site in Chrome's extension menu first, then try again.
+  Request only cookies on the review gesture, remove it in finally after the snapshot,
+  and verify absence with permissions.contains. Retain worker onDisconnect/late-grant cleanup
+  when the popup disappears during a permission prompt. Removal rejection or unconfirmed
+  absence must show a warning alongside the actual capture result; worker failure sets a
+  toolbar `!` badge, and a surviving grant warns when the popup reopens. Keep required
+  <all_urls> and the original host grants intact on every exit.
 - One worker port keeps the native owner alive after popup close. Only that owner's existing
   KeepAlive scheduler runs; frequent probes require explicit configuration and learned routes.
   Stop on disconnect; rehydrate routes on startup. Stop an old job in NativeVault.beginning

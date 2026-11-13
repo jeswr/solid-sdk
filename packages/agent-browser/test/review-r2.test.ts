@@ -129,7 +129,10 @@ describe("review r2 repeat guard", () => {
       required: false,
       location: "body",
     });
-    pay.request.bodyTemplate = '{"item":{item},"qty":{qty},"price":{price},"currency":{currency}}';
+    // A direct buy sends only identity and the quantity covered by price multiplication.
+    pay.inputs = pay.inputs.filter((p) => p.name === "item" || p.name === "qty");
+    pay.request.urlTemplate = "https://shop.test/checkout";
+    pay.request.bodyTemplate = '{"item":{item},"qty":{qty}}';
     model.operations.push(quote);
     model.flows = [
       {

@@ -11,6 +11,7 @@ import {
 } from '@jeswr/agent-vault/browser';
 import {
   CAPTURE_PERMISSION_PORT,
+  captureOriginPermission,
   capturePermissions,
   releaseCapturePermissions,
 } from '../shared/agent-capture-permissions';
@@ -19,6 +20,7 @@ type Tab = { id?: number; url?: string; incognito?: boolean };
 interface BrowserApi {
   tabs: { query(query: { active: boolean; currentWindow: boolean }): Promise<Tab[]> };
   permissions: {
+    contains(permissions: chrome.permissions.Permissions): Promise<boolean>;
     request(permissions: chrome.permissions.Permissions): Promise<boolean>;
     remove(permissions: chrome.permissions.Permissions): Promise<boolean>;
   };
@@ -38,6 +40,11 @@ export type VaultRequest = NativeRequest extends infer R
   : never;
 type Choices = Extract<NativeResult, { type: 'list' }>;
 const failed = () => new Error('Sign-in sharing unavailable. Review the site and try again.');
+export class AgentSiteAccessRequired extends Error {
+  constructor() {
+    super("Allow this extension on this site from Chrome's extension menu first, then try again.");
+  }
+}
 
 /** Only cookies for the chosen host, or an explicitly vetted parent, survive the browser query. */
 export function captureCookies(
@@ -87,6 +94,7 @@ export class AgentSignIn {
   #pending: { token: string; message: SessionCapture } | undefined;
   #version = 0;
   #busy = false;
+  #permissionWarning = false;
   #permissionPort: ReturnType<BrowserApi['runtime']['connect']> | undefined;
   constructor(
     readonly browser: BrowserApi,
@@ -102,12 +110,24 @@ export class AgentSignIn {
       throw failed();
     }
   }
-  async #removePermissions(permissions: chrome.permissions.Permissions): Promise<void> {
+  get permissionWarning(): boolean {
+    return this.#permissionWarning;
+  }
+  async #requireHost(site: string): Promise<void> {
+    let granted: boolean;
     try {
-      await releaseCapturePermissions(this.browser.permissions, permissions.origins ?? []);
+      granted = await this.browser.permissions.contains(captureOriginPermission(site));
     } catch {
-      this.#pending = undefined;
       throw failed();
+    }
+    if (!granted) throw new AgentSiteAccessRequired();
+  }
+  async #removePermissions(): Promise<void> {
+    try {
+      await releaseCapturePermissions(this.browser.permissions);
+      this.#permissionWarning = false;
+    } catch {
+      this.#permissionWarning = true;
     }
   }
   async #active() {
@@ -127,13 +147,20 @@ export class AgentSignIn {
     this.#tab = undefined;
     this.#choices = undefined;
     const tab = await this.#active();
+    await this.#requireHost(tab.site);
+    // Also surface a grant left behind by an interrupted/failed cleanup on a previous popup.
+    try {
+      this.#permissionWarning = await this.browser.permissions.contains(capturePermissions());
+    } catch {
+      this.#permissionWarning = true;
+    }
     const result = await this.#request({ type: 'list', site: tab.site });
     if (result.type !== 'list') throw failed();
     this.#tab = tab;
     this.#choices = result;
     return { site: tab.site, choices: result };
   }
-  /** Called directly from the review click: permissions.request precedes the first await. */
+  /** Called from the review click; check existing host access before requesting only cookies. */
   async review(profile: string, persona: string) {
     if (this.#busy) throw failed();
     this.cancel();
@@ -144,15 +171,18 @@ export class AgentSignIn {
     const selectedProfile = choices?.profiles.find((p) => p.id === profile);
     if (!tab || !choices || !account || !selectedProfile) throw failed();
     this.#busy = true;
-    const permissions = capturePermissions(tab.site);
+    let cleanup = false;
     try {
+      await this.#requireHost(tab.site);
+      if (version !== this.#version) throw failed();
       const port = this.browser.runtime.connect({ name: CAPTURE_PERMISSION_PORT });
       this.#permissionPort = port;
       port.onDisconnect.addListener(() => {
         if (this.#permissionPort === port) this.cancel();
       });
       port.postMessage({ site: tab.site });
-      if (!(await this.browser.permissions.request(permissions))) throw failed();
+      cleanup = true;
+      if (!(await this.browser.permissions.request(capturePermissions()))) throw failed();
       const current = await this.#active();
       if (current.id !== tab.id || current.site !== tab.site || version !== this.#version)
         throw failed();
@@ -182,13 +212,14 @@ export class AgentSignIn {
         persona: account.label,
         profile: selectedProfile.label,
       };
-    } catch {
+    } catch (error) {
       this.#pending = undefined;
+      if (error instanceof AgentSiteAccessRequired) throw error;
       throw failed();
     } finally {
       // The preview retains only its in-memory snapshot; browser authority ends after reading.
       try {
-        await this.#removePermissions(permissions);
+        if (cleanup) await this.#removePermissions();
       } finally {
         const port = this.#permissionPort;
         this.#permissionPort = undefined;
@@ -211,6 +242,7 @@ export class AgentSignIn {
     if (!pending || this.#busy) throw failed();
     this.#busy = true;
     try {
+      await this.#requireHost(pending.message.site);
       const tab = await this.#active();
       if (
         version !== this.#version ||

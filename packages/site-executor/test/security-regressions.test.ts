@@ -162,9 +162,23 @@ describe("security review regressions", () => {
 
   it("F2 approval binds concrete quote inputs and resumes without replaying reads or writes", async () => {
     let amount = 20;
-    const fetch = vi.fn<typeof globalThis.fetch>(async () => json({ amount, currency: "GBP" }));
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      json({ amount: 1, quantity: amount, currency: "GBP" }),
+    );
     const gate = createApprovalGate();
     const f = quotedFlow();
+    const direct = payment({
+      inputs: [
+        p("item", ["object", "productID"], { default: "104", required: false }),
+        p("charge", ["orderQuantity"], { range: `${X}integer` }),
+      ],
+    });
+    const read = quote();
+    if (!read.extraction) throw new Error("Missing extraction");
+    read.extraction.fields.push({ property: `${S}orderQuantity`, path: "/quantity" });
+    const step = f.steps[1];
+    if (!step) throw new Error("Missing payment step");
+    step.bind = { charge: "$step0.schema:orderQuantity" };
     f.steps.push({ operation: "urn:finish", bind: { note: "$step0.schema:price" } });
     const finish = op({
       id: "urn:finish",
@@ -173,7 +187,7 @@ describe("security review regressions", () => {
       request: { method: "POST", urlTemplate: `${O}/finish` },
     });
     const ex = createExecutor({
-      model: model([quote(), payment(), finish], [f]),
+      model: model([read, direct, finish], [f]),
       sessions: sessions(),
       gate,
       fetch,
@@ -443,27 +457,35 @@ describe("security review regressions", () => {
         ? { kind: "allow" }
         : { kind: "deny", reason: "limit" },
     );
+    const direct = payment({
+      inputs: [p("item", ["object", "productID"], { default: "104", required: false })],
+      request: {
+        method: "POST",
+        urlTemplate: `${O}/pay`,
+        contentType: "application/x-www-form-urlencoded",
+      },
+    });
     const total = quote();
     total.id = "urn:total";
-    total.inputs = payment().inputs.map((input) => ({
+    total.inputs = direct.inputs.map((input) => ({
       ...input,
       location: "query",
-      default: input.name === "charge" ? "10" : input.name === "currency" ? "GBP" : "104",
+      default: "104",
     }));
     total.request.urlTemplate = `${O}/total`;
     if (!total.extraction) throw new Error("Missing extraction");
     total.extraction = { ...total.extraction, itemType: `${S}Order` };
     const f = flow([
       { operation: "urn:read", bind: {} },
-      { operation: "urn:pay", bind: { charge: "10", currency: "GBP" } },
+      { operation: "urn:pay", bind: {} },
       { operation: "urn:total", bind: {} },
-      { operation: "urn:pay", bind: { charge: "10", currency: "GBP" } },
+      { operation: "urn:pay", bind: {} },
     ]);
     const transport = vi.fn<NonNullable<ExecutorOptions["fetch"]>>(async () =>
       json({ amount: "10", currency: "GBP" }),
     );
     const executor = createExecutor({
-      model: model([quote(), total, payment()], [f]),
+      model: model([quote(), total, direct], [f]),
       sessions: sessions(),
       gate: { authorize },
       fetch: transport,

@@ -81,6 +81,10 @@ function fixture(): { model: SiteModel; operation: Operation } {
       ],
     },
   };
+  // Planner money remains a cap; this direct request sends only product identity.
+  const flowInputs = operation.inputs;
+  operation.inputs = operation.inputs.filter((input) => input.name === "item");
+  operation.request.bodyTemplate = '{"item":{item}}';
   return {
     operation,
     model: {
@@ -96,12 +100,12 @@ function fixture(): { model: SiteModel; operation: Operation } {
           actionType: operation.actionType,
           effect: "payment",
           provenance: operation.provenance,
-          inputs: operation.inputs,
+          inputs: flowInputs,
           steps: [
             { operation: quote.id, bind: {} },
             {
               operation: operation.id,
-              bind: { amount: "$input.amount", currency: "$input.currency" },
+              bind: {},
             },
           ],
         },
@@ -240,10 +244,7 @@ describe("execution outcomes", () => {
     const { model, operation } = fixture();
     operation.request.contentType = "application/x-www-form-urlencoded";
     delete operation.request.bodyTemplate;
-    // This site's wire field is lexical: preserve precision beyond JSON numbers.
-    const amount = operation.inputs.find((input) => input.name === "amount");
-    if (!amount) throw new Error("Missing amount input");
-    amount.range = `${xsd}string`;
+    // Site evidence retains decimal precision beyond JSON numbers; no amount is sent.
     const audit: Operation = {
       ...operation,
       id: `${origin}/model#audit`,
@@ -261,9 +262,9 @@ describe("execution outcomes", () => {
       provenance: operation.provenance,
       steps: [
         { operation: `${origin}/model#quote`, bind: {} },
-        { operation: operation.id, bind: { amount: "0.1234567890123456789", currency: "GBP" } },
+        { operation: operation.id, bind: {} },
         { operation: `${origin}/model#total`, bind: {} },
-        { operation: operation.id, bind: { amount: "0.2", currency: "GBP" } },
+        { operation: operation.id, bind: {} },
         { operation: audit.id, bind: {} },
       ],
     });

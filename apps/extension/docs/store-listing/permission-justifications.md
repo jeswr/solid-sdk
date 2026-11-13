@@ -83,13 +83,17 @@ extension's review window.
 No `tabs` permission is requested. Existing host access supports the tab-origin checks
 needed to send access updates only to the relevant pages.
 
-## Optional permission: `cookies`; `nativeMessaging` and optional host access
+## Optional permission: `cookies`; `nativeMessaging` and existing host access
 
-The optional agent sign-in feature requests the optional `cookies` permission together
-with one selected origin from an explicit popup review click. Cookie access is absent
-at installation. Existing required Solid host access remains unchanged and can satisfy
-the origin request without a further browser prompt; while held, the optional cookie
-permission combines with that existing host access and is extension-wide. The feature
+The optional agent sign-in feature first checks existing Chrome site access before any
+native message, and checks again on the explicit popup review click. If the site's access
+is withheld, capture refuses without requesting permission or contacting the native host,
+and tells the person to allow the extension on this site from Chrome's extension menu first,
+then try again. Capture never requests or removes a host origin. Required `<all_urls>`
+access remains unchanged, and capture does not use the declared optional host patterns.
+Confirmation rechecks host access before sending, including withdrawal during review.
+The review click requests only the optional `cookies` permission. Cookie access is absent
+at installation; while held, it combines with existing host access and is extension-wide. The feature
 reads cookies matching that page URL, checks exact-host or explicitly vetted parent-domain
 scope (never public suffixes or sibling host-only cookies), and shows site/count/persona.
 Separate confirmation sends them to the person's local encrypted agent vault through a
@@ -97,11 +101,13 @@ Chrome native host registered for this extension ID. It does not send them to a 
 service or page, store them in extension storage, export passkey keys, or run automatically.
 Only the actual extension popup can invoke the worker channel. The native connection
 allows the vault's configured keep-alive jobs to continue while Chrome is open.
-Cookie access and any removable optional origin grant are released with separate
-`chrome.permissions.remove` calls in `finally` immediately after the cookie snapshot is
-prepared, before confirmation. Required-host removal refusal cannot block cookie removal. Failure, denial,
-cancellation and success leave no optional cookie access. A worker port's `onDisconnect`
-also removes permissions if the popup closes, including grants arriving after closure.
+Cookie access is removed in `finally` immediately after the snapshot is prepared, before
+confirmation, then checked absent with `chrome.permissions.contains({ permissions: ["cookies"] })`.
+Failure, permission denial, cancellation and success restore the same host grants with no
+cookie access. A worker port's `onDisconnect` also removes and verifies cookie permission
+if the popup closes, including grants arriving after closure. Removal rejection or a failed
+absence check displays a popup warning alongside the truthful capture outcome; worker
+cleanup failure displays a toolbar `!` badge. A surviving grant warns on reopening the popup.
 
 ## Remote code
 

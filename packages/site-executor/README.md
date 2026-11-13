@@ -151,6 +151,12 @@ excluded. The remaining observations retain their original step order and untrus
 
 ## Security invariants
 
+- **Site-model trust.** A site model is trusted input on a par with code. It comes from the
+  person's own profiler run or from a signed model. The executor validates its structure and
+  applies Rule W below; it refuses whenever payment and total requests differ on the wire,
+  apart from the explicitly checked identity and CSRF exemptions. A signature's verification
+  belongs to the model-loading host; this package does not authenticate model publishers.
+
 - **Origin guard.** Every operation URL, CSRF page and redirect target is resolved and parsed with
   WHATWG URL, then compared to the model's origin, including scheme and port. Absolute,
   protocol-relative, backslash, userinfo and scheme-change escapes are all refused before
@@ -201,28 +207,43 @@ excluded. The remaining observations retain their original step order and untrus
   does not explicitly bind that identity. Identity-only records and their source reads join the
   approval digest and retry revalidation; changing them invalidates the previous consent.
 
-  Every payment input must be CSRF/session decoration, a checked order/basket identity, or an
-  input each contributing total read took with the same value. Match by parameter name or
-  nonempty semantic path and compare canonical values, including defaults. Otherwise refuse
-  with "needs a fresh basket total for these options". Declared inputs qualify only when sent
-  exactly once as whole values in the total request. Every quote-bound payment option and every
-  checked order/basket identity must also reach the payment request exactly once as a whole
-  value, across URL, header and body surfaces. Unused, embedded (`9{order}`, `{qty}000`),
-  duplicated and transformed uses (including URI prefix modifiers) refuse. A static JSON field,
-  query parameter or form/multipart field whose name equals a quote parameter's name or a checked
-  payment input's name also refuses as shadowing, even when the checked value is sent elsewhere.
-  Unrelated static literals, such as a submit button value, remain allowed.
-  CSRF decoration cannot exempt a checked input or target a quoted option/identity name.
-  A direct buy applies the same whole-value and shadow checks to quantity and other inputs,
-  accounts for mapped quantity in exact price multiplication and cross-checks mapped money;
-  any other non-identity option requires a fresh total. The digest includes the total reads'
-  concrete inputs and semantic paths.
+  **Rule W — closed-world wire coverage.** Compare payment P with each total read Q that
+  contributed the single fresh amount/currency pair, using the concrete compiled requests after
+  template expansion and CSRF insertion:
+
+  1. Inventory every query parameter, form/multipart field, JSON body member (named by its
+     RFC 6901 pointer), URL path variable (named by its template variable), and model-supplied
+     request header: static, parameter and CSRF headers. Include static body/query literals.
+     Exclude session/vault headers and executor transport headers `Content-Type`, `Content-Length`,
+     `Accept`, `Cookie`, `Origin` and `Referer`. Names compare case-insensitively; values compare
+     exactly after the existing typed canonicalisation. JSON pointers retain their leading `/`:
+     a JSON `/delivery` member is distinct from a query/form `delivery` field.
+  2. Refuse any name occurring more than once within P or within Q, across all locations.
+  3. Every P field must have the same name/value in Q, be the target of P's CSRF rule, or be a
+     whole, checked order/basket identity matching the total record. A CSRF name must not occur
+     in Q or elsewhere in P, including case aliases. Otherwise refuse with
+     "payment sends <name>, which the basket total did not cover".
+  4. Every non-identity Q field must also occur in P with the same name/value. An identity
+     exemption requires a whole value checked against the selected order's records.
+  5. For a direct buy (payment is the first write), every P field must be the whole bound
+     product identity, the whole bound quantity multiplied into the amount, or the unique CSRF
+     token. Even static submit values and wire amount/currency fields need a fresh matching total.
+  6. Refuse item or value truncation in any read capable of supplying money or identity evidence
+     for the selected order/product, including separate identity-only reads. The incomplete
+     tail cannot prove the absence of a conflicting identity or price.
+
+  Keep the whole-value invariant for bound payment inputs: unused, embedded, duplicated and
+  transformed uses (including URI prefix modifiers) refuse. Configuration matching never uses
+  parameter names or semantic paths: only the effective wire fields establish coverage. A static
+  literal is allowed only when covered by Q. The evidence digest retains the total requests'
+  actual wire inventories; their source reads are repeated on approval retry. Payment CSRF reads
+  are authorized as reads before payment consent so Rule W sees the decorated request, and repeat on retry.
 
   Bind every contributing record's subject, raw amount/currency values, typed identity, source
   read and quantity in the approval digest. Re-read every contributing source on approval retry;
   changed evidence invalidates consent without replaying completed writes. Untrusted fields,
   off-origin reads/items and observations from separate actions cannot authorize money.
-  Every contributing partial record is bound and its source is re-read too. If any money-capable
+  Every contributing partial record is bound and its source is re-read too. If any money- or identity-capable
   read in the evidence window reports item or value truncation, evidence is incomplete and
   payment is refused, even when the retained items do not match the purchase identity.
   Wire monetary mappings remain strict cross-checks (whole values, sent exactly once, exact JSON
@@ -275,9 +296,22 @@ blocking after auxiliary session-refresh failures (#5).
 
 Round 5 regressions are in `test/review-r5.test.ts`: payment-side whole-value transmission for
 quoted options and checked identities, static shadowing across JSON/query/form/multipart,
-direct-buy quantities, and allowed unrelated submit literals (#1); contradictory identity-only
+direct-buy quantities, and payment-only submit literals (now refused by Rule W) (#1); contradictory identity-only
 order records, evidence-digest inclusion and revalidation of identity-only sources (#2).
 Unsafe payment configurations now return `refused` before payment approval or transmission.
+
+Rule W regressions live in `test/review-r6.test.ts`: static delivery headers, case-aliased CSRF
+headers, hard-coded total queries, swapped parameter values, truncated identity-only reads,
+all field locations, duplicate names, reverse coverage, checked identities, canonical values,
+direct-buy restrictions and trusted-model structure validation. Earlier tests now refuse
+payment-only submit literals and direct-buy wire money, semantic-path aliases with different
+wire names, and query versus JSON-pointer name differences. Receipt, commitment and retry fixtures use requests covered by
+Rule W so their original behavior assertions remain exercised.
+
+Agent-browser's `test/wire-checkout.test.ts` learns operations and a buy flow from demonstration
+records and a CSRF-bearing checkout form, round-trips the model through RDF, and executes the
+shared-delivery total/payment requests over an injected transport. It asserts "for GBP 20.00"
+and exactly one checkout. The real browser e2e remains a separate loopback/Chromium check.
 
 ## Session-protected JSON lists
 
