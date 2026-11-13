@@ -1,12 +1,26 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
-import { lstatSync, mkdirSync, writeFileSync } from "fs";
-import { isAbsolute, join, resolve } from "path";
+import { lstatSync, realpathSync, writeFileSync } from "fs";
+import { dirname, isAbsolute, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { parseArgs } from "util";
 import { NATIVE_HOST_NAME } from "../dist/browser.js";
 import { nativeConfigSchema, validateNativeCaller } from "../dist/native-config.js";
+
+// Both destinations must already exist. Validate every ancestor before using one real path.
+function canonicalDirectory(input) {
+  if (!isAbsolute(input) || input.split("/").includes("..")) throw 0;
+  const leaf = resolve(input);
+  for (let path = leaf; ; path = dirname(path)) {
+    const stat = lstatSync(path);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || stat.mode & 0o022) throw 0;
+    if (path === leaf && (stat.mode & 0o077 || (process.getuid && stat.uid !== process.getuid())))
+      throw 0;
+    if (dirname(path) === path) break;
+  }
+  return realpathSync(leaf);
+}
 
 try {
   const { values } = parseArgs({
@@ -25,25 +39,17 @@ try {
     !isAbsolute(values["output-dir"])
   )
     throw 0;
+  const output = canonicalDirectory(values["output-dir"]);
+  const storeDir = canonicalDirectory(values["store-dir"]);
   const parsed = nativeConfigSchema.safeParse({
     extensionId: values["extension-id"],
-    storeDir: values["store-dir"],
+    storeDir,
     cookieDomains: values["cookie-domain"] ?? [],
     frequentSites: values["frequent-site"] ?? [],
   });
   if (!parsed.success) throw 0;
   const config = parsed.data;
   validateNativeCaller(config, `chrome-extension://${config.extensionId}/`);
-  const output = values["output-dir"];
-  mkdirSync(output, { recursive: true, mode: 0o700 });
-  const directory = lstatSync(output);
-  if (
-    !directory.isDirectory() ||
-    directory.isSymbolicLink() ||
-    directory.mode & 0o077 ||
-    (process.getuid && directory.uid !== process.getuid())
-  )
-    throw 0;
   const configPath = join(output, "host-config.json");
   const launcher = join(output, "agent-vault-native");
   const cli = fileURLToPath(new URL("../dist/native-cli.js", import.meta.url));

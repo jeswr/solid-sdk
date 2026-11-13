@@ -14,6 +14,7 @@ export function acceptCapture(
   input: Secret<SessionCapture>,
   expected: LoginTransaction,
   now: () => number = Date.now,
+  source?: "browser-capture",
 ): Promise<SessionBundle> {
   return boundary(() =>
     input.use(async (raw) => {
@@ -34,6 +35,7 @@ export function acceptCapture(
           tokens: c.tokens,
           capturedAt: c.capturedAt,
           stale: false,
+          origin: source,
         },
         expected,
       );

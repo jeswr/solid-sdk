@@ -9,11 +9,26 @@ import {
   nativeResultSchema,
   type SessionCapture,
 } from '@jeswr/agent-vault/browser';
+import {
+  CAPTURE_PERMISSION_PORT,
+  capturePermissions,
+  releaseCapturePermissions,
+} from '../shared/agent-capture-permissions';
 
 type Tab = { id?: number; url?: string; incognito?: boolean };
 interface BrowserApi {
   tabs: { query(query: { active: boolean; currentWindow: boolean }): Promise<Tab[]> };
-  permissions: { request(permissions: { origins: string[] }): Promise<boolean> };
+  permissions: {
+    request(permissions: chrome.permissions.Permissions): Promise<boolean>;
+    remove(permissions: chrome.permissions.Permissions): Promise<boolean>;
+  };
+  runtime: {
+    connect(info: { name: string }): {
+      postMessage(message: unknown): void;
+      disconnect(): void;
+      onDisconnect: { addListener(listener: () => void): void };
+    };
+  };
   cookies: { getAll(details: { url: string }): Promise<chrome.cookies.Cookie[]> };
 }
 export type VaultRequest = NativeRequest extends infer R
@@ -72,6 +87,7 @@ export class AgentSignIn {
   #pending: { token: string; message: SessionCapture } | undefined;
   #version = 0;
   #busy = false;
+  #permissionPort: ReturnType<BrowserApi['runtime']['connect']> | undefined;
   constructor(
     readonly browser: BrowserApi,
     readonly transport: (request: VaultRequest) => Promise<unknown>,
@@ -83,6 +99,14 @@ export class AgentSignIn {
       if (!response.success || response.data.type !== request.type) throw 0;
       return response.data;
     } catch {
+      throw failed();
+    }
+  }
+  async #removePermissions(permissions: chrome.permissions.Permissions): Promise<void> {
+    try {
+      await releaseCapturePermissions(this.browser.permissions, permissions.origins ?? []);
+    } catch {
+      this.#pending = undefined;
       throw failed();
     }
   }
@@ -120,15 +144,20 @@ export class AgentSignIn {
     const selectedProfile = choices?.profiles.find((p) => p.id === profile);
     if (!tab || !choices || !account || !selectedProfile) throw failed();
     this.#busy = true;
+    const permissions = capturePermissions(tab.site);
     try {
-      const url = new URL(tab.site);
-      const pattern = `${url.protocol}//${url.hostname}:${url.port || (url.protocol === 'https:' ? '443' : '80')}/*`;
-      if (!(await this.browser.permissions.request({ origins: [pattern] }))) throw failed();
+      const port = this.browser.runtime.connect({ name: CAPTURE_PERMISSION_PORT });
+      this.#permissionPort = port;
+      port.onDisconnect.addListener(() => {
+        if (this.#permissionPort === port) this.cancel();
+      });
+      port.postMessage({ site: tab.site });
+      if (!(await this.browser.permissions.request(permissions))) throw failed();
       const current = await this.#active();
       if (current.id !== tab.id || current.site !== tab.site || version !== this.#version)
         throw failed();
       const begun = await this.#request({ type: 'beginLogin', site: tab.site, persona, profile });
-      if (begun.type !== 'beginLogin') throw failed();
+      if (begun.type !== 'beginLogin' || version !== this.#version) throw failed();
       const cookies = captureCookies(
         tab.site,
         await this.browser.cookies.getAll({ url: current.url }),
@@ -157,12 +186,23 @@ export class AgentSignIn {
       this.#pending = undefined;
       throw failed();
     } finally {
-      this.#busy = false;
+      // The preview retains only its in-memory snapshot; browser authority ends after reading.
+      try {
+        await this.#removePermissions(permissions);
+      } finally {
+        const port = this.#permissionPort;
+        this.#permissionPort = undefined;
+        port?.disconnect();
+        this.#busy = false;
+      }
     }
   }
   cancel(): void {
     this.#version++;
     this.#pending = undefined;
+    const port = this.#permissionPort;
+    this.#permissionPort = undefined;
+    port?.disconnect();
   }
   async share(): Promise<void> {
     const pending = this.#pending;

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installNativeVaultBridge } from '../src/background/agent-vault';
+import { CAPTURE_PERMISSION_PORT } from '../src/shared/agent-capture-permissions';
 
 afterEach(() => vi.useRealTimers());
 function fixture() {
@@ -16,15 +17,72 @@ function fixture() {
     getURL: (path: string) => `chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/${path}`,
     connectNative: vi.fn(() => port),
     onMessage: { addListener: vi.fn() },
+    onConnect: { addListener: vi.fn() },
     lastError: undefined,
   };
-  installNativeVaultBridge({ runtime } as unknown as typeof chrome);
+  const permissions = {
+    remove: vi.fn(async (_permissions: chrome.permissions.Permissions) => true),
+    onAdded: { addListener: vi.fn() },
+  };
+  installNativeVaultBridge({ runtime, permissions } as unknown as typeof chrome);
   const listener = runtime.onMessage.addListener.mock.calls[0][0];
   const sender = { id: runtime.id, url: runtime.getURL('popup/popup.html') };
-  return { runtime, port, listener, sender };
+  return { runtime, port, listener, sender, permissions };
 }
 const request = { type: 'AGENT_VAULT', request: { type: 'list', site: 'https://shop.test' } };
 describe('native host trust boundary', () => {
+  it('removes cookies and selected origin on popup close, including a late permission grant', async () => {
+    const { runtime, sender, permissions } = fixture();
+    const popup = {
+      name: CAPTURE_PERMISSION_PORT,
+      sender,
+      disconnect: vi.fn(),
+      onMessage: { addListener: vi.fn() },
+      onDisconnect: { addListener: vi.fn() },
+    };
+    runtime.onConnect.addListener.mock.calls[0][0](popup);
+    popup.onMessage.addListener.mock.calls[0][0]({ site: 'https://shop.test' });
+    permissions.onAdded.addListener.mock.calls[0][0]({ permissions: ['cookies'] });
+    expect(permissions.remove).not.toHaveBeenCalled();
+    // Popup destruction prevents its finally from running; the worker owns this cleanup.
+    popup.onDisconnect.addListener.mock.calls[0][0]();
+    expect(permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(permissions.remove).toHaveBeenCalledWith({ origins: ['https://shop.test:443/*'] });
+    permissions.remove.mockClear();
+    permissions.onAdded.addListener.mock.calls[0][0]({ permissions: ['cookies'] });
+    expect(permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(permissions.remove).toHaveBeenCalledWith({ origins: ['https://shop.test:443/*'] });
+  });
+  it('removes cookie authority on popup close even when Chrome rejects required-host removal', async () => {
+    const { runtime, sender, permissions } = fixture();
+    permissions.remove.mockImplementation(async (input) => {
+      if (input.origins) throw new Error('You cannot remove required permissions.');
+      return true;
+    });
+    const popup = {
+      name: CAPTURE_PERMISSION_PORT,
+      sender,
+      disconnect: vi.fn(),
+      onMessage: { addListener: vi.fn() },
+      onDisconnect: { addListener: vi.fn() },
+    };
+    runtime.onConnect.addListener.mock.calls[0][0](popup);
+    popup.onMessage.addListener.mock.calls[0][0]({ site: 'https://shop.test' });
+    popup.onDisconnect.addListener.mock.calls[0][0]();
+    expect(permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(permissions.remove).toHaveBeenCalledWith({ origins: ['https://shop.test:443/*'] });
+    await Promise.resolve();
+  });
+  it('denies content scripts permission-cleanup ports', () => {
+    const { runtime, sender } = fixture();
+    const popup = {
+      name: CAPTURE_PERMISSION_PORT,
+      sender: { ...sender, tab: { id: 1 } },
+      disconnect: vi.fn(),
+    };
+    runtime.onConnect.addListener.mock.calls[0][0](popup);
+    expect(popup.disconnect).toHaveBeenCalled();
+  });
   it('refuses content scripts, pages, other extensions and other extension surfaces', () => {
     const { listener, sender, runtime } = fixture();
     for (const candidate of [

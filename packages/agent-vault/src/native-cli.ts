@@ -16,6 +16,8 @@ import { EncryptedRecords } from "./storage.js";
 
 export async function nativeMain(args: string[]): Promise<void> {
   return boundary(async () => {
+    // Reject accidental interactive launches; argv is not same-user process authentication.
+    if (process.stdin.isTTY || process.stdout.isTTY) throw new VaultError("denied");
     if (args[0] !== "--config" || !args[1] || !isAbsolute(args[1])) throw new VaultError("invalid");
     const fd = openSync(args[1], constants.O_RDONLY | constants.O_NOFOLLOW);
     let config: z.infer<typeof nativeConfigSchema>;

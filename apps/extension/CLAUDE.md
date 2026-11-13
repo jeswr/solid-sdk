@@ -57,6 +57,19 @@ replies contain display metadata, a generation token or acknowledgements, never 
 Use the browser-safe `@jeswr/agent-vault/browser` schemas and PSL boundary; parent cookies
 require explicit vetted host configuration. No cookie values in logs, errors, UI or storage.
 
+Hostile processes running as the same OS user are explicitly outside the native vault's
+threat model: they can read its store/key or forge the public extension-ID caller argument.
+There are no code-signature checks or independent browser-process authentication, matching
+other local credential tools without such checks. Native stdin/stdout TTY refusal prevents
+accidental interactive launches; it does not establish caller identity. Each accepted
+capture marks its vault session `origin: "browser-capture"` and records a pending
+"New sign-in from browser" entry for the host's later agent approval UI.
+Request optional `cookies` together with the chosen origin only on review. Remove both in
+finally after reading the snapshot using separate remove calls, with worker onDisconnect/late-grant cleanup for popup
+closure. Required Solid host permissions remain in place, so the temporary cookies grant
+is extension-wide while held; exact-origin filtering and explicit confirmation still apply.
+Chrome refusing required-origin removal must never prevent independent cookie removal.
+
 ## Gate
 
 `pnpm run gate` = lint (biome) + typecheck (tsc) + test (vitest, the core) + build (webpack).

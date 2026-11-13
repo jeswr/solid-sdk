@@ -2,6 +2,7 @@
 
 import { captureSchema, cookieDomainAllowed, registrableDomain } from '@jeswr/agent-vault/browser';
 import { describe, expect, it, vi } from 'vitest';
+import manifest from '../src/manifest.json';
 import { AgentSignIn, captureCookies } from '../src/popup/agent-sign-in';
 
 const site = 'https://bank.example.co.uk';
@@ -103,9 +104,18 @@ describe('agent cookie boundary', () => {
   });
 });
 function setup() {
+  const port = {
+    postMessage: vi.fn(),
+    disconnect: vi.fn(),
+    onDisconnect: { addListener: vi.fn() },
+  };
   const browser = {
     tabs: { query: vi.fn(async () => [{ id: 7, url: `${site}/account`, incognito: false }]) },
-    permissions: { request: vi.fn(async () => true) },
+    permissions: {
+      request: vi.fn(async (_permissions: chrome.permissions.Permissions) => true),
+      remove: vi.fn(async (_permissions: chrome.permissions.Permissions) => true),
+    },
+    runtime: { connect: vi.fn(() => port) },
     cookies: { getAll: vi.fn(async () => [cookie()]) },
   };
   const transport = vi.fn(async (request: { type: string }) => {
@@ -123,16 +133,37 @@ function setup() {
   return { browser, transport, controller: new AgentSignIn(browser, transport, () => now) };
 }
 describe('user-initiated sharing', () => {
+  const permissions = { permissions: ['cookies'], origins: [`${site}:443/*`] };
+  it('declares cookies optional while retaining the required host permissions', () => {
+    expect(manifest.permissions).not.toContain('cookies');
+    expect(manifest.optional_permissions).toEqual(['cookies']);
+    expect(manifest.host_permissions).toEqual(['<all_urls>']);
+  });
+  it('removes cookies independently when Chrome refuses removal of a required host origin', async () => {
+    const { browser, controller } = setup();
+    browser.permissions.remove.mockImplementation(async (input) => {
+      if (input.origins) throw new Error('You cannot remove required permissions.');
+      return true;
+    });
+    await controller.load();
+    await controller.review('personal', 'alex');
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ origins: permissions.origins });
+    await controller.share();
+  });
   it('only lists on opening, requests one origin on review, and waits for explicit confirmation', async () => {
     const { browser, transport, controller } = setup();
     await controller.load();
     expect(browser.cookies.getAll).not.toHaveBeenCalled();
     const pending = controller.review('personal', 'alex');
-    expect(browser.permissions.request).toHaveBeenCalledWith({ origins: [`${site}:443/*`] });
+    expect(browser.permissions.request).toHaveBeenCalledWith(permissions);
     const preview = await pending;
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ origins: permissions.origins });
     expect(preview).toMatchObject({ site, count: 1, persona: 'Alex Example', profile: 'Personal' });
     expect(transport.mock.calls.map(([r]) => r.type)).toEqual(['list', 'beginLogin']);
     await controller.share();
+    expect(browser.runtime.connect.mock.results[0].value.disconnect).toHaveBeenCalled();
     expect(transport).toHaveBeenLastCalledWith(
       expect.objectContaining({
         type: 'capture',
@@ -153,6 +184,8 @@ describe('user-initiated sharing', () => {
     await expect(controller.review('personal', 'alex')).rejects.toThrow();
     expect(browser.cookies.getAll).not.toHaveBeenCalled();
     expect(transport).toHaveBeenCalledTimes(1);
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ origins: permissions.origins });
   });
   it('refuses navigation, cancellation, profile changes, empty cookies and expired previews', async () => {
     const { browser, transport, controller } = setup();
@@ -193,9 +226,97 @@ describe('user-initiated sharing', () => {
     controller.cancel();
     allow(true);
     await expect(review).rejects.toThrow();
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ origins: permissions.origins });
+    expect(browser.runtime.connect.mock.results[0].value.disconnect).toHaveBeenCalled();
     expect(browser.cookies.getAll).not.toHaveBeenCalled();
     expect(transport).toHaveBeenCalledTimes(1);
     browser.tabs.query.mockRejectedValueOnce(new Error('fixture-cookie-secret'));
     await expect(controller.load()).rejects.toThrow('Sign-in sharing unavailable.');
+  });
+  it.each([
+    'request',
+    'beginLogin',
+    'cookies',
+    'navigation',
+    'empty',
+  ])('releases cookies and origin when review fails at %s', async (stage) => {
+    const { browser, transport, controller } = setup();
+    await controller.load();
+    if (stage === 'request') browser.permissions.request.mockRejectedValueOnce(new Error('secret'));
+    if (stage === 'beginLogin') transport.mockRejectedValueOnce(new Error('secret'));
+    if (stage === 'cookies') browser.cookies.getAll.mockRejectedValueOnce(new Error('secret'));
+    if (stage === 'empty') browser.cookies.getAll.mockResolvedValueOnce([]);
+    if (stage === 'navigation')
+      browser.tabs.query.mockResolvedValueOnce([{ id: 8, url: site, incognito: false }]);
+    await expect(controller.review('personal', 'alex')).rejects.toThrow(
+      'Sign-in sharing unavailable.',
+    );
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ origins: permissions.origins });
+    expect(browser.runtime.connect.mock.results[0].value.disconnect).toHaveBeenCalled();
+  });
+  it.each([
+    'success',
+    'failure',
+    'cancel',
+  ])('has released browser authority before confirmation %s', async (exit) => {
+    const { browser, transport, controller } = setup();
+    await controller.load();
+    await controller.review('personal', 'alex');
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ origins: permissions.origins });
+    if (exit === 'cancel') controller.cancel();
+    if (exit === 'failure') transport.mockRejectedValueOnce(new Error('secret'));
+    if (exit === 'success') await controller.share();
+    else await expect(controller.share()).rejects.toThrow();
+  });
+  it('refuses the preview if permission removal fails and still disconnects cleanup', async () => {
+    const { browser, controller } = setup();
+    await controller.load();
+    browser.permissions.remove.mockRejectedValueOnce(new Error('secret'));
+    await expect(controller.review('personal', 'alex')).rejects.toThrow(
+      'Sign-in sharing unavailable.',
+    );
+    expect(browser.runtime.connect.mock.results[0].value.disconnect).toHaveBeenCalled();
+    await expect(controller.share()).rejects.toThrow();
+  });
+  it.each([
+    'beginLogin',
+    'cookies',
+  ])('releases permissions when cancelled during %s', async (stage) => {
+    const { browser, transport, controller } = setup();
+    await controller.load();
+    let finish!: () => void;
+    const held = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    if (stage === 'beginLogin')
+      transport.mockImplementationOnce(async () => {
+        await held;
+        return { type: 'beginLogin', token: '00000000-0000-4000-8000-000000000001' };
+      });
+    else
+      browser.cookies.getAll.mockImplementationOnce(async () => {
+        await held;
+        return [cookie()];
+      });
+    const review = controller.review('personal', 'alex');
+    await vi.waitFor(() => {
+      if (stage === 'beginLogin')
+        expect(transport).toHaveBeenCalledWith({
+          type: 'beginLogin',
+          site,
+          persona: 'alex',
+          profile: 'personal',
+        });
+      else expect(browser.cookies.getAll).toHaveBeenCalled();
+    });
+    controller.cancel();
+    finish();
+    await expect(review).rejects.toThrow('Sign-in sharing unavailable.');
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ permissions: ['cookies'] });
+    expect(browser.permissions.remove).toHaveBeenCalledWith({ origins: permissions.origins });
+    await expect(controller.share()).rejects.toThrow();
   });
 });

@@ -10,7 +10,7 @@ const config = {
   frequentSites: [],
 };
 describe("native host registration", () => {
-  it("pins the exact Chrome caller, independently of the host manifest", () => {
+  it("checks the exact Chrome caller argument, independently of the host manifest", () => {
     expect(() => validateNativeCaller(config, `chrome-extension://${extensionId}/`)).not.toThrow();
     for (const caller of [
       undefined,

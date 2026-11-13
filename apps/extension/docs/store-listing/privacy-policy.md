@@ -45,8 +45,11 @@ for access decisions and cached data are used to provide the connection you appr
 
 ## What is sent and who receives it
 
-If you choose **Share this sign-in with my agent**, the popup reads cookies matching the
-active site's page after you request a review. It displays the site, cookie count, vault
+If you choose **Share this sign-in with my agent**, the popup requests temporary optional
+cookie access together with the active site's origin when you click review, then reads
+only cookies matching that page. Cookie access and any optional origin grant are removed
+after the snapshot is prepared, including errors, cancellation and popup closure. Required Solid host access
+remains. The popup displays the site, cookie count, vault
 profile and persona before a separate confirmation sends that snapshot to your local
 encrypted agent vault through Chrome native messaging. These cookies give your agent
 the site's session; they are not sent to a developer service or web page, saved in extension

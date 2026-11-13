@@ -13,14 +13,34 @@ consent, independently checked by the worker, controls which pages can use that 
 | `contextMenus` | The toolbar's “Open Solid side panel” menu entry and the “Fill from pod” entry on editable controls. Form-fill clicks are routed only to the clicked tab and frame. |
 | `scripting` | Register the MAIN-world fetch-patch entry only for explicitly granted origins, with one exact `scheme://host:port/*` match per origin (including explicit default ports), no wildcard hosts or schemes, top frame only. Reconcile on worker wake, install/update, grant changes, and expiry. Remove the legacy `solid-main-world-inject` all-origins registration. |
 | `alarms` | Wake the worker at the earliest origin-grant expiry to unregister scripts and clear page capabilities. Alarms are a cleanup mechanism: every request independently checks expiry, even if the alarm is late. |
-| `cookies` | After a popup review click and an exact-origin permission request, read cookies matching the selected active page URL. Filter domains/flags again, preview site/count/persona, and send only after separate confirmation. No automatic capture, page API or persistent extension cookie storage. |
 | `nativeMessaging` | One worker-owned port to `org.jeswr.agent_vault`, whose registration pins this extension ID. Only the popup can call the worker seam; content-script/page senders refuse. Display metadata and capture acknowledgements return; credentials never do. |
 
-`optional_host_permissions` declares HTTPS and loopback HTTP sites. The sharing action
-requests one exact scheme/hostname/port pattern from the review click, never a wildcard
-host or parent origin. Existing `<all_urls>` access for Solid may satisfy Chrome's request
-without an additional browser prompt; the popup's review and confirmation remain mandatory.
+`optional_permissions: ["cookies"]` enables the optional sign-in sharing feature only
+on demand. The review click requests `cookies` and one exact scheme/hostname/port pattern
+together through `chrome.permissions.request`. `optional_host_permissions` declares HTTPS
+and loopback HTTP sites, never wildcard hosts or parent origins in the actual request.
+The popup reads cookies matching only the selected active page URL and filters domains
+and flags again. It calls `chrome.permissions.remove` separately for cookies and the chosen
+origin in `finally` immediately after preparing the in-memory snapshot, including failures and
+denials. Success, cancellation and confirmation failures retain no cookie permission.
+A popup-to-worker port supplies `onDisconnect` cleanup on popup closure; the worker also
+removes late grants when a permission prompt outlives the popup.
+
+Existing required `<all_urls>` access for Solid remains unchanged and can satisfy the
+host request without another prompt. Optional `cookies` is extension-wide while held;
+the origin request does not narrow that existing host grant. The popup's exact-origin
+cookie query, review and separate confirmation remain mandatory.
+Chrome can reject removing a host covered by required access. That failure never blocks
+the independent removal of optional cookie access; any acquired optional origin is removed.
+See [Chromium's removal implementation](https://github.com/chromium/chromium/blob/main/extensions/browser/api/permissions/permissions_api.cc).
 Parent-domain cookies require explicit vault configuration and public/private suffix checks.
+
+The native host checks a public extension-ID argument and rejects TTY stdin/stdout;
+neither authenticates a hostile same-OS-user process. Such processes are explicitly outside
+the threat model because they can read the vault store/key directly. There are no
+code-signature checks, matching other local credential tools without them. Every accepted
+capture has vault origin `browser-capture` and a pending "New sign-in from browser" entry
+that the host can list for a later agent approval UI.
 
 No `tabs` permission is requested. Existing host access permits tab-URL visibility for
 scoped state broadcasts. Each tab receives only its bound profile's WebID; other tabs

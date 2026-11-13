@@ -258,8 +258,13 @@ node packages/agent-vault/scripts/native-manifest.mjs \
   --output-dir /absolute/private/agent-native
 ```
 
-The store's parent must exist. Use a new private output directory; the generator refuses
-existing files. It creates an owner-only config, a POSIX executable launcher with absolute
+Create both store and output directories first with mode 0700. Use absolute paths with
+no `..` components or symlinked ancestors (on macOS, use the real path rather than a
+symlink such as `/var`). Every ancestor must be free of group/world write permission;
+world-writable temporary directories are refused, even with the sticky bit. The generator
+checks both existing directories, resolves each once with `realpath`, and uses only those
+canonical paths. It refuses existing files. It exclusively creates an owner-only config
+and manifest (0600), a POSIX executable launcher (0700) with absolute
 Node/package paths, and `org.jeswr.agent_vault.json` with one `allowed_origins` entry.
 Copy that manifest into your browser's native-host directory:
 
@@ -288,8 +293,10 @@ Cookies scoped only to another path are not captured; navigate to the signed-in 
 page before sharing. Secure, httpOnly, hostOnly, sameSite, path and expiry are preserved.
 Incognito capture is refused. Only HTTPS and development loopback HTTP can be selected.
 
-The worker holds one `connectNative` port after the popup closes. The executable validates
-Chrome's caller against the pinned ID before opening the store, and owns one keep-alive
+The worker holds one `connectNative` port after the popup closes. The executable checks
+Chrome's caller argument against the pinned ID and refuses TTY stdin or stdout before
+opening the store. These checks prevent misconfiguration and accidental terminal launches;
+they do not authenticate a same-user process. The executable owns one keep-alive
 scheduler under a cross-process owner lock. It resumes configured account routes when the
 port opens and calls the existing KeepAlive after each accepted capture. Refresh uses
 existing encrypted refresh metadata when available; cookie-only captures have no OAuth
@@ -327,7 +334,23 @@ stop during review; cancelling does not restore an older session.
 Capture cannot invent a transaction, cross site/account/profile, replay a token, or overwrite
 a newer/revoked generation. No protocol payloads, raw errors or secrets are logged.
 
+Every accepted native capture atomically stores `origin: "browser-capture"` on its vault
+session and appends a pending **New sign-in from browser** entry. The host can call
+`sessions.listPendingBrowserSignIns(site, account)` for each `profiles.accounts()` entry.
+It returns only entry ID, site, account, label, origin, status and capture time; no cookies
+or tokens. Entries survive restart, later captures, login resets and revocation. A future
+agent approval UI can show this list. Pending is a notification status: it does not add an
+approval gate to current session use.
+
 ## Threat model and limits
+
+A hostile process running as the **same OS user is explicitly outside the threat model**.
+It can read both the vault store and its default key directly, or impersonate Chrome by
+passing the public extension ID as argv. No code-signature or independent browser-process
+authentication is performed. This is the same boundary as other local credential tools
+without code-signature checks. TTY refusal and pending browser sign-in entries are cheap
+hardening and visibility, not isolation from that user. Stronger same-user protection
+requires an OS-enforced boundary around both the host and its store/key.
 
 Protects disk confidentiality from accidental disclosure/backups without the key, file
 permissions against other OS users, and routine JSON/string/`util.inspect` diagnostics.

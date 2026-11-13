@@ -37,7 +37,7 @@ login and interactive login are injected seams.
   explicit '<account>/new' ref for a separate item until a preserving edit seam exists.
   Exact origin is default; any domainGroups
   must be operator-vetted registrable domains, never guessed public suffixes.
-- Captures need an authenticated browser sender/transaction outside this library. Validate
+- Captures need a browser-attested popup sender/transaction outside this library. Validate
   site/account/time, cookie domains/prefixes and same-origin token endpoint before storing.
   Use account id as executor persona. Do not broaden parent cookie domains automatically.
   Call `beginLogin(site, account)` before opening the login UI and retain its returned
@@ -92,10 +92,26 @@ Native messaging and real-browser capture:
   including private suffixes, and matching SessionStore options. Never widen to a sibling or
   guess the last two labels. Preserve flags; refuse partitioned cookies until the contract
   can retain their partition key. Never silently flatten them.
-- The native executable pins Chrome's caller before opening the store. The POSIX generator
+- A hostile same-OS-user process is OUT of the threat model: it can read the store and
+  default key, or forge the public extension-ID argv. There are no code-signature checks
+  or independent browser-process authentication, as with other local credential tools
+  without such checks. Caller-ID checks and TTY refusal do not prove process identity.
+  Refuse native startup if either stdin or stdout is a TTY before opening the store.
+  Every accepted native capture atomically marks its session `origin: "browser-capture"`
+  and appends a pending "New sign-in from browser" entry. Host applications list display
+  metadata through `SessionStore.listPendingBrowserSignIns(site, account)` for a later
+  approval UI; pending does not gate current session use. Preserve entries across resets.
+- The native executable checks Chrome's caller argument before opening the store. The POSIX generator
   writes private config/launcher files and one exact allowed_origins ID; no wildcard sender,
   shell interpolation of arguments, or credentials in argv. Keep a bounded native-endian
   frame parser, strict JSON schemas, sequential dispatch and bounded output.
+- Require existing private output/store directories. Reject `..`, symlinked ancestors and
+  group/world-writable ancestors (including sticky temporary directories); resolve each
+  once with realpath and write only relative to that canonical path, exclusively at 0600
+  for config/manifest and 0700 for the launcher. Never validate one path and write another.
+- `cookies` is optional. Request it with the selected origin on the review gesture, remove
+  both in finally after the snapshot, and retain worker onDisconnect/late-grant cleanup
+  when the popup disappears during a permission prompt. Keep required host access intact.
 - One worker port keeps the native owner alive after popup close. Only that owner's existing
   KeepAlive scheduler runs; frequent probes require explicit configuration and learned routes.
   Stop on disconnect; rehydrate routes on startup. Stop an old job in NativeVault.beginning

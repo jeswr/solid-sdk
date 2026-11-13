@@ -5,6 +5,7 @@ import { Readable, Writable } from "stream";
 import { describe, expect, it, vi } from "vitest";
 import { KeepAlive } from "../src/keepalive.js";
 import { NativeVault, readFrames, runNativeHost, writeFrame } from "../src/native-host.js";
+import { SessionStore } from "../src/sessions.js";
 import { account, cookie, FakeClock, NOW, SITE, setup } from "./helpers.js";
 
 function packet(value: unknown) {
@@ -136,6 +137,48 @@ describe("native vault", () => {
     expect(captured).toHaveBeenCalledWith(SITE, "alex");
     expect((await sessions.get(SITE, "alex"))?.cookies[0]?.value).toBe(cookie().value);
     expect(await h.handle(request)).toMatchObject({ ok: false, error: "denied" });
+  });
+  it("atomically marks browser captures and lists every pending new sign-in across restarts and replacements", async () => {
+    const { host: h, sessions, records } = await host();
+    for (let i = 0; i < 2; i++) {
+      const begun = await h.handle({
+        id: 1,
+        type: "beginLogin",
+        site: SITE,
+        persona: "alex",
+        profile: "personal",
+      });
+      if (!begun.ok || begun.result.type !== "beginLogin") throw new Error("Expected token");
+      const request = {
+        id: 2,
+        type: "capture",
+        token: begun.result.token,
+        message: { site: SITE, account: "alex", capturedAt: NOW, cookies: [cookie()] },
+      };
+      expect(await h.handle(request)).toMatchObject({ ok: true });
+      expect(await h.handle(request)).toMatchObject({ ok: false });
+      expect(await (await sessions.state(SITE, "alex"))?.use((r) => r.origin)).toBe(
+        "browser-capture",
+      );
+    }
+    const restored = new SessionStore(records, { now: () => NOW });
+    const entries = await restored.listPendingBrowserSignIns(SITE, "alex");
+    expect(entries).toHaveLength(2);
+    expect(new Set(entries.map((e) => e.id)).size).toBe(2);
+    expect(entries[0]).toEqual({
+      id: expect.any(String),
+      site: SITE,
+      account: "alex",
+      label: "New sign-in from browser",
+      origin: "browser-capture",
+      status: "pending",
+      capturedAt: NOW,
+    });
+    expect(JSON.stringify(entries)).not.toContain(cookie().value);
+    expect(await restored.listPendingBrowserSignIns(SITE, "other")).toEqual([]);
+    await restored.beginLogin(SITE, "alex");
+    await restored.stale(SITE, "alex");
+    expect(await restored.listPendingBrowserSignIns(SITE, "alex")).toEqual(entries);
   });
   it("refuses a stale generation and cross-account capture", async () => {
     const { host: h, sessions } = await host();
