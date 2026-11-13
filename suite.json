@@ -89,6 +89,7 @@
     "@jeswr/agent-model-gateway",
     "@jeswr/agent-credentials",
     "@jeswr/agent-memory",
+    "@jeswr/site-model",
     "@jeswr/agent-registry",
     "@jeswr/fetch-rdf",
     "@jeswr/reactive-authentication",

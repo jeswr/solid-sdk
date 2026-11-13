@@ -8,20 +8,14 @@
 // IRIs are absolute strings. Vocabulary: schema.org actions + EntryPoint, and the
 // provisional `sab:` namespace https://jeswr.org/ns/site-action# for the rest.
 
-export const SAB = "https://jeswr.org/ns/site-action#";
-export const SCHEMA = "https://schema.org/";
+export const SAB = 'https://jeswr.org/ns/site-action#';
+export const SCHEMA = 'https://schema.org/';
 
 /** What running an operation changes. The Answerable outbound gate keys off this. */
-export type EffectClass = "read" | "reversible-write" | "irreversible-write" | "payment";
+export type EffectClass = 'read' | 'reversible-write' | 'irreversible-write' | 'payment';
 
 /** How an operation was learned. */
-export type LearnMethod =
-  | "crawl"
-  | "form"
-  | "js-analysis"
-  | "demonstration"
-  | "fallback"
-  | "manual";
+export type LearnMethod = 'crawl' | 'form' | 'js-analysis' | 'demonstration' | 'fallback' | 'manual';
 
 export interface Provenance {
   /** IRIs (or urn:uuid) of the recorded runs/traces this was derived from. */
@@ -36,7 +30,7 @@ export interface Provenance {
   attempts?: number;
 }
 
-export type ParamLocation = "path" | "query" | "body" | "form" | "header";
+export type ParamLocation = 'path' | 'query' | 'body' | 'form' | 'header';
 
 export interface Parameter {
   /** Template variable name used in urlTemplate / bodyTemplate / form fields. */
@@ -60,10 +54,10 @@ export interface Parameter {
 }
 
 export interface RequestTemplate {
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** RFC 6570 template, absolute, on the site origin: https://shop.test/api/search{?q,page} */
   urlTemplate: string;
-  contentType?: "application/json" | "application/x-www-form-urlencoded" | "multipart/form-data";
+  contentType?: 'application/json' | 'application/x-www-form-urlencoded' | 'multipart/form-data';
   /** JSON body with {var} placeholders (whole-value placeholders keep JSON types). */
   bodyTemplate?: string;
   /** Static headers the site expects (never credentials; the vault adds those). */
@@ -71,15 +65,15 @@ export interface RequestTemplate {
 }
 
 export type CsrfSource =
-  | { kind: "cookie"; name: string }
-  | { kind: "html"; urlTemplate: string; selector: string; attribute: string }
-  | { kind: "json"; urlTemplate: string; pointer: string }
-  | { kind: "meta"; urlTemplate: string; name: string };
+  | { kind: 'cookie'; name: string }
+  | { kind: 'html'; urlTemplate: string; selector: string; attribute: string }
+  | { kind: 'json'; urlTemplate: string; pointer: string }
+  | { kind: 'meta'; urlTemplate: string; name: string };
 
 export type CsrfTarget =
-  | { kind: "header"; name: string }
-  | { kind: "form"; name: string }
-  | { kind: "query"; name: string };
+  | { kind: 'header'; name: string }
+  | { kind: 'form'; name: string }
+  | { kind: 'query'; name: string };
 
 export interface CsrfRule {
   source: CsrfSource;
@@ -100,7 +94,7 @@ export interface FieldRule {
 }
 
 export interface Extraction {
-  format: "json" | "html";
+  format: 'json' | 'html';
   /** JSON: pointer to an array or object. HTML: CSS selector matching each item. Omit = whole document is one item. */
   itemPath?: string;
   /** rdf:type for each extracted item, e.g. https://schema.org/Product */
@@ -120,7 +114,7 @@ export interface Operation {
   description?: string;
   inputs: Parameter[];
   request: RequestTemplate;
-  session: "none" | "signed-in";
+  session: 'none' | 'signed-in';
   csrf?: CsrfRule[];
   effect: EffectClass;
   extraction?: Extraction;
