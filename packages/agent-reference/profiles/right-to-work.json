@@ -89,7 +89,8 @@
       ],
       "assurances": [
         "attested"
-      ]
+      ],
+      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:immigration-office> . GRAPH ?g { ?subject <urn:claim:work.valid-until> ?until . } FILTER(?until >= \"2026-11-13\"^^<http://www.w3.org/2001/XMLSchema#date>) }"
     }
   ],
   "decisionsForPerson": [],
@@ -163,8 +164,8 @@
       "replacedBy": "Separately keyed fictional issuer-only sources issuing salted-digest credentials; ordinary disclosure only, no hidden-value proofs"
     },
     {
-      "what": "Planned proof method sparq-zk-result/5",
-      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+      "what": "sparq-zk-result/5",
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). No holder, absence or completeness binding or unlinkability guarantee. Unsupported rules stay blocked; no real scenario proof is claimed."
     }
   ],
   "parties": {

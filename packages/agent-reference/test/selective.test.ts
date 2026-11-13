@@ -23,7 +23,7 @@ it("runs ordinary right-to-work disclosure and passport refusal, leaving the hid
     reason: "excessive-scope",
   });
   expect(paths[2]?.blocked).toBe(
-    "needs a proof system: needs the sparq-zk-result/5 package, which is not installed",
+    "Blocked: needs a hidden date comparison, due in sparq’s next result-proof build. The current build also rejects issuer-scoped GRAPH queries.",
   );
   expect(paths[2]?.trace).toBeUndefined();
   const trace = JSON.stringify(paths[0]?.trace);

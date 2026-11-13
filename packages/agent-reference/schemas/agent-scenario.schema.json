@@ -2092,6 +2092,10 @@
                                   "minLength": 1
                                 }
                               },
+                              "proofQuery": {
+                                "type": "string",
+                                "minLength": 1
+                              },
                               "assurances": {
                                 "default": [
                                   "recomputed"
@@ -2188,6 +2192,10 @@
                                   "minLength": 1
                                 }
                               },
+                              "proofQuery": {
+                                "type": "string",
+                                "minLength": 1
+                              },
                               "assurances": {
                                 "default": [
                                   "recomputed"
@@ -2279,6 +2287,10 @@
                                   "minLength": 1
                                 }
                               },
+                              "proofQuery": {
+                                "type": "string",
+                                "minLength": 1
+                              },
                               "assurances": {
                                 "default": [
                                   "recomputed"
@@ -2346,6 +2358,10 @@
                                   "type": "string",
                                   "minLength": 1
                                 }
+                              },
+                              "proofQuery": {
+                                "type": "string",
+                                "minLength": 1
                               },
                               "assurances": {
                                 "default": [
@@ -2440,6 +2456,10 @@
                                   "type": "string",
                                   "minLength": 1
                                 }
+                              },
+                              "proofQuery": {
+                                "type": "string",
+                                "minLength": 1
                               },
                               "assurances": {
                                 "default": [
@@ -2556,6 +2576,10 @@
                                   "type": "string",
                                   "minLength": 1
                                 }
+                              },
+                              "proofQuery": {
+                                "type": "string",
+                                "minLength": 1
                               },
                               "assurances": {
                                 "default": [
@@ -4087,6 +4111,10 @@
                                 "minLength": 1
                               }
                             },
+                            "proofQuery": {
+                              "type": "string",
+                              "minLength": 1
+                            },
                             "assurances": {
                               "default": [
                                 "recomputed"
@@ -4183,6 +4211,10 @@
                                 "minLength": 1
                               }
                             },
+                            "proofQuery": {
+                              "type": "string",
+                              "minLength": 1
+                            },
                             "assurances": {
                               "default": [
                                 "recomputed"
@@ -4274,6 +4306,10 @@
                                 "minLength": 1
                               }
                             },
+                            "proofQuery": {
+                              "type": "string",
+                              "minLength": 1
+                            },
                             "assurances": {
                               "default": [
                                 "recomputed"
@@ -4341,6 +4377,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "proofQuery": {
+                              "type": "string",
+                              "minLength": 1
                             },
                             "assurances": {
                               "default": [
@@ -4435,6 +4475,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "proofQuery": {
+                              "type": "string",
+                              "minLength": 1
                             },
                             "assurances": {
                               "default": [
@@ -4551,6 +4595,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "proofQuery": {
+                              "type": "string",
+                              "minLength": 1
                             },
                             "assurances": {
                               "default": [

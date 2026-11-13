@@ -1299,7 +1299,12 @@
   ],
   "suites": {},
   "assurance": "attested",
-  "blocked": [],
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "Blocked: needs a hidden integer comparison, due in sparq’s next result-proof build. Projecting the balance would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
+    }
+  ],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -1311,9 +1316,7 @@
     }
   ],
   "traceSteps": {},
-  "requiredMethods": [
-    "sparq-zk-result/5"
-  ],
+  "requiredMethods": [],
   "catalogueAssurance": "proved",
   "recordedAssurance": "attested",
   "proofCredentials": [

@@ -3,12 +3,40 @@
 import { join } from "path";
 import { expect, it } from "vitest";
 import { verifierRegistry } from "../src/derive/verifiers.js";
-import { loadCase } from "../src/engine/load.js";
+import { loadCase as loadActualCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 import { ToyJointProtocol } from "./doubles/joint.js";
 import { ToyProofSystem } from "./doubles/proof.js";
 
 const root = join(import.meta.dirname, "..");
+// These tests deliberately exercise the earlier toy relation. Production profiles
+// remain blocked on capabilities absent from the delivered real result package.
+function loadCase(directory: string, id: string) {
+  const loaded = loadActualCase(directory, id);
+  if (
+    [
+      "degree-recognition",
+      "introduction",
+      "visa-application",
+      "tenancy-application",
+      "age-check",
+      "right-to-work",
+    ].includes(id)
+  ) {
+    for (const rule of loaded.profile.rules) if ("proofQuery" in rule) delete rule.proofQuery;
+    if (id === "right-to-work") {
+      const branch = loaded.scenario.branches.find((b) => b.id === "hidden-validity-proof");
+      if (branch) {
+        branch.change.blocked = [];
+        branch.change.requiredMethods = ["sparq-zk-result/5"];
+      }
+    } else {
+      loaded.scenario.blocked = [];
+      loaded.scenario.requiredMethods = ["sparq-zk-result/5"];
+    }
+  }
+  return loaded;
+}
 const doubles = () =>
   verifierRegistry([
     new ToyProofSystem(),

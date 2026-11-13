@@ -21,7 +21,9 @@ export function snapshot(root) {
   const manifest = JSON.parse(readFileSync(new URL("scenario-runs.json", root), "utf8"));
   return Object.fromEntries(
     manifest.paths
-      .filter((path) => path.status !== "blocked")
+      // The immutable oracle exercises the canonical/default configuration only.
+      // Transport matrix rows may share its scenario/path and must not overwrite it.
+      .filter((path) => path.status !== "blocked" && !path.configuration)
       .map((path) => [
         `${path.scenario}/${path.path}`,
         decisionsOf(JSON.parse(readFileSync(new URL(`traces/${path.trace}`, root), "utf8"))),

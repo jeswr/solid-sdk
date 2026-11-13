@@ -868,9 +868,7 @@
       "id": "hidden-validity-proof",
       "what": "Show valid until at least a date while hiding the actual date",
       "change": {
-        "requiredMethods": [
-          "sparq-zk-result/5"
-        ],
+        "requiredMethods": [],
         "catalogueAssurance": "proved",
         "recordedAssurance": "attested",
         "proofCredentials": [
@@ -1022,6 +1020,12 @@
           "source",
           "fitness",
           "disclosure"
+        ],
+        "blocked": [
+          {
+            "path": "hidden-validity-proof",
+            "reason": "Blocked: needs a hidden date comparison, due in sparq’s next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
+          }
         ]
       },
       "expect": {

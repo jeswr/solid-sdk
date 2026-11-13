@@ -1564,7 +1564,12 @@
   ],
   "suites": {},
   "assurance": "attested",
-  "blocked": [],
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "Blocked: needs an issuer-scoped GRAPH query; this result-proof build rejects GRAPH with \"operator outside positive BGP/JOIN/FILTER\"."
+    }
+  ],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -1576,9 +1581,7 @@
     }
   ],
   "traceSteps": {},
-  "requiredMethods": [
-    "sparq-zk-result/5"
-  ],
+  "requiredMethods": [],
   "catalogueAssurance": "proved",
   "recordedAssurance": "attested",
   "proofCredentials": [
