@@ -389,6 +389,12 @@ sab:itemPath a owl:DatatypeProperty ;
     rdfs:domain sab:Extraction ;
     rdfs:range xsd:string .
 
+sab:totalPath a owl:DatatypeProperty ;
+    rdfs:label "total path"@en ;
+    rdfs:comment "JSON pointer or HTML selector to the total number of matching records, including items not returned in this page."@en ;
+    rdfs:domain sab:Extraction ;
+    rdfs:range xsd:string .
+
 sab:itemType a owl:ObjectProperty ;
     rdfs:label "item type"@en ;
     rdfs:comment "The rdf:type given to each extracted item, for example schema:Product."@en ;

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // End to end: profile the fictional test shop with a login and one demonstration (search, view a
@@ -148,7 +149,7 @@ describe("profiling the test shop", () => {
     expect(add?.provenance.method).toBe("demonstration");
   });
 
-  it("learns checkout with an HTML hidden-field CSRF rule and the delivery options", () => {
+  it("learns checkout with the witnessed cookie CSRF source and the delivery options", () => {
     const order = op("OrderAction");
     expect(order?.request).toMatchObject({
       method: "POST",
@@ -159,10 +160,8 @@ describe("profiling the test shop", () => {
     expect(order?.csrf).toEqual([
       {
         source: {
-          kind: "html",
-          urlTemplate: `${shop.url}/checkout`,
-          selector: 'form#checkout-form input[name="csrf_token"]',
-          attribute: "value",
+          kind: "cookie",
+          name: "csrf",
         },
         target: { kind: "form", name: "csrf_token" },
       },

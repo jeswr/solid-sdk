@@ -53,6 +53,27 @@ Administrative applications:
   authorized disposable live fixture is opt-in via SAB_LIVE_SITE_URL in webarena-bench; the default
   suite remains deterministic and local. Never run a planner as part of live profiling acceptance.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+List/write learning additions: keep totalPath synchronized through types, ontology, both shapes,
+codegen config and generated artifacts (regenerate, never hand-edit). List counts are integers
+on ItemList; unseen records make observations partial. Display coercion requires a row currency
+code for formatted prices and strict ISO-like timestamp syntax; payment evidence rules stay
+unchanged. Type records from endpoint-owned words, ignoring user query values. Refund documents
+fall back to Thing/additionalType text rather than Invoice/category.
+
+Composite write templates must be witnessed by successful demonstrations, size bounded and
+redacted. Prefer witnessed cookie CSRF over hidden/meta sources; script variables require a
+contract discussion, never a hard-coded token. Preserve ordinary flat-form defaults/options.
+Created identities may come from checked on-origin 301/302/303 redirects and supply later flow
+bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
+The harness's opt-in live test creates and cleans up only its own product, blocks background
+preference writes and uses a scripted planner. Never invoke a planner/model CLI for acceptance.
+
+For product administration, a quantity input describes inventoryLevel, not purchase quantity.
+A demonstrated destructive grid search remains a required dynamic input, including when the
+site submits no explicit selected IDs. Never drop or fix that selector to a demonstration SKU.
+
 - Never emit executor-owned headers (including Accept and Content-Type) as model static headers,
   header parameters or CSRF header targets. Keep body encoding in request.contentType. Verification
   derives Accept from extraction format; recorded JSON Accept is not a model header. Vendor-specific

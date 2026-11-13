@@ -154,6 +154,7 @@
   sh:property [ sh:path sab:format ; sh:name "format" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
     sh:in ( "json" "html" ) ] ;
   sh:property [ sh:path sab:itemPath ; sh:name "itemPath" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:totalPath ; sh:name "totalPath" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
   sh:property [ sh:path sab:itemType ; sh:name "itemType" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
   sh:property [ sh:path sab:idField ; sh:name "idField" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
   sh:property [ sh:path sab:fieldRule ; sh:name "fields" ; sh:nodeKind sh:IRI ] .

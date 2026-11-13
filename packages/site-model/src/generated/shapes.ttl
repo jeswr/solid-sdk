@@ -236,6 +236,10 @@ shapes:7716c8304774eab5ef578fe419f2c8f69ece376e0623528c1c8a03c0ad6ee2e4-FieldRul
     sh:minInclusive 0;
     sh:name "position";
     sh:path schema:position.
+shapes:775407dc13f7d25874f8c27fddbb51aab6909a891730d46828db7479f01cc259-Extraction-totalPath sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "totalPath";
+    sh:path sab:totalPath.
 shapes:77c14bf218f3bd5067174d96468cb366eda0c89bceef80331860e13f7cca3587-SiteModel-potentialAction sh:name "actions";
     sh:nodeKind sh:IRI;
     sh:path schema:potentialAction.
@@ -491,7 +495,7 @@ shapes:e7313f21a8f847590f64ce7828b011cabbf49799fc8af2627e47dd38344c976b-Operatio
 shapes:e7d596a924e912f48ef43af11d2a77a02e68516eceb703c64c0dd81e6b5c8cb6-n21 rdf:first "crawl";
     rdf:rest shapes:37049903491ec4b88fc39dbff5666227ca91f372ead780d1e10847b9320ce4a7-n43.
 shapes:e8e8ec7f3e38f6be2343a41558e8be23cbcb0c9657e50b5aee2830d9c9fa7011-ExtractionShape a sh:NodeShape;
-    sh:property shapes:0dc093a8505aad28f90754450d53905ee79fe3cd89d7ccd9ab24eb3fa863009e-Extraction-idField, shapes:81641faf9d44de386039e96a53effd62344323fe32d0d83f38aebb39584b3b13-Extraction-format, shapes:b4ed9e74fad7b180b3397749c8aef1933db6c1efa499836c6b34042c00cb1fe8-Extraction-itemPath, shapes:d7fa8b8f4b576bf437e89b6fc12c84c1f2d6497f69dba0679c1ecab5e215023b-Extraction-fieldRule, shapes:f51ba256c078b4134a6e0275b30fbc947733ea69d5bb3896185f404a9979e9b7-Extraction-itemType;
+    sh:property shapes:0dc093a8505aad28f90754450d53905ee79fe3cd89d7ccd9ab24eb3fa863009e-Extraction-idField, shapes:775407dc13f7d25874f8c27fddbb51aab6909a891730d46828db7479f01cc259-Extraction-totalPath, shapes:81641faf9d44de386039e96a53effd62344323fe32d0d83f38aebb39584b3b13-Extraction-format, shapes:b4ed9e74fad7b180b3397749c8aef1933db6c1efa499836c6b34042c00cb1fe8-Extraction-itemPath, shapes:d7fa8b8f4b576bf437e89b6fc12c84c1f2d6497f69dba0679c1ecab5e215023b-Extraction-fieldRule, shapes:f51ba256c078b4134a6e0275b30fbc947733ea69d5bb3896185f404a9979e9b7-Extraction-itemType;
     sh:targetClass sab:Extraction.
 shapes:e91bcaaf4553fcb79c169bed67e0f07a3a05f4a6a45197c9d31fddf53cf4cfef-n4 rdf:first sab:IrreversibleWrite;
     rdf:rest shapes:0bbed302abf6aa534e5c662378e591b1d0e99b13de0fea707c16c3c9e1eb419a-n9.

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
@@ -14,10 +15,12 @@ export {
 } from "./action-request.js";
 export { compactIri, renderCatalogue, shortName } from "./catalogue.js";
 export { SiteModelError } from "./errors.js";
+export { endpointItemType } from "./item-types.js";
 export { jsonLdToQuads } from "./jsonld.js";
 export type { ParseOptions as ReadSiteModelOptions } from "./rdf.js";
 export { SKOLEM_PREFIX } from "./rdf.js";
 export { readSiteModel } from "./read.js";
+export { responseIdentity } from "./response-identity.js";
 export * from "./types.js";
 export {
   isExecutorOwnedHeader,

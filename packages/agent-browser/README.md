@@ -162,6 +162,13 @@ in `tools/webarena-bench/test/live.test.ts` exercises fresh host login and execu
 calling a planner CLI; see the harness README for opt-in settings.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The opt-in `tools/webarena-bench/test/live-writes.test.ts` uses a scripted planner and learned
+operations to create/update/delete a disposable product. It records six approval decisions
+(deny then approve for each action), requires exactly three POSTs, checks an identical-create
+repeat refusal and observes prices/deletion through the grid. Redirect-derived identifier facts
+bind subsequent actions. Paged ItemList counts and partial markers remain in planner RDF history;
+formatted list prices do not relax payment evidence requirements. No planner CLI is used.
+
 ## Browser fallback
 
 `runTask({ fallback })` can learn a missing operation during a task. Configure it with the

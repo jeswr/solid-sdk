@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { Parser } from "n3";
 import { describe, expect, it } from "vitest";
@@ -23,6 +24,20 @@ describe("writeSiteModel / readSiteModel round trip", () => {
 
   it("is lossless for a model that uses every contract field", async () => {
     expect(await roundTrip(model)).toEqual(model);
+  });
+
+  it("round-trips totalPath without changing optional extraction fields", async () => {
+    const m = withOperation({
+      ...search,
+      extraction: {
+        format: "json",
+        itemPath: "/items",
+        totalPath: "/totalRecords",
+        itemType: `${S}Product`,
+        fields: [],
+      },
+    });
+    expect((await roundTrip(m)).operations[0]?.extraction?.totalPath).toBe("/totalRecords");
   });
 
   it("is a fixed point: writing what was read gives the same Turtle", async () => {

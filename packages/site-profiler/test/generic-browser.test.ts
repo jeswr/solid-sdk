@@ -1,12 +1,14 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Browser } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { crawl } from "../src/crawl.js";
+import { formFields } from "../src/form-body.js";
 import { performLogin } from "../src/login.js";
 import { launchChromium, profileSite } from "../src/profile.js";
-import { Recorder } from "../src/recorder.js";
+import { BODY_LIMIT, Recorder } from "../src/recorder.js";
 
 let browser: Browser;
 let origin: string;
@@ -18,6 +20,28 @@ const site = createServer((req, res) => {
     res.setHeader("content-type", "text/html");
     res.end(body);
   };
+  if (path === "/portal/search") {
+    html(
+      '<script>fetch("/portal/filtered-data?search=none",{headers:{"X-Requested-With":"XMLHttpRequest"}})</script>',
+    );
+    return;
+  }
+  if (path === "/portal/filtered-data") {
+    if (req.headers["x-requested-with"] !== "XMLHttpRequest") {
+      html("<h1>Page</h1>");
+      return;
+    }
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        totalRecords: req.url?.includes("search=none") ? 0 : 1,
+        items: req.url?.includes("search=none")
+          ? []
+          : [{ id: 1, name: "Example Widget", price: "1.00" }],
+      }),
+    );
+    return;
+  }
   if (path === "/stall") return;
   if (path === "/entry") {
     res.writeHead(302, { location: "/portal" });
@@ -118,4 +142,60 @@ it("closes the learning context at the hard deadline while preserving a supplied
   ).rejects.toThrow("time limit");
   expect(browser.isConnected()).toBe(true);
   expect(browser.contexts()).toHaveLength(0);
+});
+
+it("learns an empty saved search by a read-only cleared probe while preserving XHR headers", async () => {
+  const result = await profileSite({ startUrl: `${origin}/portal/search`, maxPages: 1, browser });
+  const op = result.model.operations.find(
+    (o) => o.actionType === "https://schema.org/SearchAction",
+  );
+  expect(op?.request.headers?.["x-requested-with"]).toBe("XMLHttpRequest");
+  expect(op?.extraction?.totalPath).toBe("/totalRecords");
+  expect(op?.provenance.successes).toBeGreaterThan(0);
+  expect(
+    result.trace.some(
+      (r) =>
+        r.phase === "probe" &&
+        new URL(r.url).searchParams.get("search") === "" &&
+        r.requestHeaders["x-requested-with"] === "XMLHttpRequest",
+    ),
+  ).toBe(true);
+});
+
+it("bounds large demonstrated request bodies and structurally redacts multipart fields", async () => {
+  const context = await browser.newContext();
+  const recorder = new Recorder(origin);
+  recorder.phase = "demonstration";
+  await recorder.attach(context);
+  try {
+    const page = await context.newPage();
+    await page.setContent(
+      `<form method="post" action="${origin}/portal/multipart" enctype="multipart/form-data"><input name="name" value="Example Widget"><input type="hidden" name="form_key" value="short-secret"><button>Submit</button></form>`,
+    );
+    await Promise.all([
+      page.waitForNavigation(),
+      page.getByRole("button", { name: "Submit" }).click(),
+    ]);
+    await recorder.flush();
+    const small = recorder.trace.find((r) => r.method === "POST");
+    expect(small?.postData).not.toContain("short-secret");
+    expect(formFields(small?.postData ?? "", small?.requestHeaders["content-type"] ?? "")).toEqual([
+      ["name", "Example Widget"],
+      ["form_key", "[redacted]"],
+    ]);
+    await page.setContent(
+      `<form method="post" action="${origin}/portal/large"><textarea name="payload"></textarea><button>Submit</button></form>`,
+    );
+    await page.locator("textarea").fill("x".repeat(BODY_LIMIT + 1));
+    await Promise.all([
+      page.waitForNavigation(),
+      page.getByRole("button", { name: "Submit" }).click(),
+    ]);
+    await recorder.flush();
+    const large = recorder.trace.find((r) => r.url.endsWith("/large"));
+    expect(large?.postDataTruncated).toBe(true);
+    expect(large?.postData).toBeUndefined();
+  } finally {
+    await context.close();
+  }
 });

@@ -43,7 +43,7 @@ with the `https://schema.org/` scheme throughout; readers normalise `http://sche
 | `ActionOutcome` | Executor-authored `sab:ActionOutcome`: `sab:status` (`sab:Completed`, `sab:Failed` or `sab:Uncertain`), `sab:target` (operation/flow label), `sab:effect`, authorized payment total (`schema:price`, `schema:priceCurrency`), and optional created-item IRI (`schema:result`) with its trusted facts |
 | `Parameter` | `sab:Parameter` (`rdfs:subClassOf schema:PropertyValueSpecification`): `schema:valueName`, `sab:valuePath` (a predicate, or an RDF list for a sequence path, as in SHACL), `sab:range`, `schema:valueRequired`, `sab:location`, `schema:description`, `sab:option` (RDF list), `skos:example`, `schema:defaultValue` |
 | `CsrfRule` | `sab:CsrfRule`: `sab:csrfSource` (`sab:sourceKind` cookie/html/json/meta with `schema:name`, `schema:urlTemplate`, `sab:selector`, `sab:attribute`, `sab:pointer`) and `sab:csrfTarget` (`sab:targetKind` header/form/query, `schema:name`) |
-| `Extraction`, `FieldRule` | `sab:Extraction`: `sab:format`, `sab:itemPath`, `sab:itemType`, `sab:idField`, `sab:fieldRule`; `sab:FieldRule`: `sab:fieldProperty`, `sab:selectorPath`, `sab:attribute`, `sab:valueDatatype` (`sab:IriValue` for the contract's `'iri'`), `sab:untrusted` |
+| `Extraction`, `FieldRule` | `sab:Extraction`: `sab:format`, `sab:itemPath`, `sab:totalPath`, `sab:itemType`, `sab:idField`, `sab:fieldRule`; `sab:FieldRule`: `sab:fieldProperty`, `sab:selectorPath`, `sab:attribute`, `sab:valueDatatype` (`sab:IriValue` for the contract's `'iri'`), `sab:untrusted` |
 | `FlowStep` | `sab:step` a `sab:FlowStep`: `sab:operation`, `schema:position`, `sab:binding` (`schema:PropertyValue`: parameter name and `$input.x`, `$step<N>.<property IRI>` with N counted from 0, or a literal) |
 | `Provenance` | on the operation or flow: `prov:wasDerivedFrom`, `prov:generatedAtTime` (learnedAt), `sab:learnMethod`, `sab:confidence`, `sab:lastVerified`, `sab:successes`, `sab:attempts` |
 | `LoginRoute` | `sab:LoginRoute`: `sab:loginMethod`, `sab:operation`, `sab:sessionCookie`, `sab:probeUrl`, `sab:refresh` a `sab:RefreshRule` (`schema:urlTemplate`, `sab:tokenPointer`, `sab:expiresInPointer`) |
@@ -251,3 +251,19 @@ an optional `terms(path)` method; otherwise the helper returns undefined. This l
 scalar blank nodes and normalize IRI terms without confusing them with literal text.
 `sab:Uncertain` includes writes that may have reached the site without a 4xx rejection (5xx,
 network/reset/timeout, or failed extraction after 2xx/3xx); hosts retain and guard their fingerprints.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## List counts and response identities
+
+`Extraction.totalPath` optionally selects the matching-record count from the response document
+(JSON pointer or HTML selector). The executor publishes a trusted `schema:ItemList` with an
+integer `schema:numberOfItems`; a total larger than the returned page makes the observation
+partial. Paging remains ordinary described inputs. This count is display information and
+cannot establish payment money.
+
+`endpointItemType(url)` uses only endpoint paths and dispatch selectors, ignoring user search
+values. Specific nouns take precedence: invoices → Invoice, shipments → ParcelDelivery,
+customers → Person, products → Product, orders → Order. Credit memo/refund records use Thing
+with textual additionalType because schema.org supplies no corresponding document class.
+`responseIdentity(location)` recognizes explicit `/id/<id>` routes or terminal numeric/UUID
+segments in server redirects. Executors additionally enforce origin and secret checks.
