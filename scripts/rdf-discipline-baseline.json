@@ -38,9 +38,6 @@
   "apps/pod-manager/src/lib/forms/subject-edit.ts": {
     "rdf-factory": 2
   },
-  "apps/pod-manager/src/lib/resource-acl.ts": {
-    "rdf-factory": 2
-  },
   "apps/pod-migrator/src/engine/executor.ts": {
     "rdf-factory": 1
   },
