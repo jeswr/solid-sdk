@@ -23,7 +23,15 @@ the public Solid Client ID Document, and HTTP composition.
 - Keep MCP_VAULT_KEY canonical base64 of exactly 32 bytes. Default to Upstash/Vercel KV;
   memory is explicit and single-process; files use a private local directory and atomic writes.
 - Never weaken vault CAS or deletion tombstones. Consume callbacks once and claim refresh
-  ownership before contacting the issuer. Crashed refreshes fail closed and require new login.
+  ownership before contacting the issuer. Return PodRefreshRetryableError (retryable: true) on
+  contention and provably unsent failures or retryable OAuth error responses; release only via CAS
+  to the original bytes. Retire other OAuth 4xx, uncertain sent outcomes, malformed refreshed claims,
+  identity mismatch and final rotation persistence failure. Claims carry claimedAt and a random
+  per-attempt claimId that fences release and finalization CAS (never drop it: same-second claims
+  are otherwise byte-identical), and expire after 60 seconds: readSession/isActive must retire
+  them, never take over a potentially spent token.
+  Release and vault deletion use eight attempts with bounded backoff, including after throws.
+  Never restore a spent refresh token. Crashed refreshes fail closed and require new login.
 - Recheck broker `isActive` during MCP verification/issuance and before resource fetches;
   MCP revocation/reuse retires the pod session and invalidates all grants bound to it.
 - Pass `verifyWebId: false` to the Node engine: the broker owns the single guarded fetch-rdf
@@ -32,6 +40,15 @@ the public Solid Client ID Document, and HTTP composition.
   after refresh rotation.
 - Resolve profiles through fetch-rdf + wrapper accessors, require profile issuer trust, scope
   authenticated fetch to advertised storage roots, refuse caller credentials and redirects.
+- Keep optional positive-integer ttlSeconds on vault CAS/put/delete and record put/consume.
+  Memory/file expiry must survive reads/CAS, and KV SET EX must be inside the atomic Lua script.
+  Bound login/pending/browser records and their consumption markers to the original ten-minute
+  deadline, unused codes to five minutes, DCR to thirty days (max ten redirect URIs). Retain used
+  code evidence through grant expiry; never expire permanent session retirement tombstones.
+- Treat client names as self-declared: escape all consent fields, label DCR names unverified,
+  identify CIMD by its client_id URL host, and show the request's exact redirect plus prominent host.
+  Use consentDisplay(context) for the escaped, bidi-isolated HTML fragment; reject control/format
+  characters in client_name and render URL hosts in punycode.
 - Require PKCE S256, nonempty state, exact redirects, and an exact configured resource.
 - Keep ES256 access tokens ten minutes and bind `aud` to the MCP resource.
 - Consume codes/refresh credentials atomically. Reuse revokes the entire family; never reset
