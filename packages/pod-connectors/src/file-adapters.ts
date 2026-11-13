@@ -1,10 +1,12 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The **file-import** adapter registry — the export-file analogue of the
  * OAuth `ADAPTERS` list in `registry.ts`. Each of the 10 Tier-C catalog entries
  * has a parser that turns the platform's official data export into pod RDF.
  *
- * OAuth entries may ALSO appear here (Garmin and WHOOP): the file adapter
- * complements the OAuth adapter under the same catalog id.
+ * OAuth entries may ALSO appear here (Spotify, Garmin and WHOOP): the file
+ * adapter complements the OAuth adapter under the same catalog id and the
+ * connect page shows both paths, including when live API access is gated.
  */
 import { amazonOrdersFileAdapter } from "./amazon-orders/file-adapter.js";
 import { appleHealthFileAdapter } from "./apple-health/file-adapter.js";
@@ -15,13 +17,15 @@ import { garminFileAdapter } from "./garmin/file-adapter.js";
 import { goodreadsFileAdapter } from "./goodreads/file-adapter.js";
 import { googleTakeoutFileAdapter } from "./google-takeout/file-adapter.js";
 import { netflixFileAdapter } from "./netflix/file-adapter.js";
+import { spotifyFileAdapter } from "./spotify/file-adapter.js";
 import { steamFileAdapter } from "./steam/file-adapter.js";
 import { uberFileAdapter } from "./uber/file-adapter.js";
 import { whatsappFileAdapter } from "./whatsapp/file-adapter.js";
 import { whoopFileAdapter } from "./whoop/file-adapter.js";
 
-/** The 10 Tier-C file-import adapters plus Garmin and WHOOP hybrids. */
+/** The 10 Tier-C file-import adapters plus Spotify, Garmin and WHOOP hybrids. */
 export const FILE_ADAPTERS: readonly FileImportAdapter[] = [
+  spotifyFileAdapter,
   netflixFileAdapter,
   amazonOrdersFileAdapter,
   uberFileAdapter,
@@ -38,7 +42,7 @@ export const FILE_ADAPTERS: readonly FileImportAdapter[] = [
 
 const byId = new Map(FILE_ADAPTERS.map((a) => [a.metadata.id, a]));
 
-/** The file-import adapter for a catalog id, including OAuth/file hybrids. */
+/** The file-import adapter for a catalog id, including OAuth/file hybrids, if one exists. */
 export function fileAdapterById(id: string): FileImportAdapter | undefined {
   return byId.get(id);
 }

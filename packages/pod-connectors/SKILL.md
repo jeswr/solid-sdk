@@ -8,6 +8,29 @@ description: Use when maintaining source adapters, injected PodWriter/SourceAuth
 
 # Maintain Pod connectors
 
+Spotify file import shares the `spotify` catalog id with its live adapter. Route it through
+`fileAdapterById('spotify')`; see README's Spotify section and `src/spotify/file-adapter.ts`.
+Reuse the streaming JSON scanner and Takeout ZIP reader, retaining their grammar, byte,
+CRC/range and inflation checks. Stage only allowlisted history fields before any writes.
+Never persist IP, country, device, raw export or filename, and skip
+`incognito_mode: true` (Private Session) rows as skips. Basic repeats in one minute get a
+per-file occurrence in their id. Plan every month (reads, part assignment, limits) before
+the first write. Keep merged month documents
+inside the connector container (`spotifyHistorySlug`: `YYYY-MM.ttl`, then contiguous
+`-part-N` under the `SPOTIFY_FILE_LIMITS` play/byte/part budgets), with SHA-256
+timestamp/track-or-name ids. Read a month's parts before writing: stored plays never move.
+Write each play through `@jeswr/solid-listening`'s `addScrobble` (the generated model) at
+`#scrobble-<id>`/`-instant`, sharing per-document track/artist/album nodes whose hash keys
+cover every value they describe; never add hand-written media accessors to
+`spotify/vocab.ts`. Canonicalize the built store with `canonicalizeJeswrDataset` before
+`ctx.write` (the model emits legacy w3id media/core terms). Suite Music's
+`data/spotify-history.ts` mirrors the slug and part limit and folds imported duplicates.
+Keep short plays: the existing scrobble importer has no duration cutoff. All archive entries
+share row, retained-text and month budgets. Count invalid, oversized and duplicate rows.
+Suite Connect reads these shards in Music and saves personal public Spotify client IDs
+through suite-sdk preferences (`connect.spotify-client-id`); the host client id wins.
+Preserve the existing live adapter, transport isolation and PKCE refresh behavior.
+
 Read README.md and src/core/types.ts before changing the public contract. The package was
 moved from apps/pod-manager/src/lib/integrations; retain registry/types exports and the
 app's compatibility shims. Hosts create an isolated createRegistry(config); never read
@@ -131,7 +154,8 @@ retains its streaming caps.
 CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
 term names in the existing vocab modules. Keep standard namespace spellings exact,
 especially mail's `http://schema.org/`. Confine `canonicalizeJeswrDataset` to import-session
-reads (including custom PodWriter ports) and run provenance in the connector's own container.
+reads (including custom PodWriter ports), the Spotify file adapter's solid-listening output,
+and run provenance in the connector's own container.
 Build its result in one pass, adding each unchanged or transformed quad without deleting
 from a populated copy. Resolve suite aliases through `canonicalize()` before typed access
 and reconciliation; restrict changes to vocabulary predicates and class values, preserving

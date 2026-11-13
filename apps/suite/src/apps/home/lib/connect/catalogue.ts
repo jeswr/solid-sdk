@@ -95,7 +95,10 @@ export function catalogue(
       return {
         id: metadata.id,
         name: metadata.name,
-        whatYouGet: metadata.whatYouGet,
+        whatYouGet:
+          metadata.id === "spotify" && status === "demo"
+            ? (fileAdapterById("spotify")?.metadata.whatYouGet ?? metadata.whatYouGet)
+            : metadata.whatYouGet,
         domains: [...new Set(destinationsFor(metadata.id).map(({ domain }) => domain))],
         tier: metadata.tier,
         status:
@@ -104,7 +107,9 @@ export function catalogue(
             : status === "live"
               ? "connect"
               : status === "demo"
-                ? "demo"
+                ? metadata.id === "spotify"
+                  ? "import"
+                  : "demo"
                 : status === "export-file"
                   ? "import"
                   : "soon",

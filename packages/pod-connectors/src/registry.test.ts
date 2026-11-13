@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { FILE_ADAPTERS, fileAdapterById } from "./file-adapters.js";
 import {
@@ -106,8 +107,8 @@ describe("integrations registry", () => {
   });
 
   it("ships a working file-import adapter for every Tier-C catalog entry", () => {
-    // All 10 Tier-C entries plus Garmin and WHOOP hybrids.
-    expect(FILE_ADAPTERS).toHaveLength(TIER_C.length + 2);
+    // All 10 Tier-C entries plus Spotify, Garmin and WHOOP hybrids.
+    expect(FILE_ADAPTERS).toHaveLength(TIER_C.length + 3);
     for (const entry of TIER_C) {
       const adapter = fileAdapterById(entry.id);
       expect(adapter, `missing file adapter for ${entry.id}`).toBeDefined();
@@ -153,6 +154,7 @@ describe("integrations registry", () => {
       steam: "https://help.steampowered.com/en/accountdata",
       chatgpt: "https://chatgpt.com",
       garmin: "https://www.garmin.com/account/datamanagement/",
+      spotify: "https://www.spotify.com/account/privacy/",
     };
     // In-app or institution-specific exports: no URL to send the user to —
     // the field must be ABSENT (the UI renders no link).

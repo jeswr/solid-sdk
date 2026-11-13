@@ -36,6 +36,15 @@ preserves backend state and blocks reauthentication. Missing ownership metadata 
 ownership changes produce an informational diagnostic. A remembered account row without an accepted
 Identity cannot authorize retirement after reload; restore must establish its grant snapshot first.
 
+## Spotify connection
+
+Spotify Connect offers streaming-history ZIP/JSON import without a Spotify Web API app,
+or live PKCE with a personal public Client ID. The form shows the callback URI and setup
+steps, validates 32 hexadecimal characters, and saves `connect.spotify-client-id` through
+suite-sdk pod-backed preferences. A deployment's `NEXT_PUBLIC_CONNECTOR_SPOTIFY_CLIENT_ID`
+takes precedence. No client secret is used. Music includes monthly imported Spotify
+history; short plays are retained, matching the scrobble import's duration policy.
+
 ## Pilot feedback
 
 `/feedback` is available without signing in. It offers a guided interview and a quick note,

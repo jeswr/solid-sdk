@@ -30,7 +30,7 @@ import type { DataCategory } from "../../lib/model/domains";
 import { useConnectors } from "../../state/connectors";
 import { useHomeSession } from "../home-app";
 import { domainForWrittenDocument } from "./completion";
-import { entries, registry } from "./config";
+import { entries, registry, spotifyAdapterFor } from "./config";
 import {
   createImportWriter,
   fetchWithSignal,
@@ -42,6 +42,7 @@ import {
 import { login, sourceFetch } from "./oauth-login";
 import { requiredScopesFor, withRequiredScopes, withSelectedScopes } from "./scopes";
 import { ConnectorLogo, StatusBadge } from "./shared";
+import { SpotifyClientSettings } from "./spotify-client";
 
 /** Abort reason when the connection drops: the user did not cancel. */
 class WentOffline extends Error {
@@ -52,24 +53,33 @@ class WentOffline extends Error {
 }
 
 export function ConnectFlow({ service }: { service: string }) {
+  const session = useHomeSession();
+  const [scope, setScope] = useState({ session, generation: 0 });
+  if (scope.session !== session) setScope({ session, generation: scope.generation + 1 });
   // The server route has already validated the id against this same catalogue.
   const entry = entries.find((candidate) => candidate.id === service) as ConnectorEntry;
-  return <ServiceFlow key={service} entry={entry} />;
+  return <ServiceFlow key={`${service}:${scope.generation}`} entry={entry} />;
 }
 
 function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const session = useHomeSession();
   const [, update] = useConnectors(session.webId);
   const online = useOnline();
-  const adapter = registry.adapterById(entry.id);
+  const [personalClientId, setPersonalClientId] = useState("");
+  const spotify = entry.id === "spotify";
+  const [fileMode, setFileMode] = useState(
+    entry.tier === "C" || (spotify && !registry.adapterById("spotify")?.oauth?.clientId),
+  );
+  const adapter = spotify ? spotifyAdapterFor(personalClientId) : registry.adapterById(entry.id);
   const fileAdapter = fileAdapterById(entry.id);
-  const metadata = entry.tier === "C" ? fileAdapter?.metadata : adapter?.metadata;
-  const scopes = metadata?.scopes ?? [];
-  const [selected, setSelected] = useState<readonly string[]>(scopes);
+  const metadata = fileMode ? fileAdapter?.metadata : adapter?.metadata;
+  const scopes = fileMode ? [] : (metadata?.scopes ?? []);
+  const [selected, setSelected] = useState<readonly string[]>(
+    adapter?.metadata.scopes ?? metadata?.scopes ?? [],
+  );
   const required = requiredScopesFor(entry.id);
   const selectedScopes = withRequiredScopes(entry.id, selected);
   const [step, setStep] = useState(1);
-  const [fileMode, setFileMode] = useState(false);
   const [phase, setPhase] = useState<
     "idle" | "waiting" | "running" | "done" | "error" | "cancelled"
   >("idle");
@@ -94,8 +104,13 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const page = useRef<HTMLDivElement>(null);
   const wasOnline = useRef(online);
   const view = useRef(`${step}:${phase}`);
-  const mode: ConnectionMode =
-    fileMode || entry.tier === "C" ? "file" : entry.status === "demo" ? "demo" : "live";
+  const mode: ConnectionMode = fileMode
+    ? "file"
+    : spotify
+      ? "live"
+      : entry.status === "demo"
+        ? "demo"
+        : "live";
   const destinations = destinationsFor(entry.id);
 
   useEffect(
@@ -340,7 +355,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             <ConnectorLogo entry={entry} />
             <div>
               <AppHeading>Synchronise your {entry.name} data</AppHeading>
-              <StatusBadge status={mode === "file" ? "import" : entry.status} />
+              <StatusBadge status={fileMode ? "import" : spotify ? "connect" : entry.status} />
             </div>
           </div>
           <div className="hm-connect-columns">
@@ -453,6 +468,43 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   <h2 ref={panelHeading} tabIndex={-1}>
                     Choose what to sync
                   </h2>
+                  {spotify && (
+                    <>
+                      <fieldset className="hm-connect-scopes">
+                        <legend>How to connect Spotify</legend>
+                        <label>
+                          <input
+                            type="radio"
+                            name="spotify-path"
+                            checked={fileMode}
+                            onChange={() => setFileMode(true)}
+                          />
+                          Import streaming history (no Spotify app needed)
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name="spotify-path"
+                            checked={!fileMode}
+                            onChange={() => setFileMode(false)}
+                          />
+                          Connect live with a Spotify app
+                        </label>
+                      </fieldset>
+                      {!fileMode &&
+                        (registry.adapterById("spotify")?.oauth?.clientId ? (
+                          <p>
+                            This deployment's Spotify Client ID is configured and takes precedence
+                            over personal settings.
+                          </p>
+                        ) : (
+                          <SpotifyClientSettings
+                            session={session}
+                            onClientId={setPersonalClientId}
+                          />
+                        ))}
+                    </>
+                  )}
                   {scopes.length ? (
                     <fieldset className="hm-connect-scopes">
                       <legend>Data to synchronise</legend>
@@ -483,7 +535,10 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   <button
                     type="button"
                     className="hm-connect-button"
-                    disabled={scopes.length > 0 && selected.length === 0}
+                    disabled={
+                      (scopes.length > 0 && selected.length === 0) ||
+                      (spotify && !fileMode && !adapter?.oauth?.clientId)
+                    }
                     onClick={() => setStep(2)}
                   >
                     Continue
@@ -500,7 +555,10 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                     <button
                       type="button"
                       className="hm-connect-button"
-                      onClick={() => setFileMode(false)}
+                      onClick={() => {
+                        setFileMode(false);
+                        if (spotify) setStep(1);
+                      }}
                     >
                       Use {entry.name} connection
                     </button>
@@ -610,7 +668,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             <aside className="hm-connect-about" aria-label={`About ${entry.name}`}>
               <h2>About {entry.name}</h2>
               <h3>What you get</h3>
-              <p>{entry.whatYouGet}</p>
+              <p>{metadata?.whatYouGet ?? entry.whatYouGet}</p>
               <h3>Requirements</h3>
               {mode !== "file" && metadata?.requirements.length ? (
                 <ul>

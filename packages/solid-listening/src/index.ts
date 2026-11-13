@@ -28,6 +28,7 @@ export {
 export {
   Album,
   Artist,
+  addScrobble,
   buildScrobble,
   isHttpIri,
   PlayedAtInstant,
@@ -35,6 +36,7 @@ export {
   parseScrobbleTtl,
   Scrobble,
   type ScrobbleData,
+  type ScrobbleNodeIris,
   scrobbleNodeIris,
   scrobbleSubject,
   serializeScrobble,

@@ -360,6 +360,7 @@
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-health": "workspace:*",
+    "@jeswr/solid-listening": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",

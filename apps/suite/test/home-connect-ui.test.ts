@@ -34,6 +34,46 @@ function button(host: HTMLElement, label: string) {
   return found;
 }
 
+it("offers Spotify file import without a client and completes through the shared flow", async () => {
+  const spotify = registry.adapterById("spotify");
+  const original = spotify?.oauth;
+  if (!spotify || !original) throw new Error("Missing Spotify adapter");
+  Object.assign(spotify, { oauth: { ...original, clientId: undefined } });
+  try {
+    const { host } = await mount(h(ConnectFlow, { service: "spotify" }));
+    const selected = host.querySelector<HTMLInputElement>('input[name="spotify-path"]:checked');
+    expect(selected?.parentElement?.textContent).toContain("no Spotify app needed");
+    await click(button(host, "Continue"));
+    const input = host.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("Missing Spotify export picker");
+    Object.defineProperty(input, "files", {
+      value: [
+        new File(
+          [
+            JSON.stringify([
+              {
+                endTime: "2026-10-03 12:00",
+                trackName: "Fixture Song",
+                artistName: "Fixture Artist",
+                msPlayed: 500,
+              },
+            ]),
+          ],
+          "StreamingHistory_music_0.json",
+        ),
+      ],
+    });
+    await act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+    await vi.waitFor(() =>
+      expect(host.querySelector(".hm-connect-result h2")?.textContent).toMatch(
+        /^Added \d+ items? to Media$/,
+      ),
+    );
+  } finally {
+    Object.assign(spotify, { oauth: original });
+  }
+});
+
 it.each([
   [[{ header: "Calendar", title: "Meeting" }], "Added 1 item to Calendar", ["calendar"]],
   [
