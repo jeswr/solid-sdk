@@ -25,7 +25,7 @@
       "advertisedBy": "Home provider default in the Vite apps, Pod Manager and the App Store",
       "fullLogin": "Playwright signs up a throwaway account through Drive, then signs in again with it (apps/pod-drive/web/tests/live)",
       "loginPage": {
-        "at": "/realms/[^/]+/",
+        "at": "^idp\\.solid-test\\.jeswr\\.org/realms/[^/]+/protocol/openid-connect/auth$",
         "marker": "type=\"password\"",
         "$comment": "Keycloak's username and password form, reached through the broker"
       }
