@@ -54,10 +54,11 @@ it("accepts ACLs only when every path interpretation stays inside the generic ex
 });
 
 // AUTHORED-BY Claude Opus 5.5
-it("lets generic tools read the shared context but never write it or an ancestor", () => {
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("reserves the shared context for context_read and refuses ancestor mutations", () => {
   const pod = createWacMemoryPodPort({ root: ROOT, webId: OWNER });
   const doc = `${ROOT}agent/context/shared-context.md`;
-  expect(() => requireGenericPodAccess(pod, doc)).not.toThrow();
+  expect(() => requireGenericPodAccess(pod, doc)).toThrow(PERSONAL_DATA_DENIED);
   for (const url of [
     doc,
     `${ROOT}agent/context/`,
