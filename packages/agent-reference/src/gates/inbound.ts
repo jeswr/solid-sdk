@@ -45,6 +45,7 @@ import {
   type GateMemory,
   type ItemTerms,
   NOT_APPLICABLE,
+  PASS_CODE,
   refsFor,
   resolutionView,
 } from "./common.js";
@@ -61,6 +62,8 @@ export interface InboundDeps {
   readonly memory: GateMemory;
   /** The agreed terms in force in a conversation, if an agreement was made. */
   readonly agreementTerms: (conversation: Iri) => JsonObject | undefined;
+  /** The purpose this agent named on a request it sent (for data delivered in answer). */
+  readonly requestPurpose?: (requestId: Iri) => Iri | undefined;
 }
 
 export type IntegrityResult =
@@ -457,11 +460,14 @@ export class InboundGate {
       return { verdict: "fail", reason: "evidence-invalid" };
     if (check.signer?.subject !== s.issuer)
       return { verdict: "fail", reason: "evidence-invalid", claim: s };
+    // The claim's own subject, when it names one: a bank's statement relayed by the bank's
+    // agent is still about the account holder.
+    const about = s.subject ?? subject;
     const input = {
       evaluator: this.deps.identity.actor,
       source: s.issuer,
       claimType: s.claimType,
-      ...(subject ? { subject } : {}),
+      ...(about ? { subject: about } : {}),
       at,
     };
     const resolution = this.deps.gate.resolver?.resolveSource(input);
@@ -504,6 +510,8 @@ export class InboundGate {
       check,
       verdict,
       ...checkRefs(this.deps.gate, check),
+      // Every verdict carries a code; a pass without one of its own takes the check's pass code.
+      ...(verdict === "pass" && !extra.reason ? { reason: PASS_CODE[check] } : {}),
       ...extra,
       caption,
     });
@@ -619,6 +627,8 @@ export class InboundGate {
           (c as JsonObject).balance ??
           (c as JsonObject).monthly ??
           (c as JsonObject).decision ??
+          (c as JsonObject).product ??
+          (c as JsonObject).level ??
           null,
         source: c.issuer,
         ...(c.method ? { method: c.method } : {}),
@@ -702,6 +712,8 @@ export class Admission {
   private readonly claimCache = new Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>();
   private claimsAdmitted = true;
   private admittedClaims: Claim[] = [];
+  /** Set when the authority check asks the sender for a stronger approval. */
+  askedFor: { approval: Iri; label: string } | undefined;
 
   constructor(
     private readonly gate: InboundGate,
@@ -749,12 +761,17 @@ export class Admission {
     );
   }
 
-  private need(conv: ConversationState) {
+  private need(conv: ConversationState, msg?: AnyMessage) {
     const t = this.deps.agreementTerms(conv.id);
+    const ref = msg?.kind === "deliver" ? msg.body.ref : undefined;
+    const asked = ref ? this.deps.requestPurpose?.(ref) : undefined;
+    const purpose = typeof t?.purpose === "string" ? t.purpose : asked;
     return {
-      ...(typeof t?.purpose === "string" ? { purpose: t.purpose } : {}),
+      ...(purpose ? { purpose } : {}),
       ...(typeof t?.retentionDays === "number" ? { retentionDays: t.retentionDays } : {}),
-      task: "a mortgage application",
+      task:
+        (conv.operation && this.deps.gate.taskLabel?.(conv.operation.id)) ??
+        "a mortgage application",
     };
   }
 
@@ -842,6 +859,47 @@ export class Admission {
       return rep;
     }
     const ok = rep.outcome === "accepted";
+    const need = handler.requiredApproval;
+    if (ok && need) {
+      // CORE-IN-8: the mandate is verified, but this operation needs a stronger approval,
+      // shown by an accepted statement of that level about the principal.
+      const shown = [...this.claimCache.values()].find(
+        (r) =>
+          r.verdict === "pass" &&
+          r.claim?.claimType === need.claimType &&
+          r.claim.subject === rep.party &&
+          (r.claim as JsonObject).level === need.level,
+      )?.claim;
+      const rule = {
+        id: need.level,
+        text: `${this.name(this.deps.identity.party ?? this.deps.identity.actor)} gives ${this.deps.gate.taskLabel?.(handler.description.id) ?? "this"} only on ${need.label}, attested by an accepted identity provider.`,
+      };
+      if (!shown) {
+        this.askedFor = { approval: need.level, label: need.label };
+        this.gate.verdictEvent(
+          "authority",
+          "ask-more",
+          `${this.name(rep.party)}'s mandate is signed with their own key, but this needs ${need.label}.`,
+          { reason: "assurance-insufficient", rule },
+        );
+        this.outcome = "ask-more";
+        this.gate.decisionEvent(
+          "ask-more",
+          `The request is held; the gate answers with a challenge that asks for ${need.label}.`,
+          "assurance-insufficient",
+        );
+        return rep;
+      }
+      if (rep.statement)
+        this.authorityByConversation.set(conv.id, { id: rep.statement, party: rep.party });
+      this.gate.verdictEvent(
+        "authority",
+        "pass",
+        `${this.name(rep.party)} signed a statement that ${this.name(rep.actor)} acts for them, and approved it with ${need.label}, attested by ${this.name(shown.issuer)}.`,
+        { rule },
+      );
+      return rep;
+    }
     if (ok && rep.statement)
       this.authorityByConversation.set(conv.id, { id: rep.statement, party: rep.party });
     this.gate.verdictEvent(
@@ -880,11 +938,20 @@ export class Admission {
           "pass",
           `Settled when this conversation opened: ${this.name(earlier.party)}'s signed representation statement still covers it.`,
           {
+            reason: "established-earlier",
             rule: {
               id: earlier.id,
               text: "The representation accepted earlier in this conversation, still valid.",
             },
           },
+        );
+      } else if (!msg.from.actor) {
+        // CORE-IN-9: a public read is made on no one's behalf.
+        this.gate.verdictEvent(
+          "authority",
+          "not-applicable",
+          "This request is made on no one's behalf: a public read, with no identifier for the asker.",
+          { reason: NOT_APPLICABLE.noPrincipal },
         );
       } else {
         this.gate.verdictEvent(
@@ -896,7 +963,7 @@ export class Admission {
       }
     }
     const claims = this.claims(msg);
-    const need = this.need(conv);
+    const need = this.need(conv, msg);
     const terms = this.messageTerms(conv, msg, claims.length > 0);
     if (terms.verdict === "fail") {
       this.refuse(terms.reason, "no agreement covers this exchange");

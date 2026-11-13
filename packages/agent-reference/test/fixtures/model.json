@@ -1,5 +1,13 @@
 {
-  "version": "0.7",
+  "version": "0.9",
+  "name": {
+    "family": "Answerable",
+    "adjective": "Answerable",
+    "baseline": "Answerable baseline",
+    "chosen": "2026-11-13",
+    "meaning": "An agent that follows these specifications answers for what it does, and answers to the person or organization it acts for.",
+    "footer": "Sent by Sam's agent, an automated assistant acting for Sam. It is an Answerable agent: this message is signed, says what the agent is allowed to do, and is recorded. You can reply as normal. If you use an agent of your own, it can check all of this for you."
+  },
   "note": "Canonical words and ids for the explorer site, the runtime's traces and the specs. Layer ids and suite ids here are the LayerId and SuiteId values used in agent-trace files.",
   "parts": [
     {
@@ -202,14 +210,14 @@
       {
         "id": "content",
         "name": "Content",
-        "summary": "The request, offer or data, in agreed terms. By value, by reference, or as a proof.",
+        "summary": "The request, offer or data, in agreed terms. Original statements or an answer derived from them; by value or by reference.",
         "readBy": "shared meaning",
         "signed": true
       },
       {
         "id": "evidence",
         "name": "Evidence",
-        "summary": "Statements signed by the authority for each claim, or a proof about them.",
+        "summary": "Statements signed by the authority for each claim, or, for a derived answer, the record of how it was derived.",
         "readBy": "source",
         "signed": true
       },
@@ -299,14 +307,14 @@
         {
           "id": "by-query",
           "name": "By query",
-          "summary": "The receiver asks a question of an index or a pod and gets back only the answer, with its provenance.",
+          "summary": "The asker sends a question and gets back only the answer, as a derived statement. The source of the data signs the answer itself; an index returns rows that each carry their own source's signature.",
           "maturity": "standard",
           "basis": "SPARQL; DCAT catalog records"
         },
         {
           "id": "aggregate-mpc",
           "name": "Joint computation",
-          "summary": "Several holders work out one answer together, such as a total. Each sees only its own input. The receiver sees only the answer. (Multi-party computation.)",
+          "summary": "Several holders work out one answer together, such as a total. Each sees only its own input. The receiver sees only the answer: a derived statement, jointly computed. (Multi-party computation.)",
           "maturity": "research",
           "basis": "Additive secret sharing; signed input attestations"
         }
@@ -468,14 +476,14 @@
         {
           "id": "selective-disclosure",
           "name": "Selective disclosure",
-          "summary": "The holder reveals only some of the signed claims.",
+          "summary": "The holder shows only some of the signed claims. The simplest proved derivation: the rule just picks claims.",
           "maturity": "standard",
           "basis": "SD-JWT VC or ecdsa-sd-2023; BBS is a candidate recommendation"
         },
         {
           "id": "zk-query-proof",
           "name": "Zero-knowledge proof of a query",
-          "summary": "A proof that a query result is true of signed data, without showing the data.",
+          "summary": "A proof that a query over signed statements has a stated result, without showing the statements. A derived statement, proved.",
           "maturity": "research",
           "basis": "Zero-knowledge proofs of SPARQL query results over signed credentials"
         }
@@ -1165,5 +1173,85 @@
     }
   },
   "maturityNote": "Maturity is of the standards a suite builds on, not of the suite. Standard: a published recommendation or RFC. Industry specification: published by an industry group. Draft: a working or community draft. Research: no settled specification. This work: defined here.",
-  "configurationNote": "A configuration is chosen for the main exchange, between the principal's agent and the parties it deals with. Lookups against public services, such as an index, a register or a trust root, use a public read configuration: no identifier for the asker, by query, signed answers."
+  "configurationNote": "A configuration is chosen for the main exchange, between the principal's agent and the parties it deals with. Lookups against public services, such as an index, a register or a trust root, use a public read configuration: no identifier for the asker, by query, signed answers.",
+  "derivation": {
+    "name": "Derived data",
+    "spec": "03-derived-data",
+    "idea": "A receiver that accepts the sources, accepts the rule, and can check how the rule was applied, can treat the result as data.",
+    "summary": "An agent often conveys an answer instead of the records behind it: a total, a yes or no, the rows that match a question. The answer is a derived statement: a published rule, such as a query, applied to statements signed by their sources. Answering a query, giving a proof and computing jointly are not three different things. They are three ways for the receiver to know the rule was applied honestly.",
+    "steps": [
+      {
+        "id": "sources",
+        "name": "Source statements",
+        "summary": "Signed by whoever is the authority for each claim. The source check runs on these issuers, never on whoever worked out the answer."
+      },
+      {
+        "id": "rule",
+        "name": "Rule",
+        "summary": "A published, deterministic query, named by its digest. The profile lists which rules answer which question."
+      },
+      {
+        "id": "derived",
+        "name": "Derived statement",
+        "summary": "The answer, with a record of the rule, the inputs and how the derivation is assured."
+      }
+    ],
+    "assurances": [
+      {
+        "id": "by-source",
+        "name": "Answered by the source",
+        "runs": "The source, over its own records",
+        "sees": "The answer",
+        "relies": "Nothing more: the source signs the answer as its own statement",
+        "mechanism": "By query, asked of the source",
+        "baseline": true
+      },
+      {
+        "id": "recomputed",
+        "name": "Recomputed by the receiver",
+        "runs": "The receiver, again",
+        "sees": "The answer and every input",
+        "relies": "Nothing more",
+        "mechanism": "Inputs attached; or rows from an index",
+        "baseline": true
+      },
+      {
+        "id": "proved",
+        "name": "Proved",
+        "runs": "The holder",
+        "sees": "The answer, and who the issuers are",
+        "relies": "That the proof system is sound",
+        "mechanism": "Selective disclosure; zero-knowledge proof of a query"
+      },
+      {
+        "id": "joint",
+        "name": "Jointly computed",
+        "runs": "Several holders together",
+        "sees": "The answer, and who contributed",
+        "relies": "That the computing parties do not collude",
+        "mechanism": "Joint computation"
+      },
+      {
+        "id": "attested",
+        "name": "Attested by a deriver",
+        "runs": "A party that is not the source",
+        "sees": "The answer",
+        "relies": "The deriver, who must be accepted under the trust framework",
+        "mechanism": "Any signature; a pod or service that runs rules"
+      }
+    ],
+    "acceptance": [
+      "The rule is accepted for this kind of claim.",
+      "Every input comes from an issuer accepted as a source for what was read from it.",
+      "The assurance is one the receiver accepts for the task, and it verifies.",
+      "Any completeness the rule needs is established, or the task accepts a partial result.",
+      "The receiver can keep the terms, which are worked out from the terms of the inputs.",
+      "The claim is fit for the task, with the quality of its weakest input."
+    ],
+    "limits": [
+      "A proof shows what is present, not what was left out. A total is only as complete as its inputs, so completeness has to be a signed claim from someone in a position to know.",
+      "A proof makes a claim checkable, not better founded. A total of self-reported figures is still self-reported.",
+      "A model's summary is not a derivation. No rule can be named, so it is marked as model output."
+    ]
+  }
 }

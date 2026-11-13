@@ -41,6 +41,21 @@ export const NOT_APPLICABLE = {
   noPersonalData: "no-personal-data",
 } as const;
 
+/** The code a passing check carries when it gives none of its own (registry Pass group). */
+export const PASS_CODE: Readonly<Record<Check, string>> = {
+  integrity: "intact",
+  source: "source-accepted",
+  authority: "authority-valid",
+  terms: "terms-acceptable",
+  fitness: "fit-for-use",
+  mandate: "within-mandate",
+  recipient: "recipient-established",
+  disclosure: "minimal-disclosure",
+  "data-terms": "terms-allow",
+  "limits-approval": "within-limits",
+  evidence: "evidence-complete",
+};
+
 /** Precedence and freshness rules for one kind of claim (reliance suite). */
 export interface RelianceRule {
   readonly id: string;
@@ -85,6 +100,13 @@ export class GateMemory {
 export interface GateContext {
   readonly sink?: TraceSink;
   readonly configuration?: Configuration;
+  /**
+   * Configurations for exchanges not under the main one, by pilot configuration id: lookups
+   * against public services use the public read configuration (model configurationNote).
+   */
+  readonly configurations?: Readonly<Record<string, Configuration>>;
+  /** Set by the runtime: the pilot configuration of the exchange being checked now. */
+  readonly carriage?: () => string | undefined;
   readonly name?: Namer;
   readonly resolver?: TrustResolver;
   readonly principalLimits?: PrincipalLimits;
@@ -132,7 +154,7 @@ export function refsFor(
   layers: readonly LayerId[],
   clause?: string,
 ): { refs?: readonly TraceRef[] } {
-  const c = ctx.configuration;
+  const c = (ctx.carriage && ctx.configurations?.[ctx.carriage() ?? ""]) || ctx.configuration;
   return c
     ? {
         refs: layers.map((layer) => ({

@@ -51,6 +51,7 @@ export type EventKind =
   | "recall"
   | "propose"
   | "ask-principal"
+  | "principal-instruction"
   | "principal-reply"
   | "record";
 

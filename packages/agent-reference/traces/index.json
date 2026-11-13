@@ -74,5 +74,30 @@
     },
     "configuration": "baseline",
     "events": 160
+  },
+  {
+    "file": "mortgage-main--baseline.json",
+    "scenario": {
+      "id": "mortgage-main",
+      "title": "Sam's mortgage in principle, all 14 steps: the product index, the register chain and a stronger approval at his bank",
+      "steps": {
+        "1": "Sam signs a mandate",
+        "2": "Sam asks for a mortgage in principle",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register",
+        "4": "The agents describe themselves and Sam's agent applies",
+        "5": "North Bank says what evidence it needs",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement",
+        "7": "Harbour Bank asks for a stronger approval",
+        "8": "Sam does a face check and the request is sent again",
+        "9": "Harbour Bank returns a signed statement with its terms",
+        "10": "Sam's agent checks the statements it holds",
+        "11": "Sam is asked, and the agent shares the evidence",
+        "12": "North Bank's gate checks the evidence",
+        "13": "North Bank returns a signed decision in principle",
+        "14": "Each side checks its own record"
+      }
+    },
+    "configuration": "baseline",
+    "events": 260
   }
 ]

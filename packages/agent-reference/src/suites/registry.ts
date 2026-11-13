@@ -48,7 +48,7 @@ export interface DataAccessSuite extends SuiteBase<"data-access"> {
 }
 /** How a party or agent is named and its keys found. */
 export interface IdentitySuite extends SuiteBase<"identity"> {
-  readonly resolution: "pinned" | "resolved";
+  readonly resolution: "pinned" | "resolved" | "none";
 }
 /** Layer 1: do both sides read the terms the same way? */
 export interface MeaningSuite extends SuiteBase<"meaning"> {

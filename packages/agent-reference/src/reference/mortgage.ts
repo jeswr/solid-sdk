@@ -56,6 +56,8 @@ import {
   tellSam,
 } from "./fixtures.js";
 import { idSource, testKey } from "./keys.js";
+import { runMain } from "./main.js";
+import { BALANCE_OP, HARBOUR_AGENT, IDP, INDEX, PRODUCT_SEARCH_OP } from "./main-fixtures.js";
 
 /** The logical clock: every run starts at the same instant and only the driver moves it. */
 export const REFERENCE_START = "2026-11-13T09:00:00.000Z";
@@ -65,10 +67,16 @@ export const SCENARIOS = {
   "mortgage-over-ask": "The lender asks for more than Sam's mandate allows",
   "mortgage-out-of-limit": "The lender's terms are outside Sam's limits",
   "mortgage-injected-fee": "A message carries an instruction to pay a fee",
+  "mortgage-main":
+    "Sam's mortgage in principle, all 14 steps: the product index, the register chain and a stronger approval at his bank",
 } as const;
 export type ScenarioId = keyof typeof SCENARIOS;
 
-const NAMES: Record<string, string> = {
+export const NAMES: Record<string, string> = {
+  [INDEX.party]: "the mortgage product index",
+  [INDEX.actor]: "the index's agent",
+  [HARBOUR_AGENT.actor]: "Harbour Bank's agent",
+  [IDP]: "the identity provider",
   [SAM.party]: "Sam",
   [SAM.actor]: "Sam's agent",
   [NORTH.party]: "North Bank",
@@ -79,14 +87,17 @@ const NAMES: Record<string, string> = {
   "https://underwriter.example/#org": "the underwriter",
   [`${AWP}fixture/national-trust-root`]: "National trust root",
 };
-const name = (iri: string | undefined): string => (iri ? (NAMES[iri] ?? iri) : "(none)");
+export const name = (iri: string | undefined): string =>
+  iri ? (NAMES[iri] ?? iri) : "an anonymous asker";
 
 const TASKS: Record<string, string> = {
   [PREQUAL_OP.id]: "a mortgage application",
   [VALUATION_OP.id]: "a valuation order",
   [PAYMENT_OP]: "a payment",
+  [PRODUCT_SEARCH_OP.id]: "a product search",
+  [BALANCE_OP.id]: "a request for your balance statement",
 };
-const taskLabel = (op: Iri) => TASKS[op] ?? op;
+export const taskLabel = (op: Iri) => TASKS[op] ?? op;
 
 export const TRACE_AGENTS: readonly TraceAgent[] = [
   { id: "sams-agent", name: "Sam's agent", actsFor: "sam", role: "Personal agent" },
@@ -148,17 +159,19 @@ interface Run {
 }
 
 /** Deliver queued messages one at a time, labelling each delivery with a step. */
-async function deliver(
+export async function deliver(
   recorder: TraceRecorder,
   byActor: Map<Iri, AgentRuntime>,
   queue: Array<{ out: OutboundMessage }>,
   stepOf: (out: OutboundMessage) => number | undefined,
   before?: (out: OutboundMessage) => Promise<void>,
+  /** Where a reply to an anonymous asker goes: back on the asker's own connection. */
+  anonymousAsker?: AgentRuntime,
 ): Promise<void> {
   let guard = 0;
   while (queue.length > 0 && guard++ < 100) {
     const item = queue.shift() as { out: OutboundMessage };
-    const to = item.out.toActor ? byActor.get(item.out.toActor) : undefined;
+    const to = item.out.toActor ? byActor.get(item.out.toActor) : anonymousAsker;
     if (!to) continue;
     await before?.(item.out);
     const step = stepOf(item.out);
@@ -171,7 +184,7 @@ async function deliver(
 }
 
 /** The worked-example step a delivery belongs to; closing messages keep the current step. */
-function stepOf(out: OutboundMessage): number | undefined {
+export function stepOf(out: OutboundMessage): number | undefined {
   const m = out.message;
   if (m.kind === "describe" || m.kind === "description") return 4;
   if (m.kind === "propose") return (m.body as { round?: number }).round === 1 ? 5 : 11;
@@ -182,10 +195,15 @@ function stepOf(out: OutboundMessage): number | undefined {
 
 /** Titles of the worked-example steps, in plain words. */
 export const STEP_TITLES: Readonly<Record<number, string>> = {
+  1: "Sam signs a mandate",
   2: "Sam asks for a mortgage in principle",
   3: "Sam's agent looks North Bank up before contacting it",
   4: "The agents describe themselves and Sam's agent applies",
   5: "North Bank says what evidence it needs",
+  6: "Sam's agent asks Harbour Bank for a signed balance statement",
+  7: "Harbour Bank asks for a stronger approval",
+  8: "Sam does a face check and the request is sent again",
+  9: "Harbour Bank returns a signed statement with its terms",
   10: "Sam's agent checks the statements it holds",
   11: "Sam is asked, and the agent shares the evidence",
   12: "North Bank's gate checks the evidence",
@@ -193,10 +211,13 @@ export const STEP_TITLES: Readonly<Record<number, string>> = {
   14: "Each side checks its own record",
 };
 
-function stepsIn(recorder: TraceRecorder): Record<string, string> {
+export function stepsIn(
+  recorder: TraceRecorder,
+  titles: Readonly<Record<number, string>> = STEP_TITLES,
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const e of recorder.events()) {
-    const title = STEP_TITLES[e.step];
+    const title = titles[e.step];
     if (title) out[String(e.step)] = title;
   }
   return out;
@@ -207,6 +228,7 @@ export async function runReference(
   scenario: ScenarioId,
   opts: { commit?: string; configuration?: Configuration } = {},
 ): Promise<TraceFile> {
+  if (scenario === "mortgage-main") return runMain(opts);
   const configuration = opts.configuration ?? BASELINE;
   const registry = baselineRegistry();
   if (registry.check(configuration).length > 0)

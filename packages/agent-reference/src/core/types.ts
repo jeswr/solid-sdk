@@ -50,6 +50,7 @@ export const MESSAGE_KINDS = [
   "propose",
   "accept",
   "refuse",
+  "challenge",
   "invoke",
   "deliver",
   "receipt",
@@ -101,6 +102,7 @@ export const REASON_CODES = [
   "evidence-invalid",
   "not-authorised",
   "mandate-invalid",
+  "assurance-insufficient",
   "approval-required",
   "approval-denied",
   "missing-context",
@@ -173,6 +175,15 @@ export interface AcceptBody {
   /** Deterministic agreement id (both sides compute and compare it). */
   readonly agreement: Iri;
 }
+/** What more the sender must supply before its request can be admitted (CORE-M-8). */
+export interface ChallengeBody {
+  readonly ref: Iri;
+  readonly reason: ReasonCode;
+  readonly detail?: string;
+  /** The approval level asked for, and how a person would say it. */
+  readonly needs: { readonly approval: Iri; readonly label: string };
+}
+
 export interface RefuseBody {
   readonly ref: Iri;
   readonly reason: ReasonCode;
@@ -216,6 +227,7 @@ export interface BodyByKind {
   propose: ProposeBody;
   accept: AcceptBody;
   refuse: RefuseBody;
+  challenge: ChallengeBody;
   invoke: InvokeBody;
   deliver: DeliverBody;
   receipt: ReceiptBody;

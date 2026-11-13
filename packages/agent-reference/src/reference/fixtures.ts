@@ -218,6 +218,20 @@ export const MORTGAGE_RELIANCE: RelianceProfile = {
       maxAgeDays: 30,
       text: "A decision in principle must come from the lender itself and still be valid.",
     },
+    {
+      id: `${AWP}reliance/mortgage-application#product`,
+      claimType: "mortgage.product",
+      methods: ["published-by-lender"],
+      maxAgeDays: 31,
+      text: "A product record must be published by the lender itself and be at most a month old.",
+    },
+    {
+      id: `${AWP}reliance/mortgage-application#approval`,
+      claimType: "identity.*",
+      methods: ["certified-face-check"],
+      maxAgeDays: 1,
+      text: "A stronger approval must be a certified face check made today.",
+    },
   ],
 };
 
@@ -246,11 +260,35 @@ export function claimLabel(
   if (String(s.claimType).startsWith("deposit"))
     return `${issuer}'s balance at ${typeof s.asOf === "string" ? dateWords(s.asOf) : "the latest date"}`;
   if (s.claimType === DECISION_CLAIM) return `${issuer}'s decision in principle`;
+  if (s.claimType === "mortgage.product")
+    return `${issuer}'s published ${String((s.product as { name?: unknown })?.name ?? "mortgage")} product`;
+  if (String(s.claimType).startsWith("identity."))
+    return `${issuer}'s attestation of your face check`;
   return `${issuer}'s statement`;
+}
+
+/** Sam's loan as a share of the price (his core's shortlist rule; never sent). */
+const SAM_LOAN_TO_VALUE = Math.round((380000 / 450000) * 1000) / 10;
+
+/** Sam's agent's shortlist, one verified product at a time. */
+function shortlistLine(s: Readonly<Record<string, unknown>>): string {
+  const p = s.product as {
+    name: string;
+    ratePercent: number;
+    fixedYears: number;
+    maxLoanToValuePercent: number;
+  };
+  const issuer =
+    NAMES[String(s.issuer)] ?? (String(s.issuer) === NORTH.party ? "North Bank" : String(s.issuer));
+  const fits = SAM_LOAN_TO_VALUE <= p.maxLoanToValuePercent;
+  return `${issuer}'s ${p.name}: ${p.ratePercent}% fixed for ${p.fixedYears} years, lends up to ${p.maxLoanToValuePercent}% of the price. You would borrow ${SAM_LOAN_TO_VALUE}%, so ${
+    fits ? "it is on your shortlist" : "it does not fit"
+  }.`;
 }
 
 /** What Sam's agent tells Sam when North Bank's decision is admitted. */
 export function tellSam(s: Readonly<Record<string, unknown>>): string | undefined {
+  if (s.claimType === "mortgage.product") return shortlistLine(s);
   if (s.claimType !== DECISION_CLAIM) return undefined;
   const d = s.decision as { amount: number; currency: string };
   return `North Bank has given you a decision in principle: they would lend up to $${d.amount.toLocaleString("en-US")}. It is valid until ${dateWords(String(s.validUntil))}, and it is not a binding offer.`;

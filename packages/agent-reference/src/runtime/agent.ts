@@ -274,6 +274,8 @@ export class AgentRuntime {
   private admission: Admission | undefined;
   /** Set while an approved action resumes, so the core is not shown proposing it twice. */
   private resuming = false;
+  /** The pilot configuration of the exchange the gates are checking now. */
+  private carriage: string | undefined;
   /** Set while a task the core took from a received message is being proposed. */
   private proposalOrigin: ProposalOrigin | undefined;
 
@@ -290,7 +292,7 @@ export class AgentRuntime {
     for (const e of options.effects ?? []) this.effectAdapters.set(e.id, e);
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
-    const gate = options.gates ?? {};
+    const gate: GateContext = { ...(options.gates ?? {}), carriage: () => this.carriage };
     const memory = new GateMemory();
     this.inbound = new InboundGate({
       identity: this.identity,
@@ -300,6 +302,11 @@ export class AgentRuntime {
       record: (r) => this.record(r),
       gate,
       memory,
+      requestPurpose: (ref) => {
+        const sent = peekWire(this.state.outbox[ref]?.wire);
+        const purpose = (sent?.body as { purpose?: unknown } | undefined)?.purpose;
+        return typeof purpose === "string" ? purpose : undefined;
+      },
       agreementTerms: (id) => {
         const agreement = this.state.conversations[id]?.agreement;
         return agreement ? this.state.agreements[agreement]?.terms : undefined;
@@ -324,6 +331,19 @@ export class AgentRuntime {
         }
         return undefined;
       },
+      demandedApproval: (intent) => {
+        if (!intent.recipient) return undefined;
+        const needs = this.getDomain(`_challenge:${intent.recipient}|${intent.operation}`);
+        if (!needs || typeof needs !== "object" || Array.isArray(needs)) return undefined;
+        const given = this.state.approvals[actionDigest(intent)];
+        const approved =
+          given?.decision === "approve" && Date.parse(given.validUntil) > Date.parse(this.now());
+        return {
+          approval: String(needs.approval),
+          label: String(needs.label),
+          ...(approved ? { approvedBy: given.id } : {}),
+        };
+      },
     });
   }
 
@@ -343,6 +363,7 @@ export class AgentRuntime {
       this.inside.run(true, () => {
         this.decisions = [];
         this.current = undefined;
+        this.carriage = undefined;
         return fn();
       });
     const result = this.queue.then(run, run);
@@ -641,6 +662,11 @@ export class AgentRuntime {
   }
 
   /** The principal tells the agent something (shown in a trace's chat column). */
+  /** Show the loaded, verified mandate in the trace (worked-example step 1). */
+  showMandate(): void {
+    this.outbound.mandateLoaded();
+  }
+
   instruct(text: string): void {
     this.outbound.instruction(text);
   }
@@ -833,6 +859,7 @@ export class AgentRuntime {
   }> {
     const plan = this.getDomain(`_start:${conversationId}`) as unknown as StartPlan | undefined;
     const conv = this.mustConversation(conversationId);
+    this.carriage = conv.configuration;
     if (!plan) return { messages: [] };
     const handler = this.handlers.get(operationKey(plan.operation));
     if (!handler) throw new Error(`no local handler for ${operationKey(plan.operation)}`);
@@ -996,6 +1023,7 @@ export class AgentRuntime {
 
   private async receiveInner(wire: unknown, meta: { binding?: string }): Promise<StepResult> {
     const at = this.now();
+    this.carriage = peekWire(wire)?.configuration;
     const admission = this.inbound.arrive(wire, meta.binding, peekWire(wire));
     this.admission = admission;
     const checked = await this.inbound.verifyIntegrity(wire, meta, (id) =>
@@ -1211,6 +1239,7 @@ export class AgentRuntime {
       case "accept":
         return this.onAccept(conv, msg);
       case "refuse":
+      case "challenge":
       case "unsupported":
       case "indeterminate":
         return this.onClosed(conv, msg);
@@ -1498,9 +1527,17 @@ export class AgentRuntime {
 
   private async onClosed(
     conv: ConversationState,
-    msg: Message<"refuse" | "unsupported" | "indeterminate">,
+    msg: Extract<AnyMessage, { kind: "refuse" | "challenge" | "unsupported" | "indeterminate" }>,
   ) {
     await this.admission?.complete(conv, msg);
+    if (msg.kind === "challenge" && conv.peer.party && conv.operation) {
+      // Kept so the outbound gate asks the principal for that approval next time (CORE-OUT-8).
+      this.setDomain(
+        `_challenge:${conv.peer.party}|${conv.operation.id}`,
+        msg.body.needs as unknown as Json,
+        conv.id,
+      );
+    }
     this.record({
       type: "closed-by-peer",
       conversation: conv.id,
@@ -1565,6 +1602,8 @@ export class AgentRuntime {
     let rep: RepresentationAssessment | undefined;
     if (!publicAccess) {
       rep = await this.checkRepresentation(conv, msg, handler);
+      const askMore = this.admission?.askedFor;
+      if (askMore) return this.replyChallenge(conv, msg, askMore);
       if (rep && rep.outcome !== "accepted") {
         return this.replyClose(
           conv,
@@ -2721,17 +2760,26 @@ export class AgentRuntime {
   }
 
   /** Submit an owner approval (or denial) JWS; resumes the matching pending action. */
-  submitApproval(jws: string): Promise<StepResult> {
+  submitApproval(
+    jws: string,
+    extra: {
+      /** Statements that show the approval was given in a stronger form (CORE-OUT-8). */
+      evidence?: readonly EvidenceItem[];
+    } = {},
+  ): Promise<StepResult> {
     return this.exclusive(async () => {
       try {
-        return await this.submitApprovalInner(jws);
+        return await this.submitApprovalInner(jws, extra);
       } finally {
         this.resuming = false;
       }
     });
   }
 
-  private async submitApprovalInner(jws: string): Promise<StepResult> {
+  private async submitApprovalInner(
+    jws: string,
+    extra: { evidence?: readonly EvidenceItem[] } = {},
+  ): Promise<StepResult> {
     const v = await verifyApproval(jws, {
       trust: this.trust,
       actor: this.identity.actor,
@@ -2763,8 +2811,22 @@ export class AgentRuntime {
       a.note ?? (a.decision === "approve" ? "Yes, go ahead." : "No."),
       `${a.decision === "approve" ? "Approves" : "Declines"} by signing an answer bound to the exact action${
         pending ? "" : " (no action is waiting with that digest, so nothing is released)"
+      }${
+        extra.evidence && extra.evidence.length > 0
+          ? "; an attestation of the stronger approval goes with the request"
+          : ""
       }.`,
     );
+    if (pending && extra.evidence && extra.evidence.length > 0) {
+      const key = `_start:${pending.conversation}`;
+      const plan = this.getDomain(key) as unknown as StartPlan | undefined;
+      if (plan)
+        this.setDomain(
+          key,
+          { ...plan, evidence: [...(plan.evidence ?? []), ...extra.evidence] } as unknown as Json,
+          pending.conversation,
+        );
+    }
     if (!pending) {
       this.persist();
       return this.result("local", {
@@ -2912,6 +2974,7 @@ export class AgentRuntime {
     const conv = this.mustConversation(conversationId);
     const configuration = opts.configuration ?? conv.configuration;
     if (!configuration) throw new Error("no configuration selected");
+    this.carriage = configuration;
     const cfg = configurationById(configuration);
     if (cfg?.integrity.status !== "selected")
       throw new Error(`configuration ${configuration} is not executable`);
@@ -3076,6 +3139,31 @@ export class AgentRuntime {
       reason,
       ...(detail ? { detail } : {}),
     };
+  }
+
+  /** Answer a request with a challenge: what more would let it be admitted (CORE-IN-8). */
+  private async replyChallenge(
+    conv: ConversationState,
+    msg: AnyMessage,
+    needs: { approval: Iri; label: string },
+  ) {
+    const reason = "assurance-insufficient" as const;
+    const detail = `needs ${needs.label}`;
+    this.record({
+      type: "challenge",
+      conversation: conv.id,
+      reason,
+      approval: needs.approval,
+      ref: msg.id,
+      at: this.now(),
+    });
+    const out = await this.emit(
+      conv.id,
+      "challenge",
+      { ref: msg.id, reason, detail, needs: { ...needs } },
+      { inReplyTo: msg.id },
+    );
+    return { disposition: "accepted" as const, outbound: [out], reason, detail };
   }
 
   private closeLocally(

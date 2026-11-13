@@ -114,3 +114,39 @@ describe("reference traces are reproducible and use the model's ids", () => {
     expect(bank?.resolution?.path.map((p) => p.kind)).toEqual(["own-list"]);
   });
 });
+
+describe("mortgage-main shows the index, the register chain and the stronger approval", () => {
+  it("queries the index under public read, verifies each record against its lender", async () => {
+    const trace = await run("mortgage-main");
+    const query = trace.events.find((e) => e.agent === "index" && e.kind === "message-in");
+    expect(query?.refs?.find((r) => r.layer === "data-access")?.suite).toBe("by-query");
+    const sources = trace.events.filter(
+      (e) => e.step === 3 && e.agent === "sams-agent" && e.check === "source",
+    );
+    expect(sources.length).toBeGreaterThan(0);
+    for (const s of sources)
+      expect(s.resolution?.path.map((p) => p.kind)).toEqual(["own-list", "root", "register"]);
+  });
+
+  it("Harbour Bank asks for more, then admits the request with the attested face check", async () => {
+    const trace = await run("mortgage-main");
+    const bank = trace.events.filter((e) => e.agent === "bank" && e.check === "authority");
+    expect(bank.map((e) => e.verdict)).toEqual(["ask-more", "pass"]);
+    expect(bank[0]?.reason).toBe("assurance-insufficient");
+    const attestation = trace.events.find(
+      (e) => e.agent === "bank" && e.check === "source" && e.verdict === "pass",
+    );
+    expect(attestation?.resolution?.path.at(-1)?.at).toBe("Identity framework register");
+    expect(
+      trace.events.some(
+        (e) => e.agent === "sams-agent" && e.check === "limits-approval" && e.step === 8,
+      ),
+    ).toBe(true);
+  });
+
+  it("every passing verdict carries a code", async () => {
+    for (const scenario of scenarios)
+      for (const e of (await run(scenario)).events)
+        if (e.kind === "check" && e.verdict === "pass") expect(e.reason).toBeTruthy();
+  });
+});

@@ -12,7 +12,8 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "recipient",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "recipient-established"
   },
   {
     "agent": "sams-agent",
@@ -20,7 +21,7 @@
     "kind": "check",
     "check": "disclosure",
     "verdict": "not-applicable",
-    "reason": "no-action"
+    "reason": "no-personal-data"
   },
   {
     "agent": "sams-agent",
@@ -28,7 +29,7 @@
     "kind": "check",
     "check": "data-terms",
     "verdict": "not-applicable",
-    "reason": "no-action"
+    "reason": "no-personal-data"
   },
   {
     "agent": "sams-agent",
@@ -43,7 +44,8 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "evidence",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "evidence-complete"
   },
   {
     "agent": "sams-agent",
@@ -66,7 +68,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "integrity",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "intact"
   },
   {
     "agent": "lender",
@@ -119,7 +122,8 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "recipient",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "recipient-established"
   },
   {
     "agent": "lender",
@@ -127,7 +131,7 @@
     "kind": "check",
     "check": "disclosure",
     "verdict": "not-applicable",
-    "reason": "no-action"
+    "reason": "no-personal-data"
   },
   {
     "agent": "lender",
@@ -135,7 +139,7 @@
     "kind": "check",
     "check": "data-terms",
     "verdict": "not-applicable",
-    "reason": "no-action"
+    "reason": "no-personal-data"
   },
   {
     "agent": "lender",
@@ -150,7 +154,8 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "evidence",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "evidence-complete"
   },
   {
     "agent": "lender",
@@ -173,7 +178,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "integrity",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "intact"
   },
   {
     "agent": "sams-agent",
@@ -218,14 +224,16 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "mandate",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "within-mandate"
   },
   {
     "agent": "sams-agent",
     "part": "outbound-gate",
     "kind": "check",
     "check": "recipient",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "recipient-established"
   },
   {
     "agent": "sams-agent",
@@ -248,14 +256,16 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "limits-approval",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "within-limits"
   },
   {
     "agent": "sams-agent",
     "part": "outbound-gate",
     "kind": "check",
     "check": "evidence",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "evidence-complete"
   },
   {
     "agent": "sams-agent",
@@ -278,7 +288,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "integrity",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "intact"
   },
   {
     "agent": "lender",
@@ -293,7 +304,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "authority",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "authority-valid"
   },
   {
     "agent": "lender",
@@ -322,14 +334,16 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "mandate",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "within-mandate"
   },
   {
     "agent": "lender",
     "part": "outbound-gate",
     "kind": "check",
     "check": "recipient",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "recipient-established"
   },
   {
     "agent": "lender",
@@ -352,14 +366,16 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "limits-approval",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "within-limits"
   },
   {
     "agent": "lender",
     "part": "outbound-gate",
     "kind": "check",
     "check": "evidence",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "evidence-complete"
   },
   {
     "agent": "lender",
@@ -377,7 +393,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "integrity",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "intact"
   },
   {
     "agent": "sams-agent",
@@ -400,14 +417,16 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "terms",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "terms-acceptable"
   },
   {
     "agent": "sams-agent",
     "part": "inbound-gate",
     "kind": "check",
     "check": "fitness",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "fit-for-use"
   },
   {
     "agent": "sams-agent",
@@ -420,7 +439,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "integrity",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "intact"
   },
   {
     "agent": "sams-agent",
@@ -443,14 +463,16 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "terms",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "terms-acceptable"
   },
   {
     "agent": "sams-agent",
     "part": "inbound-gate",
     "kind": "check",
     "check": "fitness",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "fit-for-use"
   },
   {
     "agent": "sams-agent",
@@ -468,7 +490,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "integrity",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "intact"
   },
   {
     "agent": "sams-agent",
@@ -483,7 +506,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "authority",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "authority-valid"
   },
   {
     "agent": "sams-agent",
@@ -535,7 +559,8 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "recipient",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "recipient-established"
   },
   {
     "agent": "sams-agent",
@@ -543,7 +568,7 @@
     "kind": "check",
     "check": "disclosure",
     "verdict": "not-applicable",
-    "reason": "no-action"
+    "reason": "no-personal-data"
   },
   {
     "agent": "sams-agent",
@@ -551,7 +576,7 @@
     "kind": "check",
     "check": "data-terms",
     "verdict": "not-applicable",
-    "reason": "no-action"
+    "reason": "no-personal-data"
   },
   {
     "agent": "sams-agent",
@@ -566,7 +591,8 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "evidence",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "evidence-complete"
   },
   {
     "agent": "sams-agent",
@@ -589,7 +615,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "integrity",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "intact"
   },
   {
     "agent": "lender",
@@ -604,7 +631,8 @@
     "part": "inbound-gate",
     "kind": "check",
     "check": "authority",
-    "verdict": "pass"
+    "verdict": "pass",
+    "reason": "established-earlier"
   },
   {
     "agent": "lender",

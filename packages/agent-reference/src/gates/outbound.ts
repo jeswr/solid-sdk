@@ -17,6 +17,7 @@ import type {
   JsonObject,
 } from "../core/types.js";
 import { actionDigest, type OwnerMandate } from "../mechanisms/mandate.js";
+import { configurationById } from "../profile/configurations.js";
 import type { WireMessage } from "../store/state.js";
 import { packetView } from "../trace/packet.js";
 import type { OutboundCheck, OutboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
@@ -29,6 +30,7 @@ import {
   type ItemTerms,
   idWords,
   NOT_APPLICABLE,
+  PASS_CODE,
   refsFor,
   resolutionView,
   ruleText,
@@ -56,6 +58,15 @@ export interface OutboundDeps {
   readonly isReplyTo: (conversation: Iri, party: Iri) => boolean;
   /** The offered terms with this digest, as received in this agent's conversations. */
   readonly offerTerms: (termsDigest: string) => JsonObject | undefined;
+  /** A stronger approval the recipient asked for in a challenge to this kind of action. */
+  readonly demandedApproval?: (intent: ActionIntent) =>
+    | {
+        readonly approval: Iri;
+        readonly label: string;
+        /** The principal's signed approval of this exact action, once given. */
+        readonly approvedBy?: Iri;
+      }
+    | undefined;
 }
 
 export interface Release {
@@ -107,6 +118,8 @@ export class OutboundGate {
     caption: string,
     extra: Partial<TraceEventInput> = {},
   ): void {
+    // Every verdict carries a code; a pass without one of its own takes the check's pass code.
+    if (verdict === "pass" && !extra.reason) extra = { reason: PASS_CODE[check], ...extra };
     out.push({
       type: "check-verdict",
       gate: "outbound",
@@ -203,6 +216,60 @@ export class OutboundGate {
     }.${limitText ? ` ${limitText}` : ""} May I go ahead?`;
   }
 
+  /** Statements about the principal, or facts it holds, that a message carries. */
+  private principalDataIn(message: AnyMessage): string[] {
+    const party = this.deps.identity.party;
+    const out: string[] = [];
+    for (const e of message.evidence ?? []) {
+      if (e.role !== "credential" || e.format !== "jws-compact") continue;
+      let payload: JsonObject = {};
+      try {
+        payload = JSON.parse(
+          Buffer.from(e.value.split(".")[1] ?? "", "base64url").toString("utf8"),
+        ) as JsonObject;
+      } catch {
+        out.push("an unreadable statement");
+        continue;
+      }
+      const fact =
+        typeof payload.id === "string" ? this.deps.memory.facts.get(payload.id) : undefined;
+      if (fact) out.push(fact.label);
+      else if (party && payload.subject === party) out.push(idWords(String(payload.claimType)));
+    }
+    return out;
+  }
+
+  private unsignedAllowed(message: AnyMessage): boolean {
+    return (configurationById(message.configuration)?.unsignedRequestKinds ?? []).includes(
+      message.kind,
+    );
+  }
+
+  /** The principal's signed mandate, as loaded and verified: the rules every check reads. */
+  mandateLoaded(): void {
+    const m = this.deps.mandate();
+    if (!m) return;
+    const rules = [
+      ...(m.autonomous.permissions ?? []).map((rule) => ({ rule, withApproval: false })),
+      ...(m.withApproval.permissions ?? []).map((rule) => ({ rule, withApproval: true })),
+    ].map(({ rule, withApproval }) =>
+      ruleText(rule, { owner: this.owner, name: this.name, withApproval }),
+    );
+    this.emit({
+      part: "record",
+      kind: "record",
+      rule: { id: m.id, text: rules.join(" ") },
+      ...refsFor(this.deps.gate, ["authority", "usage-control"]),
+      caption: `${this.owner} signed this mandate with their own key; the agent verified it, wrote it to its record, and every check reads it: ${rules.length} rules, valid until ${m.validUntil.slice(0, 10)}.`,
+    });
+  }
+
+  /** The request the principal sees when a recipient asked for a stronger approval. */
+  strongerApprovalRequest(intent: ActionIntent, label: string): string {
+    const task = this.deps.gate.taskLabel?.(intent.operation) ?? idWords(intent.operation);
+    return `Before ${this.name(intent.recipient)} will go ahead with ${task}, it asks you to approve with ${label}. May I ask you to do that now?`;
+  }
+
   /**
    * The core proposes an action; the gate receives it. When the core took the idea from a
    * message, the caption says which one: the gate decides on the action all the same.
@@ -294,6 +361,12 @@ export class OutboundGate {
     // 5. Limits and approval.
     const limitText = this.exceededLimit(intent);
     const limitRule = ctx.principalLimits && limitText ? { id: ctx.principalLimits.id } : undefined;
+    // CORE-OUT-8: the recipient asked for a stronger approval; ask the principal in that form.
+    const demanded = this.deps.demandedApproval?.(intent);
+    const demandText =
+      demanded && !demanded.approvedBy
+        ? `${this.name(intent.recipient)} asked for ${demanded.label} before it will do this.`
+        : undefined;
     let effective = decision;
     if (decision.outcome === "permit" && decision.basis === "autonomous" && limitText) {
       effective = {
@@ -301,10 +374,19 @@ export class OutboundGate {
         outcome: "approval-required",
         reason: `principal limit: ${limitText}`,
       };
+    } else if (decision.outcome === "permit" && decision.basis === "autonomous" && demandText) {
+      effective = {
+        ...decision,
+        outcome: "approval-required",
+        reason: `stronger approval asked for: ${demanded?.approval}`,
+      };
     }
     if (effective.outcome === "approval-required") {
       const reason = limitText ? "limit-exceeded" : "approval-required";
-      const request = this.approvalRequest(intent, limitText);
+      const request =
+        demandText && demanded
+          ? this.strongerApprovalRequest(intent, demanded.label)
+          : this.approvalRequest(intent, limitText);
       this.verdict(
         verdicts,
         subject,
@@ -312,12 +394,14 @@ export class OutboundGate {
         "ask-principal",
         limitText
           ? `This is outside ${this.owner}'s limits, so the gate asks ${this.owner}.`
-          : `The mandate says to ask ${this.owner} first.`,
+          : demandText
+            ? `${demandText} The gate asks ${this.owner} to approve in that form.`
+            : `The mandate says to ask ${this.owner} first.`,
         {
           reason,
           rule: {
-            id: limitRule?.id ?? matched?.rule.id ?? decision.policy.id,
-            text: [ruleRef.rule?.text, limitText].filter(Boolean).join(" "),
+            id: limitRule?.id ?? demanded?.approval ?? matched?.rule.id ?? decision.policy.id,
+            text: [ruleRef.rule?.text, limitText ?? demandText].filter(Boolean).join(" "),
           },
         },
       );
@@ -330,16 +414,37 @@ export class OutboundGate {
       });
       return { outcome: "ask-principal", verdicts, decision: effective };
     }
+    if (demanded?.approvedBy) {
+      this.verdict(
+        verdicts,
+        subject,
+        "limits-approval",
+        "pass",
+        `${this.owner} approved this exact action with ${demanded.label}, as ${this.name(intent.recipient)} asked; the attestation goes with the request.`,
+        {
+          reason: "approval-given",
+          rule: {
+            id: demanded.approvedBy,
+            text: `${this.owner}'s signed approval, bound to digest ${subject.slice(0, 16)}….`,
+          },
+        },
+      );
+      this.pendingGo.add(subject);
+      return { outcome: "go", verdicts, decision };
+    }
     this.verdict(
       verdicts,
       subject,
       "limits-approval",
       "pass",
       decision.basis === "owner-approval"
-        ? `${this.owner} approved this exact action.`
+        ? demanded
+          ? `${this.owner} approved this exact action with ${demanded.label}, as ${this.name(intent.recipient)} asked.`
+          : `${this.owner} approved this exact action.`
         : `Inside what the agent may do on its own, and within ${this.owner}'s limits.`,
       decision.approval
         ? {
+            reason: "approval-given",
             rule: {
               id: decision.approval,
               text: `${this.owner}'s signed approval, bound to digest ${subject.slice(0, 16)}….`,
@@ -514,6 +619,20 @@ export class OutboundGate {
     intent: ActionIntent,
   ): string | undefined {
     const p = intent.parameters;
+    if (intent.action === "distribute" && typeof p.attachedTerms === "string") {
+      // An issuer releasing its own statement: the terms it attaches travel with it.
+      this.verdict(
+        verdicts,
+        subject,
+        "data-terms",
+        "pass",
+        `${this.owner}'s own terms go with it: ${p.attachedTerms}`,
+        typeof p.termsId === "string"
+          ? { rule: { id: p.termsId, text: String(p.attachedTerms) } }
+          : {},
+      );
+      return undefined;
+    }
     if (intent.action !== "distribute" || !Array.isArray(p.evidence)) {
       this.verdict(
         verdicts,
@@ -607,26 +726,47 @@ export class OutboundGate {
         { reason: NOT_APPLICABLE.noAction },
       );
       this.recipient(verdicts, subject, message.to?.party, opts.operation, message.conversation);
-      this.verdict(
-        verdicts,
-        subject,
-        "disclosure",
-        "not-applicable",
-        "This message proposes no action, so nothing is disclosed by choice.",
-        {
-          reason: NOT_APPLICABLE.noAction,
-        },
-      );
-      this.verdict(
-        verdicts,
-        subject,
-        "data-terms",
-        "not-applicable",
-        "This message proposes no disclosure.",
-        {
-          reason: NOT_APPLICABLE.noAction,
-        },
-      );
+      // CORE-OUT-12: sending is itself an action. The gate looks for the principal's data
+      // itself; not-applicable only when it finds none.
+      const carried = this.principalDataIn(message);
+      if (carried.length === 0) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "not-applicable",
+          `The gate finds none of ${this.owner}'s data in this message: no statement about ${this.owner} and no stored fact.`,
+          { reason: NOT_APPLICABLE.noPersonalData },
+        );
+        this.verdict(
+          verdicts,
+          subject,
+          "data-terms",
+          "not-applicable",
+          `None of ${this.owner}'s data goes, so no terms apply.`,
+          { reason: NOT_APPLICABLE.noPersonalData },
+        );
+      } else {
+        // OPEN-DESIGN: a protocol message carrying the principal's data with no action behind
+        // it has no request to measure the disclosure against. The gate shows it as
+        // indeterminate; the pilot cannot hold protocol messages here.
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "indeterminate",
+          `This message carries ${this.owner}'s data (${listWords(carried)}) with no action behind it.`,
+          { reason: "missing-context" },
+        );
+        this.verdict(
+          verdicts,
+          subject,
+          "data-terms",
+          "indeterminate",
+          "No action names a purpose to check the data's terms against.",
+          { reason: "missing-context" },
+        );
+      }
       this.verdict(
         verdicts,
         subject,
@@ -648,12 +788,14 @@ export class OutboundGate {
       verdicts,
       message.id,
       "evidence",
-      signed ? "pass" : "fail",
+      signed || this.unsignedAllowed(message) ? "pass" : "fail",
       signed
         ? `Signed (JWS ${String(header.alg)}) with ${this.name(this.deps.identity.actor)}'s pinned key, and written to the record.`
-        : "Sent unsigned, as its configuration allows; written to the record.",
+        : this.unsignedAllowed(message)
+          ? "Sent unsigned and with no identifier, as the public read configuration requires; written to the record."
+          : "Sent unsigned; written to the record.",
       {
-        ...(signed ? {} : { reason: "evidence-missing" }),
+        ...(signed || this.unsignedAllowed(message) ? {} : { reason: "evidence-missing" }),
         rule: {
           id: message.configuration,
           text: "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record.",
@@ -696,7 +838,12 @@ export class OutboundGate {
 
   /** The principal starts something in chat. */
   instruction(text: string): void {
-    this.principal(text, `${this.owner} asks the agent in chat.`);
+    this.emit({
+      part: "principal",
+      kind: "principal-instruction",
+      chat: { who: "principal", text },
+      caption: `${this.owner} asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does.`,
+    });
   }
 
   /** The principal's own words, as a chat line. */
