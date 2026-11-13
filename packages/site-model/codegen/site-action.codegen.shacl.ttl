@@ -1,4 +1,5 @@
 # AUTHORED-BY Claude Opus 5.5
+# AUTHORED-BY Codex GPT-6
 #
 # Generation INPUT (SHACL profile, L2) for @jeswr/site-model's generated model.
 #
@@ -21,6 +22,8 @@
 #   - The shared sabsh:LearnedActionShape (sh:node) of the normative shapes is inlined
 #     into the Operation and Flow shapes: admission projects sh:node only as a
 #     composite link.
+#   - ActionOutcome's conditional payment requiredness and currency pattern are
+#     omitted (sh:or and literal patterns). The executor enforces these on output.
 
 @prefix sab:    <https://jeswr.org/ns/site-action#> .
 @prefix schema: <https://schema.org/> .
@@ -28,6 +31,15 @@
 @prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
 @prefix sh:     <http://www.w3.org/ns/shacl#> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+[] a sh:NodeShape ;
+  sh:targetClass sab:ActionOutcome ;
+  sh:property [ sh:path sab:status ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( sab:Completed sab:Failed ) ] ;
+  sh:property [ sh:path sab:target ; sh:name "target" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:effect ; sh:name "effect" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( sab:ReversibleWrite sab:IrreversibleWrite sab:Payment ) ] ;
+  sh:property [ sh:path schema:price ; sh:name "amount" ; sh:datatype xsd:decimal ; sh:minInclusive 0 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:priceCurrency ; sh:name "currency" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:result ; sh:name "result" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] .
 
 [] a sh:NodeShape ;
   sh:targetClass sab:SiteModel ;

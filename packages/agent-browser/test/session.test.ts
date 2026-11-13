@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { InMemorySessions } from "@jeswr/site-executor";
 import { readSiteModel, writeSiteModel } from "@jeswr/site-model";
 import { describe, expect, it, vi } from "vitest";
@@ -10,12 +11,13 @@ import {
   type PlannerInput,
   promptFor,
   runTask,
+  scriptedPlanner,
 } from "../src/index.js";
 import { readQuads } from "../src/rdf.js";
-import { injection, modelFixture, productIri } from "./fixtures.js";
+import { buy, injection, modelFixture, productIri } from "./fixtures.js";
 
 /** Inject HTTP at the existing executor seam; use the real compiler, gate, cookies and extraction. */
-function transport() {
+function transport(longReviews = false) {
   const password = 'secret-$`"password';
   const sid = "fictional-session-value";
   const csrf = "fictional-csrf-value";
@@ -50,7 +52,7 @@ function transport() {
               name: "Trail Runner sneakers",
               price: "20.00",
               currency: "GBP",
-              review: `${injection}. ${sid} ${password}`,
+              review: `${injection.repeat(longReviews ? 200 : 1)}. ${sid} ${password}`,
             },
           ],
         });
@@ -152,6 +154,46 @@ describe("host login and real executor composition (in-process transport)", () =
       }),
     ).rejects.toThrow("Password login failed");
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("a scripted planner buying twice creates one order, with completion ahead of long reviews", async () => {
+    const fixture = transport(true);
+    const model = modelFixture();
+    const sessions = new InMemorySessions();
+    await loginWithPassword(model, createExecutorFetch({ model, sessions, fetch: fixture.fetch }), {
+      username: "alex@example.test",
+      password: fixture.password,
+    });
+    const executor = createTaskExecutor({ model, sessions, fetch: fixture.fetch });
+    const approver = vi.fn(() => ({ limit: 20 }));
+    const trace = await runTask({
+      goal: "Buy once",
+      model,
+      executor,
+      approver,
+      observationBudget: 1200,
+      planner: scriptedPlanner([
+        { kind: "act", turtle: buy },
+        (input) => {
+          const turtle = input.history[0]?.observations ?? "";
+          expect(readQuads(turtle)[0]?.object.value).toBe(
+            "https://jeswr.org/ns/site-action#ActionOutcome",
+          );
+          expect(turtle).toContain("sab:Completed");
+          expect(turtle).toContain("schema:orderNumber");
+          expect(turtle.indexOf("schema:orderNumber")).toBeLessThan(turtle.indexOf("schema:name"));
+          return { kind: "act", turtle: buy };
+        },
+        (input) => {
+          expect(input.history[1]?.status).toBe("repeat-blocked");
+          return { kind: "answer", text: "One order placed." };
+        },
+      ]),
+    });
+    expect(trace.steps.map((s) => s.status)).toEqual(["done", "repeat-blocked", "answer"]);
+    expect(fixture.orders()).toBe(1);
+    expect(approver).toHaveBeenCalledTimes(1);
+    expect(trace.steps[0]?.observations.length).toBeGreaterThan(1200);
   });
 
   it("treats login failure as a host error with no response body or credentials", async () => {

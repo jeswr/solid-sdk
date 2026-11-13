@@ -43,6 +43,13 @@ Preparatory reads run before the gate, so approval shows, for example,
 currency and source item, re-reads on approval retry, and asks again if they change.
 Completed writes are never replayed.
 
+Within one `runTask`, a completed effectful action is remembered by its target and resolved
+inputs. An identical later action returns `repeat-blocked` before execution or approval:
+"already done in this task: <summary>; ask the person if they really want another".
+Changing a product or a bound quantity is a new action; omitted defaults and equivalent
+RDF spellings resolve to the same inputs. Reads and failed actions can be retried.
+`allowRepeats: true` disables this guard (default false); each task has its own memory.
+
 `loginWithPassword(model, executorFetch, { username, password })` compiles the model's
 password operation, obtains its CSRF token, submits it and checks its session cookie
 and optional signed-in probe. `createExecutorFetch` returns a host-only transport
@@ -61,9 +68,14 @@ and execution. The adapter remembers login/session secrets for trace redaction.
 - `{ kind: "ask", question }`: stop and return a question to the host.
 
 History entries contain `request` Turtle, result `status`, `observations` Turtle and an
-optional safe `error`. Observations share a default 12,000-character budget, allocated
-newest first. Truncation preserves complete RDF items and connected blank nodes, including
-`sab:UntrustedText` wrappers. `maxSteps` defaults to 12; each planner call counts as a step.
+optional safe `error` (including the plain-text repeat-blocked result). Observations share
+a default 12,000-character budget, allocated newest first. Within an execution they put
+`sab:ActionOutcome` first, then the final step's trusted facts, then earlier steps.
+`sab:Completed` means the action is done and the planner must not repeat it.
+In the planner view, each `sab:UntrustedText` value is capped at 200 characters, including
+an explicit `[truncated]` marker. Untrusted structures receive space after all trusted
+facts across history; truncation preserves connected blank nodes and untrusted wrappers.
+The trace retains full extracted text. `maxSteps` defaults to 12; each planner call counts as a step.
 Parsing, execution and planner failures become history text, so the next call can recover.
 
 `promptFor(input)` renders the fixed system instructions and input. Vocabulary prefixes
@@ -92,6 +104,7 @@ The executor owns extraction redaction; the task adapter also redacts known logi
 session values. Custom executors must uphold the same no-secrets result contract.
 Each step's `approvals` array records all prompts in order; `approval` retains the latest
 for compatibility. Refused payments are recorded as `refused` in trace and planner history.
+Blocked repeats are recorded as `repeat-blocked` in both, without another HTTP request.
 
 ```sh
 pnpm --filter @jeswr/agent-browser run build

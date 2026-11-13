@@ -11,6 +11,11 @@
   },
   "entities": [
     {
+      "targetClass": "https://jeswr.org/ns/site-action#ActionOutcome",
+      "name": "ActionOutcome",
+      "subject": { "convention": "self" }
+    },
+    {
       "targetClass": "https://jeswr.org/ns/site-action#SiteModel",
       "name": "SiteModel",
       "subject": {

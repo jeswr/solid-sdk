@@ -22,6 +22,44 @@ afterAll(async () => {
 });
 
 describe("fresh test shop -> profiler -> RDF model -> executor -> planner", () => {
+  it("a scripted planner trying the identical buy twice creates exactly one shop order", async () => {
+    const { executor } = await shopExecutor(model);
+    const base = shopPlanner();
+    let calls = 0;
+    let purchase = "";
+    const trace = await runTask({
+      goal: SHOP_GOAL,
+      model,
+      executor,
+      approver: () => ({ limit: 20 }),
+      planner: {
+        async next(input) {
+          calls++;
+          if (calls <= 2) {
+            const output = await base.next(input);
+            if (calls === 2 && output.kind === "act") purchase = output.turtle;
+            return output;
+          }
+          if (calls === 3) {
+            expect(purchase).not.toBe("");
+            const completed = input.history[1]?.observations ?? "";
+            expect(readQuads(completed)[0]?.object.value).toBe(`${PREFIXES.sab}ActionOutcome`);
+            expect(completed).toContain("sab:Completed");
+            expect(completed).toMatch(/schema:result <[^>]+\/orders\/\d+>/);
+            return { kind: "act", turtle: purchase };
+          }
+          expect(input.history.at(-1)?.status).toBe("repeat-blocked");
+          return { kind: "answer", text: "Bought one pair." };
+        },
+      },
+    });
+    expect(trace.steps.map((s) => s.status)).toEqual(["done", "done", "repeat-blocked", "answer"]);
+    expect(shop.state.orders).toHaveLength(1);
+    expect(shop.state.orders[0]?.lines).toEqual([
+      expect.objectContaining({ sku: "SNK-TRAIL-01", qty: 1 }),
+    ]);
+  });
+
   it.each([
     "deny",
     "approve",

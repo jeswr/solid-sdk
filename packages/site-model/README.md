@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/site-model
 
@@ -39,6 +40,7 @@ with the `https://schema.org/` scheme throughout; readers normalise `http://sche
 | `Operation.request` | `schema:target` a `schema:EntryPoint`: `schema:httpMethod`, `schema:urlTemplate`, `schema:contentType`, `sab:bodyTemplate`, `sab:header` (`schema:PropertyValue` name/value pairs) |
 | `Operation.session` | `sab:session` `sab:NoSession` or `sab:SignedIn` |
 | `EffectClass` | `sab:effect` `sab:Read` < `sab:ReversibleWrite` < `sab:IrreversibleWrite` < `sab:Payment` (concepts of `sab:EffectScheme`) |
+| `ActionOutcome` | Executor-authored `sab:ActionOutcome`: `sab:status` (`sab:Completed` or `sab:Failed`), `sab:target` (operation/flow label), `sab:effect`, authorized payment total (`schema:price`, `schema:priceCurrency`), and optional created-item IRI (`schema:result`) with its trusted facts |
 | `Parameter` | `sab:Parameter` (`rdfs:subClassOf schema:PropertyValueSpecification`): `schema:valueName`, `sab:valuePath` (a predicate, or an RDF list for a sequence path, as in SHACL), `sab:range`, `schema:valueRequired`, `sab:location`, `schema:description`, `sab:option` (RDF list), `skos:example`, `schema:defaultValue` |
 | `CsrfRule` | `sab:CsrfRule`: `sab:csrfSource` (`sab:sourceKind` cookie/html/json/meta with `schema:name`, `schema:urlTemplate`, `sab:selector`, `sab:attribute`, `sab:pointer`) and `sab:csrfTarget` (`sab:targetKind` header/form/query, `schema:name`) |
 | `Extraction`, `FieldRule` | `sab:Extraction`: `sab:format`, `sab:itemPath`, `sab:itemType`, `sab:idField`, `sab:fieldRule`; `sab:FieldRule`: `sab:fieldProperty`, `sab:selectorPath`, `sab:attribute`, `sab:valueDatatype` (`sab:IriValue` for the contract's `'iri'`), `sab:untrusted` |
@@ -49,6 +51,10 @@ with the `https://schema.org/` scheme throughout; readers normalise `http://sche
 `sab:UntrustedText` is a datatype for literals an executor extracts from untrusted field rules.
 Ordered collections (inputs, steps, CSRF rules, field rules, login routes, operations, flows)
 carry `schema:position`; a reader orders by position, then by IRI.
+Execution outcomes are runtime receipts, separate from the learned `SiteModel` graph.
+`sab:Completed` means the action is done and must not be repeated. `sab:Failed` makes no
+completion claim; earlier flow steps may already have changed site state. Completed
+payment outcomes require an authorized amount and currency in the normative shapes.
 
 ## Worked example
 
@@ -214,6 +220,7 @@ Each gap is handled in the facade; the generator would need the named feature to
 | `sab:valuePath` is a predicate IRI or an RDF list; `sab:option` is an RDF list. | `src/lists.ts` via `@rdfjs/wrapper` `RdfList`. | `rdf:List` field projection, and `sh:or` of IRI and list. |
 | `CsrfSource` is a discriminated union (`sh:xone` in the normative shape). | Per-kind requirements checked in `src/read.ts`; the writer emits only the kind's fields. | `sh:xone`/`sh:or` admission with discriminator-conditional requiredness. |
 | `sh:pattern "^https?://"` on string-valued URL templates and the probe URL. | Kept in the normative shapes only. | A reviewed pattern guard for string fields. |
+| Conditional payment amount/currency requiredness (`sh:or`) and the currency literal pattern on `ActionOutcome`. | Normative shapes and executor output checks; the generated profile keeps those fields optional. | Conditional admission and literal pattern guards. |
 | The shared `sabsh:LearnedActionShape` (`sh:node` from the operation and flow shapes). | Inlined into both shapes of the profile. | Flat `sh:node` conjunction. |
 | Field names `value` and `datatype` are reserved by the runtime. | Projected as `propertyValue` and `valueDatatype`. | None (a naming rule). |
 | `xsd:dateTime` projects to `Date`, so lexical forms are not kept. | Timestamps are canonicalised to `toISOString()`. | A lexical-preserving string projection for date-times. |

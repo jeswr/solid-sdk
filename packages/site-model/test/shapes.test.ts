@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import type { Quad } from "@rdfjs/types";
 import env from "@zazuko/env-node";
@@ -82,6 +83,26 @@ describe("vocabulary", () => {
 });
 
 describe("normative shapes (site-action.shacl.ttl)", () => {
+  it.each([
+    [
+      "Completed",
+      "Payment",
+      'schema:price "20.00"^^xsd:decimal; schema:priceCurrency "GBP";',
+      true,
+    ],
+    ["Completed", "Payment", "", false],
+    ["Completed", "ReversibleWrite", "", true],
+    ["Failed", "Payment", "", true],
+    ["Pending", "Payment", "", false],
+    ["Completed", "Read", "", false],
+    ["Completed", "Payment", 'schema:price "-1"^^xsd:decimal; schema:priceCurrency "GBP";', false],
+  ])("validates %s %s execution receipts", async (status, effect, money, conforms) => {
+    const quads =
+      parse(`@prefix sab: <${SAB}>. @prefix schema: <https://schema.org/>. @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+      [] a sab:ActionOutcome; sab:status sab:${status}; sab:effect sab:${effect}; sab:target "Buy a product"; ${money} schema:result <https://shop.test/orders/42>.`);
+    expect((await validate(quads)).conforms).toBe(conforms);
+  });
+
   it("a written site model conforms", async () => {
     const quads = parse(await writeSiteModel(model));
     const report = await validate(quads);

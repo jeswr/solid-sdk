@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 export { claudeCliPlanner, codexCliPlanner } from "./cli.js";
 export {
   PLANNER_SYSTEM,
@@ -24,6 +25,7 @@ export type {
   PlannerOutput,
   RunTaskOptions,
   TaskExecutor,
+  TaskStatus,
   TaskTrace,
   TraceStep,
 } from "./types.js";

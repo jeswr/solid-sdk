@@ -11,6 +11,7 @@
 // - results and errors never carry cookies, session headers or CSRF tokens.
 
 import type {
+  ActionOutcome,
   ActionRequest,
   EffectClass,
   Flow,
@@ -63,6 +64,7 @@ import {
   resolvedMoney,
 } from "./money.js";
 import { describeUrl, guardUrl, OriginError, siteOrigin } from "./origin.js";
+import { outcomeTurtle } from "./outcome.js";
 import { secretRedactor } from "./secrets.js";
 import { UriTemplateError } from "./uri-template.js";
 import { BindingError, expandIri, idFromIri, isClassRange } from "./values.js";
@@ -90,6 +92,8 @@ export type ErrorKind =
 export interface ExecutionResult {
   status: ExecutionStatus;
   target?: Target;
+  /** Executor-authored receipt; also the first observation for terminal writes. */
+  outcome?: ActionOutcome;
   observations: Observation[];
   approval?: ApprovalRequest;
   error?: string;
@@ -198,6 +202,7 @@ interface Response0 {
   status: number;
   url: URL;
   body: string;
+  createdLocation?: string;
 }
 
 function describeRule(rule: NonNullable<Operation["csrf"]>[number]): string {
@@ -257,6 +262,7 @@ interface ObservationRecord {
   status: number;
   url: string;
   output?: ExtractOutput;
+  createdLocation?: string;
 }
 interface Progress {
   index: number;
@@ -267,6 +273,7 @@ interface Progress {
   spent: string;
   writes: MoneyWrite[];
   currency?: string;
+  authorizedMoney?: { amount?: string; currency?: string };
 }
 interface Pending {
   key: string;
@@ -381,6 +388,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     let currentMethod = method;
     let currentBody = body;
     const currentHeaders = { ...headers };
+    let createdLocation: string | undefined;
     for (let redirects = 0; ; redirects++) {
       checkDeadline(ctx);
       if (ctx.requests >= maxRequests)
@@ -423,6 +431,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
           throw new OriginError("redirect Location is not a valid URL");
         }
         next = guardUrl(next.href, origin);
+        if (res.status === 303 && currentMethod !== "GET") createdLocation = next.href;
         if (currentMethod !== "GET" && (res.status === 307 || res.status === 308)) {
           throw new HttpError(
             `${currentMethod} ${describeUrl(url)} answered ${res.status}; a redirect that re-sends the body is not followed`,
@@ -438,7 +447,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
         url = next;
         continue;
       }
-      return { status: res.status, url, body: await readBody(ctx, res) };
+      return {
+        status: res.status,
+        url,
+        body: await readBody(ctx, res),
+        ...(createdLocation ? { createdLocation } : {}),
+      };
     }
   }
 
@@ -535,6 +549,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
           operation: operation.id,
           status: res.status,
           url: res.url.href,
+          ...(res.createdLocation ? { createdLocation: res.createdLocation } : {}),
         },
         items: [],
       };
@@ -548,6 +563,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         operation: operation.id,
         status: res.status,
         url: res.url.href,
+        ...(res.createdLocation ? { createdLocation: res.createdLocation } : {}),
         output: out,
       },
       items: out.items,
@@ -677,6 +693,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       deadline: performance.now() + maxExecutionMs,
     };
     let target: Target | undefined;
+    let effect: EffectClass = "read";
     let progress: Progress = {
       index: 0,
       observations: [],
@@ -698,19 +715,66 @@ export function createExecutor(options: ExecutorOptions): Executor {
     const finish = async (
       result: Omit<ExecutionResult, "observations" | "requests">,
     ): Promise<ExecutionResult> => {
+      const redact = redactWith(ctx);
+      const receipt = (status: ActionOutcome["status"]): ActionOutcome | undefined => {
+        if (!target || effect === "read") return undefined;
+        const money =
+          status === "completed" && progress.currency !== undefined
+            ? { amount: progress.spent, currency: progress.currency }
+            : progress.authorizedMoney;
+        const last = progress.observations.at(-1);
+        const candidate = last?.output?.items[0]?.iri ?? last?.createdLocation;
+        let resultIri: string | undefined;
+        if (status === "completed" && candidate && redact(candidate) === candidate) {
+          const url = new URL(candidate);
+          // Never promote an off-origin identity, query string or secret to a receipt.
+          if (url.origin === origin && !url.search && !url.hash && !url.username && !url.password)
+            resultIri = url.href;
+        }
+        return {
+          status,
+          target: redact(target.label),
+          effect,
+          ...(money?.amount !== undefined && redact(money.amount) === money.amount
+            ? { amount: money.amount }
+            : {}),
+          ...(money?.currency !== undefined && redact(money.currency) === money.currency
+            ? { currency: money.currency }
+            : {}),
+          ...(resultIri ? { result: resultIri } : {}),
+        };
+      };
+      const outcome = ["done", "error", "refused", "denied"].includes(result.status)
+        ? receipt(result.status === "done" ? "completed" : "failed")
+        : undefined;
+      const withOutcome = (observations: Observation[], outcome?: ActionOutcome): Observation[] =>
+        outcome && target
+          ? [
+              {
+                operation: target.id,
+                status: progress.observations.at(-1)?.status ?? 0,
+                turtle: outcomeTurtle(outcome, observations.at(-1)?.turtle),
+                itemCount: outcome.result ? 1 : 0,
+              },
+              ...observations,
+            ]
+          : observations;
       try {
         return {
           ...result,
           ...(target ? { target } : {}),
-          observations: await observations(),
+          ...(outcome ? { outcome } : {}),
+          observations: withOutcome(await observations(), outcome),
           requests: ctx.requests,
           ...(result.error ? { error: redactWith(ctx)(result.error) } : {}),
         };
       } catch {
+        const failed = receipt("failed");
         return {
           status: "error",
           ...(target ? { target } : {}),
-          observations: [],
+          ...(failed ? { outcome: failed } : {}),
+          observations: withOutcome([], failed),
           requests: ctx.requests,
           error: "observation output limit exceeded",
           errorKind: "extraction",
@@ -734,6 +798,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       const { flow, operation, inputs } = match;
       target = match.target;
       const steps = flow ? flowOperations(flow) : [operation as Operation];
+      effect = effectiveEffect(model, flow, operation, steps);
       const claims = moneyFields(request);
       const key = approvalDigest({
         site: origin,
@@ -1032,6 +1097,14 @@ export function createExecutor(options: ExecutorOptions): Executor {
             });
           claimed = undefined;
           pending = undefined;
+          if (normaliseEffect(op.effect) !== "read")
+            progress.authorizedMoney = {
+              ...progress.authorizedMoney,
+              ...(authorizedMoney.amount !== undefined ? { amount: authorizedMoney.amount } : {}),
+              ...(authorizedMoney.currency !== undefined
+                ? { currency: authorizedMoney.currency }
+                : {}),
+            };
           const out = await runOperation(ctx, op, resolved, compiled);
           checkDeadline(ctx);
           progress.observations.push(out.observation);

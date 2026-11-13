@@ -8,14 +8,12 @@
 @prefix skos: <http://www.w3.org/2004/02/skos/core#>.
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
 
-shapes:0050525b47a15c443482c07469d6c206777b6dd2493432c82aa78c7fb1c41149-n14 rdf:first "crawl";
-    rdf:rest shapes:e1a0e2a7d904b0fdb309d2af9b92c1648df4c96fd6a5bc08ae4816225646b5f7-n30.
-shapes:012da97569373d3a8e648ee63731e2fbe3939635ed464606616189d3d1434170-n8 rdf:first "demonstration";
-    rdf:rest shapes:96457dbfaaf041106a4fed7f0d2b5f9755f4392a090a249ec76ea5525c670986-n20.
-shapes:026c1f2dd0ee67d3b12fcb52724609aadce21d8e9bb2e2b390df0c46905c517e-n13 rdf:first sab:Payment;
+shapes:088c4fdb77fc50ed3d0748d57ad968c02dcf20ccf833d89517077e9a77f4e881-n34 rdf:first sab:Payment;
     rdf:rest rdf:nil.
-shapes:029525f429d2711d438b5d358d064019f2b5d6c1035acbe9d418711dd2d44b40-n27 rdf:first "multipart/form-data";
-    rdf:rest rdf:nil.
+shapes:0b25ebce450081847f689945584804ad8d3022c468a040bce8068c56c4675825-ActionOutcome-priceCurrency sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "currency";
+    sh:path schema:priceCurrency.
 shapes:0dc093a8505aad28f90754450d53905ee79fe3cd89d7ccd9ab24eb3fa863009e-Extraction-idField sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "idField";
@@ -23,23 +21,25 @@ shapes:0dc093a8505aad28f90754450d53905ee79fe3cd89d7ccd9ab24eb3fa863009e-Extracti
 shapes:0e230623afe19b2c5df6993a4d2f7966650415f8d7375685e16de77969e8a1e9-CsrfSourceShape a sh:NodeShape;
     sh:property shapes:3f8334012ff03a8d0d8d93c7ac1ab88356120d717d65b1b6390db59f0b4d7560-CsrfSource-name, shapes:48cc1ee3addabb09a5b288d3759c21abde42d2f5b0988bbe177e36be41158564-CsrfSource-pointer, shapes:60082839dde207825d3e900fdad5e4e146d9c16ad2ec7e70badf6b6ba9b89870-CsrfSource-selector, shapes:899ec3a101668a3ac572d861e9860effb9fc427d8a097b135db4b5e81b76f314-CsrfSource-sourceKind, shapes:9f5ded86ac78250c4eddae11e7c67fa77bec398427d91e64045d9b62f7029c47-CsrfSource-attribute, shapes:ec48893734595299d91a5ea3f2136d92efa9f45ea2e636fcbb23b70a3c97ecc0-CsrfSource-urlTemplate;
     sh:targetClass sab:CsrfSource.
-shapes:0fd12d10733f9f068ff1e87dd4332ec279efdbbf5bc256f2e63b440f89c7e31a-n40 rdf:first "POST";
-    rdf:rest shapes:7a7ff2ba5a451479e1b01cabb1e79e3735174873eb7b1ff125de8976aac438d1-n10.
 shapes:14623cb80b053f177a7a8905386a43987afd92f0f879fc50ae64791515dd9fc3-EntryPoint-urlTemplate sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "urlTemplate";
     sh:path schema:urlTemplate.
+shapes:15119734f8971f8ec7179f191b89fa39bede83329abc18f8eb99d6fd6d86c9a2-n46 rdf:first "html";
+    rdf:rest rdf:nil.
 shapes:160a25b9f16f8677fa877190f6e67aaf83c97f79a4efadea07f9ba222e6ed5f5-RefreshRule-urlTemplate sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "urlTemplate";
     sh:path schema:urlTemplate.
+shapes:18862581f1b9c99948c01e0416af9437f7ddfb3bcc9eb8d29f826148af08142e-n5 rdf:first "PATCH";
+    rdf:rest shapes:939a4a6f121a320e975ff7e3d3f1c40fdc0a6924787e0595dbd3d48b7172c34e-n21.
 shapes:1b1ba4bed1d7ee0def24c8111f05c07f7cae05529fcb1b271e0d1c3b3cc194e7-Flow-wasDerivedFrom sh:name "derivedFrom";
     sh:nodeKind sh:IRI;
     sh:path prov:wasDerivedFrom.
-shapes:1cbdae0c01bc7bafefe0da6acf53d7ecb2930f6108fc44a914c983bcc8e1cbe6-n39 rdf:first sab:IrreversibleWrite;
-    rdf:rest shapes:6603759b3005ca350b0a1919f891a64bd1e6157d28d9087c6bb074c3dbd1e8ec-n18.
+shapes:1de4750d26d04aaf2523f5bdf54a1fcb280de6206b18f484475ff8ae5d2f2c1a-n3 rdf:first sab:Completed;
+    rdf:rest shapes:5833d7b9db425f25de88ac9559a6edbb843b091f80aeb53be16939b40a8f6543-n7.
 shapes:1e1d1adcf0cc9e4c85c63551ff215d5f2211dd1a7336aa66fe3c7c0608f320e2-FieldRule-selectorPath sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
@@ -55,24 +55,26 @@ shapes:21782d873c09d37d7cd0986211a8bff936c32833cf3933092b3d1aaf1ebb4c99-Paramete
     sh:name "range";
     sh:nodeKind sh:IRI;
     sh:path sab:range.
-shapes:228b752a67c45be716d2cba954348b86efb4e5afdad63d18b54319c74d599183-n31 rdf:first "form";
-    rdf:rest shapes:75793caf3ab3493e1ab7bf783b9cc1e03482f4acd609b30bfe2b482961518d4b-n16.
-shapes:22c28de0dbee2a0d5fd18f83334851ba0cdfe9d75eed1042df71b988a52a8f15-n35 rdf:first "form";
-    rdf:rest shapes:3c9973253ce9a3ea6f065e91f667bf937f29a6f7776ef4ace8a78d7cd8f206be-n15.
+shapes:21d5bd29a1fbdd9d5e1be4c13371ce91cb50088e5a49424b91efaa6a79c4ae8d-n10 rdf:first "crawl";
+    rdf:rest shapes:62b445de4c4c3581dccebb2970d14ac4bcf5493154d98d2d15b10ccf8f341ffd-n42.
 shapes:23705421b6b0a4f28d2e54b29d6853ce9f9753cc2fc5752bd01b9eb4c32226c7-Operation-csrfRule sh:name "csrf";
     sh:nodeKind sh:IRI;
     sh:path sab:csrfRule.
-shapes:24c67211e340d25ccf366c1109a2ab037580d67991bf115a077831fce7cf0ee9-n17 rdf:first "html";
-    rdf:rest rdf:nil.
-shapes:254870361d5ef7eaf944613faa89f544a587be3f09908b9616f55b9d52de517b-n2 rdf:first "DELETE";
-    rdf:rest rdf:nil.
-shapes:25bd565317098edb56b8c6db02fb2a33390518a78ec25c68f2f1dbe03a334778-n36 rdf:first "header";
-    rdf:rest shapes:dd3c52901ae19833fbc5ff0c9f9c89d1efb0e74cfff8d3a8b592fadf0255a183-n24.
+shapes:25383b62895feebfaec4901938235abd6dc80174c14100e4cfb81c5fdf465197-ActionOutcome-effect sh:in shapes:d01e8f5a5ca2f85ec680411cefd25a44f9d9bafbdda501aed1973d5251b85ddd-n48;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "effect";
+    sh:nodeKind sh:IRI;
+    sh:path sab:effect.
+shapes:259fc266e10c7f1bd2257812b927ac1c3411379c40bc9789fb7cb5ea46582d5c-n4 rdf:first sab:IrreversibleWrite;
+    rdf:rest shapes:631b0eb6d51428023a1ed13643e09303745aa1c1bab9788a2e51835302ba1b24-n30.
 shapes:25ef1a869647ee98896913dcd0c7234d1440f5e789df14db3ef6f8d21ebea472-SiteModel-url sh:maxCount 1;
     sh:minCount 1;
     sh:name "site";
     sh:nodeKind sh:IRI;
     sh:path schema:url.
+shapes:2976f9c21d8a6274a5998c4a289aa7b79814c0b9050140435d95497be28c7ffd-n12 rdf:first sab:ReversibleWrite;
+    rdf:rest shapes:90cf7cbe929ed7d1abaaf84dc8d43979f73bedd568f844965147704901d82cc8-n28.
 shapes:29f13f78944fc7de00582c498580b61ce70498774bd7e725a1524b1148550e1f-Operation-actionType sh:maxCount 1;
     sh:minCount 1;
     sh:name "actionType";
@@ -83,9 +85,15 @@ shapes:2af815cfbaae44f7cc7c6296603381760d12e4d3b4bd01ecd128b8d2d038fe5b-FieldRul
     sh:name "property";
     sh:nodeKind sh:IRI;
     sh:path sab:fieldProperty.
+shapes:2c60e4d94fa71772b008df055cbfc2175e5f04e597566f1be94ff8b5be14862d-n44 rdf:first "body";
+    rdf:rest shapes:d31848805b12c88ace94002c73ffefbb014785e700633d9c932b6f348e904df5-n41.
 shapes:2e318e405019551ff7252479380c7ab9dab5fa81ad7118aaf4677b57c8313a2b-Operation-input sh:name "inputs";
     sh:nodeKind sh:IRI;
     sh:path sab:input.
+shapes:306b2547ebd77f660877c9efd08c6045da9b08a28a960507a6d70534ace68316-n19 rdf:first sab:Read;
+    rdf:rest shapes:2976f9c21d8a6274a5998c4a289aa7b79814c0b9050140435d95497be28c7ffd-n12.
+shapes:31f9f001082c059a86c09d905b6002f1b8ee5f58d580fcd1dcde7a3c1884a8af-n18 rdf:first "meta";
+    rdf:rest rdf:nil.
 shapes:33c651d9aa2c629d9733255aa59fd9c8d012dc320962c260c7f71a8db907d1e9-FieldRule-untrusted sh:datatype xsd:boolean;
     sh:maxCount 1;
     sh:name "untrusted";
@@ -95,6 +103,8 @@ shapes:34a22143b98e2631cd4df9545c8e031aabc3e0808fe950f07bab5c1b4095b876-Flow-nam
     sh:minCount 1;
     sh:name "label";
     sh:path schema:name.
+shapes:35683e84ee36030744caf0bcca0ecbfc3048f89b50ec9ca33d625f437535da41-n27 rdf:first "json";
+    rdf:rest shapes:31f9f001082c059a86c09d905b6002f1b8ee5f58d580fcd1dcde7a3c1884a8af-n18.
 shapes:36012a086ffd9f2ebe3abe6ff919d53c1e12ea44db73926843784973a39729fc-CsrfRule-csrfTarget sh:maxCount 1;
     sh:minCount 1;
     sh:name "target";
@@ -103,12 +113,14 @@ shapes:36012a086ffd9f2ebe3abe6ff919d53c1e12ea44db73926843784973a39729fc-CsrfRule
 shapes:37319d54de4ed6cd1716c3127937bbcf9b717b2097c9c635ce58e8364dfad352-LoginRoute-sessionCookie sh:datatype xsd:string;
     sh:name "sessionCookies";
     sh:path sab:sessionCookie.
-shapes:3c9973253ce9a3ea6f065e91f667bf937f29a6f7776ef4ace8a78d7cd8f206be-n15 rdf:first "header";
-    rdf:rest rdf:nil.
+shapes:389b02ec0de4f315fa5d52aad9403d3f48996163013560d4274c594a29c14770-n38 rdf:first "demonstration";
+    rdf:rest shapes:f5d3623dc53ccadc7d1087c6901bcd28c1912342728c82a7ada427b72383230b-n39.
 shapes:3d077694a5187fe7ae01f94beb8b0425665299360ae646463ac58fe8645ee9cc-Operation-lastVerified sh:datatype xsd:dateTime;
     sh:maxCount 1;
     sh:name "lastVerified";
     sh:path sab:lastVerified.
+shapes:3e0795422b2561848ee95e3e095a2d8a302f0314eef923224563d567a540195d-n22 rdf:first "query";
+    rdf:rest rdf:nil.
 shapes:3e3b0870f614d35f3291f865996a862dbc71959f6fe2453f67760bfae5d7b5fd-Parameter-description sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "description";
@@ -117,6 +129,11 @@ shapes:3f8334012ff03a8d0d8d93c7ac1ab88356120d717d65b1b6390db59f0b4d7560-CsrfSour
     sh:maxCount 1;
     sh:name "name";
     sh:path schema:name.
+shapes:3f9aade3a161e8a646b6249c9d06543c3c8ac06bf8d1afa4174220b5c59e88a2-ActionOutcome-result sh:maxCount 1;
+    sh:name "result";
+    sh:nodeKind sh:IRI;
+    sh:path schema:result;
+    sh:pattern "^https?://".
 shapes:413b493de38d4a932e385b5b5db47d5d00ae9732a61fd3184ac2d4799ae57688-Flow-step sh:name "steps";
     sh:nodeKind sh:IRI;
     sh:path sab:step.
@@ -136,37 +153,53 @@ shapes:48cc1ee3addabb09a5b288d3759c21abde42d2f5b0988bbe177e36be41158564-CsrfSour
     sh:maxCount 1;
     sh:name "pointer";
     sh:path sab:pointer.
+shapes:48d8838e84382c55ffa1fbac3d1ad6ee2660de88c9818fa41149490bb0860c84-n33 rdf:first "POST";
+    rdf:rest shapes:f4480562cc717ca7a54b4e49b3482d15768c60c0efd7589631d9625c5505cf42-n43.
 shapes:49e812e82504929ab1735f5ff13fe8c601816ab04912566d1567ed4b66951082-Operation-position sh:datatype xsd:integer;
     sh:maxCount 1;
     sh:minInclusive 0;
     sh:name "position";
     sh:path schema:position.
-shapes:4b2a6cfaaae5ea10834198ff4d227ec0fd5334fb5cbd173ed450413cf609cd82-n4 rdf:first sab:SignedIn;
-    rdf:rest rdf:nil.
-shapes:4c80b9aea5dc43c53eeb1b0dc75237873996b47c3734d2f0896e6c07f6cc0613-n1 rdf:first "cookie";
-    rdf:rest shapes:c6da410187401cd993de6abf75e2b438734fae17bb58cb2059c965b1b2250e1d-n28.
-shapes:51353ba14a06292e94e42b2d86fbaea93e66b212818353200555d17bcd2c4c00-n32 rdf:first sab:Read;
-    rdf:rest shapes:7fb3b822cedb469e028919ddacf1a877edde4befc2b452cf7c5151c584e6808a-n3.
+shapes:4bce726955d74d3066feaed5ac2664a5a34dfeed8cf0aae2eb33f83c71b87535-n47 rdf:first "js-analysis";
+    rdf:rest shapes:389b02ec0de4f315fa5d52aad9403d3f48996163013560d4274c594a29c14770-n38.
+shapes:4e5c13c73c5ca339a71643062933be2a5da79570abf8260294ef158e19b3c130-n25 rdf:first "json";
+    rdf:rest shapes:15119734f8971f8ec7179f191b89fa39bede83329abc18f8eb99d6fd6d86c9a2-n46.
+shapes:52e6ad26291918c9016aa87dcd2ed469f958caca6123ca03cc00aa808c94fb6e-ActionOutcome-target sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "target";
+    sh:path sab:target.
+shapes:531c127a739a90a8f191c58d62ee25566d1e13bd798fa9bcdd447e341561fc4c-n2 rdf:first "html";
+    rdf:rest shapes:35683e84ee36030744caf0bcca0ecbfc3048f89b50ec9ca33d625f437535da41-n27.
+shapes:532999f6a3961c6a503bd9783d1e4218e745b2e079fdf0212621f6f700db0aa1-n37 rdf:first "demonstration";
+    rdf:rest shapes:e077dfda53cb9dc109736256174305a2d57faba74040c1ac729c3d7f879f8250-n24.
+shapes:538a06ade0c61b744b8ff169dec48fb42e9b468b4ac2de54bbfe71c7ad632f97-n32 rdf:first "GET";
+    rdf:rest shapes:48d8838e84382c55ffa1fbac3d1ad6ee2660de88c9818fa41149490bb0860c84-n33.
 shapes:549f3bb915b52ba930af6824eee319d8286968f6870b79065a71142a8e36fbe7-FlowStepShape a sh:NodeShape;
     sh:property shapes:989bc161dafc37e03a691b4b8e372e4e286ff2c979052b32197fa2cc936a505b-FlowStep-position, shapes:a407ff67defa1187d85a3863b33a03736129c34b59391f6a80ace9049b196d60-FlowStep-operation, shapes:f24d40465ba32c04999c7f498f9a5970b14586d90d909f672fe54614d3fe8871-FlowStep-binding;
     sh:targetClass sab:FlowStep.
+shapes:5833d7b9db425f25de88ac9559a6edbb843b091f80aeb53be16939b40a8f6543-n7 rdf:first sab:Failed;
+    rdf:rest rdf:nil.
 shapes:59d5d084c77c506c4ddbb128fe00826e55fe80971dcee69d848fdeb54c5c1418-Parameter-valueName sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "name";
     sh:path schema:valueName.
-shapes:5a2940221465cd6dc0c26050e9c1db6cf26afa4a93aafcf06d539c377e5b08d6-n37 rdf:first "path";
-    rdf:rest shapes:991adbaeb7a01aee772e89de6b1cdae6364552b69f6dd388e5dcf648a07e3802-n41.
 shapes:5ae8086c975d6d17f833720d745d20888d29b480445dd671ff93ba6df783fdd0-LoginRoute-probeUrl sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "probeUrl";
     sh:path sab:probeUrl.
+shapes:5c8e0595800ddba416ad62eee0891cddb6a92ec29d60a6713c921d40b9ef5ee2-ActionOutcome-price sh:datatype xsd:decimal;
+    sh:maxCount 1;
+    sh:minInclusive 0;
+    sh:name "amount";
+    sh:path schema:price.
 shapes:5ddc6882de3034c922bfe4b8774394d962542b2f6ef5a28d99c1b0595b214253-Flow-description sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "description";
     sh:path schema:description.
 shapes:5f12ac81bbb2b6f127343a0f0ce5782383ffba64558b018da7c1cd08c70c44d5-EntryPoint-httpMethod sh:datatype xsd:string;
-    sh:in shapes:dad96d9afa63f40edd67b51a1e2922fb0608531b5bdd632431e4b436ff03d4f2-n7;
+    sh:in shapes:538a06ade0c61b744b8ff169dec48fb42e9b468b4ac2de54bbfe71c7ad632f97-n32;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "method";
@@ -175,25 +208,29 @@ shapes:60082839dde207825d3e900fdad5e4e146d9c16ad2ec7e70badf6b6ba9b89870-CsrfSour
     sh:maxCount 1;
     sh:name "selector";
     sh:path sab:selector.
-shapes:6603759b3005ca350b0a1919f891a64bd1e6157d28d9087c6bb074c3dbd1e8ec-n18 rdf:first sab:Payment;
+shapes:62b445de4c4c3581dccebb2970d14ac4bcf5493154d98d2d15b10ccf8f341ffd-n42 rdf:first "form";
+    rdf:rest shapes:7d6fb24c5bf83330b14071dd6eedf4ed8e8e5477ae09b07b46fa36044b4a191f-n6.
+shapes:631b0eb6d51428023a1ed13643e09303745aa1c1bab9788a2e51835302ba1b24-n30 rdf:first sab:Payment;
     rdf:rest rdf:nil.
 shapes:6672a74c5f668ef4d92f7b0a17da6d66dfefc9c869fb9701bdee59dffa582850-PropertyValue-value sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "propertyValue";
     sh:path schema:value.
-shapes:66e1ccf44bc0e77e59c108010c792b0825010c2115e314beaa276f57b590a779-n11 rdf:first "PATCH";
-    rdf:rest shapes:254870361d5ef7eaf944613faa89f544a587be3f09908b9616f55b9d52de517b-n2.
-shapes:692681f82a488ee07ca7d1cada1ba504870b678f8a6c4549bc5ad782c75d1c9f-n9 rdf:first "body";
-    rdf:rest shapes:22c28de0dbee2a0d5fd18f83334851ba0cdfe9d75eed1042df71b988a52a8f15-n35.
-shapes:71200f800ce1beb203bcd7b640352ac87c21caca449e3e29606f229e11a21a2a-n34 rdf:first "json";
-    rdf:rest shapes:24c67211e340d25ccf366c1109a2ab037580d67991bf115a077831fce7cf0ee9-n17.
+shapes:66f787442e28839615a3764e67c832d909ff0259b84aa54f7bbe12b257f79bb0-n13 rdf:first "manual";
+    rdf:rest rdf:nil.
+shapes:6793f5e0faf1576781a0b0685ad2ee8b059e6f7358d0326acaff2bcf8f502315-n20 rdf:first sab:ReversibleWrite;
+    rdf:rest shapes:896728860293daeb7e9dca4478113ee08436b0cf81386d270ec299af935b47ec-n11.
+shapes:6c219afcb8ddbe9c554c5391743bd922eafab6bf648ab6f0a1e2b5397a8362ab-ActionOutcome-status sh:in shapes:1de4750d26d04aaf2523f5bdf54a1fcb280de6206b18f484475ff8ae5d2f2c1a-n3;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "status";
+    sh:nodeKind sh:IRI;
+    sh:path sab:status.
 shapes:73f9cb075c0d98c052eb5ef40809577944a4de0653ce86cfdb3dd318d883b2a8-EntryPoint-bodyTemplate sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "bodyTemplate";
     sh:path sab:bodyTemplate.
-shapes:75793caf3ab3493e1ab7bf783b9cc1e03482f4acd609b30bfe2b482961518d4b-n16 rdf:first "js-analysis";
-    rdf:rest shapes:012da97569373d3a8e648ee63731e2fbe3939635ed464606616189d3d1434170-n8.
 shapes:7716c8304774eab5ef578fe419f2c8f69ece376e0623528c1c8a03c0ad6ee2e4-FieldRule-position sh:datatype xsd:integer;
     sh:maxCount 1;
     sh:minInclusive 0;
@@ -206,33 +243,29 @@ shapes:79f2c392cb84e10962fc96d67e48cde7b2245145d3bddd37a4e00673381038c4-Paramete
     sh:maxCount 1;
     sh:name "example";
     sh:path skos:example.
-shapes:7a7ff2ba5a451479e1b01cabb1e79e3735174873eb7b1ff125de8976aac438d1-n10 rdf:first "PUT";
-    rdf:rest shapes:66e1ccf44bc0e77e59c108010c792b0825010c2115e314beaa276f57b590a779-n11.
+shapes:7b70fe4e4d411ad8b63ede0de6a29c7aff295fbb63a83380b75ba4b114f06350-n16 rdf:first "path";
+    rdf:rest shapes:ac1db268299bf8bd80b782ecb417d660f42194d7b490b7aebb3d5e392e43ea6a-n14.
 shapes:7bafbf82e7564414ffe754c747a8d4ac64d92e574bf27b6628968d17ff16e683-Operation-attempts sh:datatype xsd:nonNegativeInteger;
     sh:maxCount 1;
     sh:name "attempts";
     sh:path sab:attempts.
 shapes:7bfb1257487377e1f3aad0195683458d569015c029e7c5742c51a70f3f756485-EntryPoint-contentType sh:datatype xsd:string;
-    sh:in shapes:99ba0bf206a4908cb2514bf0ba7c7ec2c0e41d6da17220749c6a786a9b1dffc3-n19;
+    sh:in shapes:d8d6a29416897f994d267f9ec8e59ce8d7580b5676ce92cf9ccb1ac3ee9839e4-n1;
     sh:maxCount 1;
     sh:name "contentType";
     sh:path schema:contentType.
-shapes:7d31e76b7feb876005c333346a8fb9ba6dfe66514f4093c43c22c1c369340c4b-n23 rdf:first "manual";
-    rdf:rest rdf:nil.
-shapes:7d9640a403c87dd8aadbb915205eae080ba723dd5347b368650b54764dbf6689-n22 rdf:first "demonstration";
-    rdf:rest shapes:b77d9b59f6a65528247b6aa2205c47d2ac1d390611c5663b2661e98ab256c8c3-n6.
+shapes:7d6fb24c5bf83330b14071dd6eedf4ed8e8e5477ae09b07b46fa36044b4a191f-n6 rdf:first "js-analysis";
+    rdf:rest shapes:532999f6a3961c6a503bd9783d1e4218e745b2e079fdf0212621f6f700db0aa1-n37.
 shapes:7e16ecc1822518b041dc187d60caf952ba07a205b6c254c591ae1dd0a14f88d2-FieldRuleShape a sh:NodeShape;
     sh:property shapes:1e1d1adcf0cc9e4c85c63551ff215d5f2211dd1a7336aa66fe3c7c0608f320e2-FieldRule-selectorPath, shapes:2af815cfbaae44f7cc7c6296603381760d12e4d3b4bd01ecd128b8d2d038fe5b-FieldRule-fieldProperty, shapes:33c651d9aa2c629d9733255aa59fd9c8d012dc320962c260c7f71a8db907d1e9-FieldRule-untrusted, shapes:7716c8304774eab5ef578fe419f2c8f69ece376e0623528c1c8a03c0ad6ee2e4-FieldRule-position, shapes:cb47d15592c550d3322fbd9c2a277e97a7b9e2d0d4f46898369f92f7acfe4a58-FieldRule-valueDatatype, shapes:f854fb2504ef1e8d4d81a1db16ac1a5af3f431f6a8040fd76a9826d3222bd996-FieldRule-attribute;
     sh:targetClass sab:FieldRule.
-shapes:7fb3b822cedb469e028919ddacf1a877edde4befc2b452cf7c5151c584e6808a-n3 rdf:first sab:ReversibleWrite;
-    rdf:rest shapes:1cbdae0c01bc7bafefe0da6acf53d7ecb2930f6108fc44a914c983bcc8e1cbe6-n39.
 shapes:81641faf9d44de386039e96a53effd62344323fe32d0d83f38aebb39584b3b13-Extraction-format sh:datatype xsd:string;
-    sh:in shapes:71200f800ce1beb203bcd7b640352ac87c21caca449e3e29606f229e11a21a2a-n34;
+    sh:in shapes:4e5c13c73c5ca339a71643062933be2a5da79570abf8260294ef158e19b3c130-n25;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "format";
     sh:path sab:format.
-shapes:83d3fdd993b74a54a28fc3bf9fa43203cd84a4e11b844a69e2078748ea6cda57-Flow-effect sh:in shapes:c4fade120b0a665ce1bb543bb174375485ee98658f656271e25587d063d2836d-n21;
+shapes:83d3fdd993b74a54a28fc3bf9fa43203cd84a4e11b844a69e2078748ea6cda57-Flow-effect sh:in shapes:c46ac1e453511485a8678774f73808efe0ec8f61653f138df8defe84875f7f04-n35;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "effect";
@@ -251,28 +284,28 @@ shapes:8654f7dc16b6cedff9fa6a7c229e55ad689fc82dae89f55a7a6f35c784b08ef5-LoginRou
 shapes:8916768f22395f84ba744a9b8f6b03b15fa73e4a7246253893a413217d2d32c1-ParameterShape a sh:NodeShape;
     sh:property shapes:21782d873c09d37d7cd0986211a8bff936c32833cf3933092b3d1aaf1ebb4c99-Parameter-range, shapes:3e3b0870f614d35f3291f865996a862dbc71959f6fe2453f67760bfae5d7b5fd-Parameter-description, shapes:480bb46188cfa0482d9005bddfa5916fd6a17bd76a2257abef1cb92c8e3ce60b-Parameter-defaultValue, shapes:59d5d084c77c506c4ddbb128fe00826e55fe80971dcee69d848fdeb54c5c1418-Parameter-valueName, shapes:79f2c392cb84e10962fc96d67e48cde7b2245145d3bddd37a4e00673381038c4-Parameter-example, shapes:85a5ab106d8e516e289a8959701d02175c22bccaf040f74e3e9db2353547e658-Parameter-valueRequired, shapes:9a5f3f531b323e523e736958416dddfa6eccf8b63049e2a7247f2ddeea98a309-Parameter-position, shapes:f93cc3951361b6441486393f0b073abc2f1b7999ddee917fce258152587f18c9-Parameter-location;
     sh:targetClass sab:Parameter.
+shapes:896728860293daeb7e9dca4478113ee08436b0cf81386d270ec299af935b47ec-n11 rdf:first sab:IrreversibleWrite;
+    rdf:rest shapes:b36ca372cb44e882f5dacd7ff65d14bb85ab3a65be272b45e5c1836385e34c09-n45.
 shapes:899ec3a101668a3ac572d861e9860effb9fc427d8a097b135db4b5e81b76f314-CsrfSource-sourceKind sh:datatype xsd:string;
-    sh:in shapes:4c80b9aea5dc43c53eeb1b0dc75237873996b47c3734d2f0896e6c07f6cc0613-n1;
+    sh:in shapes:e48420a442eaff681713243356a2183c0f3b51620037b616324d63d993d3e5a5-n36;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "kind";
     sh:path sab:sourceKind.
-shapes:9034673bd6a9ae8215a5ce026a875a106585de086766ec26fccc6b04ba8d8cbd-n33 rdf:first sab:NoSession;
-    rdf:rest shapes:4b2a6cfaaae5ea10834198ff4d227ec0fd5334fb5cbd173ed450413cf609cd82-n4.
+shapes:90cf7cbe929ed7d1abaaf84dc8d43979f73bedd568f844965147704901d82cc8-n28 rdf:first sab:IrreversibleWrite;
+    rdf:rest shapes:088c4fdb77fc50ed3d0748d57ad968c02dcf20ccf833d89517077e9a77f4e881-n34.
 shapes:922400dc7e44f9335055ccff4c74f295f78cffb9255d6ac38c65d2302fa09fa2-Operation-extraction sh:maxCount 1;
     sh:name "extraction";
     sh:nodeKind sh:IRI;
     sh:path sab:extraction.
-shapes:96457dbfaaf041106a4fed7f0d2b5f9755f4392a090a249ec76ea5525c670986-n20 rdf:first "fallback";
-    rdf:rest shapes:7d31e76b7feb876005c333346a8fb9ba6dfe66514f4093c43c22c1c369340c4b-n23.
+shapes:939a4a6f121a320e975ff7e3d3f1c40fdc0a6924787e0595dbd3d48b7172c34e-n21 rdf:first "DELETE";
+    rdf:rest rdf:nil.
 shapes:989bc161dafc37e03a691b4b8e372e4e286ff2c979052b32197fa2cc936a505b-FlowStep-position sh:datatype xsd:integer;
     sh:maxCount 1;
     sh:minCount 1;
     sh:minInclusive 0;
     sh:name "position";
     sh:path schema:position.
-shapes:991adbaeb7a01aee772e89de6b1cdae6364552b69f6dd388e5dcf648a07e3802-n41 rdf:first "query";
-    rdf:rest shapes:692681f82a488ee07ca7d1cada1ba504870b678f8a6c4549bc5ad782c75d1c9f-n9.
 shapes:999209e87afdea13623d9c9e15d3fc3e69fea7695982705561548d3cd2d8a6fa-Flow-confidence sh:datatype xsd:decimal;
     sh:maxCount 1;
     sh:maxInclusive 1;
@@ -280,10 +313,6 @@ shapes:999209e87afdea13623d9c9e15d3fc3e69fea7695982705561548d3cd2d8a6fa-Flow-con
     sh:minInclusive 0;
     sh:name "confidence";
     sh:path sab:confidence.
-shapes:99ba0bf206a4908cb2514bf0ba7c7ec2c0e41d6da17220749c6a786a9b1dffc3-n19 rdf:first "application/json";
-    rdf:rest shapes:d44073f32c42a78b9286fb534444449d8cebba9225bdc8f0fa713919ff2fdb75-n29.
-shapes:9a54709b74fffe6db4e2deb0c9d961f98cf24d4e1334c3984f444728da75b1cc-n25 rdf:first sab:ReversibleWrite;
-    rdf:rest shapes:b7c433c5fa4bb1052ac1eef4aa96ca901916041e2013a4fb5bdd2d266c3472bc-n5.
 shapes:9a5f3f531b323e523e736958416dddfa6eccf8b63049e2a7247f2ddeea98a309-Parameter-position sh:datatype xsd:integer;
     sh:maxCount 1;
     sh:minInclusive 0;
@@ -296,14 +325,12 @@ shapes:9bc1ec9a64c07935944d7f6783d9102bc7017204ff448b6e486d035b8fc82b74-Operatio
     sh:maxCount 1;
     sh:name "successes";
     sh:path sab:successes.
-shapes:9bec893deccfb48a6624fb708f46b1893b51db152539432f463c4850b2318938-n12 rdf:first "js-analysis";
-    rdf:rest shapes:7d9640a403c87dd8aadbb915205eae080ba723dd5347b368650b54764dbf6689-n22.
 shapes:9e8d770cc28d736e50f7b84029750f98c1e02d88e5b655b860a30601b9641b91-Flow-successes sh:datatype xsd:nonNegativeInteger;
     sh:maxCount 1;
     sh:name "successes";
     sh:path sab:successes.
 shapes:9f0e9d284b724bd91e3a49a08a1de297adc7c6cacc39c15eb29754e97ad9f1e1-Flow-learnMethod sh:datatype xsd:string;
-    sh:in shapes:a962fe4ae2d90eaf996e891ba91838d7ff9c665a9f6fcc0679f2d8237cdffda9-n43;
+    sh:in shapes:21d5bd29a1fbdd9d5e1be4c13371ce91cb50088e5a49424b91efaa6a79c4ae8d-n10;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "method";
@@ -312,23 +339,25 @@ shapes:9f5ded86ac78250c4eddae11e7c67fa77bec398427d91e64045d9b62f7029c47-CsrfSour
     sh:maxCount 1;
     sh:name "attribute";
     sh:path sab:attribute.
+shapes:9fda1c845c360b3c45aab2da6284fa971605456860241d07e886bab030acacea-n17 rdf:first "header";
+    rdf:rest shapes:eb5c8f7376383882d0974e34fa8f8207e4a4568ff3074532a072a5358467c064-n9.
+shapes:a35d63988e545256756a4455169c8a826b486481676acc6261db28818c5e7fdf-n8 rdf:first sab:NoSession;
+    rdf:rest shapes:f536c642fa40b60ed37ad1f84f1a82a771cf96f56f5b80be1f196f58a8d4e31b-n40.
+shapes:a3c80772926d87d6c6047a7a713b15c42a2620f353a4998ec72a9e2f798593fd-n0 rdf:first "crawl";
+    rdf:rest shapes:f0687b33940ecdc179eabe95500cf75d97f6f28578b776434b9e6b3e454c96cf-n26.
 shapes:a407ff67defa1187d85a3863b33a03736129c34b59391f6a80ace9049b196d60-FlowStep-operation sh:maxCount 1;
     sh:minCount 1;
     sh:name "operation";
     sh:nodeKind sh:IRI;
     sh:path sab:operation.
-shapes:a60bd854bfc74f7462deeea94e37d636400d4b5237835f1bb59284d0da86bb7f-n42 rdf:first "meta";
-    rdf:rest rdf:nil.
-shapes:a962fe4ae2d90eaf996e891ba91838d7ff9c665a9f6fcc0679f2d8237cdffda9-n43 rdf:first "crawl";
-    rdf:rest shapes:228b752a67c45be716d2cba954348b86efb4e5afdad63d18b54319c74d599183-n31.
-shapes:abe2b56fdc648f8fed5d30e6a1d5a3e5a15a9077b4152b703ea4085f6101bce1-n0 rdf:first "manual";
-    rdf:rest rdf:nil.
+shapes:ac1db268299bf8bd80b782ecb417d660f42194d7b490b7aebb3d5e392e43ea6a-n14 rdf:first "query";
+    rdf:rest shapes:2c60e4d94fa71772b008df055cbfc2175e5f04e597566f1be94ff8b5be14862d-n44.
 shapes:ac2903805b4725c470ccd2c40b05fe3d0f9fffde9c57eaf42a0638c3f54314b8-RefreshRule-tokenPointer sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "tokenPointer";
     sh:path sab:tokenPointer.
-shapes:acc03624125529911f1328fc9b58b98f37c9b5d3c5a6c8dec4958274a5c13e01-Operation-effect sh:in shapes:51353ba14a06292e94e42b2d86fbaea93e66b212818353200555d17bcd2c4c00-n32;
+shapes:acc03624125529911f1328fc9b58b98f37c9b5d3c5a6c8dec4958274a5c13e01-Operation-effect sh:in shapes:306b2547ebd77f660877c9efd08c6045da9b08a28a960507a6d70534ace68316-n19;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "effect";
@@ -341,6 +370,8 @@ shapes:ad1a62335892db145f6d6316385a1e41c5bd2adec65dda6a2e368f03fab7b2e4-LoginRou
 shapes:ae2baf193e5edfb42ee9184a031b2a1b08ab83458e1aa37f0422d345e6d77386-LoginRouteShape a sh:NodeShape;
     sh:property shapes:37319d54de4ed6cd1716c3127937bbcf9b717b2097c9c635ce58e8364dfad352-LoginRoute-sessionCookie, shapes:421364c07660093b64a74d960e58456a15ba7a9efe710bd19cc5469d195abf7b-LoginRoute-position, shapes:5ae8086c975d6d17f833720d745d20888d29b480445dd671ff93ba6df783fdd0-LoginRoute-probeUrl, shapes:8654f7dc16b6cedff9fa6a7c229e55ad689fc82dae89f55a7a6f35c784b08ef5-LoginRoute-loginMethod, shapes:ad1a62335892db145f6d6316385a1e41c5bd2adec65dda6a2e368f03fab7b2e4-LoginRoute-operation, shapes:ea85cd944f1dc5123d431b50b99d4d79910b4bff2393cb286ec92089062f919c-LoginRoute-refresh;
     sh:targetClass sab:LoginRoute.
+shapes:b36ca372cb44e882f5dacd7ff65d14bb85ab3a65be272b45e5c1836385e34c09-n45 rdf:first sab:Payment;
+    rdf:rest rdf:nil.
 shapes:b4ed9e74fad7b180b3397749c8aef1933db6c1efa499836c6b34042c00cb1fe8-Extraction-itemPath sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "itemPath";
@@ -350,12 +381,6 @@ shapes:b5b0633acce7a1bcc52a9312e03a9e72bebdc547890fbdac34d51abd1299bf3d-Operatio
     sh:minCount 1;
     sh:name "learnedAt";
     sh:path prov:generatedAtTime.
-shapes:b77d9b59f6a65528247b6aa2205c47d2ac1d390611c5663b2661e98ab256c8c3-n6 rdf:first "fallback";
-    rdf:rest shapes:abe2b56fdc648f8fed5d30e6a1d5a3e5a15a9077b4152b703ea4085f6101bce1-n0.
-shapes:b7c433c5fa4bb1052ac1eef4aa96ca901916041e2013a4fb5bdd2d266c3472bc-n5 rdf:first sab:IrreversibleWrite;
-    rdf:rest shapes:026c1f2dd0ee67d3b12fcb52724609aadce21d8e9bb2e2b390df0c46905c517e-n13.
-shapes:b8378e3299536c40d38be892349320f02ffb5ebd5ef4bc3e172da64e3be6d065-n26 rdf:first "json";
-    rdf:rest shapes:a60bd854bfc74f7462deeea94e37d636400d4b5237835f1bb59284d0da86bb7f-n42.
 shapes:b9ae3d450e941ca0334cfa2b5cbdb6898e34ad836db4129f02715053d930a324-CsrfTarget-name sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
@@ -373,24 +398,22 @@ shapes:c075800ebe5be9a9caa40aa7b4a45abde51b4509901bc1a06eca6ab94cc2970b-Operatio
     sh:minCount 1;
     sh:name "label";
     sh:path schema:name.
-shapes:c4fade120b0a665ce1bb543bb174375485ee98658f656271e25587d063d2836d-n21 rdf:first sab:Read;
-    rdf:rest shapes:9a54709b74fffe6db4e2deb0c9d961f98cf24d4e1334c3984f444728da75b1cc-n25.
+shapes:c46ac1e453511485a8678774f73808efe0ec8f61653f138df8defe84875f7f04-n35 rdf:first sab:Read;
+    rdf:rest shapes:6793f5e0faf1576781a0b0685ad2ee8b059e6f7358d0326acaff2bcf8f502315-n20.
 shapes:c54eb80b1186426007805f97bdf5c6c477b4336d5472e2feae8ea331c87d3497-OperationShape a sh:NodeShape;
     sh:property shapes:23705421b6b0a4f28d2e54b29d6853ce9f9753cc2fc5752bd01b9eb4c32226c7-Operation-csrfRule, shapes:29f13f78944fc7de00582c498580b61ce70498774bd7e725a1524b1148550e1f-Operation-actionType, shapes:2e318e405019551ff7252479380c7ab9dab5fa81ad7118aaf4677b57c8313a2b-Operation-input, shapes:3d077694a5187fe7ae01f94beb8b0425665299360ae646463ac58fe8645ee9cc-Operation-lastVerified, shapes:49e812e82504929ab1735f5ff13fe8c601816ab04912566d1567ed4b66951082-Operation-position, shapes:7bafbf82e7564414ffe754c747a8d4ac64d92e574bf27b6628968d17ff16e683-Operation-attempts, shapes:922400dc7e44f9335055ccff4c74f295f78cffb9255d6ac38c65d2302fa09fa2-Operation-extraction, shapes:9bc1ec9a64c07935944d7f6783d9102bc7017204ff448b6e486d035b8fc82b74-Operation-successes, shapes:acc03624125529911f1328fc9b58b98f37c9b5d3c5a6c8dec4958274a5c13e01-Operation-effect, shapes:b5b0633acce7a1bcc52a9312e03a9e72bebdc547890fbdac34d51abd1299bf3d-Operation-generatedAtTime, shapes:c075800ebe5be9a9caa40aa7b4a45abde51b4509901bc1a06eca6ab94cc2970b-Operation-name, shapes:cefec252f2c9c68c0c104382997a5f2d5f0b52fe7a8ab11e891c587d72f536ae-Operation-session, shapes:e0ac779cbf58098e18e6a5d15cde9e3b793d172dd4f051264a05c8b0a105df62-Operation-wasDerivedFrom, shapes:e0ffdf4e14534e7cbde4dfc0b900dbbdc9141969e4e0e22da3512ab73b33e250-Operation-target, shapes:e7313f21a8f847590f64ce7828b011cabbf49799fc8af2627e47dd38344c976b-Operation-learnMethod, shapes:efbd5ef2320844852bc0059481c28c1c7740f6ba65026f2ed98a119ed5b99b3f-Operation-returnsShape, shapes:f0fd034895dcccf77a94844eddd68585fa0bf6a96184722647c2cca44ec7f678-Operation-description, shapes:fe6eba8ddb69d9f8a0d56ee66cee10c0e0dc85347cc9825c8ef1127f3d76bdd5-Operation-confidence;
     sh:targetClass sab:Operation.
-shapes:c6da410187401cd993de6abf75e2b438734fae17bb58cb2059c965b1b2250e1d-n28 rdf:first "html";
-    rdf:rest shapes:b8378e3299536c40d38be892349320f02ffb5ebd5ef4bc3e172da64e3be6d065-n26.
 shapes:cb47d15592c550d3322fbd9c2a277e97a7b9e2d0d4f46898369f92f7acfe4a58-FieldRule-valueDatatype sh:maxCount 1;
     sh:name "valueDatatype";
     sh:nodeKind sh:IRI;
     sh:path sab:valueDatatype.
 shapes:cdce5bc77d105b4b27eb1caf15f666af410b80474b26436512633d03e9286df2-CsrfTarget-targetKind sh:datatype xsd:string;
-    sh:in shapes:25bd565317098edb56b8c6db02fb2a33390518a78ec25c68f2f1dbe03a334778-n36;
+    sh:in shapes:9fda1c845c360b3c45aab2da6284fa971605456860241d07e886bab030acacea-n17;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "kind";
     sh:path sab:targetKind.
-shapes:cefec252f2c9c68c0c104382997a5f2d5f0b52fe7a8ab11e891c587d72f536ae-Operation-session sh:in shapes:9034673bd6a9ae8215a5ce026a875a106585de086766ec26fccc6b04ba8d8cbd-n33;
+shapes:cefec252f2c9c68c0c104382997a5f2d5f0b52fe7a8ab11e891c587d72f536ae-Operation-session sh:in shapes:a35d63988e545256756a4455169c8a826b486481676acc6261db28818c5e7fdf-n8;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "session";
@@ -401,22 +424,26 @@ shapes:cfbee86f05cbb922bf801c0cd392038cb3f8232d2609b631c0b20639e03a5fda-Flow-pos
     sh:minInclusive 0;
     sh:name "position";
     sh:path schema:position.
+shapes:d01e8f5a5ca2f85ec680411cefd25a44f9d9bafbdda501aed1973d5251b85ddd-n48 rdf:first sab:ReversibleWrite;
+    rdf:rest shapes:259fc266e10c7f1bd2257812b927ac1c3411379c40bc9789fb7cb5ea46582d5c-n4.
 shapes:d1bed1e4e508022f28816b78b7fb6cfdc6b5a119ee78f3886a4a31d09167bc31-SiteModelShape a sh:NodeShape;
     sh:property shapes:25ef1a869647ee98896913dcd0c7234d1440f5e789df14db3ef6f8d21ebea472-SiteModel-url, shapes:42956d4fb84f1154fce115e870501b8a9bf1742ebd4687cbd3dc9da8d845bfcf-SiteModel-loginRoute, shapes:77c14bf218f3bd5067174d96468cb366eda0c89bceef80331860e13f7cca3587-SiteModel-potentialAction, shapes:e98edd4f7d60fd7da748cbf32f0c709456a4281f3a9a2bfe6e23976737616578-SiteModel-generatedAtTime, shapes:f62e77c8c5f113f413d815c806d019991c8e6115bf84135a10d524a9fbd9f461-SiteModel-version;
     sh:targetClass sab:SiteModel.
+shapes:d31848805b12c88ace94002c73ffefbb014785e700633d9c932b6f348e904df5-n41 rdf:first "form";
+    rdf:rest shapes:df893914c76f0d0c3c6984cd2e329b4b73b5231cbd73e0afdba90428d9e12b96-n23.
 shapes:d32bf17aa91ce22aeeed7f959eab1d8d5ec16a617f2e5d7796a20d19307959e9-CsrfTargetShape a sh:NodeShape;
     sh:property shapes:b9ae3d450e941ca0334cfa2b5cbdb6898e34ad836db4129f02715053d930a324-CsrfTarget-name, shapes:cdce5bc77d105b4b27eb1caf15f666af410b80474b26436512633d03e9286df2-CsrfTarget-targetKind;
     sh:targetClass sab:CsrfTarget.
 shapes:d33473011486c289830d6ff18cd8ac71c98568ba79a1083055846441ad29219d-EntryPoint-header sh:name "headers";
     sh:nodeKind sh:IRI;
     sh:path sab:header.
-shapes:d44073f32c42a78b9286fb534444449d8cebba9225bdc8f0fa713919ff2fdb75-n29 rdf:first "application/x-www-form-urlencoded";
-    rdf:rest shapes:029525f429d2711d438b5d358d064019f2b5d6c1035acbe9d418711dd2d44b40-n27.
 shapes:d7fa8b8f4b576bf437e89b6fc12c84c1f2d6497f69dba0679c1ecab5e215023b-Extraction-fieldRule sh:name "fields";
     sh:nodeKind sh:IRI;
     sh:path sab:fieldRule.
-shapes:dad96d9afa63f40edd67b51a1e2922fb0608531b5bdd632431e4b436ff03d4f2-n7 rdf:first "GET";
-    rdf:rest shapes:0fd12d10733f9f068ff1e87dd4332ec279efdbbf5bc256f2e63b440f89c7e31a-n40.
+shapes:d8d6a29416897f994d267f9ec8e59ce8d7580b5676ce92cf9ccb1ac3ee9839e4-n1 rdf:first "application/json";
+    rdf:rest shapes:e5e5019a57b5316da6c0285728512434cfca80766251c9318ad42d19f5888494-n31.
+shapes:d9c4ba9cda971b1b511e234dd615ac4ef352ab0a456060f5c8c6957451e7707d-n15 rdf:first "multipart/form-data";
+    rdf:rest rdf:nil.
 shapes:dbc35755b8b8588536ed83424b61edbce0321ad7d81a302caad1230979035f9e-RefreshRule-expiresInPointer sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "expiresInPointer";
@@ -426,11 +453,18 @@ shapes:dc4b18e71396b1cd02d031e1f6839e6a4408678274907a414a7a10f1a14f9968-Flow-gen
     sh:minCount 1;
     sh:name "learnedAt";
     sh:path prov:generatedAtTime.
-shapes:dd3c52901ae19833fbc5ff0c9f9c89d1efb0e74cfff8d3a8b592fadf0255a183-n24 rdf:first "form";
-    rdf:rest shapes:f305cb16a29ca34e202e1cb5985ef5a64feb9b4175c60c89ebdca83ba7916480-n38.
 shapes:ddf5f47a1037cfd51f449df274ac170fec48449154171b506d67da3a40fb4459-EntryPointShape a sh:NodeShape;
     sh:property shapes:14623cb80b053f177a7a8905386a43987afd92f0f879fc50ae64791515dd9fc3-EntryPoint-urlTemplate, shapes:5f12ac81bbb2b6f127343a0f0ce5782383ffba64558b018da7c1cd08c70c44d5-EntryPoint-httpMethod, shapes:73f9cb075c0d98c052eb5ef40809577944a4de0653ce86cfdb3dd318d883b2a8-EntryPoint-bodyTemplate, shapes:7bfb1257487377e1f3aad0195683458d569015c029e7c5742c51a70f3f756485-EntryPoint-contentType, shapes:d33473011486c289830d6ff18cd8ac71c98568ba79a1083055846441ad29219d-EntryPoint-header;
     sh:targetClass schema:EntryPoint.
+shapes:de77b9b1f1d4589817e541d62ff836026073243631dd0f187b7429eb8bcae047-ActionOutcomeShape a sh:NodeShape;
+    sh:property shapes:0b25ebce450081847f689945584804ad8d3022c468a040bce8068c56c4675825-ActionOutcome-priceCurrency, shapes:25383b62895feebfaec4901938235abd6dc80174c14100e4cfb81c5fdf465197-ActionOutcome-effect, shapes:3f9aade3a161e8a646b6249c9d06543c3c8ac06bf8d1afa4174220b5c59e88a2-ActionOutcome-result, shapes:52e6ad26291918c9016aa87dcd2ed469f958caca6123ca03cc00aa808c94fb6e-ActionOutcome-target, shapes:5c8e0595800ddba416ad62eee0891cddb6a92ec29d60a6713c921d40b9ef5ee2-ActionOutcome-price, shapes:6c219afcb8ddbe9c554c5391743bd922eafab6bf648ab6f0a1e2b5397a8362ab-ActionOutcome-status;
+    sh:targetClass sab:ActionOutcome.
+shapes:df893914c76f0d0c3c6984cd2e329b4b73b5231cbd73e0afdba90428d9e12b96-n23 rdf:first "header";
+    rdf:rest rdf:nil.
+shapes:e03fe4e03dbce4b587d6f4a989fe06e62636c8981003376ea05fca91fc66396b-n29 rdf:first "manual";
+    rdf:rest rdf:nil.
+shapes:e077dfda53cb9dc109736256174305a2d57faba74040c1ac729c3d7f879f8250-n24 rdf:first "fallback";
+    rdf:rest shapes:e03fe4e03dbce4b587d6f4a989fe06e62636c8981003376ea05fca91fc66396b-n29.
 shapes:e0ac779cbf58098e18e6a5d15cde9e3b793d172dd4f051264a05c8b0a105df62-Operation-wasDerivedFrom sh:name "derivedFrom";
     sh:nodeKind sh:IRI;
     sh:path prov:wasDerivedFrom.
@@ -439,15 +473,17 @@ shapes:e0ffdf4e14534e7cbde4dfc0b900dbbdc9141969e4e0e22da3512ab73b33e250-Operatio
     sh:name "request";
     sh:nodeKind sh:IRI;
     sh:path schema:target.
-shapes:e1a0e2a7d904b0fdb309d2af9b92c1648df4c96fd6a5bc08ae4816225646b5f7-n30 rdf:first "form";
-    rdf:rest shapes:9bec893deccfb48a6624fb708f46b1893b51db152539432f463c4850b2318938-n12.
+shapes:e48420a442eaff681713243356a2183c0f3b51620037b616324d63d993d3e5a5-n36 rdf:first "cookie";
+    rdf:rest shapes:531c127a739a90a8f191c58d62ee25566d1e13bd798fa9bcdd447e341561fc4c-n2.
 shapes:e4929f16b98ddb4c4d40e2d70883e6f33bf2b4d9191249032529cb0db9d41f4a-PropertyValue-name sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "name";
     sh:path schema:name.
+shapes:e5e5019a57b5316da6c0285728512434cfca80766251c9318ad42d19f5888494-n31 rdf:first "application/x-www-form-urlencoded";
+    rdf:rest shapes:d9c4ba9cda971b1b511e234dd615ac4ef352ab0a456060f5c8c6957451e7707d-n15.
 shapes:e7313f21a8f847590f64ce7828b011cabbf49799fc8af2627e47dd38344c976b-Operation-learnMethod sh:datatype xsd:string;
-    sh:in shapes:0050525b47a15c443482c07469d6c206777b6dd2493432c82aa78c7fb1c41149-n14;
+    sh:in shapes:a3c80772926d87d6c6047a7a713b15c42a2620f353a4998ec72a9e2f798593fd-n0;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "method";
@@ -464,6 +500,8 @@ shapes:ea85cd944f1dc5123d431b50b99d4d79910b4bff2393cb286ec92089062f919c-LoginRou
     sh:name "refresh";
     sh:nodeKind sh:IRI;
     sh:path sab:refresh.
+shapes:eb5c8f7376383882d0974e34fa8f8207e4a4568ff3074532a072a5358467c064-n9 rdf:first "form";
+    rdf:rest shapes:3e0795422b2561848ee95e3e095a2d8a302f0314eef923224563d567a540195d-n22.
 shapes:ec48893734595299d91a5ea3f2136d92efa9f45ea2e636fcbb23b70a3c97ecc0-CsrfSource-urlTemplate sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "urlTemplate";
@@ -478,6 +516,8 @@ shapes:efbd5ef2320844852bc0059481c28c1c7740f6ba65026f2ed98a119ed5b99b3f-Operatio
 shapes:f05e0bea517e0b2c525ce3144d250e20b5fb8ee579724d4fac7f1f254e629c2e-RefreshRuleShape a sh:NodeShape;
     sh:property shapes:160a25b9f16f8677fa877190f6e67aaf83c97f79a4efadea07f9ba222e6ed5f5-RefreshRule-urlTemplate, shapes:ac2903805b4725c470ccd2c40b05fe3d0f9fffde9c57eaf42a0638c3f54314b8-RefreshRule-tokenPointer, shapes:dbc35755b8b8588536ed83424b61edbce0321ad7d81a302caad1230979035f9e-RefreshRule-expiresInPointer;
     sh:targetClass sab:RefreshRule.
+shapes:f0687b33940ecdc179eabe95500cf75d97f6f28578b776434b9e6b3e454c96cf-n26 rdf:first "form";
+    rdf:rest shapes:4bce726955d74d3066feaed5ac2664a5a34dfeed8cf0aae2eb33f83c71b87535-n47.
 shapes:f0fd034895dcccf77a94844eddd68585fa0bf6a96184722647c2cca44ec7f678-Operation-description sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "description";
@@ -488,8 +528,8 @@ shapes:f1e125b75f55d680ad51977323c2e71d7335a4368ec6dc8618ef54ee3b85a252-CsrfRule
 shapes:f24d40465ba32c04999c7f498f9a5970b14586d90d909f672fe54614d3fe8871-FlowStep-binding sh:name "bindings";
     sh:nodeKind sh:IRI;
     sh:path sab:binding.
-shapes:f305cb16a29ca34e202e1cb5985ef5a64feb9b4175c60c89ebdca83ba7916480-n38 rdf:first "query";
-    rdf:rest rdf:nil.
+shapes:f4480562cc717ca7a54b4e49b3482d15768c60c0efd7589631d9625c5505cf42-n43 rdf:first "PUT";
+    rdf:rest shapes:18862581f1b9c99948c01e0416af9437f7ddfb3bcc9eb8d29f826148af08142e-n5.
 shapes:f50f9258d5a44e257f7780327a4e645226eebb28508fb8604d3c5e1c490ec192-Flow-attempts sh:datatype xsd:nonNegativeInteger;
     sh:maxCount 1;
     sh:name "attempts";
@@ -499,6 +539,10 @@ shapes:f51ba256c078b4134a6e0275b30fbc947733ea69d5bb3896185f404a9979e9b7-Extracti
     sh:name "itemType";
     sh:nodeKind sh:IRI;
     sh:path sab:itemType.
+shapes:f536c642fa40b60ed37ad1f84f1a82a771cf96f56f5b80be1f196f58a8d4e31b-n40 rdf:first sab:SignedIn;
+    rdf:rest rdf:nil.
+shapes:f5d3623dc53ccadc7d1087c6901bcd28c1912342728c82a7ada427b72383230b-n39 rdf:first "fallback";
+    rdf:rest shapes:66f787442e28839615a3764e67c832d909ff0259b84aa54f7bbe12b257f79bb0-n13.
 shapes:f62e77c8c5f113f413d815c806d019991c8e6115bf84135a10d524a9fbd9f461-SiteModel-version sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
@@ -509,7 +553,7 @@ shapes:f854fb2504ef1e8d4d81a1db16ac1a5af3f431f6a8040fd76a9826d3222bd996-FieldRul
     sh:name "attribute";
     sh:path sab:attribute.
 shapes:f93cc3951361b6441486393f0b073abc2f1b7999ddee917fce258152587f18c9-Parameter-location sh:datatype xsd:string;
-    sh:in shapes:5a2940221465cd6dc0c26050e9c1db6cf26afa4a93aafcf06d539c377e5b08d6-n37;
+    sh:in shapes:7b70fe4e4d411ad8b63ede0de6a29c7aff295fbb63a83380b75ba4b114f06350-n16;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "location";

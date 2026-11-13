@@ -1,4 +1,5 @@
 # AUTHORED-BY Claude Opus 5.5
+# AUTHORED-BY Codex GPT-6
 #
 # Site-action ontology (provisional) for the semantic agent browser
 # (@jeswr/site-model). A SITE MODEL describes the actions a website offers as
@@ -55,6 +56,31 @@ sab:Flow a owl:Class ;
     rdfs:subClassOf schema:Action ;
     rdfs:label "Flow"@en ;
     rdfs:comment "An ordered sequence of operations that together perform one schema.org action, such as a buy action made of add-to-cart and checkout."@en .
+
+sab:ActionOutcome a owl:Class ;
+    rdfs:subClassOf schema:Action ;
+    rdfs:label "Action outcome"@en ;
+    rdfs:comment "An executor-authored receipt for a terminal effectful execution. Completed means the action is done and must not be repeated. schema:price and schema:priceCurrency report the authorized payment total; schema:result identifies the created item when known."@en .
+
+sab:Completed a skos:Concept ;
+    rdfs:label "Completed"@en ;
+    rdfs:comment "The executor completed the operation or flow. The action is done."@en .
+
+sab:Failed a skos:Concept ;
+    rdfs:label "Failed"@en ;
+    rdfs:comment "The execution failed or was refused. Earlier steps may already have changed site state; completion must not be assumed."@en .
+
+sab:status a owl:ObjectProperty ;
+    rdfs:label "status"@en ;
+    rdfs:comment "Whether an executor-authored action outcome is Completed or Failed."@en ;
+    rdfs:domain sab:ActionOutcome ;
+    rdfs:range skos:Concept .
+
+sab:target a owl:DatatypeProperty ;
+    rdfs:label "target"@en ;
+    rdfs:comment "The label of the operation or flow whose execution this outcome describes."@en ;
+    rdfs:domain sab:ActionOutcome ;
+    rdfs:range xsd:string .
 
 sab:FlowStep a owl:Class ;
     rdfs:label "Flow step"@en ;

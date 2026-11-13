@@ -392,7 +392,7 @@ describe("security review regressions", () => {
     );
     expect(JSON.stringify(r)).not.toContain(secret);
     expect(JSON.stringify(r)).not.toContain("later");
-    expect(r.observations[0]?.turtle).toContain("[redacted]");
+    expect(r.observations.some((o) => o.turtle.includes("[redacted]"))).toBe(true);
   });
 
   it("F9 bounds per-field extraction amplification", async () => {
