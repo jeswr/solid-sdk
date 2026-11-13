@@ -183,6 +183,7 @@ function useLoadedFile(
           etag: versioned?.etag,
           writable: versioned?.writable,
           verifyHeaders: versioned?.verifyHeaders,
+          discovery: versioned?.discovery,
           contentType: (blob.type || type)?.split(";")[0]?.trim().toLowerCase(),
         } as const;
       }
