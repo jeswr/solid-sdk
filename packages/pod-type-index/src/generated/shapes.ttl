@@ -1,0 +1,29 @@
+@prefix sh: <http://www.w3.org/ns/shacl#>.
+@prefix shapes: <https://jeswr.org/ns/pod-type-index/shapes#>.
+
+shapes:148a65f72b7a5b56784fca7803c43eb4942422373752e79c9af47552a48d241f-TypeIndexShape a sh:NodeShape;
+    sh:targetClass <http://www.w3.org/ns/solid/terms#TypeIndex>.
+shapes:190f078cf4c46e4e14b4174af5d02f1a3ca92bb0adf7e1fef802cb1bf673199e-TypeRegistration-instance sh:name "instance";
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/ns/solid/terms#instance>.
+shapes:55bb7229592a62f1edd0f259eebf1270a02c71c4f0c9ee4ec31bf169c5834ebf-AgentShape a sh:NodeShape;
+    sh:property shapes:5a25b61795319a151fb5c10abd316a3cafe1292fb16e4587ef2563f876d45cb9-Agent-preferencesFile, shapes:7a2035e490dfef5258165d9a297ba1a24667744e0265fe7a53fcc334d183a954-Agent-privateTypeIndex, shapes:df6e4c4f48c3a02fff81091f1bc82411af56418d56d277ff02509191ca1f6358-Agent-publicTypeIndex;
+    sh:targetClass <http://xmlns.com/foaf/0.1/Agent>.
+shapes:5a25b61795319a151fb5c10abd316a3cafe1292fb16e4587ef2563f876d45cb9-Agent-preferencesFile sh:name "preferencesFile";
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/ns/pim/space#preferencesFile>.
+shapes:72e6e64c835513348b0b64e3b863f3d49a0a2d3c465e82d048a3f9da90886d5b-TypeRegistrationShape a sh:NodeShape;
+    sh:property shapes:190f078cf4c46e4e14b4174af5d02f1a3ca92bb0adf7e1fef802cb1bf673199e-TypeRegistration-instance, shapes:854d47fe222d6a675c308b5737a603be5c2912494439dd7a22eda1a68a059edb-TypeRegistration-forClass, shapes:fd1bfd314478087b67f2af47ba3e80d08f59ba54317716f319bac55b271d969d-TypeRegistration-instanceContainer;
+    sh:targetClass <http://www.w3.org/ns/solid/terms#TypeRegistration>.
+shapes:7a2035e490dfef5258165d9a297ba1a24667744e0265fe7a53fcc334d183a954-Agent-privateTypeIndex sh:name "privateTypeIndex";
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/ns/solid/terms#privateTypeIndex>.
+shapes:854d47fe222d6a675c308b5737a603be5c2912494439dd7a22eda1a68a059edb-TypeRegistration-forClass sh:name "forClass";
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/ns/solid/terms#forClass>.
+shapes:df6e4c4f48c3a02fff81091f1bc82411af56418d56d277ff02509191ca1f6358-Agent-publicTypeIndex sh:name "publicTypeIndex";
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/ns/solid/terms#publicTypeIndex>.
+shapes:fd1bfd314478087b67f2af47ba3e80d08f59ba54317716f319bac55b271d969d-TypeRegistration-instanceContainer sh:name "instanceContainer";
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/ns/solid/terms#instanceContainer>.
