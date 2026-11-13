@@ -30,17 +30,23 @@ while (result.status === "needs-approval") {
 ```
 
 - `createExecutor({ model, sessions, gate?, fetch?, now?, persona?, maxRequests?, maxRedirects?, maxResponseBytes?, maxExecutionMs? })`
-- `execute(request, { approvalId? })` returns `{ status, target?, outcome?, observations, approval?, error?,
-  errorKind?, candidates?, requests }`. `status` is one of `done`, `needs-approval`, `denied`,
-  `refused` (unsafe or unverifiable money; see `error`), `no-path` (the host should use the
-  fallback browser), `ambiguous` (see `candidates`) or `error`.
+- `execute(request, { approvalId?, excludeFingerprints? })` returns `{ status, target?, outcome?, observations, approval?, error?,
+  errorKind?, candidates?, missing?, committed, requests }`. `status` is one of `done`, `needs-approval`, `denied`,
+  `refused` (unsafe or unverifiable money; see `error`), `no-path` (`missing` lists unresolved required input names for the closest candidate), `ambiguous` (see `candidates`) or `error`.
 - `planToRequests(request)` (a method, and a standalone `planToRequests(model, request)`) is a dry
   run. It returns the compiled requests and sends nothing. Flow step references show up as
-  placeholders, and a plan never contains credentials.
+  placeholders, and a plan never contains credentials. Concrete writes include a `fingerprint`;
+  response-bound writes get theirs when their inputs resolve at the write boundary. Fingerprints
+  hash the method, WHATWG-normalized URL with sorted query, and canonical body. JSON keys are
+  sorted; typed values use canonical XSD lexicals on JSON, form, path, query and header surfaces.
+  Unused inputs, session credentials and CSRF decoration are excluded. `excludeFingerprints`
+  refuses a matching concrete write before approval or transmission (`errorKind: "repeat"`).
 - `SessionProvider` is `{ get(site, persona?), update(site, persona, bundle) }`.
-  `SessionBundle = { cookies: Cookie[]; headers? }`. `Cookie` uses the shape of Playwright's
+  `SessionBundle = { cookies: Cookie[]; headers?; revision?: string }`. `Cookie` uses the shape of Playwright's
   `context.cookies()`, with `expires` in Unix seconds. `InMemorySessions` is the in-memory
-  implementation.
+  implementation. Revisions are opaque: every cookie update in an execute call passes the exact
+  revision returned by its `get()`. InMemorySessions issues a new session generation on `set()`;
+  cookie updates retain that generation, and stale updates are silently ignored.
 - `Gate` is `{ authorize(GateRequest) }`. It returns `allow`, `ask` with an `ApprovalRequest`, or
   `deny`. A `GateRequest` carries the target, the effect class, the resolved inputs, any money
   fields (`amount` and `currency`, derived from wire mappings or trusted site facts), a plain-English
@@ -53,10 +59,15 @@ while (result.status === "needs-approval") {
 
 Every completed effectful operation or flow returns an `outcome` (`ActionOutcome` from
 site-model): `{ status: "completed", target: <label>, effect, amount?, currency?, result? }`.
-Terminal errors, refusals and denials return `status: "failed"`; reads and approval pauses
-have no outcome. A failed flow may have completed earlier writes.
+`ExecutionOutcome` locally extends the shared `ActionOutcome` with `status: "uncertain"`.
+Terminal errors, refusals and denials use `uncertain` when a write already received a 2xx/3xx
+response; otherwise they use `failed`. Reads and approval pauses have no outcome. Every result
+includes `committed: { target: Target, fingerprint: string }[]`, including pauses and failures.
+Each entry identifies an operation whose write received 2xx/3xx, recorded before cookies, redirects,
+body consumption or extraction. A later failure never removes these entries. Hosts must not
+repeat those writes merely because the overall execution failed.
 The first observation is an executor-authored receipt: `a sab:ActionOutcome`,
-`sab:status sab:Completed` (or `sab:Failed`), `sab:target` (the label) and `sab:effect`.
+`sab:status sab:Completed` (or `sab:Uncertain` / `sab:Failed`), `sab:target` (the label) and `sab:effect`.
 Payments carry the authorized total as `schema:price` / `schema:priceCurrency`, rather
 than the planner's spending cap. When the final extraction or a write's 303 Location
 identifies a created item, `schema:result` points to its on-origin IRI and the receipt
@@ -70,7 +81,10 @@ excluded. The remaining observations retain their original step order and untrus
    through `Parameter.path` or a default. When several candidates match, the one that resolves the
    most inputs from the request wins, and a tie returns `ambiguous`. A class-ranged parameter takes
    the node's `schema:sku`, `schema:productID` or `schema:identifier` when present. Otherwise it
-   uses the last path segment of the IRI. A blank node without an id property does not resolve.
+   uses the last path segment of the IRI for the wire input, while retaining its original typed
+   identity for money checks. A blank node without an id property does not resolve. Required
+   name/search inputs still need their mapped values: an object IRI cannot supply its name.
+   `no-path.missing` identifies those inputs without exposing URLs, defaults or binding specs.
 2. **Gate.** The executor computes the effect it reports to the gate. For a flow, this is the
    strongest of the flow's declared effect and each step's effect for writes. Preparatory flow
    reads are authorized separately as reads. Every write is compiled and authorized immediately
@@ -140,7 +154,8 @@ excluded. The remaining observations retain their original step order and untrus
 - **No secrets out.** Results, errors and extracted RDF never carry cookies, session headers or
   CSRF tokens. Errors name only the origin and path, never the query string or the response
   body. Every nonempty secret is registered. Raw, mixed percent-encoded and nested encoded echoes
-  are redacted before truncation. Every return path renders all observations against the final
+  are redacted before truncation. Every complete summary display value, including unmapped object
+  names and model labels, is redacted before whitespace normalization, formatting or truncation. Every return path renders all observations against the final
   secret set, including secrets discovered by later steps.
 - **Money.** Establish a payment's amount and currency from wire mappings or trusted facts from
   an earlier read in the same flow. For wire mappings, map
@@ -151,16 +166,26 @@ excluded. The remaining observations retain their original step order and untrus
   reach the wire once as whole values; unused, duplicated or
   transformed mappings and numeric amounts that round during JSON conversion are refused.
   Facts come only from extracted fields whose `FieldRule` is not `untrusted`, on the site origin
-  (off-origin item IRIs are ignored too). They pair `schema:price`, `schema:totalPaymentDue` or
-  `schema:value` with `schema:priceCurrency` or `schema:currency` on the same item. Prefer the first
+  (off-origin item IRIs are ignored too). They pair `schema:price`, `schema:amount`, `schema:totalPaymentDue` or
+  `schema:value` with `schema:priceCurrency` or `schema:currency` on the same item. Prefer a fresh
   basket/checkout total (an `Order`, `Invoice`, or item with `totalPaymentDue`) read after the last
-  reversible write before payment. Otherwise take the first product price matching the write's
-  bound SKU/id or item IRI, multiplied by its bound quantity. `schema:orderQuantity` and the
-  profiler's `sab:quantity` mapping use exact decimal arithmetic. Mixed payment currencies fail closed.
+  write of any effect class preceding payment. Distinct totals in that window refuse, including
+  conflicting basket identities or quantities. If payment itself binds quantity or an item,
+  the total must carry the same `schema:orderQuantity` and typed item identity; otherwise fall
+  back to a matching product price times quantity, or refuse with "needs a fresh basket total".
+  On the selected item all amount and currency values must agree; conflicts return `refused`
+  with a reason naming the conflict. All raw values of that pair enter the approval digest.
+  Identities are typed: request IRIs compare exactly after WHATWG normalization, SKU only to
+  `schema:sku`, productID only to `schema:productID`, identifier only to `schema:identifier`.
+  Identifier-free wire IDs may use an IRI suffix only for one on-origin item; a second candidate
+  matching any identifier type refuses as ambiguous. Every quantity-bearing write must be
+  explained by the amount, including checkout writes without IDs. Unrelated quantities or
+  multi-product changes require a fresh total. `schema:orderQuantity` and `sab:quantity` use
+  exact decimal arithmetic. Mixed payment currencies fail closed.
   Preparatory reads run as separately authorized reads before any write approval, so even an
   add-to-basket approval in a payment flow displays the site's real amount, such as
   "Buy Trail Runner sneakers for GBP 20.00 on shop.test". Approvals bind the facts' amount,
-  currency and source item. Retrying re-reads that source and recompiles the next write; a change
+  currency, every pair value and source item. Retrying re-reads all contributing sources and recompiles the next write; a change
   invalidates the approval and asks again, without replaying completed writes.
   Planner money is a cap and cross-check, never evidence: site facts above its cap or in a
   different currency return `refused` with a safe reason stating the site's real price, without
@@ -178,7 +203,7 @@ excluded. The remaining observations retain their original step order and untrus
   `render(redact)` for rendering the retained structured values with an updated redactor.
 
 These stricter checks intentionally refuse formerly accepted malformed models, unbound payments,
-unsafe routes and invalid flow inputs. The site-model contract is unchanged.
+unsafe routes and invalid flow inputs. The shared site-model TypeScript contract is unchanged; the additive executor result/session APIs are described above.
 
 ## Tests
 
@@ -190,3 +215,9 @@ cover RFC 6570 vectors, origin escapes, each CSRF source, approval binding (chan
 single use, concurrent retries, forged ids), flow binding, untrusted marking and secret
 redaction. Money regressions also cover caps, currencies, trusted/on-origin fact selection,
 total preference, exact quantity multiplication and price/item changes during approval.
+
+Review round 2 regressions live in `test/review-r2.test.ts`: conflicting evidence and approval
+binding (finding 1), typed collisions and fallback ambiguity (2), total freshness and purchase
+binding (3), checkout quantity coverage (4), committed writes and uncertain receipts (5),
+canonical request fingerprints (6), and summary redaction before display transformations (7).
+The same suite covers session revision passthrough and safe `no-path.missing` diagnostics.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Resolving parameter values from an ActionRequest, and checking them against the
 // parameter's declared range and options before they reach a request.
 
@@ -121,6 +122,34 @@ export function jsonValue(param: Parameter | undefined, value: string): string |
   if (!param) return value;
   if (INTEGER_TYPES.has(param.range) || DECIMAL_TYPES.has(param.range)) return Number(value);
   if (param.range === BOOLEAN_TYPE) return value === "true" || value === "1";
+  return value;
+}
+
+/** Canonical lexical values are used on every wire surface, including form/query strings. */
+export function canonicalValue(param: Parameter, value: string): string {
+  if (INTEGER_TYPES.has(param.range)) return BigInt(value).toString();
+  if (param.range === BOOLEAN_TYPE) return value === "true" || value === "1" ? "true" : "false";
+  if (param.range === `${XSD}decimal`) {
+    const [mantissa = "", exponent = "0"] = value.toLowerCase().split("e");
+    const negative = mantissa.startsWith("-");
+    const [whole = "", tail = ""] = mantissa.replace(/^[+-]/, "").split(".");
+    const scale = tail.length - Number(exponent);
+    if (Math.abs(scale) > 1000) throw new BindingError("decimal exponent exceeds lexical limit");
+    let digits = (whole + tail).replace(/^0+/, "") || "0";
+    if (scale < 0) digits += "0".repeat(-scale);
+    else if (scale > 0) {
+      digits = digits.padStart(scale + 1, "0");
+      digits = `${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
+    }
+    if (digits.includes(".")) digits = digits.replace(/0+$/, "").replace(/\.$/, "");
+    return `${negative && digits !== "0" ? "-" : ""}${digits}.0`.replace(/(\.\d+)\.0$/, "$1");
+  }
+  if (DECIMAL_TYPES.has(param.range)) {
+    const n = Number(value);
+    const [head = "0", power = "0"] = n.toExponential().split("e");
+    return `${head.includes(".") ? head : `${head}.0`}E${Number(power)}`;
+  }
+  if (param.range === ANY_URI && /^https?:/i.test(value)) return new URL(value).href;
   return value;
 }
 

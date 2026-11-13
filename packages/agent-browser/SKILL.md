@@ -41,3 +41,17 @@ The shared contract belongs to site-model; keep adaptations local to this packag
 - Run package lint/build/typecheck/test and root lint after changing the skill index or
   suite inventory. The real shop e2e requires Chromium and loopback; do not hide failures
   behind environment-dependent skips.
+
+Repeat guard and recovery:
+- Remember every executor committed entry as soon as any execute call returns, including approval
+  pauses and uncertain/failed flows. Use planToRequests fingerprints before execute and pass the
+  task's excluded fingerprints back to the executor to cover response-bound writes. Canonical
+  method/URL/body fingerprints exclude unused inputs and equate typed lexical variants. Never
+  infer lack of commitment from result.status, and do not replay a sab:Uncertain receipt.
+- Preserve commitment memory on host denial, approval-limit exhaustion and later execution errors.
+  allowRepeats explicitly disables this task guard.
+- Surface no-path.missing as safe planner-history error text. A Buy flow learned from a product-name
+  search still requires that name; an object IRI cannot resolve the search input. Let the planner
+  correct the mapped inputs instead of weakening typed identity matching.
+- Session revisions belong to the executor/vault seam. Keep the original revision unchanged in
+  cookie updates; model learning and planner history must never carry it.

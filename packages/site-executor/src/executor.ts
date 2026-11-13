@@ -27,6 +27,7 @@ import {
   compileOperation,
   endpointUrl,
   isForbiddenHeader,
+  requestFingerprint,
 } from "./compile.js";
 import {
   applySetCookies,
@@ -58,6 +59,8 @@ import {
   addAmounts,
   assertFactsCap,
   factsMoney,
+  type ItemIdentity,
+  inputIdentities,
   type MoneyEvidence,
   MoneyRefusal,
   type MoneyWrite,
@@ -87,13 +90,31 @@ export type ErrorKind =
   | "extraction"
   | "limit"
   | "no-session"
-  | "gate";
+  | "gate"
+  | "repeat";
 
+/** Local extension of the shared receipt contract for confirmed writes with an incomplete result. */
+export type ExecutionOutcome = Omit<ActionOutcome, "status"> & {
+  status: ActionOutcome["status"] | "uncertain";
+};
+export interface CommittedWrite {
+  target: Target;
+  fingerprint: string;
+}
+export interface ExecuteOptions {
+  approvalId?: string;
+  /** Host repeat guard, checked again when response-bound inputs become concrete. */
+  excludeFingerprints?: readonly string[];
+}
 export interface ExecutionResult {
   status: ExecutionStatus;
   target?: Target;
   /** Executor-authored receipt; also the first observation for terminal writes. */
-  outcome?: ActionOutcome;
+  outcome?: ExecutionOutcome;
+  /** Writes with a 2xx/3xx response, recorded before processing that response. */
+  committed: CommittedWrite[];
+  /** Safe unresolved required names for the closest no-path candidate. */
+  missing?: string[];
   observations: Observation[];
   approval?: ApprovalRequest;
   error?: string;
@@ -125,6 +146,8 @@ export interface ExecutorOptions {
 export interface PlannedRequest {
   operation: string;
   label: string;
+  /** Present on concrete effectful requests; response-bound placeholders have none yet. */
+  fingerprint?: string;
   method: string;
   url: string;
   /** Static headers only; credentials are never part of a plan. */
@@ -143,12 +166,13 @@ export interface Plan {
   summary?: string;
   requests: PlannedRequest[];
   candidates?: string[];
+  missing?: string[];
   error?: string;
 }
 
 export interface Executor {
   readonly model: SiteModel;
-  execute(request: ActionRequest, opts?: { approvalId?: string }): Promise<ExecutionResult>;
+  execute(request: ActionRequest, opts?: ExecuteOptions): Promise<ExecutionResult>;
   /** Dry run: the compiled requests without sending anything, credentials redacted. */
   planToRequests(request: ActionRequest): Plan;
 }
@@ -192,6 +216,7 @@ interface RunContext {
   headers: Record<string, string>;
   /** The vault's headers exactly as stored, written back unchanged with cookie updates. */
   storedHeaders?: Record<string, string>;
+  revision?: string;
   requests: number;
   secrets: Set<string>;
   controller: AbortController;
@@ -272,6 +297,7 @@ interface Progress {
   requests: number;
   spent: string;
   writes: MoneyWrite[];
+  committed: CommittedWrite[];
   currency?: string;
   authorizedMoney?: { amount?: string; currency?: string };
 }
@@ -371,6 +397,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     addSecrets(ctx);
     const bundle: SessionBundle = {
       cookies: jar,
+      ...(ctx.revision !== undefined ? { revision: ctx.revision } : {}),
       ...(ctx.storedHeaders ? { headers: { ...ctx.storedHeaders } } : {}),
     };
     await budget(ctx, sessions.update(origin, persona, bundle));
@@ -383,6 +410,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     headers: Record<string, string>,
     body: CompiledRequest["body"],
     accept: string | undefined,
+    committed?: () => void,
   ): Promise<Response0> {
     let url = guardUrl(startUrl.href, origin);
     let currentMethod = method;
@@ -419,6 +447,10 @@ export function createExecutor(options: ExecutorOptions): Executor {
       } catch {
         checkDeadline(ctx);
         throw new NetworkError(`${currentMethod} ${describeUrl(url)} failed (network error)`);
+      }
+      if (committed && res.status >= 200 && res.status < 400) {
+        committed();
+        committed = undefined;
       }
       await storeCookies(ctx, res, url);
       const location = res.headers.get("location");
@@ -509,6 +541,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     operation: Operation,
     values: Record<string, string>,
     compiled: CompiledRequest,
+    committed?: () => void,
   ): Promise<{ observation: ObservationRecord; items: ExtractedItem[] }> {
     for (const rule of compiled.csrf) {
       // A token must never replace an already approved effectful value.
@@ -539,6 +572,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       compiled.headers,
       compiled.body,
       accept,
+      committed,
     );
     if (res.status >= 400) {
       throw new HttpError(`${operation.label}: ${describeUrl(res.url)} answered ${res.status}`);
@@ -641,6 +675,36 @@ export function createExecutor(options: ExecutorOptions): Executor {
     return sources;
   }
 
+  function writeIdentities(
+    flow: Flow | undefined,
+    index: number,
+    op: Operation,
+    values: Record<string, string>,
+    items: ExtractedItem[][],
+    request: ActionRequest,
+  ): ItemIdentity[] {
+    return op.inputs.flatMap((p) => {
+      const v = values[p.name] ?? p.default;
+      if (v === undefined) return [];
+      const spec = flow?.steps[index]?.bind[p.name];
+      const fromInput = spec?.startsWith("$input.")
+        ? flow?.inputs.find((input) => input.name === spec.slice(7))
+        : undefined;
+      const ref = spec ? STEP_REF.exec(spec) : undefined;
+      let original: ItemIdentity[] = [];
+      if (fromInput) original = inputIdentities(fromInput.path, v, request);
+      else if (ref) {
+        const property = ref[2] === "@id" ? "@id" : expandIri(ref[2] ?? "");
+        const item = items[Number(ref[1])]?.[0];
+        const raw = property === "@id" ? item?.iri : item?.values.get(property)?.[0];
+        original = inputIdentities([property], raw);
+      } else if (!flow) original = inputIdentities(p.path, v, request);
+      const mapped = inputIdentities(p.path, v);
+      const concrete = mapped.filter((id) => id.type !== "fallback");
+      return original.length ? [...concrete, ...original] : mapped;
+    });
+  }
+
   function operationValues(op: Operation, values: Record<string, string>): Record<string, string> {
     return Object.fromEntries(
       op.inputs.flatMap((p) => {
@@ -670,7 +734,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
 
   async function execute(
     request: ActionRequest,
-    opts: { approvalId?: string } = {},
+    opts: ExecuteOptions = {},
   ): Promise<ExecutionResult> {
     // A planner implementation may return mutable arrays: snapshot each lookup.
     const original = request;
@@ -702,6 +766,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       requests: 0,
       spent: "0",
       writes: [],
+      committed: [],
     };
     const observations = async (): Promise<Observation[]> =>
       Promise.all(
@@ -712,11 +777,19 @@ export function createExecutor(options: ExecutorOptions): Executor {
           itemCount: record.output?.items.length ?? 0,
         })),
       );
+    const safeTarget = (value: Target): Target => ({
+      ...value,
+      id: redactWith(ctx)(value.id),
+      label: redactWith(ctx)(value.label),
+      actionType: redactWith(ctx)(value.actionType),
+    });
+    const committed = (): CommittedWrite[] =>
+      progress.committed.map((entry) => ({ ...entry, target: safeTarget(entry.target) }));
     const finish = async (
-      result: Omit<ExecutionResult, "observations" | "requests">,
+      result: Omit<ExecutionResult, "observations" | "requests" | "committed">,
     ): Promise<ExecutionResult> => {
       const redact = redactWith(ctx);
-      const receipt = (status: ActionOutcome["status"]): ActionOutcome | undefined => {
+      const receipt = (status: ExecutionOutcome["status"]): ExecutionOutcome | undefined => {
         if (!target || effect === "read") return undefined;
         const money =
           status === "completed" && progress.currency !== undefined
@@ -745,9 +818,18 @@ export function createExecutor(options: ExecutorOptions): Executor {
         };
       };
       const outcome = ["done", "error", "refused", "denied"].includes(result.status)
-        ? receipt(result.status === "done" ? "completed" : "failed")
+        ? receipt(
+            result.status === "done"
+              ? "completed"
+              : progress.committed.length
+                ? "uncertain"
+                : "failed",
+          )
         : undefined;
-      const withOutcome = (observations: Observation[], outcome?: ActionOutcome): Observation[] =>
+      const withOutcome = (
+        observations: Observation[],
+        outcome?: ExecutionOutcome,
+      ): Observation[] =>
         outcome && target
           ? [
               {
@@ -762,20 +844,22 @@ export function createExecutor(options: ExecutorOptions): Executor {
       try {
         return {
           ...result,
-          ...(target ? { target } : {}),
+          ...(target ? { target: safeTarget(target) } : {}),
           ...(outcome ? { outcome } : {}),
           observations: withOutcome(await observations(), outcome),
           requests: ctx.requests,
+          committed: committed(),
           ...(result.error ? { error: redactWith(ctx)(result.error) } : {}),
         };
       } catch {
-        const failed = receipt("failed");
+        const failed = receipt(progress.committed.length ? "uncertain" : "failed");
         return {
           status: "error",
-          ...(target ? { target } : {}),
+          ...(target ? { target: safeTarget(target) } : {}),
           ...(failed ? { outcome: failed } : {}),
           observations: withOutcome([], failed),
           requests: ctx.requests,
+          committed: committed(),
           error: "observation output limit exceeded",
           errorKind: "extraction",
         };
@@ -792,7 +876,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
     let pending: Pending | undefined;
     try {
       const match = matchRequest(model, request);
-      if (match.kind === "no-path") return await finish({ status: "no-path" });
+      if (match.kind === "no-path")
+        return await finish({ status: "no-path", missing: match.missing });
       if (match.kind === "ambiguous")
         return await finish({ status: "ambiguous", candidates: match.candidates });
       const { flow, operation, inputs } = match;
@@ -825,6 +910,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         if (error instanceof LimitError) throw error;
         throw new SessionError("session store unavailable");
       }
+      ctx.revision = bundle?.revision;
       ctx.jar = bundle?.cookies.map((c) => ({ ...c })) ?? [];
       ctx.headers = { ...(bundle?.headers ?? {}) };
       if (bundle?.headers) ctx.storedHeaders = { ...bundle.headers };
@@ -837,63 +923,67 @@ export function createExecutor(options: ExecutorOptions): Executor {
       // Revalidate the fact source, never replay a completed write. Recompiling
       // below binds any changed money, item identity or concrete inputs anew.
       if (flow && pending?.evidence) {
-        const n = pending.evidence.binding.step;
-        const read = steps[n] as Operation;
-        const values = operationValues(read, stepValues(flow, n, read, inputs, progress.stepItems));
-        const compiled = compileOperation(read, values, origin);
-        const gateInputs = authorizationInputs(inputs, values, n, flow);
-        const readRequest: GateRequest = {
-          site: origin,
-          target,
-          effect: "read",
-          inputs: gateInputs,
-          summary: summarise(request, target, origin, {}),
-          digest: approvalDigest({
+        for (const n of pending.evidence.revalidate) {
+          const read = steps[n] as Operation;
+          const values = operationValues(
+            read,
+            stepValues(flow, n, read, inputs, progress.stepItems),
+          );
+          const compiled = compileOperation(read, values, origin);
+          const gateInputs = authorizationInputs(inputs, values, n, flow);
+          const readRequest: GateRequest = {
             site: origin,
-            modelVersion: model.version,
             target,
             effect: "read",
             inputs: gateInputs,
-            ...(persona !== undefined ? { persona } : {}),
-            binding: {
-              key,
-              index: n,
-              operation: read,
-              url: compiled.url.href,
-              headers: compiled.headers,
-              body: compiled.body,
-              session: approvalDigest({
-                site: origin,
-                modelVersion: model.version,
-                target,
-                effect: "read",
-                inputs: {},
-                binding: { cookies: ctx.jar, headers: ctx.headers },
-              }),
-            },
-          }),
-        };
-        let decision: Awaited<ReturnType<Gate["authorize"]>>;
-        try {
-          decision = await budget(ctx, gate.authorize(structuredClone(readRequest)));
-        } catch (error) {
-          if (claimed) issued.set(claimed, pending);
-          if (error instanceof LimitError) throw error;
-          return await finish({
-            status: "error",
-            error: "the approval gate failed",
-            errorKind: "gate",
-          });
+            summary: summarise(request, target, origin, {}, redactWith(ctx)),
+            digest: approvalDigest({
+              site: origin,
+              modelVersion: model.version,
+              target,
+              effect: "read",
+              inputs: gateInputs,
+              ...(persona !== undefined ? { persona } : {}),
+              binding: {
+                key,
+                index: n,
+                operation: read,
+                url: compiled.url.href,
+                headers: compiled.headers,
+                body: compiled.body,
+                session: approvalDigest({
+                  site: origin,
+                  modelVersion: model.version,
+                  target,
+                  effect: "read",
+                  inputs: {},
+                  binding: { cookies: ctx.jar, headers: ctx.headers, revision: ctx.revision },
+                }),
+              },
+            }),
+          };
+          let decision: Awaited<ReturnType<Gate["authorize"]>>;
+          try {
+            decision = await budget(ctx, gate.authorize(structuredClone(readRequest)));
+          } catch (error) {
+            if (claimed) issued.set(claimed, pending);
+            if (error instanceof LimitError) throw error;
+            return await finish({
+              status: "error",
+              error: "the approval gate failed",
+              errorKind: "gate",
+            });
+          }
+          if (decision.kind !== "allow")
+            return await finish({
+              status: "denied",
+              error: "price revalidation read was not authorized",
+            });
+          const out = await runOperation(ctx, read, values, compiled);
+          progress.stepItems[n] = out.items;
+          progress.observations[n] = out.observation;
+          progress.requests = ctx.requests;
         }
-        if (decision.kind !== "allow")
-          return await finish({
-            status: "denied",
-            error: "price revalidation read was not authorized",
-          });
-        const out = await runOperation(ctx, read, values, compiled);
-        progress.stepItems[n] = out.items;
-        progress.observations[n] = out.observation;
-        progress.requests = ctx.requests;
       }
       for (let i = progress.index; i < steps.length; i++) {
         const op = steps[i] as Operation;
@@ -903,6 +993,14 @@ export function createExecutor(options: ExecutorOptions): Executor {
           const resolved = operationValues(op, values);
           const compiled = compileOperation(op, resolved, origin);
           const sources = stepSources(flow, i);
+          const fingerprint =
+            normaliseEffect(op.effect) !== "read" ? requestFingerprint(compiled) : undefined;
+          if (fingerprint && opts.excludeFingerprints?.includes(fingerprint))
+            return await finish({
+              status: "refused",
+              errorKind: "repeat",
+              error: "already done in this task; ask the person if they really want another",
+            });
           let evidence: MoneyEvidence | undefined;
           let paymentPreview: MoneyWrite | undefined;
           const nextPayment = steps.findIndex(
@@ -933,13 +1031,14 @@ export function createExecutor(options: ExecutorOptions): Executor {
                 values: bound,
                 sources: stepSources(flow, n),
                 compiled: n === i ? compiled : compileOperation(write, bound, origin),
+                identities: writeIdentities(flow, n, write, bound, progress.stepItems, request),
               };
               writes.push(prepared);
               if (n === nextPayment) paymentPreview = prepared;
             }
-            const lastReversible = steps
+            const lastWrite = steps
               .slice(0, nextPayment)
-              .findLastIndex((step) => normaliseEffect(step.effect) === "reversible-write");
+              .findLastIndex((step) => normaliseEffect(step.effect) !== "read");
             evidence = factsMoney(
               origin,
               progress.observations.flatMap((record, n) => {
@@ -956,7 +1055,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
                   : [];
               }),
               writes,
-              lastReversible,
+              lastWrite,
+              request,
             );
           }
           let money = resolvedMoney(request, op, resolved, sources, compiled, evidence);
@@ -1020,7 +1120,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
                 target,
                 effect,
                 inputs: {},
-                binding: { cookies: ctx.jar, headers: ctx.headers },
+                binding: { cookies: ctx.jar, headers: ctx.headers, revision: ctx.revision },
               }),
             },
           });
@@ -1032,7 +1132,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
             effect,
             inputs: gateInputs,
             ...authorizedMoney,
-            summary: summarise(request, target, origin, authorizedMoney),
+            summary: summarise(request, target, origin, authorizedMoney, redactWith(ctx)),
             digest,
             ...(approvalId !== undefined ? { approvalId } : {}),
           };
@@ -1081,7 +1181,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
               id: decision.approval.id,
               effect,
               site: origin,
-              target: { ...target },
+              target: safeTarget(target),
               inputs: { ...gateInputs },
               digest,
               summary: redactWith(ctx)(gateRequest.summary),
@@ -1105,13 +1205,38 @@ export function createExecutor(options: ExecutorOptions): Executor {
                 ? { currency: authorizedMoney.currency }
                 : {}),
             };
-          const out = await runOperation(ctx, op, resolved, compiled);
+          const out = await runOperation(
+            ctx,
+            op,
+            resolved,
+            compiled,
+            fingerprint
+              ? () => {
+                  progress.committed.push({
+                    target: {
+                      kind: "operation",
+                      id: op.id,
+                      label: op.label,
+                      actionType: op.actionType,
+                    },
+                    fingerprint,
+                  });
+                }
+              : undefined,
+          );
           checkDeadline(ctx);
           progress.observations.push(out.observation);
           progress.stepItems.push(out.items);
           progress.index = i + 1;
           if (normaliseEffect(op.effect) !== "read")
-            progress.writes.push({ step: i, operation: op, values: resolved, sources, compiled });
+            progress.writes.push({
+              step: i,
+              operation: op,
+              values: resolved,
+              sources,
+              compiled,
+              identities: writeIdentities(flow, i, op, resolved, progress.stepItems, request),
+            });
           if (payment) {
             progress.spent = total as string;
             progress.currency = money.currency;
@@ -1140,7 +1265,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
         error: error instanceof Error ? error.message : "invalid request",
       };
     }
-    if (match.kind === "no-path") return { status: "no-path", requests: [] };
+    if (match.kind === "no-path")
+      return { status: "no-path", requests: [], missing: match.missing };
     if (match.kind === "ambiguous")
       return { status: "ambiguous", requests: [], candidates: match.candidates };
     const { target, flow, operation, inputs } = match;
@@ -1155,6 +1281,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
       requests.push({
         operation: op.id,
         label: op.label,
+        ...(normaliseEffect(op.effect) !== "read" && !placeholders?.size
+          ? { fingerprint: requestFingerprint(compiled) }
+          : {}),
         method: compiled.method,
         url: compiled.url.href,
         headers: { ...compiled.headers },

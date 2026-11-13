@@ -40,7 +40,7 @@ with the `https://schema.org/` scheme throughout; readers normalise `http://sche
 | `Operation.request` | `schema:target` a `schema:EntryPoint`: `schema:httpMethod`, `schema:urlTemplate`, `schema:contentType`, `sab:bodyTemplate`, `sab:header` (`schema:PropertyValue` name/value pairs) |
 | `Operation.session` | `sab:session` `sab:NoSession` or `sab:SignedIn` |
 | `EffectClass` | `sab:effect` `sab:Read` < `sab:ReversibleWrite` < `sab:IrreversibleWrite` < `sab:Payment` (concepts of `sab:EffectScheme`) |
-| `ActionOutcome` | Executor-authored `sab:ActionOutcome`: `sab:status` (`sab:Completed` or `sab:Failed`), `sab:target` (operation/flow label), `sab:effect`, authorized payment total (`schema:price`, `schema:priceCurrency`), and optional created-item IRI (`schema:result`) with its trusted facts |
+| `ActionOutcome` | Executor-authored `sab:ActionOutcome`: `sab:status` (`sab:Completed`, `sab:Failed` or `sab:Uncertain`), `sab:target` (operation/flow label), `sab:effect`, authorized payment total (`schema:price`, `schema:priceCurrency`), and optional created-item IRI (`schema:result`) with its trusted facts |
 | `Parameter` | `sab:Parameter` (`rdfs:subClassOf schema:PropertyValueSpecification`): `schema:valueName`, `sab:valuePath` (a predicate, or an RDF list for a sequence path, as in SHACL), `sab:range`, `schema:valueRequired`, `sab:location`, `schema:description`, `sab:option` (RDF list), `skos:example`, `schema:defaultValue` |
 | `CsrfRule` | `sab:CsrfRule`: `sab:csrfSource` (`sab:sourceKind` cookie/html/json/meta with `schema:name`, `schema:urlTemplate`, `sab:selector`, `sab:attribute`, `sab:pointer`) and `sab:csrfTarget` (`sab:targetKind` header/form/query, `schema:name`) |
 | `Extraction`, `FieldRule` | `sab:Extraction`: `sab:format`, `sab:itemPath`, `sab:itemType`, `sab:idField`, `sab:fieldRule`; `sab:FieldRule`: `sab:fieldProperty`, `sab:selectorPath`, `sab:attribute`, `sab:valueDatatype` (`sab:IriValue` for the contract's `'iri'`), `sab:untrusted` |
@@ -52,9 +52,14 @@ with the `https://schema.org/` scheme throughout; readers normalise `http://sche
 Ordered collections (inputs, steps, CSRF rules, field rules, login routes, operations, flows)
 carry `schema:position`; a reader orders by position, then by IRI.
 Execution outcomes are runtime receipts, separate from the learned `SiteModel` graph.
-`sab:Completed` means the action is done and must not be repeated. `sab:Failed` makes no
-completion claim; earlier flow steps may already have changed site state. Completed
-payment outcomes require an authorized amount and currency in the normative shapes.
+`sab:Completed` means the action is done and must not be repeated. `sab:Failed` means execution
+stopped without a write returning a successful HTTP response. `sab:Uncertain` means at least one
+write returned 2xx/3xx but response processing or a later step failed; those writes must not be
+repeated. Completed payment outcomes require an authorized amount and currency in the normative
+shapes. Failed and uncertain receipts allow those fields to be absent. The ontology and both
+SHACL profiles admit Uncertain; generated artifacts are regenerated through codegen. The shared
+TypeScript `ActionOutcome` stays unchanged; site-executor's local `ExecutionOutcome` adds the
+uncertain status and its result supplies committed write targets/fingerprints.
 
 ## Worked example
 

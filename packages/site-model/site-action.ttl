@@ -66,13 +66,17 @@ sab:Completed a skos:Concept ;
     rdfs:label "Completed"@en ;
     rdfs:comment "The executor completed the operation or flow. The action is done."@en .
 
+sab:Uncertain a skos:Concept ;
+    rdfs:label "Uncertain"@en ;
+    rdfs:comment "At least one write returned a successful HTTP response, but the execution did not finish. The committed effects must not be repeated."@en .
+
 sab:Failed a skos:Concept ;
     rdfs:label "Failed"@en ;
-    rdfs:comment "The execution failed or was refused. Earlier steps may already have changed site state; completion must not be assumed."@en .
+    rdfs:comment "The execution failed or was refused before any write returned a successful HTTP response."@en .
 
 sab:status a owl:ObjectProperty ;
     rdfs:label "status"@en ;
-    rdfs:comment "Whether an executor-authored action outcome is Completed or Failed."@en ;
+    rdfs:comment "Whether an executor-authored action outcome is Completed, Failed or Uncertain."@en ;
     rdfs:domain sab:ActionOutcome ;
     rdfs:range skos:Concept .
 

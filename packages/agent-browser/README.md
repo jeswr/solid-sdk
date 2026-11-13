@@ -41,14 +41,25 @@ site's real amount. Wire/fact disagreement and missing money evidence fail close
 Preparatory reads run before the gate, so approval shows, for example,
 "Buy Trail Runner sneakers for GBP 20.00 on shop.test". The executor binds the amount,
 currency and source item, re-reads on approval retry, and asks again if they change.
-Completed writes are never replayed.
+Committed writes are never replayed. A 2xx/3xx write remains committed if extraction,
+redirects, body consumption, cookie storage or a later step fails; its terminal receipt says
+`sab:Uncertain`. Do not infer that an `error` result means the charge failed.
+Money evidence rejects conflicting amounts/currencies and typed identifier collisions.
+Totals must follow every preceding write, agree across readings, and match any quantity/item
+bound by payment. Every quantity-bearing write must be accounted for; otherwise the executor
+requires a fresh basket total. Full summary display values are redacted before normalization
+or truncation, including names outside mapped inputs.
 
-Within one `runTask`, a completed effectful action is remembered by its target and resolved
-inputs. An identical later action returns `repeat-blocked` before execution or approval:
+Within one `runTask`, every executor `committed` entry is remembered, including writes in an
+uncertain execution or a flow paused for later approval. Before each action, `runTask` calls
+`planToRequests` and blocks a concrete write whose `fingerprint` is already committed:
 "already done in this task: <summary>; ask the person if they really want another".
-Changing a product or a bound quantity is a new action; omitted defaults and equivalent
-RDF spellings resolve to the same inputs. Reads and failed actions can be retried.
-`allowRepeats: true` disables this guard (default false); each task has its own memory.
+Fingerprints cover the effective method, normalized URL with sorted query and canonical body.
+Equivalent typed lexicals, JSON key order, hostname case, blank-node labels on unused inputs,
+and optional inputs absent from the wire cannot bypass the guard. Response-bound writes are
+checked again by the executor once their inputs resolve, using `excludeFingerprints`.
+Changed effective bodies or URLs represent different writes. Reads and failures before any
+write commits can be retried. `allowRepeats: true` disables the guard; each task has its own memory.
 
 `loginWithPassword(model, executorFetch, { username, password })` compiles the model's
 password operation, obtains its CSRF token, submits it and checks its session cookie
@@ -71,7 +82,12 @@ History entries contain `request` Turtle, result `status`, `observations` Turtle
 optional safe `error` (including the plain-text repeat-blocked result). Observations share
 a default 12,000-character budget, allocated newest first. Within an execution they put
 `sab:ActionOutcome` first, then the final step's trusted facts, then earlier steps.
-`sab:Completed` means the action is done and the planner must not repeat it.
+`sab:Completed` means the action is done and the planner must not repeat it. `sab:Uncertain`
+means a write committed but execution did not finish: do not repeat it or claim full completion.
+For `no-path`, the executor's safe `missing` names appear as "Missing required inputs: ..."
+in planner history. A learned Buy flow may require `schema:object/schema:name` for its search;
+an object IRI supplies identity but cannot supply that name. The planner can then correct its
+request using the catalogue's input paths.
 In the planner view, each `sab:UntrustedText` value is capped at 200 characters, including
 an explicit `[truncated]` marker. Untrusted structures receive space after all trusted
 facts across history; truncation preserves connected blank nodes and untrusted wrappers.
@@ -131,3 +147,7 @@ Unit and in-process transport tests need no network. `test/e2e.test.ts` needs a 
 listener and Chromium; it profiles the actual shop and checks both approval outcomes,
 the product/price summary, RDF provenance of the requested product, session isolation and
 untrusted review wrapping. It fails if those facilities are unavailable; it does not skip.
+
+`test/review-r2.test.ts` covers uncertain successful charges, canonical repeat detection,
+response-bound write checks and missing-input recovery. Session bundles accept an opaque
+`revision`; the shared executor passes it unchanged to every cookie update of that execution.

@@ -114,13 +114,13 @@ export function moneyFields(request: ActionRequest): { amount?: string; currency
   };
 }
 
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>)
       .filter(([, v]) => v !== undefined)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
   }
   return JSON.stringify(value);
 }
@@ -138,7 +138,7 @@ export function approvalDigest(fields: {
   /** Concrete request, execution position and session fingerprint (executor supplied). */
   binding?: unknown;
 }): string {
-  return createHash("sha256").update(canonical(fields)).digest("hex");
+  return createHash("sha256").update(canonicalJson(fields)).digest("hex");
 }
 
 const VERBS: Readonly<Record<string, string>> = {
@@ -190,17 +190,18 @@ export function summarise(
   target: Target,
   site: string,
   money: { amount?: string; currency?: string },
+  redact: (value: string) => string = (value) => value,
 ): string {
   const host = new URL(site).host;
   const objectName = request.values([`${SCHEMA}object`, `${SCHEMA}name`])[0];
-  const subject = objectName ? clean(objectName) : clean(target.label);
-  const verb = verbFor(target.actionType);
+  const subject = clean(redact(objectName ?? target.label));
+  const verb = clean(verbFor(redact(target.actionType)));
   const what = objectName ? `${verb} ${subject}` : subject;
   const price =
     money.amount !== undefined
-      ? ` for ${money.currency ? `${money.currency} ` : ""}${formatAmount(money.amount)}`
+      ? ` for ${money.currency ? `${clean(redact(money.currency))} ` : ""}${clean(formatAmount(redact(money.amount)), 120)}`
       : "";
-  return `${what}${price} on ${host}`;
+  return `${what}${price} on ${clean(redact(host), 255)}`;
 }
 
 export function newApprovalId(): string {

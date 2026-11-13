@@ -5,7 +5,9 @@
 // inserted structurally (URL encoding, JSON values, form fields), never spliced
 // into raw text, and the final URL passes the origin guard.
 
+import { createHash } from "node:crypto";
 import type { CsrfRule, Operation, Parameter } from "@jeswr/site-model";
+import { canonicalJson } from "./gate.js";
 import { guardUrl } from "./origin.js";
 import {
   encodeValue,
@@ -14,7 +16,7 @@ import {
   templateVariables,
   UriTemplateError,
 } from "./uri-template.js";
-import { BindingError, jsonValue, validateValue } from "./values.js";
+import { BindingError, canonicalValue, jsonValue, validateValue } from "./values.js";
 
 export type CompiledBody =
   | { kind: "json"; value: unknown }
@@ -239,7 +241,7 @@ export function compileOperation(
       continue;
     }
     if (!placeholders.has(param.name)) validateValue(param, v);
-    present[param.name] = v;
+    present[param.name] = placeholders.has(param.name) ? v : canonicalValue(param, v);
   }
   const { request } = operation;
   let templateVars: string[];
@@ -368,4 +370,26 @@ export function bodyInit(body: CompiledBody | undefined): string | FormData | un
     return form;
   }
   return bodyText(body);
+}
+
+/** The effective request before session/CSRF decoration; unused inputs never enter it. */
+export function requestFingerprint(compiled: CompiledRequest): string {
+  const url = new URL(compiled.url.href);
+  url.hash = "";
+  const query = [...url.searchParams].sort(([ak, av], [bk, bv]) =>
+    ak < bk ? -1 : ak > bk ? 1 : av < bv ? -1 : av > bv ? 1 : 0,
+  );
+  url.search = new URLSearchParams(query).toString();
+  const body =
+    compiled.body?.kind === "json"
+      ? { kind: "json", value: compiled.body.value }
+      : compiled.body
+        ? {
+            kind: compiled.body.kind,
+            fields: [...compiled.body.fields].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+          }
+        : undefined;
+  return createHash("sha256")
+    .update(canonicalJson({ method: compiled.method.toUpperCase(), url: url.href, body }))
+    .digest("hex");
 }

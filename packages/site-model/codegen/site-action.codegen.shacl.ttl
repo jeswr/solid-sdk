@@ -34,7 +34,7 @@
 
 [] a sh:NodeShape ;
   sh:targetClass sab:ActionOutcome ;
-  sh:property [ sh:path sab:status ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( sab:Completed sab:Failed ) ] ;
+  sh:property [ sh:path sab:status ; sh:name "status" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( sab:Completed sab:Failed sab:Uncertain ) ] ;
   sh:property [ sh:path sab:target ; sh:name "target" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
   sh:property [ sh:path sab:effect ; sh:name "effect" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( sab:ReversibleWrite sab:IrreversibleWrite sab:Payment ) ] ;
   sh:property [ sh:path schema:price ; sh:name "amount" ; sh:datatype xsd:decimal ; sh:minInclusive 0 ; sh:maxCount 1 ] ;

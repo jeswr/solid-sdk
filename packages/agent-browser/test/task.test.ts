@@ -1,15 +1,21 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { approvalFor, type ExecutionResult, type Executor } from "@jeswr/site-executor";
+import {
+  approvalFor,
+  type ExecutionResult,
+  type Executor,
+  planToRequests,
+} from "@jeswr/site-executor";
 import { describe, expect, it, vi } from "vitest";
 import { runTask, scriptedPlanner, type TaskExecutor } from "../src/index.js";
 import { buy, modelFixture, observations, search } from "./fixtures.js";
 
 const model = modelFixture();
-const done: ExecutionResult = { status: "done", observations: [], requests: 1 };
+const done: ExecutionResult = { status: "done", observations: [], committed: [], requests: 1 };
 const pending: ExecutionResult = {
   status: "needs-approval",
   observations: [],
+  committed: [],
   requests: 0,
   approval: approvalFor(
     {
@@ -33,8 +39,36 @@ const pending: ExecutionResult = {
 function executorFor(execute: Executor["execute"]): TaskExecutor {
   return {
     model,
-    execute,
-    planToRequests: () => ({ status: "planned", requests: [] }),
+    async execute(request, opts) {
+      const result = await execute(request, opts);
+      // Mock the boundary receipts for these protocol tests; transport regressions
+      // exercise actual executor commitment tracking separately.
+      const plan = this.planToRequests(request);
+      return {
+        ...result,
+        committed:
+          result.status === "done"
+            ? plan.requests.flatMap((r) =>
+                r.fingerprint
+                  ? [
+                      {
+                        fingerprint: r.fingerprint,
+                        target: {
+                          kind: "operation" as const,
+                          id: r.operation,
+                          label: r.label,
+                          actionType: "https://schema.org/BuyAction",
+                        },
+                      },
+                    ]
+                  : [],
+              )
+            : result.committed,
+      };
+    },
+    planToRequests(request) {
+      return planToRequests(this.model, request);
+    },
     approve: vi.fn(() => true),
     reject: vi.fn(() => true),
   };
@@ -166,6 +200,7 @@ describe("runTask", () => {
     approver.mockClear();
     execute.mockResolvedValue({
       status: "refused",
+      committed: [],
       error: "The site's real price is GBP 21.00",
       observations: [],
       requests: 1,

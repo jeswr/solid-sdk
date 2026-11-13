@@ -175,11 +175,11 @@ describe("execution outcomes", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({
       status: "error",
-      outcome: { status: "failed", target: "Create then update", effect: "irreversible-write" },
+      outcome: { status: "uncertain", target: "Create then update", effect: "irreversible-write" },
     });
     expect(result.outcome?.result).toBeUndefined();
     const receipt = result.observations[0]?.turtle ?? "";
-    expect(receipt).toContain("sab:Failed");
+    expect(receipt).toContain("sab:Uncertain");
     expect(receipt).not.toContain("sab:Completed");
     expect(receipt).not.toContain("schema:result");
     expect(result.observations[1]?.turtle).toContain("orders/42");

@@ -1,20 +1,23 @@
 // AUTHORED-BY Codex GPT-6
-import type { ActionOutcome } from "@jeswr/site-model";
+
 import { EFFECT_IRI, PREFIXES, SAB, SCHEMA } from "@jeswr/site-model";
 import { DataFactory, Parser, type Quad, Writer } from "n3";
+import type { ExecutionOutcome } from "./executor.js";
 
 const { blankNode, namedNode, literal, quad } = DataFactory;
 const type = `${PREFIXES.rdf}type`;
 
 /** Only trusted fields on the identified final item enter the completion receipt. */
-export function outcomeTurtle(outcome: ActionOutcome, finalTurtle = ""): string {
+export function outcomeTurtle(outcome: ExecutionOutcome, finalTurtle = ""): string {
   const node = blankNode();
   const quads: Quad[] = [
     quad(node, namedNode(type), namedNode(`${SAB}ActionOutcome`)),
     quad(
       node,
       namedNode(`${SAB}status`),
-      namedNode(`${SAB}${outcome.status === "completed" ? "Completed" : "Failed"}`),
+      namedNode(
+        `${SAB}${outcome.status === "completed" ? "Completed" : outcome.status === "uncertain" ? "Uncertain" : "Failed"}`,
+      ),
     ),
     quad(node, namedNode(`${SAB}target`), literal(outcome.target)),
     quad(node, namedNode(`${SAB}effect`), namedNode(EFFECT_IRI[outcome.effect])),

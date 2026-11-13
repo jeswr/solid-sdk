@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // @jeswr/site-executor: run a planner's RDF action request against a site's own
 // HTTP calls, as described by a @jeswr/site-model SiteModel.
 
@@ -8,6 +9,7 @@ export {
   type CompiledRequest,
   compileOperation,
   fillJsonTemplate,
+  requestFingerprint,
 } from "./compile.js";
 export {
   applySetCookies,
@@ -23,8 +25,11 @@ export {
 } from "./cookies.js";
 export { jsonPointer } from "./dom.js";
 export {
+  type CommittedWrite,
   createExecutor,
   type ErrorKind,
+  type ExecuteOptions,
+  type ExecutionOutcome,
   type ExecutionResult,
   type ExecutionStatus,
   type Executor,

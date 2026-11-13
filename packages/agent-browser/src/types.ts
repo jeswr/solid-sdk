@@ -51,7 +51,7 @@ export interface RunTaskOptions {
   persona?: string;
   /** Total observation characters across planner history, newest first. */
   observationBudget?: number;
-  /** Permit identical completed effectful actions in this task. Default false. */
+  /** Permit writes whose canonical requests already committed in this task. Default false. */
   allowRepeats?: boolean;
 }
 

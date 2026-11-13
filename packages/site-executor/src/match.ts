@@ -28,7 +28,7 @@ export type MatchResult =
       inputs: Record<string, string>;
     }
   | { kind: "ambiguous"; candidates: string[] }
-  | { kind: "no-path" };
+  | { kind: "no-path"; missing: string[] };
 
 interface Candidate {
   target: Target;
@@ -39,26 +39,35 @@ interface Candidate {
 }
 
 /**
- * Resolve all parameters; undefined when a required one has no value. Inputs with
- * no value at all (optional, no default) are left out of the record.
+ * Resolve available parameters and retain required names that could not resolve.
+ * Optional inputs without defaults are left out of the record.
  */
-export function resolveInputs(
+function inspectInputs(
   params: readonly Parameter[],
   request: ActionRequest,
-): { inputs: Record<string, string>; matched: number } | undefined {
+): { inputs: Record<string, string>; matched: number; missing: string[] } {
   const inputs: Record<string, string> = {};
   let matched = 0;
+  const missing: string[] = [];
   for (const param of params) {
     const { value, fromRequest } = resolveParameter(param, request);
     if (value === undefined) {
-      if (param.required) return undefined;
+      if (param.required) missing.push(param.name);
       continue;
     }
     validateValue(param, value);
     inputs[param.name] = value;
     if (fromRequest) matched++;
   }
-  return { inputs, matched };
+  return { inputs, matched, missing };
+}
+
+export function resolveInputs(
+  params: readonly Parameter[],
+  request: ActionRequest,
+): { inputs: Record<string, string>; matched: number } | undefined {
+  const result = inspectInputs(params, request);
+  return result.missing.length ? undefined : { inputs: result.inputs, matched: result.matched };
 }
 
 function pick(candidates: Candidate[]): MatchResult | undefined {
@@ -79,10 +88,14 @@ function pick(candidates: Candidate[]): MatchResult | undefined {
 export function matchRequest(model: SiteModel, request: ActionRequest): MatchResult {
   const types = new Set(request.types.map(normaliseIri));
   const flows: Candidate[] = [];
+  const incomplete: { missing: string[]; matched: number }[] = [];
   for (const flow of model.flows) {
     if (!types.has(normaliseIri(flow.actionType))) continue;
-    const r = resolveInputs(flow.inputs, request);
-    if (!r) continue;
+    const r = inspectInputs(flow.inputs, request);
+    if (r.missing.length) {
+      incomplete.push(r);
+      continue;
+    }
     flows.push({
       target: {
         kind: "flow",
@@ -100,8 +113,11 @@ export function matchRequest(model: SiteModel, request: ActionRequest): MatchRes
   const ops: Candidate[] = [];
   for (const operation of model.operations) {
     if (!types.has(normaliseIri(operation.actionType))) continue;
-    const r = resolveInputs(operation.inputs, request);
-    if (!r) continue;
+    const r = inspectInputs(operation.inputs, request);
+    if (r.missing.length) {
+      incomplete.push(r);
+      continue;
+    }
     ops.push({
       target: {
         kind: "operation",
@@ -114,7 +130,17 @@ export function matchRequest(model: SiteModel, request: ActionRequest): MatchRes
       matched: r.matched,
     });
   }
-  return pick(ops) ?? { kind: "no-path" };
+  const closest = incomplete.sort(
+    (a, b) => a.missing.length - b.missing.length || b.matched - a.matched,
+  )[0];
+  return (
+    pick(ops) ?? {
+      kind: "no-path",
+      missing: (closest?.missing ?? []).filter((name) =>
+        /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/.test(name),
+      ),
+    }
+  );
 }
 
 const EFFECT_RANK: Readonly<Record<EffectClass, number>> = {

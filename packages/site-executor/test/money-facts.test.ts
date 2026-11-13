@@ -247,7 +247,7 @@ describe("money from trusted reads in the same flow", () => {
     ["Order", "Invoice", "Product", "dynamicOrder"].flatMap((type) =>
       [true, false].map((fresh) => ({ type, fresh })),
     ),
-  )("uses a $type total only after the last reversible write (fresh=$fresh)", async ({
+  )("uses a purchase-bound $type total only after the last write (fresh=$fresh)", async ({
     type,
     fresh,
   }) => {
@@ -270,6 +270,9 @@ describe("money from trusted reads in the same flow", () => {
         fields: [
           { property: S + (type === "Product" ? "totalPaymentDue" : "value"), path: "/total" },
           { property: `${S}currency`, path: "/currency" },
+          { property: `${S}sku`, path: "/sku" },
+          { property: `${S}orderQuantity`, path: "/qty" },
+          { property: `${S}object`, path: "/object", datatype: "iri" },
           {
             property: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
             path: "/type",
@@ -289,6 +292,9 @@ describe("money from trusted reads in the same flow", () => {
         ? Response.json({
             total: "23.45",
             currency: "GBP",
+            sku: "TRAIL",
+            qty: "1",
+            object: `${O}/product/104`,
             type: type === "dynamicOrder" ? `${S}Order` : undefined,
           })
         : init?.method === "GET"
@@ -308,7 +314,7 @@ describe("money from trusted reads in the same flow", () => {
     ).toEqual(["20", fresh ? "23.45" : "20"]);
   });
 
-  it("voids approval when a re-read changes the price or the source item", async () => {
+  it("voids approval for a changed price and refuses a different source item", async () => {
     const { model } = fixture();
     let price = "20.00";
     let iri = `${O}/product/104`;
@@ -331,11 +337,9 @@ describe("money from trusted reads in the same flow", () => {
     gate.approve(second.approval?.id ?? "");
     iri = `${O}/product/another-iri`;
     const third = await ex.execute(req, { approvalId: second.approval?.id ?? "" });
-    expect(third.status).toBe("needs-approval");
-    expect(third.approval?.digest).not.toBe(second.approval?.digest);
-    gate.approve(third.approval?.id ?? "");
-    expect((await ex.execute(req, { approvalId: third.approval?.id ?? "" })).status).toBe("done");
-    expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+    expect(third.status).toBe("refused");
+    expect(third.error).toContain("identity");
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
   });
 
   it("refuses disagreement between wire money and site facts", async () => {

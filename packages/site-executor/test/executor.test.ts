@@ -439,7 +439,7 @@ describe("flows", () => {
     ]);
     expect(shop.requests[6]?.body).toBe("");
     expect(shop.requests[5]?.body).toBe(
-      `delivery=express&amount=20&currency=GBP&csrf_token=${CSRF}`,
+      `delivery=express&amount=20.0&currency=GBP&csrf_token=${CSRF}`,
     );
     expect(r.outcome).toEqual({
       status: "completed",

@@ -7,7 +7,7 @@ import type { Store } from "n3";
 
 export interface ActionOutcomeData {
   "effect": "https://jeswr.org/ns/site-action#ReversibleWrite" | "https://jeswr.org/ns/site-action#IrreversibleWrite" | "https://jeswr.org/ns/site-action#Payment";
-  "status": "https://jeswr.org/ns/site-action#Completed" | "https://jeswr.org/ns/site-action#Failed";
+  "status": "https://jeswr.org/ns/site-action#Completed" | "https://jeswr.org/ns/site-action#Failed" | "https://jeswr.org/ns/site-action#Uncertain";
   "target": string;
   "amount"?: number;
   "currency"?: string;
@@ -16,7 +16,7 @@ export interface ActionOutcomeData {
 
 export interface ActionOutcomeWrapper extends EntityWrapper {
   "effect"?: "https://jeswr.org/ns/site-action#ReversibleWrite" | "https://jeswr.org/ns/site-action#IrreversibleWrite" | "https://jeswr.org/ns/site-action#Payment";
-  "status"?: "https://jeswr.org/ns/site-action#Completed" | "https://jeswr.org/ns/site-action#Failed";
+  "status"?: "https://jeswr.org/ns/site-action#Completed" | "https://jeswr.org/ns/site-action#Failed" | "https://jeswr.org/ns/site-action#Uncertain";
   "target"?: string;
   "amount"?: number;
   "currency"?: string;

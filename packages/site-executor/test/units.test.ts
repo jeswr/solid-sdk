@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import type { Operation, Parameter, SiteModel } from "@jeswr/site-model";
 import { Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -366,6 +367,7 @@ describe("matching", () => {
     });
     expect(matchRequest(model, actionRequest(`[] a schema:BuyAction .`))).toEqual({
       kind: "no-path",
+      missing: ["name"],
     });
     expect(
       matchRequest(model, actionRequest(`[] a schema:SearchAction ; schema:query "q" .`)),

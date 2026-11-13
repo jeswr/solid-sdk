@@ -93,6 +93,8 @@ describe("normative shapes (site-action.shacl.ttl)", () => {
     ["Completed", "Payment", "", false],
     ["Completed", "ReversibleWrite", "", true],
     ["Failed", "Payment", "", true],
+    ["Uncertain", "Payment", "", true],
+    ["Uncertain", "IrreversibleWrite", "", true],
     ["Pending", "Payment", "", false],
     ["Completed", "Read", "", false],
     ["Completed", "Payment", 'schema:price "-1"^^xsd:decimal; schema:priceCurrency "GBP";', false],

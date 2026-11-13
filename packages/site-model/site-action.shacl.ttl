@@ -19,7 +19,7 @@
 
 sabsh:ActionOutcomeShape a sh:NodeShape ;
   sh:targetClass sab:ActionOutcome ;
-  sh:property [ sh:path sab:status ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( sab:Completed sab:Failed ) ] ;
+  sh:property [ sh:path sab:status ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( sab:Completed sab:Failed sab:Uncertain ) ] ;
   sh:property [ sh:path sab:target ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
   sh:property [ sh:path sab:effect ; sh:minCount 1 ; sh:maxCount 1 ;
     sh:in ( sab:ReversibleWrite sab:IrreversibleWrite sab:Payment ) ] ;
@@ -27,7 +27,7 @@ sabsh:ActionOutcomeShape a sh:NodeShape ;
   sh:property [ sh:path schema:priceCurrency ; sh:datatype xsd:string ; sh:pattern "^[A-Z]{3}$" ; sh:maxCount 1 ] ;
   sh:property [ sh:path schema:result ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
   sh:or (
-    [ sh:property [ sh:path sab:status ; sh:hasValue sab:Failed ] ]
+    [ sh:property [ sh:path sab:status ; sh:in ( sab:Failed sab:Uncertain ) ] ]
     [ sh:property [ sh:path sab:effect ; sh:in ( sab:ReversibleWrite sab:IrreversibleWrite ) ] ]
     [ sh:property [ sh:path schema:price ; sh:minCount 1 ] ;
       sh:property [ sh:path schema:priceCurrency ; sh:minCount 1 ] ]

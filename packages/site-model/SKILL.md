@@ -3,6 +3,7 @@ name: site-model
 description: Use when reading, writing or changing semantic agent browser site models (operations, flows, login routes as schema.org actions mapped to a site's own HTTP calls), the site-action (sab) vocabulary or shapes, planner action requests, the planner catalogue, or @jeswr/site-model's generated model.
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/site-model
 
@@ -41,3 +42,9 @@ change with both lanes.
 ## Agent persona
 
 None specific; use the general persona for suite packages.
+
+Execution receipts admit sab:Completed, sab:Failed and sab:Uncertain. Uncertain means a write
+received 2xx/3xx but the overall execution failed; the host must retain and guard those effects.
+Failed/Uncertain receipts may omit payment fields. Keep ontology, normative shapes and codegen
+profile synchronized, regenerate via codegen and keep the byte-for-byte drift test passing.
+The executor locally extends the shared ActionOutcome with uncertain; do not alter src/types.ts.

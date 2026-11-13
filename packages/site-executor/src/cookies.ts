@@ -1,8 +1,10 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Cookie jar and session providers. The jar is a plain array of cookies (the shape
 // Playwright's context.cookies() returns, so a profiler or fallback browser can
 // hand its session over); matching follows RFC 6265 domain/path/secure rules.
 
+import { randomUUID } from "node:crypto";
 import { isLoopbackHost } from "./origin.js";
 
 export interface Cookie {
@@ -21,6 +23,8 @@ export interface Cookie {
 }
 
 export interface SessionBundle {
+  /** Opaque session generation, returned unchanged with updates from this execution. */
+  revision?: string;
   cookies: Cookie[];
   /** Extra request headers (e.g. a bearer token from the vault). Sent only to the site origin. */
   headers?: Record<string, string>;
@@ -33,6 +37,7 @@ export interface SessionProvider {
 
 function cloneBundle(bundle: SessionBundle): SessionBundle {
   return {
+    ...(bundle.revision !== undefined ? { revision: bundle.revision } : {}),
     cookies: bundle.cookies.map((c) => ({ ...c })),
     ...(bundle.headers ? { headers: { ...bundle.headers } } : {}),
   };
@@ -48,16 +53,22 @@ export class InMemorySessions implements SessionProvider {
 
   async get(site: string, persona?: string): Promise<SessionBundle | undefined> {
     const bundle = this.#store.get(this.#key(site, persona));
+    // Anonymous cookie updates share the execution's undefined generation until
+    // a host/another execution obtains the newly established session.
+    if (bundle && bundle.revision === undefined) bundle.revision = randomUUID();
     return bundle ? cloneBundle(bundle) : undefined;
   }
 
   async update(site: string, persona: string | undefined, bundle: SessionBundle): Promise<void> {
-    this.#store.set(this.#key(site, persona), cloneBundle(bundle));
+    const key = this.#key(site, persona);
+    const current = this.#store.get(key);
+    if (bundle.revision !== current?.revision) return;
+    this.#store.set(key, cloneBundle(bundle));
   }
 
   /** Seed a session (e.g. after the host signs in). */
   set(site: string, persona: string | undefined, bundle: SessionBundle): void {
-    this.#store.set(this.#key(site, persona), cloneBundle(bundle));
+    this.#store.set(this.#key(site, persona), { ...cloneBundle(bundle), revision: randomUUID() });
   }
 }
 

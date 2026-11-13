@@ -51,7 +51,8 @@ const manifest = {
           "maxCount": 1,
           "in": [
             "https://jeswr.org/ns/site-action#Completed",
-            "https://jeswr.org/ns/site-action#Failed"
+            "https://jeswr.org/ns/site-action#Failed",
+            "https://jeswr.org/ns/site-action#Uncertain"
           ],
           "guards": {
             "requiredFailClosed": true

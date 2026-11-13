@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { ExecutionResult } from "@jeswr/site-executor";
-import { approvalDigest, effectiveEffect, matchRequest, summarise } from "@jeswr/site-executor";
 import { parseActionRequest, renderCatalogue } from "@jeswr/site-model";
 import { budgetHistory, plainText, promptFor } from "./planner.js";
 import { orderObservations, readQuads, writeQuads } from "./rdf.js";
@@ -17,6 +16,7 @@ const failure = (error: string): ExecutionResult => ({
   status: "error",
   error,
   observations: [],
+  committed: [],
   requests: 0,
 });
 
@@ -52,6 +52,12 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
   const redact = (text: string) => executor.redact?.(text) ?? text;
   const history: PlannerHistory[] = [];
   const completed = new Map<string, string>();
+  const remember = (result: ExecutionResult): void => {
+    for (const entry of result.committed)
+      completed.set(entry.fingerprint, redact(entry.target.label));
+  };
+  const exclusions = () =>
+    !options.allowRepeats && completed.size ? { excludeFingerprints: [...completed.keys()] } : {};
   const start = performance.now();
   const trace: TaskTrace = {
     format: "agent-browser-trace/0.1",
@@ -118,33 +124,20 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
         });
         continue;
       }
-      // Resolve with the executor's matching rules: RDF node labels, property order,
-      // omitted defaults and an item's SKU/IRI spelling do not change the action.
-      let action: { digest: string; summary: string } | undefined;
+      // Concrete writes use the executor's canonical wire fingerprint. Writes
+      // depending on future read values are checked again at its write boundary.
+      let previous: string | undefined;
       try {
-        const match = matchRequest(executor.model, request);
-        if (match.kind === "match") {
-          const effect = effectiveEffect(executor.model, match.flow, match.operation);
-          if (effect !== "read")
-            action = {
-              digest: approvalDigest({
-                site: executor.model.site,
-                modelVersion: executor.model.version,
-                target: match.target,
-                effect,
-                inputs: match.inputs,
-              }),
-              summary: `${summarise(request, match.target, executor.model.site, {})} (${Object.entries(
-                match.inputs,
-              )
-                .map(([name, value]) => `${name}=${value}`)
-                .join(", ")})`,
-            };
+        const plan = executor.planToRequests(request);
+        for (const write of plan.requests) {
+          if (write.fingerprint && completed.has(write.fingerprint)) {
+            previous = completed.get(write.fingerprint);
+            break;
+          }
         }
       } catch {
-        // Invalid/unmatched actions still go to the executor for its normal safe error.
+        // The executor returns its usual safe error for invalid/unmatched actions.
       }
-      const previous = action && completed.get(action.digest);
       if (!options.allowRepeats && previous !== undefined) {
         step.status = "repeat-blocked";
         step.statuses.push(step.status);
@@ -162,15 +155,20 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
         continue;
       }
       try {
-        result = await executor.execute(request);
+        result = await executor.execute(request, exclusions());
       } catch {
         result = failure("Executor failed to execute the action.");
       }
+      remember(result);
       step.statuses.push(result.status);
       let approvalCount = 0;
       while (result.status === "needs-approval" && result.approval) {
         if (approvalCount++ >= maxApprovals) {
-          result = failure("Approval limit reached; do not assume the action completed.");
+          result = {
+            ...failure("Approval limit reached; do not assume the action completed."),
+            committed: result.committed,
+            observations: result.observations,
+          };
           step.statuses.push(result.status);
           break;
         }
@@ -199,26 +197,30 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
           executor.reject?.(approval.id);
           result = {
             status: "denied",
-            observations: [],
-            requests: 0,
+            observations: result.observations,
+            committed: result.committed,
+            requests: result.requests,
             error: "The user denied this action.",
           };
         } else {
           executor.approve?.(approval.id);
           try {
-            result = await executor.execute(request, { approvalId: approval.id });
+            result = await executor.execute(request, { approvalId: approval.id, ...exclusions() });
           } catch {
             result = failure(
               "Executor failed to execute the approved action; do not assume it was completed.",
             );
           }
         }
+        remember(result);
         step.statuses.push(result.status);
       }
-      step.status = result.status;
-      if (result.status === "done" && action) completed.set(action.digest, action.summary);
+      step.status = result.errorKind === "repeat" ? "repeat-blocked" : result.status;
+      if (step.status === "repeat-blocked") step.statuses[step.statuses.length - 1] = step.status;
       step.observations = orderObservations(result.observations.map((o) => redact(o.turtle)));
       if (result.error) step.error = plainText(redact(result.error));
+      if (result.missing?.length)
+        step.error = `Missing required inputs: ${plainText(redact(result.missing.join(", ")))}`;
       if (result.candidates?.length)
         step.error = `Ambiguous action: ${plainText(redact(result.candidates.join(", ")))}`;
       history.push({
