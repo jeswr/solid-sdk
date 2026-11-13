@@ -94,6 +94,19 @@ export function productRecord(input: {
     id: `urn:awp:product:${input.slug}`,
     issuer: input.lender,
     claimType: PRODUCT_CLAIM,
+    terms: {
+      policy: {
+        id: `urn:awp:product-terms:${input.slug}`,
+        permissions: ["use", "distribute"].map((action) => ({
+          type: "permission",
+          action,
+          target: `urn:awp:product:${input.slug}`,
+          constraints: [
+            { leftOperand: "purpose", operator: "eq", rightOperand: PURPOSE.productSearch },
+          ],
+        })),
+      },
+    },
     method: "published-by-lender",
     issuedAt: "2026-11-01T09:00:00Z",
     product: {
@@ -115,9 +128,26 @@ export function faceCheckAttestation(input: {
   operation: Iri;
   challenge?: JsonObject;
 }): JsonObject {
+  const id = `urn:awp:attestation:face-check:${input.actionDigest.slice(0, 16)}`;
   return {
     type: "ApprovalAttestation",
-    id: `urn:awp:attestation:face-check:${input.actionDigest.slice(0, 16)}`,
+    id,
+    terms: {
+      policy: {
+        id: `${id}:terms`,
+        permissions: ["use", "distribute"].map((action) => ({
+          type: "permission",
+          action,
+          target: id,
+          constraints: [
+            { leftOperand: "purpose", operator: "eq", rightOperand: PURPOSE.mortgageApplication },
+            ...(action === "distribute"
+              ? [{ leftOperand: "recipient", operator: "eq", rightOperand: HARBOUR }]
+              : []),
+          ],
+        })),
+      },
+    },
     issuer: IDP,
     claimType: APPROVAL_CLAIM,
     subject: SAM.party,

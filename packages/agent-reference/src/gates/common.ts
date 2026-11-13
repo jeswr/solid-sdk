@@ -92,6 +92,7 @@ export interface AdmittedFact {
   readonly label: string;
   readonly claimType: string;
   readonly source: string;
+  readonly digest?: string;
   readonly subject?: string;
   readonly method?: string;
   readonly asOf?: string;
@@ -101,6 +102,7 @@ export interface AdmittedFact {
 /** Every item actually shown to the core, with labels retained across restarts. */
 export interface ContextItem extends AdmittedFact {
   readonly kind: "statement" | "memory" | "message" | "reading";
+  readonly accepted?: boolean;
   readonly digest: string;
 }
 

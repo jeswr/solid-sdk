@@ -22,6 +22,7 @@ export const TYP = {
   representation: "awp-representation+jws",
   approval: "awp-approval+jws",
   statement: "awp-statement+jws",
+  implementation: "awp-implementation+jws",
 } as const;
 
 export const MECHANISM_ID = "jws-compact/rfc7515";

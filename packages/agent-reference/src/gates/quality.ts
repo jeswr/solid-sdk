@@ -6,10 +6,36 @@
  * kind of claim); item terms are ODRL policies in the pilot subset, decided by the same policy
  * engine as mandates.
  */
+import { z } from "zod";
 import type { Iri } from "../core/types.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
 import type { ItemTerms, RelianceProfile } from "./common.js";
 import { idWords } from "./common.js";
+
+const constraintShape = z
+  .object({
+    leftOperand: z.string(),
+    operator: z.string(),
+    rightOperand: z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]),
+  })
+  .passthrough();
+const ruleShape = z
+  .object({ action: z.string(), constraints: z.array(constraintShape).optional() })
+  .passthrough();
+const termsShape = z
+  .object({
+    policy: z
+      .object({
+        id: z.string(),
+        permissions: z.array(ruleShape).optional(),
+        prohibitions: z.array(ruleShape).optional(),
+        obligations: z.array(ruleShape).optional(),
+      })
+      .passthrough(),
+    deleteWithinDays: z.number().nonnegative().optional(),
+    recipientMustBe: z.object({ task: z.string(), label: z.string() }).optional(),
+  })
+  .passthrough();
 
 export interface QualityClaim {
   readonly claimType: string;
@@ -73,6 +99,7 @@ export interface TermsVerdict {
 /** Plain words for an item's terms. */
 export function termsSummary(terms: ItemTerms | undefined): string {
   if (!terms) return "no terms attached";
+  if (!termsShape.safeParse(terms).success) return "unsupported terms";
   const uses = new Set<string>();
   const shares = new Set<string>();
   const never = new Set<string>();
@@ -118,6 +145,12 @@ export function evaluateItemTerms(
   },
   engine: PolicyEngine = solidOdrlEngine,
 ): TermsVerdict {
+  if (terms && !termsShape.safeParse(terms).success)
+    return {
+      verdict: "indeterminate",
+      reason: "indeterminate-policy",
+      text: "The attached terms are not understood.",
+    };
   if (!terms && need.action === "distribute")
     return {
       verdict: "fail",

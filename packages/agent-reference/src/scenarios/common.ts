@@ -210,7 +210,7 @@ export class Cast {
     handlers: OperationHandler[],
     effects: EffectAdapter[] = [],
     accepted: string[] = [CONFIG_ED25519],
-    extra: Pick<AgentRuntimeOptions, "gates"> = {},
+    extra: Pick<AgentRuntimeOptions, "gates" | "core"> = {},
   ): Promise<{ runtime: AgentRuntime; ledger: MemoryLedger }> {
     const p = this.get(name);
     const ledger = new MemoryLedger();

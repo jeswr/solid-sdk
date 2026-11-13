@@ -351,160 +351,693 @@
       "change": {
         "script": [
           {
+            "id": "request",
+            "agent": "service-agent",
+            "type": "start",
+            "peer": "person-agent",
+            "kind": "propose",
+            "operation": "urn:operation:service-query",
+            "contents": {
+              "purpose": "urn:purpose:service-query",
+              "evidenceRequest": [
+                {
+                  "claimType": "contact"
+                }
+              ],
+              "topic": "contact-request"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:operation:service-query",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:service-query",
+            "discover": false
+          },
+          {
+            "id": "open-channel",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "accept",
+              "intent": {
+                "operation": "urn:operation:service-query",
+                "action": "use",
+                "target": "urn:operation:service-query",
+                "purpose": "urn:purpose:service-query",
+                "recipient": {
+                  "$ref": "current.peer.party"
+                },
+                "conversation": {
+                  "$ref": "current.conversation.id"
+                },
+                "parameters": {}
+              }
+            }
+          },
+          {
+            "id": "channel-accepted",
+            "agent": "service-agent",
+            "type": "receive"
+          },
+          {
+            "id": "probe-1",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 1
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-1",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
+          },
+          {
             "id": "outside-1",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
             "activityType": "urn:activity:request"
+          },
+          {
+            "id": "probe-2",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 2
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-2",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
           },
           {
             "id": "outside-2",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
             "activityType": "urn:activity:request"
+          },
+          {
+            "id": "probe-3",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 3
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-3",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
           },
           {
             "id": "outside-3",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
             "activityType": "urn:activity:request"
+          },
+          {
+            "id": "probe-4",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 4
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-4",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
           },
           {
             "id": "outside-4",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
             "activityType": "urn:activity:request"
+          },
+          {
+            "id": "probe-5",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 5
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-5",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
           },
           {
             "id": "outside-5",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
             "activityType": "urn:activity:request"
+          },
+          {
+            "id": "probe-6",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 6
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-6",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
           },
           {
             "id": "outside-6",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
             "activityType": "urn:activity:request"
+          },
+          {
+            "id": "probe-7",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 7
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-7",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
           },
           {
             "id": "outside-7",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
             "activityType": "urn:activity:request"
+          },
+          {
+            "id": "probe-8",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 8
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-8",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
           },
           {
             "id": "outside-8",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
             "activityType": "urn:activity:request"
+          },
+          {
+            "id": "probe-9",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 9
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-9",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
           },
           {
             "id": "outside-9",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
             "activityType": "urn:activity:request"
           },
           {
+            "id": "probe-10",
+            "agent": "service-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
+                }
+              },
+              "purpose": "urn:purpose:service-query",
+              "input": {
+                "request": "private-history",
+                "sequence": 10
+              }
+            },
+            "intent": {
+              "operation": "urn:operation:service-query",
+              "action": "use",
+              "target": "urn:operation:service-query",
+              "purpose": "urn:purpose:service-query",
+              "recipient": "urn:fictional:rowan",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": []
+          },
+          {
+            "id": "probe-arrives-10",
+            "agent": "person-agent",
+            "type": "receive",
+            "reply": {
+              "type": "none"
+            }
+          },
+          {
             "id": "outside-10",
             "agent": "person-agent",
             "type": "effect",
             "intent": {
-              "action": "use",
               "operation": "urn:operation:service-query",
+              "action": "use",
               "target": "urn:operation:private-history",
               "purpose": "urn:purpose:service-query",
               "recipient": "urn:fictional:cedar-service",
-              "conversation": "urn:scenario:probing-counterparty:hostile-task",
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              },
               "parameters": {}
             },
             "params": {},
@@ -519,6 +1052,396 @@
       },
       "outline": [
         {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "service-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "service-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "service-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "service-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "service-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "fail",
+          "reason": "representation-missing"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "representation-missing"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "person-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
           "agent": "person-agent",
           "part": "outbound-gate",
           "kind": "check",
@@ -534,6 +1457,93 @@
           "reason": "not-authorised"
         },
         {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "conversation-closed"
+        },
+        {
           "agent": "person-agent",
           "part": "outbound-gate",
           "kind": "check",
@@ -549,6 +1559,93 @@
           "reason": "not-authorised"
         },
         {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "conversation-closed"
+        },
+        {
           "agent": "person-agent",
           "part": "outbound-gate",
           "kind": "check",
@@ -564,6 +1661,93 @@
           "reason": "not-authorised"
         },
         {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "conversation-closed"
+        },
+        {
           "agent": "person-agent",
           "part": "outbound-gate",
           "kind": "check",
@@ -579,6 +1763,93 @@
           "reason": "not-authorised"
         },
         {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "conversation-closed"
+        },
+        {
           "agent": "person-agent",
           "part": "outbound-gate",
           "kind": "check",
@@ -594,6 +1865,93 @@
           "reason": "not-authorised"
         },
         {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "conversation-closed"
+        },
+        {
           "agent": "person-agent",
           "part": "outbound-gate",
           "kind": "check",
@@ -609,6 +1967,93 @@
           "reason": "not-authorised"
         },
         {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "conversation-closed"
+        },
+        {
           "agent": "person-agent",
           "part": "outbound-gate",
           "kind": "check",
@@ -624,6 +2069,93 @@
           "reason": "not-authorised"
         },
         {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "conversation-closed"
+        },
+        {
           "agent": "person-agent",
           "part": "outbound-gate",
           "kind": "check",
@@ -639,6 +2171,93 @@
           "reason": "not-authorised"
         },
         {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "conversation-closed"
+        },
+        {
           "agent": "person-agent",
           "part": "outbound-gate",
           "kind": "check",
@@ -652,6 +2271,93 @@
           "kind": "decision",
           "verdict": "fail",
           "reason": "not-authorised"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "service-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "service-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "person-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "person-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "conversation-closed"
         },
         {
           "agent": "person-agent",
@@ -1486,6 +3192,22 @@
       "check": "limits-approval",
       "verdict": "pass",
       "reason": "within-limits"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
     },
     {
       "agent": "person-agent",

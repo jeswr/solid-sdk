@@ -33,7 +33,7 @@
       "change": {},
       "expect": {
         "outcome": "ask-principal",
-        "check": "source",
+        "check": "limits-approval",
         "reason": "limit-exceeded"
       },
       "outline": [],

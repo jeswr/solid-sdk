@@ -12,6 +12,7 @@
  * open) → `agreed` (an accept referenced the exact offer digest) → per-side outcomes
  * recorded from receipts → `completed` / `failed` / `uncertain`.
  */
+import { digestOf } from "./canonical.js";
 import type { PilotLimits } from "./limits.js";
 import type {
   AnyMessage,
@@ -68,6 +69,7 @@ export interface ConversationState {
     readonly nonce: Iri;
     readonly expiresAt: string;
     readonly by: Side;
+    readonly requestDigest: string;
   };
   /** Recorded requests, including operations invoked under a different negotiated operation. */
   readonly requests?: Readonly<
@@ -78,6 +80,7 @@ export interface ConversationState {
         readonly basis: Basis;
         readonly by: Side;
         readonly delivered?: boolean;
+        readonly digest?: string;
       }
     >
   >;
@@ -303,6 +306,7 @@ export function transition(
           nonce: message.body.needs.nonce,
           expiresAt: message.body.needs.expiresAt,
           by,
+          requestDigest: state.requests?.[message.body.ref]?.digest ?? "",
         },
       };
       break;
@@ -332,6 +336,16 @@ export function transition(
             "protocol-violation",
             "retry does not cite this conversation's challenge and nonce",
           );
+        if (
+          challenge.requestDigest !==
+          digestOf({
+            operation: message.body.operation,
+            input: message.body.input,
+            basis: message.body.basis,
+            purpose: message.body.purpose ?? null,
+          })
+        )
+          return fail("protocol-violation", "retry changed the challenged request");
         if (Date.parse(challenge.expiresAt) <= Date.parse(event.at))
           return fail("expired", "challenge expired");
       } else if (message.body.challenge)
@@ -364,6 +378,12 @@ export function transition(
             operation: message.body.operation,
             basis,
             by,
+            digest: digestOf({
+              operation: message.body.operation,
+              input: message.body.input,
+              basis,
+              purpose: message.body.purpose ?? null,
+            }),
           },
         },
       };

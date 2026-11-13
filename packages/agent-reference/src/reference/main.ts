@@ -154,6 +154,19 @@ export async function runMain(
   // organization keys, pinned at introduction; whether the register should publish them is
   // left to the identity layer.
   cast.pinIssuer("harbourbank", IDP, issuers.idp, "identity provider's attestation key");
+  cast.pinIssuer("sam", IDP, issuers.idp, "identity provider's attestation key");
+  cast.pinIssuer(
+    "product-index",
+    NORTH.party,
+    issuers.north,
+    "lender identity key introduced to the index",
+  );
+  cast.pinIssuer(
+    "product-index",
+    HARBOUR,
+    issuers.harbour,
+    "lender identity key introduced to the index",
+  );
   const until = new Date(t + 365 * 86_400_000).toISOString();
   for (const rule of samSourceRules(until)) cast.rule("sam", rule);
   for (const rule of referenceLenderRules(until)) cast.rule("northbank-intake", rule);
@@ -299,6 +312,13 @@ export async function runMain(
   // 3. Find products: an anonymous query to the index (public read), nothing about Sam in
   // it. Each record comes back signed by its lender and passes Sam's inbound gate.
   recorder.step(3);
+  await index.runtime.admitStatements(
+    records.map((record) => ({ jws: record.jws })),
+    {
+      task: "a product search",
+      purpose: PURPOSE.productSearch,
+    },
+  );
   const search = await sam.runtime.startInvocation({
     peer: { actor: INDEX.actor, party: INDEX.party },
     operation: PRODUCT_SEARCH_OP,
@@ -369,6 +389,11 @@ export async function runMain(
         challenge: pending.intent.parameters.challenge as JsonObject,
       }),
     );
+    await sam.runtime.admitStatements([{ jws: attestation }], {
+      subject: SAM.party,
+      task: "a mortgage application",
+      purpose: PURPOSE.mortgageApplication,
+    });
     const answered = await sam.runtime.submitApproval(
       await cast.approval(
         "sam",

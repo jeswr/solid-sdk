@@ -46,6 +46,15 @@
     },
     "terms.turn": {
       "type": "number"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "private-history"
+      ]
+    },
+    "input.sequence": {
+      "type": "number"
     }
   },
   "operations": [

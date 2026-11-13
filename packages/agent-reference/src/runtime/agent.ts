@@ -56,7 +56,7 @@ import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.
 import { TYP, verifyStatement } from "../mechanisms/statements.js";
 import type { TrustStore } from "../mechanisms/trust.js";
 import { CONFIGURATIONS, configurationById, POLICY_PROFILE } from "../profile/configurations.js";
-import { CORE_CONTENT_VOCABULARY, freeStrings } from "../profile/content.js";
+import { CORE_CONTENT_VOCABULARY, freeMessageStrings, freeStrings } from "../profile/content.js";
 import {
   buildDescription,
   type ConformanceClaim,
@@ -133,6 +133,11 @@ export interface AgentRuntimeOptions {
   /** Accepted configuration ids, in preference order. */
   readonly accepted: readonly string[];
   readonly handlers: readonly OperationHandler[];
+  readonly core?: {
+    readonly id: Iri;
+    readonly version: string;
+    readonly kind: "scripted" | "model";
+  };
   readonly effects?: readonly EffectAdapter[];
   readonly store: StateStore;
   readonly ledger: EvidenceLedger;
@@ -313,7 +318,11 @@ export class AgentRuntime {
     this.gateMemory = memory;
     for (const items of Object.values(memory.contexts))
       for (const item of items) {
-        if (item.kind === "statement" || item.kind === "reading") memory.facts.set(item.id, item);
+        if (
+          (item.kind === "statement" && item.accepted !== false) ||
+          (item.kind === "reading" && item.accepted === true)
+        )
+          memory.facts.set(item.id, item);
       }
     this.inbound = new InboundGate({
       identity: this.identity,
@@ -336,7 +345,8 @@ export class AgentRuntime {
     this.outbound = new OutboundGate({
       identity: this.identity,
       now: () => this.now(),
-      mandate: () => this.mandate && !this.isRevoked(this.mandate) ? this.mandate.mandate : undefined,
+      mandate: () =>
+        this.mandate && !this.isRevoked(this.mandate) ? this.mandate.mandate : undefined,
       policyEngine: options.policyEngine,
       gate,
       memory,
@@ -345,6 +355,11 @@ export class AgentRuntime {
         return conv?.role === "responder" && conv.peer.party === party;
       },
       conversationPurpose: (id) => this.purposeOf(id),
+      conversationRetentionDays: (id) => {
+        const agreement = this.state.conversations[id]?.agreement;
+        const days = agreement ? this.state.agreements[agreement]?.terms.retentionDays : undefined;
+        return typeof days === "number" ? days : undefined;
+      },
       offerTerms: (termsDigest) => {
         for (const [key, entry] of Object.entries(this.state.domain)) {
           if (!key.startsWith("_offer:")) continue;
@@ -700,7 +715,17 @@ export class AgentRuntime {
   }
 
   instruct(text: string): void {
+    this.gateMemory.enter(this.options.gates?.taskId ?? "*", {
+      id: derivedUrn("instruction", { text }),
+      digest: digestOf(text),
+      kind: "message",
+      label: "Principal instruction",
+      source: this.identity.party ?? this.identity.actor,
+      subject: this.identity.party ?? "unknown",
+      claimType: "principal-instruction",
+    });
     this.outbound.instruction(text);
+    this.persist();
   }
 
   /**
@@ -743,6 +768,23 @@ export class AgentRuntime {
         );
       const key = this.keysByAlg.get("EdDSA");
       if (!key) throw new RejectError("unknown-key", "no authoring agent key");
+      if (!this.options.core)
+        throw new RejectError("missing-context", "a reading needs a declared core implementation");
+      const implementation = {
+        issuer: this.identity.actor,
+        core: this.options.core,
+        description: this.description(),
+      };
+      const implementationId = derivedUrn("implementation", implementation);
+      const implementationStatement = { id: implementationId, ...implementation };
+      const implementationJws = await signCompact(key, TYP.implementation, implementationStatement);
+      this.record({
+        type: "implementation-statement",
+        id: implementationId,
+        digest: digestOf(implementationStatement),
+        jws: implementationJws,
+        at: this.now(),
+      });
       const statement: JsonObject = {
         id: this.newId(),
         issuer: this.identity.actor,
@@ -752,7 +794,8 @@ export class AgentRuntime {
         method: "model-output",
         asOf: this.now(),
         originalDigest: input.originalDigest,
-        implementation: digestOf(this.description()),
+        implementation: implementationId,
+        implementationDigest: digestOf(implementationStatement),
       };
       // A reading inherits the original's terms. The caller cannot loosen them.
       if (original.terms) statement.terms = original.terms as unknown as Json;
@@ -767,6 +810,7 @@ export class AgentRuntime {
         claimType: input.claimType,
         method: "model-output",
         kind: "reading",
+        accepted: false,
         digest: digestOf(statement),
       });
       this.persist();
@@ -1807,8 +1851,20 @@ export class AgentRuntime {
           Buffer.from(item.value.split(".")[1] ?? "", "base64url").toString(),
         ) as JsonObject;
         const fact = this.gateMemory.facts.get(String(claim.id));
-        if (fact)
-          this.gateMemory.enter(task, { ...fact, kind: "statement", digest: digestOf(claim) });
+        const digest = digestOf(claim);
+        if (fact && fact.digest === digest)
+          this.gateMemory.enter(task, { ...fact, kind: "statement", accepted: true, digest });
+        else
+          this.gateMemory.enter(task, {
+            id: typeof claim.id === "string" ? claim.id : digest,
+            digest,
+            kind: "statement",
+            accepted: false,
+            label: "Unaccepted statement shown as untrusted data",
+            claimType: typeof claim.claimType === "string" ? claim.claimType : "unknown",
+            source: typeof claim.issuer === "string" ? claim.issuer : "unknown",
+            subject: typeof claim.subject === "string" ? claim.subject : "unknown",
+          });
       } catch {
         /* An unaccepted claim is never a fact. The message below retains its labels. */
       }
@@ -2981,7 +3037,12 @@ export class AgentRuntime {
         outbound: [],
       });
     const waiting = this.state.pending[a.actionDigest];
-    if (!waiting) return this.result("rejected", { reason: "approval-denied", detail: "no action is waiting with this digest", outbound: [] });
+    if (!waiting)
+      return this.result("rejected", {
+        reason: "approval-denied",
+        detail: "no action is waiting with this digest",
+        outbound: [],
+      });
     if (waiting && a.conversation !== waiting.conversation)
       return this.result("rejected", {
         reason: "approval-denied",
@@ -3066,9 +3127,16 @@ export class AgentRuntime {
       });
     }
     if (cont.type === "release-message") {
-      if (digestOf(cont.message) !== pending.intent.parameters.messageDigest || actionDigest(pending.intent) !== a.actionDigest) {
+      if (
+        digestOf(cont.message) !== pending.intent.parameters.messageDigest ||
+        actionDigest(pending.intent) !== a.actionDigest
+      ) {
         this.persist();
-        return this.result("rejected", { reason: "approval-denied", detail: "held message does not match the approved digest", outbound: [] });
+        return this.result("rejected", {
+          reason: "approval-denied",
+          detail: "held message does not match the approved digest",
+          outbound: [],
+        });
       }
       if (a.decision === "deny") {
         this.state.usedApprovals[a.id] = true;
@@ -3221,7 +3289,7 @@ export class AgentRuntime {
       ...CORE_CONTENT_VOCABULARY,
       ...this.options.gates?.vocabulary,
     });
-    const message =
+    let message =
       opts.resume ??
       ({
         profile: PILOT_PROFILE,
@@ -3241,14 +3309,44 @@ export class AgentRuntime {
         createdAt: at.toISOString(),
         expiresAt: new Date(at.getTime() + lifetime).toISOString(),
         ...(opts.inReplyTo ? { inReplyTo: opts.inReplyTo } : {}),
-        body,
+        body: structuredClone(body),
         ...(free.length > 0 && this.identity.party
           ? { authorship: { method: "model-output", onBehalfOf: this.identity.party } }
           : {}),
-        ...(opts.evidence && opts.evidence.length > 0 ? { evidence: opts.evidence } : {}),
+        ...(opts.evidence && opts.evidence.length > 0
+          ? { evidence: structuredClone(opts.evidence) }
+          : {}),
       } as unknown as AnyMessage);
+    if (
+      !opts.resume &&
+      this.identity.party &&
+      freeMessageStrings(message, this.options.gates?.vocabulary).length > 0
+    ) {
+      message = {
+        ...message,
+        authorship: { method: "model-output", onBehalfOf: this.identity.party },
+      };
+    }
     const checked = validateMessage(message);
     if (!checked.ok) throw new Error(`internal: outbound ${kind} invalid: ${checked.detail}`);
+    for (const evidence of message.evidence ?? []) {
+      if (evidence.role !== "credential" || evidence.format !== "jws-compact") continue;
+      const checkedEvidence = await this.inbound.assessClaim(evidence, this.identity.party);
+      if (
+        !checkedEvidence.claim ||
+        checkedEvidence.reason === "evidence-invalid" ||
+        checkedEvidence.reason === "unknown-key"
+      ) {
+        this.outbound.stopEvidence(message.id);
+        throw new MessageReleaseError(
+          this.result("rejected", {
+            reason: "evidence-invalid",
+            conversation: conv.id,
+            outbound: [],
+          }),
+        );
+      }
+    }
     const release = this.outbound.checkMessage(message, {
       ...(opts.intent ? { intent: opts.intent } : {}),
       ...(this.operationOf(conv) ? { operation: this.operationOf(conv) } : {}),
@@ -3411,31 +3509,16 @@ export class AgentRuntime {
       ref: msg.id,
       at: this.now(),
     });
-    if (isTerminal(conv.phase))
-      return {
-        disposition: "accepted" as const,
-        outbound: [],
-        reason,
-        ...(detail ? { detail } : {}),
-      };
-    const body = { ref: msg.id, reason, ...(detail ? { detail: detail.slice(0, 1000) } : {}) };
+    const local = { reason, ...(detail ? { detail } : {}) };
+    if (isTerminal(conv.phase)) return { disposition: "accepted" as const, outbound: [], ...local };
     const current = this.mustConversation(conv.id);
     if (current.phase === "open" || current.phase === "discovering") {
       this.closeLocally(current, kind === "refuse" ? "refused" : kind, reason);
-      return {
-        disposition: "accepted" as const,
-        outbound: [],
-        reason,
-        ...(detail ? { detail } : {}),
-      };
+      return { disposition: "accepted" as const, outbound: [], ...local };
     }
-    const out = await this.emit(conv.id, kind, body, { inReplyTo: msg.id });
-    return {
-      disposition: "accepted" as const,
-      outbound: [out],
-      reason,
-      ...(detail ? { detail } : {}),
-    };
+    // Diagnostic prose stays local. A registry code is enough for a peer to act on.
+    const out = await this.emit(conv.id, kind, { ref: msg.id, reason }, { inReplyTo: msg.id });
+    return { disposition: "accepted" as const, outbound: [out], ...local };
   }
 
   /** Answer a request with a challenge: what more would let it be admitted (CORE-IN-8). */
@@ -3498,11 +3581,16 @@ export class AgentRuntime {
       assessRepresentation: (jws, expect) => this.inbound.assessRepresentation(jws, expect),
       getState: <T extends Json>(key: string) => {
         const value = this.getDomain(`${opKey}:${key}`);
-        if (value !== undefined) this.gateMemory.enter(this.options.gates?.taskId ?? conv.id, {
-          id: derivedUrn("memory", { operation: opKey, key, digest: digestOf(value) }),
-          kind: "memory", digest: digestOf(value), label: `Memory entry ${key}`,
-          claimType: `memory:${key}`, source: this.identity.actor, subject: this.identity.party ?? "unknown",
-        });
+        if (value !== undefined)
+          this.gateMemory.enter(this.options.gates?.taskId ?? conv.id, {
+            id: derivedUrn("memory", { operation: opKey, key, digest: digestOf(value) }),
+            kind: "memory",
+            digest: digestOf(value),
+            label: `Memory entry ${key}`,
+            claimType: `memory:${key}`,
+            source: this.identity.actor,
+            subject: this.identity.party ?? "unknown",
+          });
         return structuredClone(value) as T | undefined;
       },
       setState: (key: string, value: Json, owner?: Iri | null) =>

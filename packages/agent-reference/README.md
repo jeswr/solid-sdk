@@ -28,8 +28,8 @@ callers and tests are unchanged. Each module is reachable by path, for example
 - `gates/inbound` — `InboundGate` and `Admission`: integrity, source, authority, terms,
   fitness, then admit or refuse. `gates/outbound` — `OutboundGate.release()`: mandate,
   recipient, disclosure, data terms, limits and approval, then `seal()` for evidence; go,
-  ask the principal, or stop. The runtime calls them where the pilot already decided, so
-  `@jeswr/personal-agent` behaves as before when no `gates` option is given.
+  ask the principal, or stop. The runtime calls them before release, including protocol messages. Unknown text and
+  untyped commitment content now fail conservatively even without trace collection.
 - `trust/resolver` — `TrustResolver`: own list, then a root, then the register it delegates
   to; every answer carries its path.
 - `trace/` — the `agent-trace/0.1` types, `TraceRecorder`, packet views and `outlineOf()`.
@@ -47,3 +47,35 @@ trust lookups, `fact` on memory events, and gate codes (`not-in-configuration`,
 `no-register-for-party`, `no-personal-data`) as the reason of `not-applicable` verdicts.
 
 Experimental. Synthetic parties and data only; both sides of every exchange run this code.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The data engine loads `profiles/<id>.json` (`agent-profile/0.1`) and
+`scenarios/<id>.json` (`agent-scenario/0.1`). Their JSON Schemas are in `schemas/`;
+the runtime validators and published schemas come from the same Zod definitions.
+`runScenario()` runs the main path and each branch in a fresh synthetic world,
+using real runtimes, signatures and gates. It checks branch outcomes and outlines.
+`pnpm run scenarios` writes runnable traces and `scenario-runs.json`, which also
+names every blocked path and its reason. `--record-outlines` explicitly records
+new expectations for review; ordinary runs fail on drift.
+
+Scripts use literal JSON and whole-value references such as
+`{ "$ref": "steps.request.conversation" }`. They can start exchanges, route
+messages, propose replies or synthetic effects, answer approval requests, introduce
+hostile mutations, record readings and check records. They cannot write gate events.
+Branch `change` objects merge into the scenario; arrays replace. The engine rejects
+unsupported suites, DER rules and standing rules instead of substituting another check.
+The three `probing-counterparty` paths run from data. Nine other catalogue cases
+and the five mortgage migrations have explicit blockers. A blocked path is not counted
+as a run, regardless of whether it has a saved outline. Existing mortgage drivers remain pending migration.
+
+Free text is detected recursively through the vocabulary's types and closed values.
+Unknown strings remain text, wherever they occur. Vocabulary paths use `*` for one
+member or index and `~1` for a literal dot in a key. Optional `claimType` labels
+identify data required by a purpose. Each task keeps the items its core actually
+sees, including memory reads and principal instructions; callers should declare
+`gates.taskId` when several conversations belong to one task. Unscoped fetched
+items conservatively affect every task. Text that fails the context rule is held
+before the outbox and requires a single-use approval of its exact message digest,
+when the signed mandate permits asking. `recordReading()` requires a declared core
+and records its signed implementation statement, original digest and model authorship.

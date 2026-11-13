@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 /** Data drives cores and the synthetic world. Only the real runtime/gates emit events. */
 import type { OdrlRule } from "@jeswr/solid-odrl";
-import { isDeepStrictEqual } from "util"; // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { isDeepStrictEqual } from "util";
+import { digestOf } from "../core/canonical.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
 import type { GateContext } from "../gates/common.js";
 import { signStatement, TYP } from "../mechanisms/statements.js";
@@ -28,6 +30,11 @@ import {
   type Scenario,
   scenarioSchema,
 } from "./schema.js";
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("a validated scenario reference is missing");
+  return value;
+}
 
 export interface PathResult {
   readonly path: string;
@@ -111,6 +118,7 @@ export async function runScenario(
 ): Promise<PathResult[]> {
   const profile = domainProfileSchema.parse(profileInput);
   const scenario = scenarioSchema.parse(scenarioInput);
+  if (profile.id !== scenario.profile) throw new Error("profile/scenario id mismatch");
   validateReferences(profile, scenario);
   const paths = [
     {
@@ -125,6 +133,7 @@ export async function runScenario(
   const results: PathResult[] = [];
   for (const path of paths) {
     const world = scenarioSchema.parse(patch(scenario, path.change));
+    if (profile.id !== world.profile) throw new Error("branch profile mismatch");
     validateReferences(profile, world);
     const blocker = path.blocked ?? unsupported(profile, world, path.id);
     if (blocker) {
@@ -134,7 +143,7 @@ export async function runScenario(
     const trace = await runPath(profile, world, path.id, options.commit ?? "unknown");
     if (path.expect) {
       const witness = trace.events.findIndex(
-        (e) => e.check === path.expect!.check && e.reason === path.expect!.reason,
+        (e) => e.check === required(path.expect).check && e.reason === required(path.expect).reason,
       );
       const checkEvent = trace.events[witness];
       const decision = trace.events
@@ -163,6 +172,12 @@ export async function runScenario(
       );
     results.push({ path: path.id, trace, matches: !diff, ...(diff ? { difference: diff } : {}) });
   }
+  const events = results.flatMap((result) => result.trace?.events ?? []);
+  if (events.length)
+    for (const check of scenario.stress) {
+      if (!events.some((event) => event.check === check))
+        throw new Error(`${scenario.id}: stress check ${check} was not exercised`);
+    }
   return results;
 }
 
@@ -186,11 +201,11 @@ async function runPath(
   const parties = new Map(scenario.parties.map((p) => [p.id, p]));
   const agents = scenario.parties.filter((p) => p.runs === "agent");
   for (const party of agents) {
-    const principal = parties.get(party.actsFor!)!;
+    const principal = required(parties.get(required(party.actsFor)));
     const mandate = scenario.mandates.find((m) => m.agent === party.id);
     if (!mandate) throw new Error(`missing mandate for ${party.id}`);
     await cast.add(
-      { name: party.id, actor: party.actor!, party: principal.identity },
+      { name: party.id, actor: required(party.actor), party: principal.identity },
       mandateOf(
         scenario.id,
         mandate.autonomous as unknown as OdrlRule[],
@@ -206,11 +221,13 @@ async function runPath(
   }
   const signed: Record<string, { jws: string; statement: JsonObject; evidence: EvidenceItem }> = {};
   for (const statement of scenario.statements) {
-    const issuer = parties.get(statement.issuer)!;
+    const issuer = required(parties.get(statement.issuer));
     const key = cast.agents.has(issuer.id)
       ? cast.get(issuer.id).ownerKey
       : await testKey(`engine/${issuer.id}/issuer`);
-    const issuerIdentity = issuer.actsFor ? parties.get(issuer.actsFor)!.identity : issuer.identity;
+    const issuerIdentity = issuer.actsFor
+      ? required(parties.get(issuer.actsFor)).identity
+      : issuer.identity;
     const payload: JsonObject = {
       ...(statement.value as JsonObject),
       id: `urn:scenario:${scenario.id}:${statement.id}`,
@@ -229,7 +246,7 @@ async function runPath(
     };
     for (const agent of agents) {
       // Local scenario setup is the reviewed pinning step, never a key supplied by a packet.
-      if (!cast.trust.get(agent.id)!.keys.some((k) => k.kid === key.kid))
+      if (!required(cast.trust.get(agent.id)).keys.some((k) => k.kid === key.kid))
         cast.pinIssuer(agent.id, issuerIdentity, key);
     }
   }
@@ -252,7 +269,7 @@ async function runPath(
   });
   for (const agent of agents) {
     const trust = await TrustStore.load(cast.trust.get(agent.id));
-    const mandate = scenario.mandates.find((m) => m.agent === agent.id)!;
+    const mandate = required(scenario.mandates.find((m) => m.agent === agent.id));
     const gate: GateContext = {
       configuration: BASELINE,
       sink: recorder.sink(agent.id),
@@ -335,7 +352,14 @@ async function runPath(
         },
       ],
       [CONFIG_ED25519],
-      { gates: gate },
+      {
+        gates: gate,
+        core: {
+          id: "urn:agent-reference:scripted-core",
+          version: digestOf(scenario),
+          kind: "scripted",
+        },
+      },
     );
     runtimes.set(agent.id, created.runtime);
     ledgers.set(agent.id, created.ledger as never);
@@ -355,15 +379,18 @@ async function runPath(
         break;
       case "admit":
         result = await runtime.admitStatements(
-          step.statements.map((id) => signed[id]!),
+          step.statements.map((id) => required(signed[id])),
           { subject: step.subject, purpose: step.purpose, task: task, taskId: task },
         );
         break;
       case "start": {
-        const peer = parties.get(step.peer)!;
-        const operation = profile.operations.find((o) => o.id === step.operation)!;
+        const peer = required(parties.get(step.peer));
+        const operation = required(profile.operations.find((o) => o.id === step.operation));
         const base = {
-          peer: { actor: peer.actor!, party: parties.get(peer.actsFor!)!.identity },
+          peer: {
+            actor: required(peer.actor),
+            party: required(parties.get(required(peer.actsFor))).identity,
+          },
           operation: { id: operation.id, version: operation.version },
           models: operation.models,
           discover: step.discover,
@@ -386,11 +413,11 @@ async function runPath(
       case "receive": {
         const position = queue.findIndex(
           (item) =>
-            item.out.toActor === parties.get(step.agent)!.actor &&
+            item.out.toActor === required(parties.get(step.agent)).actor &&
             (!step.from || item.from === step.from),
         );
         if (position < 0) throw new Error(`${step.id}: no queued message to ${step.agent}`);
-        const item = queue.splice(position, 1)[0]!;
+        const item = required(queue.splice(position, 1)[0]);
         responses.set(step.agent, { reply: step.reply, agreementPlan: step.agreementPlan });
         let wire = structuredClone(item.out.wire);
         for (const injection of scenario.inject.filter((i) => i.step === step.id)) {
@@ -436,7 +463,7 @@ async function runPath(
             step.decision,
             step.note,
           ),
-          { evidence: step.evidence.map((id) => signed[id]!.evidence) },
+          { evidence: step.evidence.map((id) => required(signed[id]).evidence) },
         );
         enqueue(step.agent, result as StepResult);
         break;
@@ -446,7 +473,7 @@ async function runPath(
           kind: step.kind,
           body: template<JsonObject>(step.body),
           ...(step.intent ? { intent: template<ActionIntent>(step.intent) } : {}),
-          evidence: step.evidence.map((id) => signed[id]!.evidence),
+          evidence: step.evidence.map((id) => required(signed[id]).evidence),
         } as OutboundPlan);
         enqueue(step.agent, result as StepResult);
         break;
@@ -473,7 +500,7 @@ async function runPath(
         });
         break;
       case "record":
-        result = runtime.checkRecord(ledgers.get(step.agent)!.entries());
+        result = runtime.checkRecord(required(ledgers.get(step.agent)).entries());
         break;
       case "advance":
         clock += step.milliseconds;
@@ -489,7 +516,12 @@ async function runPath(
       steps: Object.fromEntries(scenario.script.map((step, i) => [String(i + 1), step.id])),
     },
     configuration: { id: BASELINE.id, layers: { ...BASELINE.layers } },
-    agents: agents.map((p) => ({ id: p.id, name: p.name, actsFor: p.actsFor!, role: p.role })),
+    agents: agents.map((p) => ({
+      id: p.id,
+      name: p.name,
+      actsFor: required(p.actsFor),
+      role: p.role,
+    })),
     generated: { commit, core: "scripted" },
     events: recorder.events(),
   };

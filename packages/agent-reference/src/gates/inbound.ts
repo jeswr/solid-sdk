@@ -444,7 +444,7 @@ export class InboundGate {
     rule?: { id: string; text: string };
   }> {
     const at = this.deps.now();
-    const verify = (role: "issuer" | "party") =>
+    const verify = (role: "issuer" | "party" | "actor") =>
       verifyStatement(item.value, {
         trust: this.deps.trust,
         typ: TYP.statement,
@@ -457,6 +457,17 @@ export class InboundGate {
     let check = await verify("issuer");
     // A party pinned at its introduction (an organization's own key) may also make statements.
     if (check.verification.outcome === "unknown-key") check = await verify("party");
+    if (check.verification.outcome === "unknown-key") {
+      const reading = await verify("actor");
+      if (
+        reading.verification.outcome === "valid" &&
+        (reading.payload?.method !== "model-output" ||
+          typeof (reading.payload as JsonObject).originalDigest !== "string" ||
+          typeof (reading.payload as JsonObject).implementation !== "string")
+      )
+        return { verdict: "fail", reason: "evidence-invalid" };
+      check = reading;
+    }
     const s = check.payload;
     if (!s || check.verification.outcome !== "valid")
       return {
@@ -591,7 +602,7 @@ export class InboundGate {
         `${label}: ${t.text.charAt(0).toLowerCase()}${t.text.slice(1)}`,
         {
           ...(t.reason ? { reason: t.reason } : {}),
-          rule: { id: terms?.policy.id ?? "default-terms", text: t.text },
+          rule: { id: terms?.policy?.id ?? "default-terms", text: t.text },
         },
       );
       termsOk.set(item.value, t.verdict === "pass");
@@ -613,6 +624,7 @@ export class InboundGate {
     if (termsOk.get(item.value) !== true || f.verdict !== "pass") return false;
     const fact: AdmittedFact = {
       id: c.id ?? digestOf(c),
+      digest: digestOf(c),
       label,
       claimType: c.claimType,
       source: c.issuer,
@@ -717,6 +729,7 @@ export class InboundGate {
       if (fact)
         this.deps.memory.enter(this.deps.gate.taskId ?? opts.taskId ?? "*", {
           ...fact,
+          accepted: true,
           kind: "statement",
           digest: digestOf(claim),
         });
@@ -787,7 +800,12 @@ export class Admission {
     const t = this.deps.agreementTerms(conv.id);
     const ref = msg?.kind === "deliver" ? msg.body.ref : undefined;
     const asked = ref ? this.deps.requestPurpose?.(ref) : undefined;
-    const purpose = typeof t?.purpose === "string" ? t.purpose : asked;
+    const purpose =
+      typeof t?.purpose === "string"
+        ? t.purpose
+        : msg?.kind === "invoke"
+          ? msg.body.purpose
+          : asked;
     return {
       ...(purpose ? { purpose } : {}),
       ...(typeof t?.retentionDays === "number" ? { retentionDays: t.retentionDays } : {}),
@@ -891,11 +909,21 @@ export class Admission {
           r.claim?.claimType === need.claimType &&
           r.claim.subject === rep.party &&
           (r.claim as JsonObject).level === need.level &&
+          fitnessOf(r.claim, this.deps.gate.reliance, this.deps.now()).verdict === "pass" &&
+          evaluateItemTerms(r.claim.terms as ItemTerms | undefined, {
+            agent: this.deps.identity.actor,
+            action: "use",
+            target: r.claim.id ?? "",
+            purpose: this.need(conv, msg).purpose,
+            at: this.deps.now(),
+          }).verdict === "pass" &&
           (!conv.challenge ||
             (() => {
               const approves = (r.claim as JsonObject).approves as JsonObject | undefined;
               const citation = approves?.challenge as JsonObject | undefined;
               return (
+                msg.kind === "invoke" &&
+                msg.body.challenge?.id === conv.challenge.id &&
                 citation?.id === conv.challenge.id &&
                 citation?.nonce === conv.challenge.nonce &&
                 approves?.actor === msg.from.actor &&

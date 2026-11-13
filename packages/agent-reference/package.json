@@ -20,13 +20,21 @@
       "default": "./dist/*.js"
     },
     "./package.json": "./package.json",
-    "./traces/*": "./traces/*"
+    "./traces/*": "./traces/*",
+    "./profiles/*": "./profiles/*",
+    "./scenarios/*": "./scenarios/*",
+    "./schemas/*": "./schemas/*",
+    "./outlines/*": "./outlines/*"
   },
   "files": [
     "dist",
     "traces",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "profiles",
+    "scenarios",
+    "schemas",
+    "outlines"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/export-schemas.mjs --check && node scripts/generate-traces.mjs && node scripts/run-scenarios.mjs",

@@ -33,7 +33,7 @@
       "change": {},
       "expect": {
         "outcome": "stop",
-        "check": "mandate",
+        "check": "source",
         "reason": "source-not-authoritative"
       },
       "outline": [],

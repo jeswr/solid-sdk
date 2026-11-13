@@ -22,7 +22,12 @@ import type {
 import { actionDigest, type OwnerMandate } from "../mechanisms/mandate.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
 import { configurationById } from "../profile/configurations.js";
-import { CORE_CONTENT_VOCABULARY, dataClaims, freeStrings } from "../profile/content.js";
+import {
+  CORE_CONTENT_VOCABULARY,
+  dataClaims,
+  freeMessageStrings,
+  freeStrings,
+} from "../profile/content.js";
 import type { WireMessage } from "../store/state.js";
 import { packetView } from "../trace/packet.js";
 import type { OutboundCheck, OutboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
@@ -65,6 +70,7 @@ export interface OutboundDeps {
   /** The offered terms with this digest, as received in this agent's conversations. */
   readonly offerTerms: (termsDigest: string) => JsonObject | undefined;
   readonly conversationPurpose?: (conversation: Iri) => Iri | undefined;
+  readonly conversationRetentionDays?: (conversation: Iri) => number | undefined;
   /** A stronger approval the recipient asked for in a challenge to this kind of action. */
   readonly demandedApproval?: (intent: ActionIntent) =>
     | {
@@ -126,7 +132,7 @@ export class OutboundGate {
     extra: Partial<TraceEventInput> = {},
   ): void {
     // Every verdict carries a code; a pass without one of its own takes the check's pass code.
-    if (verdict === "pass" && !extra.reason) extra = { reason: PASS_CODE[check], ...extra };
+    if (verdict === "pass" && !extra.reason) extra = { ...extra, reason: PASS_CODE[check] };
     out.push({
       type: "check-verdict",
       gate: "outbound",
@@ -704,7 +710,7 @@ export class OutboundGate {
         {
           ...(reason ? { reason } : {}),
           rule: {
-            id: terms?.policy.id ?? "default-terms",
+            id: terms?.policy?.id ?? "default-terms",
             text: terms
               ? `The issuer's terms: ${termsSummary(terms)}. They go out with the data.`
               : text,
@@ -713,6 +719,13 @@ export class OutboundGate {
       );
     }
     return blocked;
+  }
+
+  stopEvidence(subject: string): void {
+    this.verdict([], subject, "evidence", "fail", "The outgoing credential was not verified.", {
+      reason: "evidence-invalid",
+    });
+    this.decide("stop", "Unverified evidence cannot leave.", "evidence-invalid");
   }
 
   stopLimit(subject: string, reason: "round-limit"): void {
@@ -749,6 +762,10 @@ export class OutboundGate {
       opts.intent?.purpose ??
       this.deps.conversationPurpose?.(message.conversation) ??
       (typeof body.purpose === "string" ? body.purpose : undefined);
+    const retentionDays =
+      typeof opts.intent?.parameters.retentionDays === "number"
+        ? opts.intent.parameters.retentionDays
+        : this.deps.conversationRetentionDays?.(message.conversation);
     const intent: ActionIntent = {
       action: "distribute",
       operation: opts.operation ?? "urn:awp:send-message",
@@ -758,12 +775,7 @@ export class OutboundGate {
       conversation: message.conversation,
       parameters: {
         messageDigest: digest,
-        textDigest: digestOf(
-          freeStrings(body, {
-            ...CORE_CONTENT_VOCABULARY,
-            ...this.deps.gate.vocabulary,
-          }),
-        ),
+        textDigest: digestOf(freeMessageStrings(message, this.deps.gate.vocabulary)),
       },
     };
     const verdicts: CheckVerdict[] = [];
@@ -773,8 +785,19 @@ export class OutboundGate {
       digest,
       intent,
     });
-    if (!opts.intent && this.deps.identity.party && ["invoke", "propose", "accept"].includes(message.kind)) {
-      this.verdict(verdicts, digest, "mandate", "fail", "A consequential message requires an authorised structured action.", { reason: "not-authorised" });
+    if (
+      !opts.intent &&
+      this.deps.identity.party &&
+      ["invoke", "propose", "accept"].includes(message.kind)
+    ) {
+      this.verdict(
+        verdicts,
+        digest,
+        "mandate",
+        "fail",
+        "A consequential message requires an authorised structured action.",
+        { reason: "not-authorised" },
+      );
       this.decide("stop", "No action authority was supplied; nothing leaves.", "not-authorised");
       return finish("stop", "not-authorised");
     }
@@ -794,6 +817,79 @@ export class OutboundGate {
         return finish("stop", "not-authorised");
       }
     }
+    for (const evidence of message.evidence ?? []) {
+      if (evidence.role !== "credential" || evidence.format !== "jws-compact") continue;
+      try {
+        const claim = JSON.parse(
+          Buffer.from(evidence.value.split(".")[1] ?? "", "base64url").toString(),
+        ) as JsonObject;
+        const fact = this.deps.memory.facts.get(String(claim.id));
+        if (!fact && claim.issuer !== this.deps.identity.party) {
+          this.stopEvidence(digest);
+          return finish("stop", "evidence-invalid");
+        }
+        if (fact) {
+          const needed = purpose ? this.deps.gate.purposes?.[purpose] : undefined;
+          const reason = !needed
+            ? "missing-context"
+            : !needed.includes(fact.claimType)
+              ? "excessive-scope"
+              : undefined;
+          this.verdict(
+            verdicts,
+            digest,
+            "disclosure",
+            reason ? "indeterminate" : "pass",
+            "The gate checks the actual credential against the declared purpose.",
+            { reason },
+          );
+          if (reason) {
+            this.decide("stop", "The credential is not necessary for this purpose.", reason);
+            return finish("stop", reason);
+          }
+          const blocked = this.dataTerms(verdicts, digest, {
+            ...intent,
+            action: "distribute",
+            parameters: {
+              evidence: [fact.id],
+              ...(retentionDays === undefined ? {} : { retentionDays }),
+            },
+          });
+          if (blocked) {
+            this.decide("stop", "The actual credential's terms prohibit release.", blocked);
+            return finish("stop", blocked);
+          }
+        }
+        if (fact?.digest && fact.digest !== digestOf(claim)) {
+          this.verdict(
+            verdicts,
+            digest,
+            "evidence",
+            "fail",
+            "The outgoing statement differs from the one admitted under this identifier.",
+            { reason: "evidence-invalid" },
+          );
+          this.decide(
+            "stop",
+            "A fact's identifier cannot substitute for its admitted bytes.",
+            "evidence-invalid",
+          );
+          return finish("stop", "evidence-invalid");
+        }
+      } catch {
+        this.verdict(
+          verdicts,
+          digest,
+          "evidence",
+          "fail",
+          "The outgoing statement cannot be read.",
+          { reason: "evidence-invalid" },
+        );
+        this.decide("stop", "Uninspectable evidence cannot leave.", "evidence-invalid");
+        return finish("stop", "evidence-invalid");
+      }
+    }
+    let bodyHasPersonalData = false;
     const payloadKey =
       message.kind === "propose"
         ? "terms"
@@ -804,8 +900,9 @@ export class OutboundGate {
             : message.kind === "receipt"
               ? "observed"
               : undefined;
-    if (payloadKey && body[payloadKey] && this.deps.gate.vocabulary) {
-      const payload = dataClaims(body[payloadKey], this.deps.gate.vocabulary, payloadKey);
+    if (payloadKey && body[payloadKey]) {
+      const payload = dataClaims(body[payloadKey], this.deps.gate.vocabulary ?? {}, payloadKey);
+      bodyHasPersonalData = payload.claims.length > 0;
       const needs = purpose ? this.deps.gate.purposes?.[purpose] : undefined;
       const reason =
         payload.claims.length > 0 && !needs
@@ -841,6 +938,34 @@ export class OutboundGate {
         this.decide("stop", "The untyped payload is held.", "missing-context");
         return finish("stop", "missing-context");
       }
+      for (const item of this.deps.memory.context(this.deps.gate.taskId ?? message.conversation)) {
+        if (!payload.claims.includes(item.claimType)) continue;
+        const terms = evaluateItemTerms(item.terms, {
+          agent: this.deps.identity.actor,
+          action: "distribute",
+          target: item.id,
+          purpose,
+          recipient: intent.recipient,
+          ...(retentionDays === undefined ? {} : { retentionDays }),
+          at: this.deps.now(),
+        });
+        this.verdict(
+          verdicts,
+          digest,
+          "data-terms",
+          terms.verdict,
+          `${item.label}: ${terms.text}`,
+          { reason: terms.reason },
+        );
+        if (terms.verdict !== "pass") {
+          this.decide(
+            "stop",
+            "The structured payload's item terms prohibit release.",
+            terms.reason,
+          );
+          return finish("stop", terms.reason);
+        }
+      }
       if (payload.claims.length)
         this.verdict(
           verdicts,
@@ -859,14 +984,14 @@ export class OutboundGate {
           { reason: "no-personal-data" },
         );
     }
-    const free = freeStrings(body, { ...CORE_CONTENT_VOCABULARY, ...this.deps.gate.vocabulary });
-    if (message.kind === "accept" && free.length > 0) {
+    const free = freeMessageStrings(message, this.deps.gate.vocabulary);
+    if ((message.kind === "accept" || message.kind === "propose") && free.length > 0) {
       this.verdict(
         verdicts,
         digest,
         "disclosure",
         "fail",
-        "A free-text selection cannot form a structured commitment.",
+        "Free text cannot form the terms or selection of a structured commitment.",
         { reason: "structured-form-required" },
       );
       this.decide("stop", "Free text never commits the principal.", "structured-form-required");
@@ -893,6 +1018,7 @@ export class OutboundGate {
           target: item.id,
           purpose,
           recipient: intent.recipient,
+          ...(retentionDays === undefined ? {} : { retentionDays }),
           at: this.deps.now(),
         });
         let termsOK = terms.verdict === "pass";
@@ -922,6 +1048,7 @@ export class OutboundGate {
           target: intent.target,
           purpose,
           recipient: intent.recipient,
+          ...(retentionDays === undefined ? {} : { retentionDays }),
           at: this.deps.now(),
         };
         const canAsk =
@@ -929,8 +1056,10 @@ export class OutboundGate {
           m &&
           Date.parse(m.validFrom) <= Date.parse(this.deps.now()) &&
           Date.parse(m.validUntil) > Date.parse(this.deps.now()) &&
-          (this.deps.policyEngine ?? solidOdrlEngine).evaluate(m.withApproval, request).effect === "permit" &&
-          (this.deps.policyEngine ?? solidOdrlEngine).evaluate(m.autonomous, request).effect !== "prohibited";
+          (this.deps.policyEngine ?? solidOdrlEngine).evaluate(m.withApproval, request).effect ===
+            "permit" &&
+          (this.deps.policyEngine ?? solidOdrlEngine).evaluate(m.autonomous, request).effect !==
+            "prohibited";
         const outcome = canAsk ? "ask-principal" : "stop";
         this.decide(
           outcome,
@@ -1002,6 +1131,14 @@ export class OutboundGate {
         );
         return finish("stop", termsReason);
       }
+    } else if (!opts.intent && bodyHasPersonalData) {
+      this.verdict(
+        verdicts,
+        digest,
+        "data-terms",
+        "pass",
+        "The vocabulary identifies original structured data for this interaction; matching context terms were checked.",
+      );
     } else if (!opts.intent && free.length === 0) {
       this.verdict(
         verdicts,
@@ -1072,6 +1209,7 @@ export class OutboundGate {
         carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
         carriageSummary: "Handed to the carriage.",
         name: this.name,
+        vocabulary: this.deps.gate.vocabulary,
       }),
       ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
       caption: `${this.name(message.from.actor)} sends ${article(message.kind)} ${message.kind} message to ${this.name(message.to?.actor)}.`,

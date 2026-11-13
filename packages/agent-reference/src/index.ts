@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * `@jeswr/agent-reference` — the reference agent runtime, lifted out of
@@ -23,12 +24,21 @@ export {
 } from "./core/limits.js";
 export { validateMessage } from "./core/schema.js";
 export type * from "./core/types.js";
+export { CORE_REASON_CODES } from "./core/types.js";
 export {
   CONVENTIONAL_BOOK_OP,
   classifyLink,
   extractLinks,
   REGISTRY,
 } from "./domains/conventional/registry.js";
+export { loadCase, loadProfile, loadScenario } from "./engine/load.js";
+export { type PathResult, runScenario } from "./engine/run.js";
+export {
+  type DomainProfile,
+  domainProfileSchema,
+  type Scenario,
+  scenarioSchema,
+} from "./engine/schema.js";
 export { mandateWithUnsupportedTerm, personalMandate, schedulingMandate } from "./mandates.js";
 export {
   generateSigningKey,
@@ -76,6 +86,7 @@ export {
   POLICY_PROFILE,
   POLICY_PROFILE_SUMMARY,
 } from "./profile/configurations.js";
+export { type ContentType, type ContentVocabulary, freeStrings } from "./profile/content.js";
 export {
   buildDescription,
   type DescribedPolicyModule,

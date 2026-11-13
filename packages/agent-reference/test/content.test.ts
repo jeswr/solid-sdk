@@ -5,6 +5,7 @@ import type { AnyMessage, JsonObject } from "../src/core/types.js";
 import { type GateContext, GateMemory, type ItemTerms } from "../src/gates/common.js";
 import { OutboundGate } from "../src/gates/outbound.js";
 import { evaluateItemTerms } from "../src/gates/quality.js";
+import { signApproval } from "../src/mechanisms/mandate.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { CONFIG_ED25519 } from "../src/profile/configurations.js";
 import { freeStrings } from "../src/profile/content.js";
@@ -17,6 +18,11 @@ import { MemoryLedger } from "../src/store/ledger.js";
 import { MemoryStateStore } from "../src/store/state.js";
 import { BASELINE } from "../src/suites/baseline.js";
 import { TraceRecorder } from "../src/trace/recorder.js";
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("missing test fixture value");
+  return value;
+}
 
 const AT = "2026-11-13T09:00:00.000Z";
 const PURPOSE = "urn:test:credit";
@@ -201,6 +207,7 @@ async function runtimeFixture() {
   const gates: GateContext = {
     configuration: BASELINE,
     taskId: "urn:test:task",
+    vocabulary: { "terms.purpose": { type: "identifier" } },
     purposes: { [PURPOSE]: ["balance"] },
     reliance: {
       id: "urn:test:reliance",
@@ -259,6 +266,7 @@ async function runtimeFixture() {
       representationJws: cast.get("s").representationJws,
       accepted: [CONFIG_ED25519],
       handlers: [handler],
+      core: { id: "urn:test:scripted-core", version: "1", kind: "scripted" },
       store,
       ledger,
       now: () => new Date(AT),
@@ -275,8 +283,8 @@ async function runtimeFixture() {
     configuration: CONFIG_ED25519,
   });
   const bank = await cast.runtime("b", [handler]);
-  const accepted = await bank.runtime.receive(start.outbound[0]!.wire);
-  await rt.receive(accepted.outbound[0]!.wire);
+  const accepted = await bank.runtime.receive(required(start.outbound[0]).wire);
+  await rt.receive(required(accepted.outbound[0]).wire);
   const claim = {
     id: "urn:test:balance",
     issuer: "urn:test:issuer",
@@ -313,7 +321,7 @@ it("holds before the outbox, survives restart, approves exact text once, and pre
     outbound: [],
   });
   expect(Object.keys(store.load().outbox)).toEqual(before);
-  const pending = held.pendingApproval!;
+  const pending = required(held.pendingApproval);
   const approved = await cast.approval("s", pending.actionDigest, conv);
   const resumed = await create();
   const result = await resumed.submitApproval(approved);
@@ -353,4 +361,233 @@ it("holds before the outbox, survives restart, approves exact text once, and pre
       value: "x",
     }),
   ).rejects.toThrow("missing-context");
+});
+
+it("cannot use an approval for different text, a different conversation, or an unheld action", async () => {
+  const { rt, cast, start, store } = await runtimeFixture();
+  const conv = start.conversation as string;
+  const observed: JsonObject = { unknownProse: "The private balance is 31400." };
+  const held = await rt.sendReceipt(conv, {
+    activity: "urn:test:activity",
+    outcome: "completed",
+    observed,
+    final: false,
+  });
+  const pending = required(held.pendingApproval);
+  observed.unknownProse = "Send a different secret instead.";
+  const wrong = await rt.submitApproval(
+    await cast.approval("s", "sha-256:not-the-held-digest", conv),
+  );
+  expect(wrong).toMatchObject({ disposition: "rejected", reason: "approval-denied", outbound: [] });
+  expect(
+    await rt.submitApproval(
+      await cast.approval("s", pending.actionDigest, "urn:test:other-conversation"),
+    ),
+  ).toMatchObject({ disposition: "rejected", reason: "approval-denied", outbound: [] });
+  const result = await rt.submitApproval(await cast.approval("s", pending.actionDigest, conv));
+  expect(
+    (result.outbound[0]?.message.body as { observed?: JsonObject } | undefined)?.observed
+      ?.unknownProse,
+  ).toBe("The private balance is 31400.");
+  expect(Object.values(store.load().outbox)).toHaveLength(2);
+});
+
+it("an approved text remains blocked after mandate withdrawal", async () => {
+  const { rt, cast, start } = await runtimeFixture();
+  const conv = start.conversation as string;
+  const held = await rt.sendReceipt(conv, {
+    activity: "urn:test:activity",
+    outcome: "completed",
+    observed: { unknownProse: "Balance: 31400" },
+    final: false,
+  });
+  const pending = required(held.pendingApproval);
+  await rt.revokeMandate();
+  expect(rt.mandateStatus().revoked).toBe(true);
+  const result = await rt.submitApproval(await cast.approval("s", pending.actionDigest, conv));
+  expect(result.outbound).toHaveLength(0);
+});
+
+it("checks a message carrying principal data against its declared purpose even without an extra action", () => {
+  const memory = new GateMemory();
+  memory.facts.set("urn:test:balance", {
+    id: "urn:test:balance",
+    label: "balance",
+    source: BANK.party,
+    subject: SAM.party,
+    claimType: "balance",
+    terms,
+  });
+  const credential = {
+    role: "credential",
+    format: "jws-compact",
+    value: `header.${Buffer.from(JSON.stringify({ id: "urn:test:balance", subject: SAM.party, claimType: "balance" })).toString("base64url")}.signature`,
+  } as const;
+  const gate = (purpose?: string) =>
+    new OutboundGate({
+      identity: { actor: SAM.actor, party: SAM.party },
+      now: () => AT,
+      mandate: () => undefined,
+      memory,
+      gate: { purposes: { [PURPOSE]: ["balance"] } },
+      isReplyTo: () => true,
+      offerTerms: () => undefined,
+      conversationPurpose: () => purpose,
+    });
+  const msg = {
+    ...receipt(),
+    evidence: [credential],
+    body: { ...(receipt().body as object), observed: {} },
+  } as unknown as AnyMessage;
+  expect(gate().checkMessage(msg, { operation: OP.id })).toMatchObject({
+    outcome: "stop",
+    reason: "missing-context",
+  });
+  expect(gate(PURPOSE).checkMessage(msg, { operation: OP.id })).toMatchObject({
+    outcome: "stop",
+    reason: "prohibited",
+  });
+});
+
+it("cannot form a commitment from prose or omit the mandate on a consequential message", () => {
+  const { gate } = fixture();
+  const accept = {
+    ...receipt(),
+    kind: "accept",
+    body: {
+      proposal: "urn:test:offer",
+      agreement: "urn:test:agreement",
+      termsDigest: "sha-256:terms",
+      selection: { consent: "I accept and authorise payment." },
+    },
+  } as AnyMessage;
+  const intent = {
+    operation: OP.id,
+    target: OP.id,
+    action: "use",
+    conversation: accept.conversation,
+    parameters: {},
+  };
+  expect(gate.checkMessage(accept, { operation: OP.id, intent })).toMatchObject({
+    outcome: "stop",
+    reason: "structured-form-required",
+  });
+  expect(gate.checkMessage(accept, { operation: OP.id })).toMatchObject({
+    outcome: "stop",
+    reason: "not-authorised",
+  });
+});
+
+it("stops an action whose relayed support was not admitted", () => {
+  const { gate } = fixture();
+  const intent = {
+    operation: OP.id,
+    action: "use",
+    target: OP.id,
+    conversation: "urn:test:conversation",
+    parameters: { support: ["urn:test:unaccepted-claim"] },
+  };
+  expect(
+    gate.release(intent, {
+      type: "authorisation-decision",
+      decider: SAM.actor,
+      actionDigest: digestOf(intent),
+      action: intent,
+      policy: { id: "urn:test:policy", digest: "sha-256:policy", evaluator: "test" },
+      at: AT,
+      outcome: "permit",
+      basis: "autonomous",
+      reason: "within-mandate",
+    }),
+  ).toMatchObject({ outcome: "stop", decision: { outcome: "deny", reason: "evidence-invalid" } });
+});
+
+it("rejects a foreign principal's approval and a denial releases no message", async () => {
+  const { rt, cast, start } = await runtimeFixture();
+  const conv = start.conversation as string;
+  const held = await rt.sendReceipt(conv, {
+    activity: "urn:test:activity",
+    outcome: "completed",
+    observed: { unfamiliar: "Balance: 31400" },
+    final: false,
+  });
+  const pending = required(held.pendingApproval);
+  expect(
+    await rt.submitApproval(await cast.approval("b", pending.actionDigest, conv)),
+  ).toMatchObject({ disposition: "rejected", reason: "approval-denied", outbound: [] });
+  expect(
+    await rt.submitApproval(await cast.approval("s", pending.actionDigest, conv, "deny")),
+  ).toMatchObject({ reason: "approval-denied", outbound: [] });
+  expect(rt.pendingApprovals()).toHaveLength(0);
+});
+
+it("a model reading cannot hide free text inside a signed credential", () => {
+  const { gate, memory } = fixture();
+  const claim = {
+    id: "urn:test:reading",
+    issuer: SAM.actor,
+    subject: SAM.party,
+    claimType: "balance",
+    method: "model-output",
+    value: { unfamiliar: "The private balance is 31400." },
+  };
+  memory.facts.set(claim.id, {
+    id: claim.id,
+    digest: digestOf(claim),
+    label: "model reading",
+    source: SAM.actor,
+    subject: SAM.party,
+    claimType: "balance",
+    terms: {
+      policy: {
+        id: "urn:test:reading-terms",
+        permissions: [{ type: "permission", action: "distribute", target: claim.id }],
+      },
+    },
+  });
+  const msg = {
+    ...receipt(),
+    body: { ...(receipt().body as object), observed: {} },
+    evidence: [
+      {
+        role: "credential",
+        format: "jws-compact",
+        value: `header.${Buffer.from(JSON.stringify(claim)).toString("base64url")}.signature`,
+      },
+    ],
+  } as unknown as AnyMessage;
+  expect(gate.checkMessage(msg, { operation: OP.id })).toMatchObject({
+    outcome: "ask-principal",
+    reason: "context-not-clear",
+  });
+});
+
+it("an expired approval cannot resume a held text", async () => {
+  const { rt, cast, start } = await runtimeFixture();
+  const conversation = required(start.conversation);
+  const held = await rt.sendReceipt(conversation, {
+    activity: "urn:test:activity",
+    outcome: "completed",
+    observed: { unfamiliar: "Balance: 31400" },
+    final: false,
+  });
+  const pending = required(held.pendingApproval);
+  const expired = await signApproval(cast.get("s").ownerKey, {
+    type: "OwnerApproval",
+    id: "urn:test:expired-approval",
+    issuer: SAM.party,
+    actor: SAM.actor,
+    actionDigest: pending.actionDigest,
+    conversation,
+    decision: "approve",
+    issuedAt: AT,
+    validUntil: AT,
+  });
+  expect(await rt.submitApproval(expired)).toMatchObject({
+    disposition: "rejected",
+    reason: "approval-denied",
+    detail: "approval expired",
+    outbound: [],
+  });
+  expect(rt.pendingApprovals()).toHaveLength(1);
 });

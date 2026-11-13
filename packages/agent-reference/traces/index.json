@@ -17,7 +17,7 @@
       }
     },
     "configuration": "baseline",
-    "events": 157
+    "events": 198
   },
   {
     "file": "mortgage-over-ask--baseline.json",
@@ -35,7 +35,7 @@
       }
     },
     "configuration": "baseline",
-    "events": 97
+    "events": 99
   },
   {
     "file": "mortgage-out-of-limit--baseline.json",
@@ -53,7 +53,7 @@
       }
     },
     "configuration": "baseline",
-    "events": 105
+    "events": 107
   },
   {
     "file": "mortgage-injected-fee--baseline.json",
@@ -73,7 +73,7 @@
       }
     },
     "configuration": "baseline",
-    "events": 160
+    "events": 201
   },
   {
     "file": "mortgage-main--baseline.json",
@@ -98,7 +98,7 @@
       }
     },
     "configuration": "baseline",
-    "events": 260
+    "events": 333
   },
   {
     "file": "probing-counterparty--baseline.json",
@@ -116,7 +116,7 @@
       }
     },
     "configuration": "baseline",
-    "events": 60
+    "events": 62
   },
   {
     "file": "probing-counterparty--tenth-request--baseline.json",
@@ -124,20 +124,43 @@
       "id": "probing-counterparty--tenth-request",
       "title": "A service agent that keeps asking",
       "steps": {
-        "1": "outside-1",
-        "2": "outside-2",
-        "3": "outside-3",
-        "4": "outside-4",
-        "5": "outside-5",
-        "6": "outside-6",
-        "7": "outside-7",
-        "8": "outside-8",
-        "9": "outside-9",
-        "10": "outside-10"
+        "1": "request",
+        "2": "open-channel",
+        "3": "channel-accepted",
+        "4": "probe-1",
+        "5": "probe-arrives-1",
+        "6": "outside-1",
+        "7": "probe-2",
+        "8": "probe-arrives-2",
+        "9": "outside-2",
+        "10": "probe-3",
+        "11": "probe-arrives-3",
+        "12": "outside-3",
+        "13": "probe-4",
+        "14": "probe-arrives-4",
+        "15": "outside-4",
+        "16": "probe-5",
+        "17": "probe-arrives-5",
+        "18": "outside-5",
+        "19": "probe-6",
+        "20": "probe-arrives-6",
+        "21": "outside-6",
+        "22": "probe-7",
+        "23": "probe-arrives-7",
+        "24": "outside-7",
+        "25": "probe-8",
+        "26": "probe-arrives-8",
+        "27": "outside-8",
+        "28": "probe-9",
+        "29": "probe-arrives-9",
+        "30": "outside-9",
+        "31": "probe-10",
+        "32": "probe-arrives-10",
+        "33": "outside-10"
       }
     },
     "configuration": "baseline",
-    "events": 30
+    "events": 203
   },
   {
     "file": "probing-counterparty--round-limit--baseline.json",

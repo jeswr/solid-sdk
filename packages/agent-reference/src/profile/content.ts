@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 /** A vocabulary types values, not field names guessed to contain prose (UNS-8..13). */
+
 import { isIri } from "../core/canonical.js";
+import { CORE_REASON_CODES } from "../core/types.js";
 
 export interface ContentType {
   readonly type: "identifier" | "code" | "number" | "date" | "term";
@@ -10,7 +12,42 @@ export interface ContentType {
 }
 export type ContentVocabulary = Readonly<Record<string, ContentType>>;
 
-/** Paths are relative to the body; * matches exactly one object member or array index. */
+function declarationAt(vocabulary: ContentVocabulary, path: string): ContentType | undefined {
+  if (Object.hasOwn(vocabulary, path)) return vocabulary[path];
+  return Object.entries(vocabulary)
+    .filter(([pattern]) => {
+      const a = pattern.split(".");
+      const b = path.split(".");
+      return a.length === b.length && a.every((p, i) => p === "*" || p === b[i]);
+    })
+    .sort(([a], [b]) => a.split("*").length - b.split("*").length)[0]?.[1];
+}
+function typed(value: unknown, declaration: ContentType | undefined): boolean {
+  if (!declaration) return false;
+  if (typeof value === "number") return declaration.type === "number" && Number.isFinite(value);
+  if (
+    (declaration.type === "code" || declaration.type === "term") &&
+    (typeof value === "string" || typeof value === "boolean")
+  )
+    return declaration.values?.includes(value) === true;
+  if (typeof value !== "string") return false;
+  if (declaration.type === "identifier") return isIri(value);
+  if (declaration.type === "date") {
+    const day = value.slice(0, 10);
+    const dayTime = Date.parse(`${day}T00:00:00Z`);
+    return (
+      /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value) &&
+      Number.isFinite(Date.parse(value)) &&
+      Number.isFinite(dayTime) &&
+      new Date(dayTime).toISOString().slice(0, 10) === day
+    );
+  }
+  return false;
+}
+const segment = (key: string) =>
+  key.replaceAll("~", "~0").replaceAll(".", "~1").replaceAll("*", "~2");
+
+/** Paths are relative to the body; * matches one member/index. Literal dots use ~1. */
 export function freeStrings(
   value: unknown,
   vocabulary: ContentVocabulary = {},
@@ -18,23 +55,10 @@ export function freeStrings(
   const out: { path: string; text: string }[] = [];
   const visit = (v: unknown, path: string) => {
     if (typeof v === "string") {
-      const declaration = Object.entries(vocabulary).find(([pattern]) => {
-        const a = pattern.split(".");
-        const b = path.split(".");
-        return a.length === b.length && a.every((p, i) => p === "*" || p === b[i]);
-      })?.[1];
-      const structured =
-        declaration &&
-        ((declaration.type === "identifier" && isIri(v)) ||
-          (declaration.type === "date" &&
-            /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(v) &&
-            Number.isFinite(Date.parse(v))) ||
-          ((declaration.type === "code" || declaration.type === "term") &&
-            declaration.values?.includes(v)));
-      // A string that looks numeric is still text. A number is a JSON number.
-      if (!structured && v.length > 0) out.push({ path, text: v });
+      if (!typed(v, declarationAt(vocabulary, path))) out.push({ path, text: v });
     } else if (v && typeof v === "object") {
-      for (const [k, child] of Object.entries(v)) visit(child, path ? `${path}.${k}` : k);
+      for (const [k, child] of Object.entries(v))
+        visit(child, path ? `${path}.${segment(k)}` : segment(k));
     }
   };
   visit(value, "");
@@ -44,6 +68,7 @@ export function freeStrings(
 export const CORE_CONTENT_VOCABULARY: ContentVocabulary = {
   "operation.id": { type: "identifier" },
   "operation.version": { type: "code", values: ["0.1", "0.2", "1"] },
+  reason: { type: "code", values: CORE_REASON_CODES },
   termsDigest: { type: "identifier" },
   purpose: { type: "identifier" },
   ref: { type: "identifier" },
@@ -77,21 +102,49 @@ export function dataClaims(
   let unknown = false;
   const visit = (v: unknown, path: string) => {
     if (v && typeof v === "object") {
-      for (const [key, child] of Object.entries(v)) visit(child, path ? `${path}.${key}` : key);
+      for (const [key, child] of Object.entries(v))
+        visit(child, path ? `${path}.${segment(key)}` : segment(key));
       return;
     }
     if (v === null) return;
-    const declaration = Object.entries(vocabulary).find(([pattern]) => {
-      const a = pattern.split(".");
-      const b = path.split(".");
-      return a.length === b.length && a.every((p, i) => p === "*" || p === b[i]);
-    })?.[1];
-    if (!declaration) {
+    const declaration = declarationAt(vocabulary, path);
+    if (!typed(v, declaration)) {
       unknown = true;
       return;
     }
-    if (declaration.claimType) claims.add(declaration.claimType);
+    if (declaration?.claimType) claims.add(declaration.claimType);
   };
   visit(value, prefix);
   return { claims: [...claims], unknown };
+}
+
+/** Model-authored readings remain free text even when transported inside a signed credential. */
+export function freeMessageStrings(
+  message: import("../core/types.js").AnyMessage,
+  vocabulary: ContentVocabulary = {},
+): { path: string; text: string }[] {
+  const found = freeStrings(message.body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary });
+  for (const [index, evidence] of (message.evidence ?? []).entries()) {
+    if (evidence.role !== "credential" || evidence.format !== "jws-compact") continue;
+    try {
+      const claim = JSON.parse(
+        Buffer.from(evidence.value.split(".")[1] ?? "", "base64url").toString(),
+      );
+      if (claim.issuer !== message.from.actor || claim.method !== "model-output") continue;
+      const readingVocabulary = Object.fromEntries(
+        Object.entries(vocabulary)
+          .filter(([path]) => path.startsWith("reading."))
+          .map(([path, type]) => [path.slice(8), type]),
+      );
+      found.push(
+        ...freeStrings(claim.value, readingVocabulary).map((item) => ({
+          path: `evidence.${index}.value${item.path ? `.${item.path}` : ""}`,
+          text: item.text,
+        })),
+      );
+    } catch {
+      /* Integrity checks reject unreadable credentials before release. */
+    }
+  }
+  return found;
 }

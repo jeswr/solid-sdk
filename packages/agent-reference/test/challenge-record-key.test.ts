@@ -79,6 +79,14 @@ it("keeps a challenge in the conversation and accepts only its unexpired nonce-b
     transition(state, { type: "message", direction: "out", message: retry, at: AT }, DEFAULT_LIMITS)
       .ok,
   ).toBe(true);
+  const altered = { ...retry, body: { ...retry.body, input: { account: "another-account" } } };
+  expect(
+    transition(
+      state,
+      { type: "message", direction: "out", message: altered, at: AT },
+      DEFAULT_LIMITS,
+    ),
+  ).toMatchObject({ ok: false, reason: "protocol-violation" });
   const wrong = {
     ...retry,
     body: { ...retry.body, challenge: { ...retry.body.challenge, nonce: "urn:test:wrong-nonce" } },

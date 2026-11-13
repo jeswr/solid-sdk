@@ -97,7 +97,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
         "path": [
@@ -109,6 +108,7 @@
         ],
         "answer": "Accepted, for urn:operation:service query only."
       },
+      "reason": "recipient-established",
       "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
     },
     {
@@ -203,11 +203,11 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
     },
     {
@@ -285,7 +285,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:operation:service-query, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "summary": "An offer to start urn:operation:service-query, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -303,21 +303,7 @@
               "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
               "round": 1
             },
-            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54",
-            "untrusted": [
-              {
-                "path": "terms.purpose",
-                "text": "urn:purpose:service-query"
-              },
-              {
-                "path": "terms.evidenceRequest.0.claimType",
-                "text": "contact"
-              },
-              {
-                "path": "terms.topic",
-                "text": "contact-request"
-              }
-            ]
+            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54"
           },
           "evidence": {
             "present": false,
@@ -427,7 +413,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:operation:service-query, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "summary": "An offer to start urn:operation:service-query, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -445,21 +431,7 @@
               "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
               "round": 1
             },
-            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54",
-            "untrusted": [
-              {
-                "path": "terms.purpose",
-                "text": "urn:purpose:service-query"
-              },
-              {
-                "path": "terms.evidenceRequest.0.claimType",
-                "text": "contact"
-              },
-              {
-                "path": "terms.topic",
-                "text": "contact-request"
-              }
-            ]
+            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54"
           },
           "evidence": {
             "present": false,
@@ -678,7 +650,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is Cedar Service a party I can send urn:operation:service query to?",
         "path": [
@@ -690,6 +661,7 @@
         ],
         "answer": "Accepted, for urn:operation:service query only."
       },
+      "reason": "recipient-established",
       "caption": "Cedar Service: Accepted, for urn:operation:service query only."
     },
     {
@@ -784,11 +756,11 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with Rowan's agent's pinned key, and written to the record."
     },
     {
@@ -867,7 +839,7 @@
           },
           "content": {
             "present": true,
-            "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "summary": "A counter-offer (round 2) with new terms.",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -887,21 +859,7 @@
               "round": 2,
               "counters": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0002"
             },
-            "digest": "sha-256:1c3a4f737f4e56ba6462f31812f3d71d67192303b9e378f2d16bee158022c3ef",
-            "untrusted": [
-              {
-                "path": "terms.purpose",
-                "text": "urn:purpose:service-query"
-              },
-              {
-                "path": "terms.evidenceRequest.0.claimType",
-                "text": "contact"
-              },
-              {
-                "path": "terms.topic",
-                "text": "contact-request"
-              }
-            ]
+            "digest": "sha-256:1c3a4f737f4e56ba6462f31812f3d71d67192303b9e378f2d16bee158022c3ef"
           },
           "evidence": {
             "present": false,
@@ -1014,7 +972,7 @@
           },
           "content": {
             "present": true,
-            "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "summary": "A counter-offer (round 2) with new terms.",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -1034,21 +992,7 @@
               "round": 2,
               "counters": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0002"
             },
-            "digest": "sha-256:1c3a4f737f4e56ba6462f31812f3d71d67192303b9e378f2d16bee158022c3ef",
-            "untrusted": [
-              {
-                "path": "terms.purpose",
-                "text": "urn:purpose:service-query"
-              },
-              {
-                "path": "terms.evidenceRequest.0.claimType",
-                "text": "contact"
-              },
-              {
-                "path": "terms.topic",
-                "text": "contact-request"
-              }
-            ]
+            "digest": "sha-256:1c3a4f737f4e56ba6462f31812f3d71d67192303b9e378f2d16bee158022c3ef"
           },
           "evidence": {
             "present": false,
@@ -1269,7 +1213,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
         "path": [
@@ -1281,6 +1224,7 @@
         ],
         "answer": "Accepted, for urn:operation:service query only."
       },
+      "reason": "recipient-established",
       "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
     },
     {
@@ -1375,11 +1319,11 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
     },
     {
@@ -1458,7 +1402,7 @@
           },
           "content": {
             "present": true,
-            "summary": "A counter-offer (round 3) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "summary": "A counter-offer (round 3) with new terms.",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -1478,21 +1422,7 @@
               "round": 3,
               "counters": "urn:awp:engine-probing-counterparty-round-limit:person-agent:0001"
             },
-            "digest": "sha-256:441857d0d12224f4a4c885f9c629d64f1213185f803d9eb761dcb2e1c0bd4def",
-            "untrusted": [
-              {
-                "path": "terms.purpose",
-                "text": "urn:purpose:service-query"
-              },
-              {
-                "path": "terms.evidenceRequest.0.claimType",
-                "text": "contact"
-              },
-              {
-                "path": "terms.topic",
-                "text": "contact-request"
-              }
-            ]
+            "digest": "sha-256:441857d0d12224f4a4c885f9c629d64f1213185f803d9eb761dcb2e1c0bd4def"
           },
           "evidence": {
             "present": false,
@@ -1605,7 +1535,7 @@
           },
           "content": {
             "present": true,
-            "summary": "A counter-offer (round 3) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "summary": "A counter-offer (round 3) with new terms.",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -1625,21 +1555,7 @@
               "round": 3,
               "counters": "urn:awp:engine-probing-counterparty-round-limit:person-agent:0001"
             },
-            "digest": "sha-256:441857d0d12224f4a4c885f9c629d64f1213185f803d9eb761dcb2e1c0bd4def",
-            "untrusted": [
-              {
-                "path": "terms.purpose",
-                "text": "urn:purpose:service-query"
-              },
-              {
-                "path": "terms.evidenceRequest.0.claimType",
-                "text": "contact"
-              },
-              {
-                "path": "terms.topic",
-                "text": "contact-request"
-              }
-            ]
+            "digest": "sha-256:441857d0d12224f4a4c885f9c629d64f1213185f803d9eb761dcb2e1c0bd4def"
           },
           "evidence": {
             "present": false,
@@ -1860,7 +1776,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is Cedar Service a party I can send urn:operation:service query to?",
         "path": [
@@ -1872,6 +1787,7 @@
         ],
         "answer": "Accepted, for urn:operation:service query only."
       },
+      "reason": "recipient-established",
       "caption": "Cedar Service: Accepted, for urn:operation:service query only."
     },
     {

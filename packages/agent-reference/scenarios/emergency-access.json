@@ -21,7 +21,7 @@
       "change": {},
       "expect": {
         "outcome": "go",
-        "check": "authority",
+        "check": "source",
         "reason": "source-accepted"
       },
       "outline": [],
@@ -33,7 +33,7 @@
       "change": {},
       "expect": {
         "outcome": "stop",
-        "check": "authority",
+        "check": "source",
         "reason": "source-unknown"
       },
       "outline": [],

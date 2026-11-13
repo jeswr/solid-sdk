@@ -44,7 +44,7 @@
     }
   ],
   "generated": {
-    "commit": "f70e61dabe101f82df60be95df78945406e001e6",
+    "commit": "unknown",
     "core": "scripted"
   },
   "events": [
@@ -81,7 +81,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "No action is proposed by this message, so there is no mandate decision."
+      "caption": "This protocol message proposes no additional action."
     },
     {
       "seq": 3,
@@ -103,7 +103,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -129,6 +128,7 @@
         "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
         "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
       },
+      "reason": "recipient-established",
       "caption": "North Bank: Accepted, for a mortgage application only."
     },
     {
@@ -147,7 +147,7 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate finds none of Sam's data in this message: no statement about Sam and no stored fact."
+      "caption": "The gate finds no personal data in this protocol message."
     },
     {
       "seq": 5,
@@ -165,7 +165,7 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "None of Sam's data goes, so no terms apply."
+      "caption": "The gate finds no data terms to apply."
     },
     {
       "seq": 6,
@@ -183,7 +183,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "No action, so no limit or approval applies."
+      "caption": "The message release check is complete."
     },
     {
       "seq": 7,
@@ -205,11 +205,11 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with Sam's agent's pinned key, and written to the record."
     },
     {
@@ -536,7 +536,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "No action is proposed by this message, so there is no mandate decision."
+      "caption": "This protocol message proposes no additional action."
     },
     {
       "seq": 18,
@@ -568,7 +568,7 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
-      "verdict": "not-applicable",
+      "verdict": "pass",
       "refs": [
         {
           "layer": "data-access",
@@ -576,8 +576,8 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "no-personal-data",
-      "caption": "The gate finds none of North Bank's data in this message: no statement about North Bank and no stored fact."
+      "reason": "minimal-disclosure",
+      "caption": "No restricted item entered this task's context."
     },
     {
       "seq": 20,
@@ -586,7 +586,7 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
-      "verdict": "not-applicable",
+      "verdict": "pass",
       "refs": [
         {
           "layer": "usage-control",
@@ -594,8 +594,8 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "no-personal-data",
-      "caption": "None of North Bank's data goes, so no terms apply."
+      "reason": "terms-allow",
+      "caption": "The context rule permits this text."
     },
     {
       "seq": 21,
@@ -613,7 +613,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "No action, so no limit or approval applies."
+      "caption": "The message release check is complete."
     },
     {
       "seq": 22,
@@ -635,11 +635,11 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
     },
     {
@@ -665,7 +665,7 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:19235e5bd51…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:ce009070c33…; never trusted."
         },
         "layers": {
           "header": {
@@ -695,7 +695,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:05ddc55605836faf47b5280147c3d40d8c549992f8372f4f535bae4355c18414"
+            "digest": "sha-256:5967d782e4a827f81233d9cf60e029377b090bbd9471bb7c43cacf4b07fd3be9"
           },
           "authority": {
             "present": false,
@@ -703,7 +703,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Describes this agent: the configurations it accepts and the operations it offers.",
+            "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
             "raw": {
               "description": {
                 "type": "ImplementationDescription",
@@ -779,7 +779,7 @@
                   {
                     "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                     "version": "0.1",
-                    "label": "Mortgage prequalification with a bounded evidence request (synthetic)",
+                    "label": "Mortgage decision in principle with a bounded evidence request (synthetic)",
                     "pattern": "negotiate",
                     "access": "represented",
                     "roles": [
@@ -825,7 +825,225 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:14948022e474a70562ed233bfad850f6130449711bba9661a2fd4aaee78df55f"
+            "digest": "sha-256:32fca2b9c7eb0f603ce9605489fe07194a10ccdcad2f7b25ce8513a5c978bce1",
+            "untrusted": [
+              {
+                "path": "description.type",
+                "text": "ImplementationDescription"
+              },
+              {
+                "path": "description.describes",
+                "text": "https://northbank.example/agents/intake#agent"
+              },
+              {
+                "path": "description.onBehalfOf",
+                "text": "https://northbank.example/#org"
+              },
+              {
+                "path": "description.operator",
+                "text": "https://northbank.example/#org"
+              },
+              {
+                "path": "description.profile.id",
+                "text": "https://w3id.org/jeswr/awp/profile/pilot/0.1"
+              },
+              {
+                "path": "description.profile.version",
+                "text": "0.1.2"
+              },
+              {
+                "path": "description.acceptedProfiles.0.id",
+                "text": "https://w3id.org/jeswr/awp/profile/pilot/0.1"
+              },
+              {
+                "path": "description.acceptedProfiles.0.versions",
+                "text": "0.1.x"
+              },
+              {
+                "path": "description.vocabularies.0.iri",
+                "text": "http://www.w3.org/ns/prov#Agent"
+              },
+              {
+                "path": "description.vocabularies.0.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.1.iri",
+                "text": "http://www.w3.org/ns/prov#actedOnBehalfOf"
+              },
+              {
+                "path": "description.vocabularies.1.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.2.iri",
+                "text": "http://www.w3.org/ns/prov#Activity"
+              },
+              {
+                "path": "description.vocabularies.2.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.3.iri",
+                "text": "http://www.w3.org/ns/prov#wasDerivedFrom"
+              },
+              {
+                "path": "description.vocabularies.3.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.4.iri",
+                "text": "http://www.w3.org/ns/odrl/2/Policy"
+              },
+              {
+                "path": "description.vocabularies.4.relation",
+                "text": "narrower"
+              },
+              {
+                "path": "description.vocabularies.5.iri",
+                "text": "http://www.w3.org/ns/odrl/2/Agreement"
+              },
+              {
+                "path": "description.vocabularies.5.relation",
+                "text": "related"
+              },
+              {
+                "path": "description.vocabularies.6.iri",
+                "text": "http://www.w3.org/ns/dx/prof/Profile"
+              },
+              {
+                "path": "description.vocabularies.6.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.7.iri",
+                "text": "https://schema.org/Action"
+              },
+              {
+                "path": "description.vocabularies.7.relation",
+                "text": "related"
+              },
+              {
+                "path": "description.vocabularies.8.iri",
+                "text": "https://schema.org/Event"
+              },
+              {
+                "path": "description.vocabularies.8.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.9.iri",
+                "text": "https://w3id.org/dpv#hasPurpose"
+              },
+              {
+                "path": "description.vocabularies.9.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.10.iri",
+                "text": "http://www.w3.org/ns/dcat#DataService"
+              },
+              {
+                "path": "description.vocabularies.10.relation",
+                "text": "related"
+              },
+              {
+                "path": "description.configurations.implemented.0",
+                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.1",
+                "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
+              },
+              {
+                "path": "description.configurations.accepted.0",
+                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+              },
+              {
+                "path": "description.operations.0.id",
+                "text": "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
+              },
+              {
+                "path": "description.operations.0.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.0.label",
+                "text": "Mortgage decision in principle with a bounded evidence request (synthetic)"
+              },
+              {
+                "path": "description.operations.0.pattern",
+                "text": "negotiate"
+              },
+              {
+                "path": "description.operations.0.access",
+                "text": "represented"
+              },
+              {
+                "path": "description.operations.0.roles.0",
+                "text": "responder"
+              },
+              {
+                "path": "description.operations.0.models.0.id",
+                "text": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series"
+              },
+              {
+                "path": "description.operations.0.models.0.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.0.purposes.0",
+                "text": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+              },
+              {
+                "path": "description.operations.0.purposes.1",
+                "text": "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+              },
+              {
+                "path": "description.operations.0.effects.0",
+                "text": "evidence disclosed under agreed terms"
+              },
+              {
+                "path": "description.operations.0.effects.1",
+                "text": "indicative eligibility (not approval)"
+              },
+              {
+                "path": "description.operations.0.outcomes.0",
+                "text": "application-state receipt: received / checked / decided"
+              },
+              {
+                "path": "description.operations.0.limitations.0",
+                "text": "synthetic lender; indicative only; no credit decision or institutional approval"
+              },
+              {
+                "path": "description.bindings.0.id",
+                "text": "direct-local/0.1"
+              },
+              {
+                "path": "description.policyModule.policyProfile",
+                "text": "https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1"
+              },
+              {
+                "path": "description.policyModule.evaluator.name",
+                "text": "@jeswr/solid-odrl"
+              },
+              {
+                "path": "description.policyModule.evaluator.version",
+                "text": "b8fabc729c56245f4b63846261f1f06b6503f1c8"
+              },
+              {
+                "path": "description.policyModule.evaluator.interface",
+                "text": "evaluate() via awp pilot-subset adapter 0.1 (in-process)"
+              },
+              {
+                "path": "description.policyModule.status",
+                "text": "ready"
+              },
+              {
+                "path": "description.notice",
+                "text": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -874,7 +1092,7 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:19235e5bd51…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:ce009070c33…; never trusted."
         },
         "layers": {
           "header": {
@@ -904,7 +1122,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:05ddc55605836faf47b5280147c3d40d8c549992f8372f4f535bae4355c18414"
+            "digest": "sha-256:5967d782e4a827f81233d9cf60e029377b090bbd9471bb7c43cacf4b07fd3be9"
           },
           "authority": {
             "present": false,
@@ -912,7 +1130,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Describes this agent: the configurations it accepts and the operations it offers.",
+            "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
             "raw": {
               "description": {
                 "type": "ImplementationDescription",
@@ -988,7 +1206,7 @@
                   {
                     "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                     "version": "0.1",
-                    "label": "Mortgage prequalification with a bounded evidence request (synthetic)",
+                    "label": "Mortgage decision in principle with a bounded evidence request (synthetic)",
                     "pattern": "negotiate",
                     "access": "represented",
                     "roles": [
@@ -1034,7 +1252,225 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:14948022e474a70562ed233bfad850f6130449711bba9661a2fd4aaee78df55f"
+            "digest": "sha-256:32fca2b9c7eb0f603ce9605489fe07194a10ccdcad2f7b25ce8513a5c978bce1",
+            "untrusted": [
+              {
+                "path": "description.type",
+                "text": "ImplementationDescription"
+              },
+              {
+                "path": "description.describes",
+                "text": "https://northbank.example/agents/intake#agent"
+              },
+              {
+                "path": "description.onBehalfOf",
+                "text": "https://northbank.example/#org"
+              },
+              {
+                "path": "description.operator",
+                "text": "https://northbank.example/#org"
+              },
+              {
+                "path": "description.profile.id",
+                "text": "https://w3id.org/jeswr/awp/profile/pilot/0.1"
+              },
+              {
+                "path": "description.profile.version",
+                "text": "0.1.2"
+              },
+              {
+                "path": "description.acceptedProfiles.0.id",
+                "text": "https://w3id.org/jeswr/awp/profile/pilot/0.1"
+              },
+              {
+                "path": "description.acceptedProfiles.0.versions",
+                "text": "0.1.x"
+              },
+              {
+                "path": "description.vocabularies.0.iri",
+                "text": "http://www.w3.org/ns/prov#Agent"
+              },
+              {
+                "path": "description.vocabularies.0.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.1.iri",
+                "text": "http://www.w3.org/ns/prov#actedOnBehalfOf"
+              },
+              {
+                "path": "description.vocabularies.1.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.2.iri",
+                "text": "http://www.w3.org/ns/prov#Activity"
+              },
+              {
+                "path": "description.vocabularies.2.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.3.iri",
+                "text": "http://www.w3.org/ns/prov#wasDerivedFrom"
+              },
+              {
+                "path": "description.vocabularies.3.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.4.iri",
+                "text": "http://www.w3.org/ns/odrl/2/Policy"
+              },
+              {
+                "path": "description.vocabularies.4.relation",
+                "text": "narrower"
+              },
+              {
+                "path": "description.vocabularies.5.iri",
+                "text": "http://www.w3.org/ns/odrl/2/Agreement"
+              },
+              {
+                "path": "description.vocabularies.5.relation",
+                "text": "related"
+              },
+              {
+                "path": "description.vocabularies.6.iri",
+                "text": "http://www.w3.org/ns/dx/prof/Profile"
+              },
+              {
+                "path": "description.vocabularies.6.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.7.iri",
+                "text": "https://schema.org/Action"
+              },
+              {
+                "path": "description.vocabularies.7.relation",
+                "text": "related"
+              },
+              {
+                "path": "description.vocabularies.8.iri",
+                "text": "https://schema.org/Event"
+              },
+              {
+                "path": "description.vocabularies.8.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.9.iri",
+                "text": "https://w3id.org/dpv#hasPurpose"
+              },
+              {
+                "path": "description.vocabularies.9.relation",
+                "text": "uses"
+              },
+              {
+                "path": "description.vocabularies.10.iri",
+                "text": "http://www.w3.org/ns/dcat#DataService"
+              },
+              {
+                "path": "description.vocabularies.10.relation",
+                "text": "related"
+              },
+              {
+                "path": "description.configurations.implemented.0",
+                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.1",
+                "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
+              },
+              {
+                "path": "description.configurations.accepted.0",
+                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+              },
+              {
+                "path": "description.operations.0.id",
+                "text": "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
+              },
+              {
+                "path": "description.operations.0.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.0.label",
+                "text": "Mortgage decision in principle with a bounded evidence request (synthetic)"
+              },
+              {
+                "path": "description.operations.0.pattern",
+                "text": "negotiate"
+              },
+              {
+                "path": "description.operations.0.access",
+                "text": "represented"
+              },
+              {
+                "path": "description.operations.0.roles.0",
+                "text": "responder"
+              },
+              {
+                "path": "description.operations.0.models.0.id",
+                "text": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series"
+              },
+              {
+                "path": "description.operations.0.models.0.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.0.purposes.0",
+                "text": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+              },
+              {
+                "path": "description.operations.0.purposes.1",
+                "text": "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+              },
+              {
+                "path": "description.operations.0.effects.0",
+                "text": "evidence disclosed under agreed terms"
+              },
+              {
+                "path": "description.operations.0.effects.1",
+                "text": "indicative eligibility (not approval)"
+              },
+              {
+                "path": "description.operations.0.outcomes.0",
+                "text": "application-state receipt: received / checked / decided"
+              },
+              {
+                "path": "description.operations.0.limitations.0",
+                "text": "synthetic lender; indicative only; no credit decision or institutional approval"
+              },
+              {
+                "path": "description.bindings.0.id",
+                "text": "direct-local/0.1"
+              },
+              {
+                "path": "description.policyModule.policyProfile",
+                "text": "https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1"
+              },
+              {
+                "path": "description.policyModule.evaluator.name",
+                "text": "@jeswr/solid-odrl"
+              },
+              {
+                "path": "description.policyModule.evaluator.version",
+                "text": "b8fabc729c56245f4b63846261f1f06b6503f1c8"
+              },
+              {
+                "path": "description.policyModule.evaluator.interface",
+                "text": "evaluate() via awp pilot-subset adapter 0.1 (in-process)"
+              },
+              {
+                "path": "description.policyModule.status",
+                "text": "ready"
+              },
+              {
+                "path": "description.notice",
+                "text": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -1217,11 +1653,11 @@
           "clause": "CORE-OUT-2"
         }
       ],
-      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
         "text": "Sam's mandate lets the agent use mortgage prequalification for mortgage application with North Bank or https://valleybank.example/#org, on its own."
       },
+      "reason": "within-mandate",
       "caption": "Sam's mandate covers this action."
     },
     {
@@ -1244,7 +1680,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -1270,6 +1705,7 @@
         "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
         "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
       },
+      "reason": "recipient-established",
       "caption": "North Bank: Accepted, for a mortgage application only."
     },
     {
@@ -1279,7 +1715,7 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
-      "verdict": "pass",
+      "verdict": "not-applicable",
       "refs": [
         {
           "layer": "data-access",
@@ -1287,8 +1723,8 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "minimal-disclosure",
-      "caption": "Only the fields the application needs go: property price and loan amount."
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
     },
     {
       "seq": 36,
@@ -1332,6 +1768,24 @@
       "agent": "sams-agent",
       "part": "outbound-gate",
       "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The vocabulary identifies only the necessary claims: mortgage.application."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
       "check": "evidence",
       "verdict": "pass",
       "refs": [
@@ -1346,15 +1800,15 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with Sam's agent's pinned key, and written to the record."
     },
     {
-      "seq": 39,
+      "seq": 40,
       "step": 4,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -1364,7 +1818,7 @@
       "caption": "The propose message goes to North Bank's agent."
     },
     {
-      "seq": 40,
+      "seq": 41,
       "step": 4,
       "agent": "sams-agent",
       "part": "transport",
@@ -1493,7 +1947,7 @@
       "caption": "Sam's agent sends a propose message to North Bank's agent."
     },
     {
-      "seq": 41,
+      "seq": 42,
       "step": 5,
       "agent": "lender",
       "part": "transport",
@@ -1622,7 +2076,7 @@
       "caption": "A propose message from Sam's agent reaches the inbound gate."
     },
     {
-      "seq": 42,
+      "seq": 43,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -1649,7 +2103,7 @@
       "caption": "The message is intact, signed with Sam's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
-      "seq": 43,
+      "seq": 44,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -1672,7 +2126,7 @@
       "caption": "The message carries no statements from third parties."
     },
     {
-      "seq": 44,
+      "seq": 45,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -1694,7 +2148,7 @@
       "caption": "Sam signed a statement that Sam's agent acts for them in this operation."
     },
     {
-      "seq": 45,
+      "seq": 46,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -1717,7 +2171,7 @@
       "caption": "The message carries no data that needs terms."
     },
     {
-      "seq": 46,
+      "seq": 47,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -1735,7 +2189,7 @@
       "caption": "The message carries no claims whose quality matters."
     },
     {
-      "seq": 47,
+      "seq": 48,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -1745,7 +2199,7 @@
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 48,
+      "seq": 49,
       "step": 5,
       "agent": "lender",
       "part": "core",
@@ -1753,7 +2207,7 @@
       "caption": "The core proposes to take the next step in a mortgage application with Sam."
     },
     {
-      "seq": 49,
+      "seq": 50,
       "step": 5,
       "agent": "lender",
       "part": "outbound-gate",
@@ -1772,15 +2226,15 @@
           "clause": "CORE-OUT-2"
         }
       ],
-      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
         "text": "North Bank's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
       },
+      "reason": "within-mandate",
       "caption": "North Bank's mandate covers this action."
     },
     {
-      "seq": 50,
+      "seq": 51,
       "step": 5,
       "agent": "lender",
       "part": "outbound-gate",
@@ -1799,7 +2253,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is Sam a party I can send a mortgage application to?",
         "path": [
@@ -1820,10 +2273,11 @@
         "id": "urn:awp:ref:sam:0001",
         "text": "Replies go to the verified sender of the request."
       },
+      "reason": "recipient-established",
       "caption": "A reply to Sam's verified agent, which opened this conversation; no register lists private persons."
     },
     {
-      "seq": 51,
+      "seq": 52,
       "step": 5,
       "agent": "lender",
       "part": "outbound-gate",
@@ -1841,7 +2295,7 @@
       "caption": "This action passes on no personal data."
     },
     {
-      "seq": 52,
+      "seq": 53,
       "step": 5,
       "agent": "lender",
       "part": "outbound-gate",
@@ -1859,7 +2313,7 @@
       "caption": "This action passes on no personal data."
     },
     {
-      "seq": 53,
+      "seq": 54,
       "step": 5,
       "agent": "lender",
       "part": "outbound-gate",
@@ -1877,7 +2331,25 @@
       "caption": "Inside what the agent may do on its own, and within North Bank's limits."
     },
     {
-      "seq": 54,
+      "seq": 55,
+      "step": 5,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The vocabulary identifies only the necessary claims: mortgage.application."
+    },
+    {
+      "seq": 56,
       "step": 5,
       "agent": "lender",
       "part": "outbound-gate",
@@ -1896,15 +2368,15 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
     },
     {
-      "seq": 55,
+      "seq": 57,
       "step": 5,
       "agent": "lender",
       "part": "outbound-gate",
@@ -1914,7 +2386,7 @@
       "caption": "The propose message goes to Sam's agent."
     },
     {
-      "seq": 56,
+      "seq": 58,
       "step": 5,
       "agent": "lender",
       "part": "transport",
@@ -2124,7 +2596,7 @@
       "caption": "North Bank's agent sends a propose message to Sam's agent."
     },
     {
-      "seq": 57,
+      "seq": 59,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2147,7 +2619,7 @@
       "caption": "Paywell's record of your pay for the last 12 months is intact and signed with Paywell's pinned key."
     },
     {
-      "seq": 58,
+      "seq": 60,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2185,7 +2657,7 @@
       "caption": "Paywell's record of your pay for the last 12 months: Paywell is an accepted source for this kind of claim."
     },
     {
-      "seq": 59,
+      "seq": 61,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2203,7 +2675,7 @@
       "caption": "Paywell's record of your pay for the last 12 months asks for nothing, so there is no authority to check."
     },
     {
-      "seq": 60,
+      "seq": 62,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2230,7 +2702,7 @@
       "caption": "Paywell's record of your pay for the last 12 months: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
     },
     {
-      "seq": 61,
+      "seq": 63,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2252,7 +2724,7 @@
       "caption": "Paywell's record of your pay for the last 12 months is fit for a mortgage application: recorded-by-authority, 12 days old."
     },
     {
-      "seq": 62,
+      "seq": 64,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2262,7 +2734,7 @@
       "caption": "Paywell's record of your pay for the last 12 months is admitted."
     },
     {
-      "seq": 63,
+      "seq": 65,
       "step": 10,
       "agent": "sams-agent",
       "part": "memory",
@@ -2337,7 +2809,7 @@
       "caption": "Paywell's record of your pay for the last 12 months is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 64,
+      "seq": 66,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2360,7 +2832,7 @@
       "caption": "Harbour Bank's balance at October 31, 2026 is intact and signed with Harbour Bank's pinned key."
     },
     {
-      "seq": 65,
+      "seq": 67,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2398,7 +2870,7 @@
       "caption": "Harbour Bank's balance at October 31, 2026: Harbour Bank is an accepted source for this kind of claim."
     },
     {
-      "seq": 66,
+      "seq": 68,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2416,7 +2888,7 @@
       "caption": "Harbour Bank's balance at October 31, 2026 asks for nothing, so there is no authority to check."
     },
     {
-      "seq": 67,
+      "seq": 69,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2443,7 +2915,7 @@
       "caption": "Harbour Bank's balance at October 31, 2026: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
     },
     {
-      "seq": 68,
+      "seq": 70,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2465,7 +2937,7 @@
       "caption": "Harbour Bank's balance at October 31, 2026 is fit for a mortgage application: recorded-by-authority, 12 days old."
     },
     {
-      "seq": 69,
+      "seq": 71,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2475,7 +2947,7 @@
       "caption": "Harbour Bank's balance at October 31, 2026 is admitted."
     },
     {
-      "seq": 70,
+      "seq": 72,
       "step": 10,
       "agent": "sams-agent",
       "part": "memory",
@@ -2502,7 +2974,7 @@
       "caption": "Harbour Bank's balance at October 31, 2026 is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 71,
+      "seq": 73,
       "step": 11,
       "agent": "sams-agent",
       "part": "transport",
@@ -2712,7 +3184,7 @@
       "caption": "A propose message from North Bank's agent reaches the inbound gate."
     },
     {
-      "seq": 72,
+      "seq": 74,
       "step": 11,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2739,7 +3211,7 @@
       "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
-      "seq": 73,
+      "seq": 75,
       "step": 11,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2762,7 +3234,7 @@
       "caption": "The message carries no statements from third parties."
     },
     {
-      "seq": 74,
+      "seq": 76,
       "step": 11,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2784,7 +3256,7 @@
       "caption": "North Bank signed a statement that North Bank's agent acts for them in this operation."
     },
     {
-      "seq": 75,
+      "seq": 77,
       "step": 11,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2807,7 +3279,7 @@
       "caption": "The message carries no data that needs terms."
     },
     {
-      "seq": 76,
+      "seq": 78,
       "step": 11,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2825,7 +3297,7 @@
       "caption": "The message carries no claims whose quality matters."
     },
     {
-      "seq": 77,
+      "seq": 79,
       "step": 11,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -2835,7 +3307,7 @@
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 78,
+      "seq": 80,
       "step": 11,
       "agent": "sams-agent",
       "part": "core",
@@ -2843,7 +3315,7 @@
       "caption": "The core proposes to share Harbour Bank's balance at October 31, 2026 and Paywell's record of your pay for the last 12 months with North Bank."
     },
     {
-      "seq": 79,
+      "seq": 81,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -2862,15 +3334,15 @@
           "clause": "CORE-OUT-2"
         }
       ],
-      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
         "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves."
       },
+      "reason": "within-mandate",
       "caption": "Sam's mandate covers this action, with approval."
     },
     {
-      "seq": 80,
+      "seq": 82,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -2889,7 +3361,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -2915,10 +3386,11 @@
         "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
         "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
       },
+      "reason": "recipient-established",
       "caption": "North Bank: Accepted, for a mortgage application only."
     },
     {
-      "seq": 81,
+      "seq": 83,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -2940,7 +3412,7 @@
       "caption": "Only what the request needs goes: Harbour Bank's balance at October 31, 2026 and Paywell's record of your pay for the last 12 months."
     },
     {
-      "seq": 82,
+      "seq": 84,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -2954,15 +3426,15 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "terms-allow",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
         "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
       },
+      "reason": "terms-allow",
       "caption": "Harbour Bank's balance at October 31, 2026: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
     },
     {
-      "seq": 83,
+      "seq": 85,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -2976,15 +3448,15 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "terms-allow",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
         "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
       },
+      "reason": "terms-allow",
       "caption": "Paywell's record of your pay for the last 12 months: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
     },
     {
-      "seq": 84,
+      "seq": 86,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3006,7 +3478,7 @@
       "caption": "This is outside Sam's limits, so the gate asks Sam."
     },
     {
-      "seq": 85,
+      "seq": 87,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3017,7 +3489,7 @@
       "caption": "The gate holds the action and asks Sam."
     },
     {
-      "seq": 86,
+      "seq": 88,
       "step": 11,
       "agent": "sams-agent",
       "part": "principal",
@@ -3029,7 +3501,7 @@
       "caption": "Sam is asked to approve this exact action; the approval will be bound to its digest."
     },
     {
-      "seq": 87,
+      "seq": 89,
       "step": 11,
       "agent": "sams-agent",
       "part": "principal",
@@ -3041,7 +3513,7 @@
       "caption": "Declines by signing an answer bound to the exact action."
     },
     {
-      "seq": 88,
+      "seq": 90,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3052,7 +3524,7 @@
       "caption": "Sam declined; the action is stopped."
     },
     {
-      "seq": 89,
+      "seq": 91,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3072,10 +3544,10 @@
         }
       ],
       "reason": "no-action",
-      "caption": "No action is proposed by this message, so there is no mandate decision."
+      "caption": "This protocol message proposes no additional action."
     },
     {
-      "seq": 90,
+      "seq": 92,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3094,7 +3566,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -3120,10 +3591,11 @@
         "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
         "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:01:00.000Z."
       },
+      "reason": "recipient-established",
       "caption": "North Bank: Accepted, for a mortgage application only."
     },
     {
-      "seq": 91,
+      "seq": 93,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3138,10 +3610,10 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate finds none of Sam's data in this message: no statement about Sam and no stored fact."
+      "caption": "The gate finds no personal data in this protocol message."
     },
     {
-      "seq": 92,
+      "seq": 94,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3156,10 +3628,10 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "None of Sam's data goes, so no terms apply."
+      "caption": "The gate finds no data terms to apply."
     },
     {
-      "seq": 93,
+      "seq": 95,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3174,10 +3646,10 @@
         }
       ],
       "reason": "no-action",
-      "caption": "No action, so no limit or approval applies."
+      "caption": "The message release check is complete."
     },
     {
-      "seq": 94,
+      "seq": 96,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3196,15 +3668,15 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with Sam's agent's pinned key, and written to the record."
     },
     {
-      "seq": 95,
+      "seq": 97,
       "step": 11,
       "agent": "sams-agent",
       "part": "outbound-gate",
@@ -3214,7 +3686,7 @@
       "caption": "The refuse message goes to North Bank's agent."
     },
     {
-      "seq": 96,
+      "seq": 98,
       "step": 11,
       "agent": "sams-agent",
       "part": "transport",
@@ -3226,7 +3698,7 @@
         "kind": "refuse",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:bca5347d652…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:e49854a7028…; never trusted."
         },
         "layers": {
           "header": {
@@ -3256,7 +3728,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:1549c7077dc1c93c69b805eca38cd966041d9389e545c6b89859e5918c77fe71"
+            "digest": "sha-256:09d70081455773bc08a4403c2e2ee41d03dab33fc4308080854c5b0eee4293cc"
           },
           "authority": {
             "present": false,
@@ -3267,10 +3739,9 @@
             "summary": "Closes the conversation (refuse): approval-denied.",
             "raw": {
               "ref": "urn:awp:ref:northbank-intake:0002",
-              "reason": "approval-denied",
-              "detail": "the represented party declined"
+              "reason": "approval-denied"
             },
-            "digest": "sha-256:ba11da1c089480be89ac185b72713fb1f199b1c81d820c910f1f124dabbee02a"
+            "digest": "sha-256:791b06c99e392f0e481e091f3466a042174ad7f2e5d288a4c362b9ed7734470e"
           },
           "evidence": {
             "present": false,
@@ -3307,7 +3778,7 @@
       "caption": "Sam's agent sends a refuse message to North Bank's agent."
     },
     {
-      "seq": 97,
+      "seq": 99,
       "step": 11,
       "agent": "lender",
       "part": "transport",
@@ -3319,7 +3790,7 @@
         "kind": "refuse",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:bca5347d652…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:e49854a7028…; never trusted."
         },
         "layers": {
           "header": {
@@ -3349,7 +3820,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:1549c7077dc1c93c69b805eca38cd966041d9389e545c6b89859e5918c77fe71"
+            "digest": "sha-256:09d70081455773bc08a4403c2e2ee41d03dab33fc4308080854c5b0eee4293cc"
           },
           "authority": {
             "present": false,
@@ -3360,10 +3831,9 @@
             "summary": "Closes the conversation (refuse): approval-denied.",
             "raw": {
               "ref": "urn:awp:ref:northbank-intake:0002",
-              "reason": "approval-denied",
-              "detail": "the represented party declined"
+              "reason": "approval-denied"
             },
-            "digest": "sha-256:ba11da1c089480be89ac185b72713fb1f199b1c81d820c910f1f124dabbee02a"
+            "digest": "sha-256:791b06c99e392f0e481e091f3466a042174ad7f2e5d288a4c362b9ed7734470e"
           },
           "evidence": {
             "present": false,
@@ -3400,7 +3870,7 @@
       "caption": "A refuse message from Sam's agent reaches the inbound gate."
     },
     {
-      "seq": 98,
+      "seq": 100,
       "step": 11,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3427,7 +3897,7 @@
       "caption": "The message is intact, signed with Sam's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
-      "seq": 99,
+      "seq": 101,
       "step": 11,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3450,7 +3920,7 @@
       "caption": "The message carries no statements from third parties."
     },
     {
-      "seq": 100,
+      "seq": 102,
       "step": 11,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3472,7 +3942,7 @@
       "caption": "Settled when this conversation opened: Sam's signed representation statement still covers it."
     },
     {
-      "seq": 101,
+      "seq": 103,
       "step": 11,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3495,7 +3965,7 @@
       "caption": "The message carries no data that needs terms."
     },
     {
-      "seq": 102,
+      "seq": 104,
       "step": 11,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3513,7 +3983,7 @@
       "caption": "The message carries no claims whose quality matters."
     },
     {
-      "seq": 103,
+      "seq": 105,
       "step": 11,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3523,7 +3993,7 @@
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 104,
+      "seq": 106,
       "step": 14,
       "agent": "sams-agent",
       "part": "record",
@@ -3531,7 +4001,7 @@
       "caption": "18 entries in this agent's hash-chained record; the chain verifies."
     },
     {
-      "seq": 105,
+      "seq": 107,
       "step": 14,
       "agent": "lender",
       "part": "record",

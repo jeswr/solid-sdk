@@ -57,7 +57,8 @@
         "deposit.balance",
         "mortgage.decision-in-principle",
         "mortgage.application",
-        "mortgage.assessment"
+        "mortgage.assessment",
+        "identity.approval"
       ]
     },
     {

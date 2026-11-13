@@ -6,9 +6,8 @@
  * and terms of use, North Bank's decision in principle, the reliance profile for a mortgage
  * application, and the plain names shown to Sam. Everyone and every figure is fictional.
  */
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { fileURLToPath } from "url";
 import type { Iri, JsonObject } from "../core/types.js";
 import { CLAIM, type EvidenceStatement, PREQUAL_OP, type WalletItem } from "../domains/mortgage.js";

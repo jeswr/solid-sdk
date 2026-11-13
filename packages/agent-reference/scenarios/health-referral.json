@@ -33,7 +33,7 @@
       "change": {},
       "expect": {
         "outcome": "stop",
-        "check": "disclosure",
+        "check": "source",
         "reason": "source-unknown"
       },
       "outline": [],

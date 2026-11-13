@@ -273,7 +273,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
         "path": [
@@ -285,6 +284,7 @@
         ],
         "answer": "Accepted, for urn:operation:service query only."
       },
+      "reason": "recipient-established",
       "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
     },
     {
@@ -379,11 +379,11 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
     },
     {
@@ -461,7 +461,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:operation:service-query, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "summary": "An offer to start urn:operation:service-query, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -479,21 +479,7 @@
               "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
               "round": 1
             },
-            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54",
-            "untrusted": [
-              {
-                "path": "terms.purpose",
-                "text": "urn:purpose:service-query"
-              },
-              {
-                "path": "terms.evidenceRequest.0.claimType",
-                "text": "contact"
-              },
-              {
-                "path": "terms.topic",
-                "text": "contact-request"
-              }
-            ]
+            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54"
           },
           "evidence": {
             "present": false,
@@ -603,7 +589,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:operation:service-query, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "summary": "An offer to start urn:operation:service-query, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -621,21 +607,7 @@
               "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
               "round": 1
             },
-            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54",
-            "untrusted": [
-              {
-                "path": "terms.purpose",
-                "text": "urn:purpose:service-query"
-              },
-              {
-                "path": "terms.evidenceRequest.0.claimType",
-                "text": "contact"
-              },
-              {
-                "path": "terms.topic",
-                "text": "contact-request"
-              }
-            ]
+            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54"
           },
           "evidence": {
             "present": false,
@@ -854,7 +826,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is Cedar Service a party I can send urn:operation:service query to?",
         "path": [
@@ -866,6 +837,7 @@
         ],
         "answer": "Accepted, for urn:operation:service query only."
       },
+      "reason": "recipient-established",
       "caption": "Cedar Service: Accepted, for urn:operation:service query only."
     },
     {
@@ -905,11 +877,11 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "terms-allow",
       "rule": {
         "id": "urn:terms:contact",
         "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
       },
+      "reason": "terms-allow",
       "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
     },
     {
@@ -950,11 +922,11 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with Rowan's agent's pinned key, and written to the record."
     },
     {
@@ -1130,7 +1102,6 @@
           "clause": "CORE-OUT-3"
         }
       ],
-      "reason": "recipient-established",
       "resolution": {
         "question": "Is Cedar Service a party I can send urn:operation:service query to?",
         "path": [
@@ -1142,6 +1113,7 @@
         ],
         "answer": "Accepted, for urn:operation:service query only."
       },
+      "reason": "recipient-established",
       "caption": "Cedar Service: Accepted, for urn:operation:service query only."
     },
     {
@@ -1181,11 +1153,11 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "terms-allow",
       "rule": {
         "id": "urn:terms:contact",
         "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
       },
+      "reason": "terms-allow",
       "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
     },
     {
@@ -1213,6 +1185,46 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 42,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:contact",
+        "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+    },
+    {
+      "seq": 43,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
       "verdict": "not-applicable",
       "refs": [
         {
@@ -1225,7 +1237,7 @@
       "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
     },
     {
-      "seq": 42,
+      "seq": 44,
       "step": 4,
       "agent": "person-agent",
       "part": "outbound-gate",
@@ -1244,15 +1256,15 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
+      "reason": "evidence-complete",
       "caption": "Signed (JWS EdDSA) with Rowan's agent's pinned key, and written to the record."
     },
     {
-      "seq": 43,
+      "seq": 45,
       "step": 4,
       "agent": "person-agent",
       "part": "outbound-gate",
@@ -1262,7 +1274,7 @@
       "caption": "The deliver message goes to Cedar's agent."
     },
     {
-      "seq": 44,
+      "seq": 46,
       "step": 4,
       "agent": "person-agent",
       "part": "transport",
@@ -1310,7 +1322,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:scenario:probing-counterparty:contact\"",
+            "summary": "Delivers the result under the agreement.",
             "raw": {
               "ref": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300",
               "basis": {
@@ -1327,13 +1339,7 @@
                 ]
               }
             },
-            "digest": "sha-256:84465e23450db2f7644e35cf30899348e34be69aac3a5229eefdf42c69260ca5",
-            "untrusted": [
-              {
-                "path": "output.items.0",
-                "text": "urn:scenario:probing-counterparty:contact"
-              }
-            ]
+            "digest": "sha-256:84465e23450db2f7644e35cf30899348e34be69aac3a5229eefdf42c69260ca5"
           },
           "evidence": {
             "present": true,
@@ -1425,7 +1431,7 @@
       "caption": "Rowan's agent sends a deliver message to Cedar's agent."
     },
     {
-      "seq": 45,
+      "seq": 47,
       "step": 5,
       "agent": "service-agent",
       "part": "transport",
@@ -1537,7 +1543,7 @@
       "caption": "An accept message from Rowan's agent reaches the inbound gate."
     },
     {
-      "seq": 46,
+      "seq": 48,
       "step": 5,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1564,7 +1570,7 @@
       "caption": "The message is intact, signed with Rowan's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
-      "seq": 47,
+      "seq": 49,
       "step": 5,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1587,7 +1593,7 @@
       "caption": "The message carries no statements from third parties."
     },
     {
-      "seq": 48,
+      "seq": 50,
       "step": 5,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1609,7 +1615,7 @@
       "caption": "Rowan Vale signed a statement that Rowan's agent acts for them in this operation."
     },
     {
-      "seq": 49,
+      "seq": 51,
       "step": 5,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1632,7 +1638,7 @@
       "caption": "The message carries no data that needs terms."
     },
     {
-      "seq": 50,
+      "seq": 52,
       "step": 5,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1650,7 +1656,7 @@
       "caption": "The message carries no claims whose quality matters."
     },
     {
-      "seq": 51,
+      "seq": 53,
       "step": 5,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1660,7 +1666,7 @@
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 52,
+      "seq": 54,
       "step": 6,
       "agent": "service-agent",
       "part": "transport",
@@ -1708,7 +1714,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:scenario:probing-counterparty:contact\"",
+            "summary": "Delivers the result under the agreement.",
             "raw": {
               "ref": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300",
               "basis": {
@@ -1725,13 +1731,7 @@
                 ]
               }
             },
-            "digest": "sha-256:84465e23450db2f7644e35cf30899348e34be69aac3a5229eefdf42c69260ca5",
-            "untrusted": [
-              {
-                "path": "output.items.0",
-                "text": "urn:scenario:probing-counterparty:contact"
-              }
-            ]
+            "digest": "sha-256:84465e23450db2f7644e35cf30899348e34be69aac3a5229eefdf42c69260ca5"
           },
           "evidence": {
             "present": true,
@@ -1823,7 +1823,7 @@
       "caption": "A deliver message from Rowan's agent reaches the inbound gate."
     },
     {
-      "seq": 53,
+      "seq": 55,
       "step": 6,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1850,7 +1850,7 @@
       "caption": "The message is intact, signed with Rowan's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
-      "seq": 54,
+      "seq": 56,
       "step": 6,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1888,7 +1888,7 @@
       "caption": "Rowan Vale's contact statement: Rowan Vale is an accepted source for this kind of claim."
     },
     {
-      "seq": 55,
+      "seq": 57,
       "step": 6,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1910,7 +1910,7 @@
       "caption": "Settled when this conversation opened: Rowan Vale's signed representation statement still covers it."
     },
     {
-      "seq": 56,
+      "seq": 58,
       "step": 6,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1937,7 +1937,7 @@
       "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
     },
     {
-      "seq": 57,
+      "seq": 59,
       "step": 6,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1959,7 +1959,7 @@
       "caption": "Rowan Vale's contact statement is fit for a mortgage application: self-reported, 0 days old."
     },
     {
-      "seq": 58,
+      "seq": 60,
       "step": 6,
       "agent": "service-agent",
       "part": "inbound-gate",
@@ -1969,7 +1969,7 @@
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 59,
+      "seq": 61,
       "step": 6,
       "agent": "service-agent",
       "part": "memory",
@@ -1992,7 +1992,7 @@
       "caption": "Rowan Vale's contact statement is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 60,
+      "seq": 62,
       "step": 7,
       "agent": "person-agent",
       "part": "record",
