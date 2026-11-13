@@ -305,6 +305,19 @@ shared with own-ACR management. Never rewrite descendant access
 documents. Test shared principals, foreign targets, metadata, both scopes, owner lockout
 and ETag races; preserve 100% coverage.
 
+`readScopedGrants(url, options)` and `setScopedGrants(url, { folder, contents }, options)` are the
+scope-aware folder editor (sst-uo4.4): folders only (`kind: "folder"`, URL ending `/`), CSS dialect
+only, no comments container. Reads show both scopes instead of refusing `partial-scope`; the token is
+the same opaque version as `readGrants`. Writes need the folder's own document (an inherit-only
+folder is `unsupported`), the caller's Control on both scopes (or inherited ACP Control), valid
+ETags, and pass `expected` from `readScopedGrants` for a conflict check. Equal per-principal modes
+share one rule (WAC `accessTo`+`default`, ACP `accessControl`+`memberAccessControl`); different modes
+get a resource-only and a members-only rule (`replaceWac(..., memberModes)`,
+`appendAcp(..., "only")`). Generated RDF is re-read per scope before the PUT; ACP removals run
+`pruneAcp`. Unrelated principals, unprojectable rules and inherited rows keep the same rules as
+`setGrants`. Malformed selections (metadata, duplicates, Commenter) throw before any request. A
+split folder stays `partial-scope` for every other role operation, moves and request approvals.
+
 `movePreservingAccess(storage, from, destinationContainer, options)` extends the role mutation
 options with `name?`, `acceptReset?`, and `signal?`. Native moves bypass access. Emulated Solid
 moves snapshot own roles across at most 2,000 resources including the root, refuse lossy source
