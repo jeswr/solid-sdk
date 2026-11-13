@@ -1,0 +1,15 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Minimal admission projection of the existing AS2 canonical message/collection.
+# External predicates remain owned by their original vocabularies, as in scheduling.
+@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+as:Note a owl:Class ;
+  rdfs:label "Canonical chat message"@en ;
+  skos:definition "An existing ActivityStreams note carrying the canonical chat message fields."@en .
+
+as:Collection a owl:Class ;
+  rdfs:label "Chat conversation"@en ;
+  skos:definition "An ActivityStreams collection carrying an archived conversation identifier and title."@en .
