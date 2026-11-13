@@ -2830,6 +2830,28 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
 
+  packages/agent-vault:
+    dependencies:
+      '@jeswr/agent-credentials':
+        specifier: workspace:*
+        version: link:../agent-credentials
+      '@jeswr/site-executor':
+        specifier: workspace:*
+        version: link:../site-executor
+      '@jeswr/site-model':
+        specifier: workspace:*
+        version: link:../site-model
+      n3:
+        specifier: ^2.1.1
+        version: 2.1.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+
   packages/agent-executor:
     dependencies:
       '@jeswr/agent-channels':

@@ -18,6 +18,7 @@
   },
   "packages": [
     "@jeswr/agent-browser",
+    "@jeswr/agent-vault",
     "@jeswr/agent-authz-verifier",
     "@jeswr/agentic-legacy-bridge",
     "@jeswr/app-session",
