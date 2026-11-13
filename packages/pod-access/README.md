@@ -652,19 +652,22 @@ are automatic. Native moves retain the existing storage backend path unchanged.
 ### Solid access requests
 
 ```ts
-import { listRequests, decide, accessModel } from "@jeswr/pod-access/requests-solid";
+import { listRequests, previewDecision, decide, accessModel } from "@jeswr/pod-access/requests-solid";
 
 const options = { fetch: authenticatedFetch, webId, storage };
 const requests = await listRequests(options);
 const request = requests.find((entry) => entry.status === "pending");
 if (request) {
-  const result = await decide(request, {
+  const decision = {
     approve: true,
-    role: "viewer",
+    role: "viewer" as const,
     dataTypes: request.dataTypes,
     expiresAt: new Date("2027-01-01T00:00:00Z"),
-  }, options);
-  // result.status, grantUrl, receiptUrl, notified, expiryEnforced
+  };
+  const preview = await previewDecision(request, decision, options);
+  // Show preview.targets (url, dataTypes, role, modes) and preview.model for consent.
+  const result = await decide(request, decision, { ...options, expected: preview });
+  // result.status, grantUrl, receiptUrl, notified, expiryEnforced, choices
 }
 // Deny: await decide(request, { approve: false }, options).
 // Detect: await accessModel({ fetch: authenticatedFetch, storage, target? }).
@@ -710,21 +713,49 @@ names the requester, so identical requests from different requesters never share
 ID; a denial receipt is named the same way. It creates the ODRL grant and DPV receipt under `settings/access-records/` using
 `If-None-Match: *`, grants each role with `addGrant` from `./roles`, then CASes to Approved. The
 role layer is additive (it never downgrades an existing role), writes conditionally, materialises a
-missing own ACL keeping the owner's Control, and refuses a legacy `acl:defaultForNew` ancestor on
+missing own ACL/ACR keeping the owner's Control, and refuses a legacy `acl:defaultForNew` ancestor on
 CSS. Each grant is planned (without writing) before anything is recorded, so a refusal the role
 layer can foresee (`owner-lockout`, `unsupported`, an unknown ACL construct) stops the decision while
 the request is still pending. A refusal that only appears later (for example a `conflict` from a
 concurrent edit) is rethrown unchanged and never retried; the approval stays Approving and can be
 retried, and a lost race against another approver that finished reports the approval. Initial CAS races throw `RequestConflictError` with
 the re-read winner's status. Explicitly retrying resumes the pinned decision without resolving
-again or rolling back ACLs. A retry may repeat the same choices or leave them out, but if it passes
-different `dataTypes`, `role` or `expiresAt` it fails with an error saying an earlier approval is
-still finishing, rather than silently granting something other than what the owner just chose. Completed decisions are idempotent; reversing
+again or rolling back access documents. A retry may omit `dataTypes` to keep the pinned subset.
+It must repeat the recorded `role` and `expiresAt`, including their absence: adding or omitting
+either is a mismatch. Legacy records that stored only `chosen.viewer` infer the applied role
+from their pinned modes; omit `role` or repeat that inferred role to resume them. An explicit
+different role is refused with the recorded role in the error. Different choices fail with an error saying an earlier approval is still
+finishing, rather than silently granting something other than what the owner just chose.
+Completed decisions are idempotent; reversing
 approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
 references never select write locations.
 
-**WAC does not enforce expiry.** An explicit decision `expiresAt` is receipt metadata, persisted in
-the recovery snapshot. It does not expire or automatically revoke WAC access; results always report
+Approval results include `choices: { dataTypes, role, targetRoles, expiresAt? }`: the types actually granted,
+the strongest applied role, the exact role per target URL in `targetRoles`, and the recorded expiry as
+a `Date`. Mixed Viewer/Editor approvals therefore retain both roles explicitly. Completed-decision replays report these recorded values even if the caller supplies
+different choices. Denials omit `choices`.
+
+`previewDecision(entry, decision, options): Promise<DecisionPreview>` runs the same resolution,
+recovery, records-privacy and grant preflight as `decide`, using only GET/HEAD. It never creates
+or seals a records folder, mints a key, updates the request, grants access or sends notifications.
+Read/preflight refusals are thrown unchanged. `DecisionPreview` is JSON-serialisable and includes
+`requestId`, `webId`, `storage`, `requester`, `approve`, `model`, `dataTypes`, `targets`, and optional
+ISO `expiresAt` and `purpose`. Every `DecisionTarget` in `targets` has `url`, `role`, `modes` and
+its source `dataTypes`. Several classes can resolve to one URL; that target gets their combined
+role. Only legacy pinned records omit target `dataTypes`, because they never saved that provenance;
+they are not re-resolved against today's Type Index. Denials have empty targets and data types.
+
+Pass the displayed preview as `options.expected` to `decide`. The shared path checks the resolved
+target set, roles, modes, source classes, model, recipient and receipt metadata before any writes.
+A changed container listing or registration refuses with exported `DecisionPreviewConflictError`;
+show a fresh preview and obtain consent again. The comparison also applies to a concurrent winning
+pin and to resumed/completed decisions; recovery previews show the pinned grants. JSON round trips
+and set ordering are supported. Exported types are `DecisionPreview`, `DecisionTarget`,
+`RequestDecision`, `DecideOptions` and `DecisionResult`. A preview does not lock the server: later
+transport failures, conditional-write conflicts and concurrent policy edits can still refuse a write.
+
+**WAC/ACP roles do not enforce expiry.** An explicit decision `expiresAt` is receipt metadata, persisted in
+the recovery snapshot. It does not expire or automatically revoke WAC/ACP access; results always report
 `expiryEnforced: false`. Requested expiry is displayed but never silently adopted. Purpose is DPV
 metadata too; this client does not enforce purposes or authenticate the claimed requester identity.
 
@@ -732,31 +763,33 @@ After committing, requester inbox discovery and ActivityStreams `Accept`/`Reject
 effort and happen only when the caller passes an unauthenticated `publicFetch` (forced to
 `credentials: "omit"` and `redirect: "error"`); global fetch is never used, since an application
 may have patched it with authentication. Requester profile and inbox URLs must be public HTTPS:
-loopback, private, link-local and local-name hosts are refused. That check reads only the URL: a
-public name can still resolve to a private address. On a server (Node), pass a DNS-checking fetch
+IP literals, single-label names, trailing dots, empty labels and local-name hosts (`.local`, `.lan`,
+`.home.arpa`, `.internal`, `.localhost`, `.intranet`, `.corp`, `.home`) are refused. That check reads
+only the URL: a public name can still resolve to a private address. On a server (Node), pass a DNS-checking fetch
 such as `createGuardedFetch()` from `@jeswr/guarded-fetch` as `publicFetch`; in a browser, where
 names cannot be resolved, the URL check is the only guard. Failures and a missing `publicFetch`
 return `notified: false` without rollback.
 
 Grant records, consent receipts and each approval's pinned decision live in
 `<storage>settings/access-records/`. Before writing there, `decide` creates the folder with an
-owner-only ACL, or checks that its existing ACL names only the owner and gives them Read, Write
-and Control over the folder and its contents; a shared folder stops the decision. A folder that
-exists without its own ACL is made private only while it lists as empty, because anything already in
-it may have been written by someone else: its new ACL is marked unverified, and the mark is removed
-(with a conditional write) only once the folder still lists as empty. A crash or a failed check
+owner-only ACL (WAC) or ACR (CSS ACP), or checks that its existing access document allows only
+the owner and gives them Read, Write and Control over the folder and its contents; a shared folder
+stops the decision. A folder that exists without its own access document is made private only while
+it lists as empty, because anything already in it may have been written by someone else: its new
+access document is marked unverified, and the mark is removed (with a conditional write) only once
+the folder still lists as empty. A crash or a failed check
 leaves the mark, so later calls check again and keep refusing while anything is inside; a folder
-that cannot be listed is refused. (A server that lists the folder's own ACL as a member is fine.)
+that cannot be listed is refused. (A server that lists the folder's own ACL/ACR as a member is fine.)
 
-When the mark is removed, `decide` also stores a random **records key** in the folder's ACL. Only
-the owner can read that ACL, and the key is created only after the folder is known to be private,
-so nobody else can predict where a decision record lives, and nothing written before the folder was
+When the mark is removed, `decide` also stores a random **records key** on the ACL/ACR document
+subject. Only the owner can read that access document, and the key is created only after the folder
+is known to be private, so nobody else can predict where a decision record lives, and nothing written before the folder was
 sealed (or slipped in while it was being sealed) can sit at one. A key found next to the unverified
 mark is not trusted and is replaced. A private folder with no key (sealed before keys existed, or
-whose key went missing) gets one only while it holds nothing but its ACL; if it holds other files,
+whose key went missing) gets one only while it holds nothing but its ACL/ACR; if it holds other files,
 `decide` refuses ("The access records folder has records this version can't read; move them out of
-settings/access-records/ first") rather than silently orphaning them. Looking up a decision creates nothing on a pod that has no records folder ACL
-yet.
+settings/access-records/ first") rather than silently orphaning them. Looking up a decision creates
+nothing on a pod that has no records folder access document yet.
 
 Each decision is a **decision record** in that folder, named from the records key, the request URL,
 its requester, what it asks for and a generation number. A record says `approving` (the decision is
@@ -783,19 +816,61 @@ Every document the pipeline writes back (including the requester-authored reques
 serialised with regenerated blank-node labels, validated language tags and no named graphs, so a
 foreign JSON-LD label or tag cannot inject Turtle.
 
-`accessModel({ fetch, storage, target?, signal? })` returns `wac`, `acp`, or `unknown`. An ACP
-`accessControl` link means `acp`. ACP servers such as ESS also advertise their access control
+`accessModel({ fetch, storage, target?, signal? })` returns `wac`, `acp`, or `unknown`. Both `acl` and ACP
+`accessControl` links are checked against the advertised RDF. ACP servers such as ESS also advertise their access control
 resources with `rel="acl"` (ESS as `?ext=acr`), so an `acl` link alone is not taken as WAC: the
 advertised document is read with the roles layer's detection (its RDF vocabulary and ACP type
 links, walking to the nearest existing ancestor) to tell the two apart. Only an existing, non-empty
 access document decides: a missing or empty one never counts as WAC. No access link, no deciding
 document, or documents that mix models (both vocabularies, or ancestors of different models) are
-`unknown`; any other discovery failure propagates. Decisions throw typed
-`UnsupportedAccessModelError` for ACP or unknown models before writing anything, and the model is
-enforced again where writes happen: the records folder's ACL is used only once its document is
-shown to be WAC (a folder that advertises no ACL is refused rather than guessed at), and grants go
-through `./roles` pinned to WAC, which refuses an ACP target before writing. ACP materialisation
-remains follow-up work.
+`unknown`; any other discovery failure propagates. Decisions accept WAC and the roles layer's CSS
+ACP subset. Unknown/mixed models, storage/target model disagreement, and unsupported ACP dialects/shapes throw typed `UnsupportedAccessModelError`
+with model `unknown` or `acp`. Grants pin the verified target model through `./roles`; the layer
+rechecks discovery before its conditional write and refuses a model change. Recovery also pins the
+model recorded by the original approval (older records are WAC).
+
+CSS ACP uses `acl:*` modes and resource Control to protect its ACR. The request API uses this same
+CSS default as `./roles`; it does not infer ESS semantics from editable RDF. ESS `?ext=acr`
+endpoints are detected as ACP but refused because the roles writer cannot write query-addressed
+ACRs. ESS `acp:*` modes and `access`/`memberAccess` management forms are also unsupported here.
+
+For ACP records, verification reads raw ACRs through the roles layer's bounded discovery, without
+flattening policies into roles. Every reachable control, policy and matcher must be defined inside
+that ACR; unknown structure and predicates fail closed. Applicable allow policies must restrict every possible
+recipient to the owner; owner-only `anyOf` and additional `allOf` client/issuer constraints are safe.
+Public/authenticated/other agents are refused, including readers of the ACR itself. Deny policies
+are retained, and denials that could remove owner access refuse sealing. Unconditional owner Read,
+Write and Control must cover both folder and members. The folder's own `accessControl` and
+`memberAccessControl`, and any controls governing its ACR, are privacy-checked. Ancestors contribute
+`memberAccessControl`; direct Read, Append or Write of an ancestor via `accessControl` does not
+share the records folder ([ACP resolution](https://solidproject.org/TR/acp#resolved-access-control)).
+Control in any ancestor resource or ACR-self policy must still be owner-only: another controller
+could rewrite that ancestor's ACR to add inherited access to the records folder and its key.
+ACR-self Write and Append must also be owner-only because they can change that ACR's policies.
+
+ACP inheritance is additive, so the proof walks every ancestor through the **origin root**, including
+ancestors above a path-based `storage` root. Only initial missing folders (HEAD 404) are skipped to
+their nearest existing ancestor, when `settings/` or the records folder has not been created yet.
+After the first existing resource, any ancestor 404 refuses the proof. The public roles API
+continues to refuse missing resources.
+Every existing ancestor must advertise readable access rules; 401/403, server errors or a missing
+access link refuse because the server's parent access rules cannot be checked.
+The owner must be able to read every ancestor's rules. This holds for single-pod servers and
+subdomain pods (`storage` equals the origin root), but not necessarily for path-based multi-pod
+servers. For example, on `https://host/alice/`, an owner who cannot read the server's `https://host/.acr`
+sees "The server's root access rules are unreadable at https://host/" and approval/preview stops.
+The client cannot prove that server-wide policies exclude other readers or controllers, so it
+refuses even when Alice's own ACR is private. An own private ACR cannot cancel inherited public access. Shared roles discovery keeps its
+existing default of skipping ancestors without access links; strict discovery is specific to this proof.
+
+A missing own ACR follows the WAC sealing protocol: check emptiness, create an owner-only ACR
+with the unverified mark using `If-None-Match: *`, then re-read privacy and emptiness before minting
+the key. The mark and key are changed together using `If-Match`; unrelated RDF is preserved.
+An interrupted check leaves the mark, and a crash after sealing keeps the secret key. A key next
+to the mark is replaced; existing records without a key are refused. Nothing written before
+privacy was established can predict a key-derived record name. These checks and conditional writes
+cannot atomically lock ancestor ACRs together with the folder ACR; deployments must keep the
+owner's settings and governing access documents owner-controlled.
 
 Inbox children and `settings/access-records/` must be owner-write-only; public Append to the inbox
 is fine. A deterministic hash is an idempotency key, not an authenticity proof for requester-writable

@@ -6,6 +6,7 @@ import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import { accmTerm } from "./canonical-vocab.js";
 import {
+  agentUrl,
   httpUrl,
   MAX_MEMBERS,
   publicTransport,
@@ -129,7 +130,7 @@ export function project(id: string, dataset: DatasetCore, etag: string | null): 
     // One request, one recipient: rules naming different assignees cannot be merged into one grant.
     if (assignees.size !== 1 || modes.size === 0 || targets.size === 0) return unreadable;
     const requester = [...assignees][0] as string;
-    httpUrl(requester);
+    agentUrl(requester);
     const statusValues = values(dataset, id, ACCM.status);
     const status =
       statusValues.length === 0 ? "pending" : STATUSES[accmTerm(statusValues[0] as string)];
