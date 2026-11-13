@@ -48,6 +48,7 @@ import {
   type ReadableRequest,
   type RequestCard,
   type ReviewError,
+  recordedMessage,
   requestCards,
   requesterHost,
   requesterName,
@@ -69,7 +70,8 @@ const RECORDED =
   "Approving this request already started with choices recorded then. Finish approving applies those recorded choices, which may differ from what you picked here";
 /**
  * An approval is pinned that this sheet didn't send (or can't show): finishing applies the choices
- * recorded when it started, which the SDK doesn't expose, so no cards are shown for it.
+ * recorded when it started. This sheet doesn't show them as cards (listed entries carry them as
+ * `recorded`, and the finished approval's result reports them for the toast).
  */
 export const RECORDED_TEXT = `${RECORDED}, or deny it.`;
 /** RECORDED_TEXT once denying was refused for good. */
@@ -263,15 +265,24 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
     setError(undefined);
     try {
       const result = await requests.decide(entry, decision);
+      // An approval reports the choices it recorded, which another tab may have made: word the
+      // message from those, not from what this sheet sent.
+      const recorded = attempt === "deny" ? undefined : result.recorded;
       let message =
         attempt === "deny"
           ? deniedMessage(name, result.notified)
-          : approval
-            ? approvedMessage(name, cards, approval.selected, result.notified)
-            : finishedMessage(name, result.notified);
-      // A choice-less finish can't know whether the recorded choices had an end date: say it
-      // whenever the result doesn't promise to enforce one.
-      const endDate = approval ? approval.decision.expiresAt !== undefined : attempt === "finish";
+          : recorded
+            ? recordedMessage(name, cards, recorded, result.notified)
+            : approval
+              ? approvedMessage(name, cards, approval.selected, result.notified)
+              : finishedMessage(name, result.notified);
+      // Without recorded choices, a choice-less finish can't know whether they had an end date:
+      // say it whenever the result doesn't promise to enforce one.
+      const endDate = recorded
+        ? recorded.expiresAt !== undefined
+        : approval
+          ? approval.decision.expiresAt !== undefined
+          : attempt === "finish";
       if (endDate && !result.expiryEnforced) message = `${message} ${EXPIRY_NOT_ENFORCED}`;
       toast.success(message);
       finish(attempt === "deny" ? "denied" : "approved");

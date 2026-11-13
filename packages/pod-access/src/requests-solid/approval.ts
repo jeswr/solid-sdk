@@ -67,6 +67,28 @@ export interface DecideOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * The owner's choices an approval recorded when it was pinned. `dataTypes`, `role` and `expiresAt`
+ * are a {@link RequestDecision}'s: passing them back resumes that approval.
+ */
+export interface RecordedChoices {
+  /** The approved data types, sorted and deduplicated (the request's own when none were chosen). */
+  dataTypes: string[];
+  /**
+   * The approved data types that were actually granted a mode, sorted: a type with no mode of its
+   * own, or one that asked only to change data under a Viewer approval, is left out. Name these
+   * when saying what was shared.
+   */
+  grantedTypes: string[];
+  /**
+   * "viewer" when the approval narrowed to requested Read; otherwise "editor", meaning each target
+   * got the role its requested modes map to, as `RequestDecision.role` means.
+   */
+  role: "viewer" | "editor";
+  /** The recorded end date (receipt metadata only); absent for access until revoked. */
+  expiresAt?: Date;
+}
+
 export interface DecisionResult {
   status: "approved" | "denied";
   grantUrl?: string;
@@ -74,6 +96,11 @@ export interface DecisionResult {
   notified: boolean;
   /** Always false: expiresAt is receipt metadata; WAC does not enforce it. */
   expiryEnforced: false;
+  /**
+   * On an approval: the choices it recorded, which is what was applied. They can differ from this
+   * call's own when another call (another tab) pinned or finished the approval first.
+   */
+  recorded?: RecordedChoices;
 }
 
 /** A readable request, as decide() projects it. */
@@ -260,14 +287,24 @@ async function settleRecord(
   throw new Error("The decision record kept changing");
 }
 
-/** A resumed approval keeps its pinned choices: refuse explicit choices that differ. */
-function assertSameChoices(snapshot: Snapshot, decision: RequestDecision): void {
+/**
+ * A resumed approval keeps its pinned choices. A decision with no choices at all resumes them as
+ * recorded. A decision with any choice is a complete payload: an omitted choice means its default
+ * (every requested data type, no narrowing to Viewer, no end date), and every choice must match
+ * the pin, so a frozen "until revoked" payload is refused against a pin with an end date.
+ */
+function assertSameChoices(
+  snapshot: Snapshot,
+  decision: RequestDecision,
+  requested: readonly string[],
+): void {
+  const { dataTypes, role, expiresAt } = decision;
+  if (dataTypes === undefined && role === undefined && expiresAt === undefined) return;
   const pinned = snapshot.chosen;
   if (
-    (decision.dataTypes !== undefined &&
-      [...new Set(decision.dataTypes)].sort().join("\n") !== pinned.dataTypes.join("\n")) ||
-    (decision.role !== undefined && (decision.role === "viewer") !== pinned.viewer) ||
-    (decision.expiresAt !== undefined && decision.expiresAt.toISOString() !== snapshot.expiresAt)
+    [...new Set(dataTypes ?? requested)].sort().join("\n") !== pinned.dataTypes.join("\n") ||
+    (role === "viewer") !== pinned.viewer ||
+    expiresAt?.toISOString() !== snapshot.expiresAt
   )
     throw new Error(
       "An earlier approval of this request is still finishing with different choices; finish it first",
@@ -339,16 +376,49 @@ function withinRequest(snapshot: Snapshot, entry: RequestEntry): boolean {
   );
 }
 
+/** Sorted, unique strings: the only form decide() records a list of data types in. */
+function isSortedSet(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item, index) =>
+        typeof item === "string" && (index === 0 || (value[index - 1] as string) < item),
+    )
+  );
+}
+
+/** A recorded timestamp exactly as `Date.prototype.toISOString` writes it. */
+function isIsoInstant(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && new Date(time).toISOString() === value;
+}
+
+/** What a validated snapshot recorded, as the owner chose it. */
+function recordedChoices(snapshot: Snapshot): RecordedChoices {
+  return {
+    dataTypes: [...snapshot.chosen.dataTypes],
+    grantedTypes: [...snapshot.dataTypes],
+    role: snapshot.chosen.viewer ? "viewer" : "editor",
+    ...(snapshot.expiresAt !== undefined && { expiresAt: new Date(snapshot.expiresAt) }),
+  };
+}
+
 async function validateSnapshot(
   snapshot: Snapshot,
   entry: RequestEntry,
   slotUrl: string,
-  options: DecideOptions,
+  options: Pick<DecideOptions, "webId" | "storage">,
 ): Promise<void> {
   if (
     !withinRequest(snapshot, entry) ||
     snapshot.schemaVersion !== "1" ||
-    !Array.isArray(snapshot.chosen?.dataTypes) ||
+    (snapshot.expiresAt !== undefined && !isIsoInstant(snapshot.expiresAt)) ||
+    // The owner's choices are a sorted set of requested types, holding every granted type.
+    !isSortedSet(snapshot.chosen?.dataTypes) ||
+    !snapshot.chosen.dataTypes.every((type) => entry.dataTypes.includes(type)) ||
+    !isSortedSet(snapshot.dataTypes) ||
+    !snapshot.dataTypes.every((type) => snapshot.chosen.dataTypes.includes(type)) ||
     typeof snapshot.chosen.viewer !== "boolean" ||
     snapshot.targets.length === 0 ||
     snapshot.targets.length > MAX_MEMBERS ||
@@ -614,7 +684,7 @@ export async function decide(
     slot = await sealed();
     await validateSnapshot(snapshot, parsed, slot.url, options);
     // Only a finished approval ignores choices: it is reported as it was recorded.
-    if (parsed.status !== "approved") assertSameChoices(snapshot, decision);
+    if (parsed.status !== "approved") assertSameChoices(snapshot, decision, parsed.dataTypes);
     if (parsed.status === "pending") await moveToApproving(request, id, snapshot, fetchFn);
   } else {
     const dataTypes = [...new Set(decision.dataTypes ?? parsed.dataTypes)].sort();
@@ -700,7 +770,7 @@ export async function decide(
       if (winner?.outcome !== "approving") throw await conflict(id, fetchFn);
       snapshot = winner.snapshot as Snapshot;
       slot = { url: slot.url, record: winner };
-      assertSameChoices(snapshot, decision);
+      assertSameChoices(snapshot, decision, parsed.dataTypes);
       await validateSnapshot(snapshot, parsed, slot.url, options);
     }
     await moveToApproving(request, id, snapshot, fetchFn);
@@ -716,5 +786,66 @@ export async function decide(
     ...locations,
     notified: await notify(id, snapshot.agent, true, options),
     expiryEnforced: false,
+    recorded: recordedChoices(snapshot),
   };
+}
+
+/** How many decision-record lookups a listing runs at once. */
+const RECORD_LOOKUPS = 4;
+
+/**
+ * Attach to each pending or Approving request the choices of the approval the owner's records
+ * hold for it, if any. Read-only: a records folder that is not sealed yet holds no trusted record,
+ * so nothing is attached. A record that can't be read or doesn't validate (or a records folder
+ * that can't be checked) leaves the entry without choices; cancellation propagates.
+ */
+export async function withRecordedChoices(
+  entries: AccessRequestEntry[],
+  options: Pick<DecideOptions, "fetch" | "webId" | "storage" | "signal">,
+): Promise<AccessRequestEntry[]> {
+  const open = (entry: AccessRequestEntry): entry is RequestEntry =>
+    entry.status === "pending" || entry.status === "approving";
+  if (!entries.some(open)) return entries;
+  const fetchFn = transport(options.fetch, options.signal);
+  const owner = options.webId;
+  const storage = scoped(
+    options.storage,
+    options.storage.endsWith("/") ? options.storage : `${options.storage}/`,
+  );
+  let key: string | undefined;
+  try {
+    key = await recordsKey(recordsFolder(storage), storage, owner, fetchFn, false);
+  } catch {
+    options.signal?.throwIfAborted();
+    return entries;
+  }
+  if (key === undefined) return entries;
+  const records = key;
+  const lookup = async (entry: RequestEntry): Promise<RecordedChoices | undefined> => {
+    try {
+      // An open request matches only an approval still in progress, never a finished record.
+      const slot = (await findSlot(storage, records, entry, owner, fetchFn)) as Slot;
+      const snapshot = slot.record?.snapshot;
+      if (snapshot === undefined) return undefined;
+      await validateSnapshot(snapshot, entry, slot.url, { webId: owner, storage });
+      return recordedChoices(snapshot);
+    } catch {
+      options.signal?.throwIfAborted();
+      return undefined;
+    }
+  };
+  // A few lookups at a time, each entry keeping its place.
+  const out = [...entries];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < entries.length) {
+      const index = next++;
+      const entry = entries[index] as AccessRequestEntry;
+      if (!open(entry)) continue;
+      const recorded = await lookup(entry);
+      if (recorded !== undefined) out[index] = { ...entry, recorded };
+    }
+  };
+  await Promise.all(Array.from({ length: RECORD_LOOKUPS }, worker));
+  return out;
 }
