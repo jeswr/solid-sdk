@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex GPT-6
 /** E1 tool-action adapter. Trusted harness supplies labels; the core supplies only the call. */
 
-import { appendFileSync } from "node:fs";
-import { createInterface } from "node:readline";
-import type { Readable, Writable } from "node:stream";
-import { pathToFileURL } from "node:url";
 import type { OdrlRule } from "@jeswr/solid-odrl";
+import { appendFileSync } from "fs";
+import { createInterface } from "readline";
+import type { Readable, Writable } from "stream";
+import { pathToFileURL } from "url";
 import { digestOf } from "../core/canonical.js";
 import type { ActionIntent, JsonObject } from "../core/types.js";
 import { GateMemory } from "../gates/common.js";

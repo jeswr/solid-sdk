@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { Readable, Writable } from "node:stream";
+import { mkdtempSync, readFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { Readable, Writable } from "stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { type BridgeRequest, decide, type EvalMandate, serve } from "./bridge.js";
 
