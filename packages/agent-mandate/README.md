@@ -6,7 +6,7 @@
 > Experimental — AI-agent-generated. Security-critical; private pending suite conformance.
 
 VC-wrapped ODRL mandates, owner approvals, and injectable policy engines for DESIGN D3 / §4.2
-(A-008, bead sst-gpa). This package never sends messages, fetches a pod, or reads credentials.
+(A-008, bead sst-gpa). This package never sends messages. Pod credential reads use the explicit fetch adapter below.
 Every read, key resolution, revocation check, process invocation and clock is explicit.
 
 `defaultMandate({ id, ownerWebId, agentWebId, recipientHashes, now })` builds the 30-day v1
@@ -149,3 +149,32 @@ requests follow the new DESIGN rule `confirm-required`.
 The 64-row decision matrix names the expected decision and reason on every row. Run the
 package lint, build, typecheck and test scripts; tests enforce 100% branches, functions,
 lines and statements per source file.
+
+`autonomousTargets(mandate, request, candidates, engine?)` returns sorted, unique
+exact autonomous read targets. Pass trusted agent, action, time and attributes;
+only `read` (or its full ODRL IRI) is accepted. Attributes are snapshotted once
+before evaluation. An absent mandate, non-scalar
+purpose, approval-only grant, prohibition or invalid validity/agent binding yields
+no target. Each exact-target permission must itself pass evaluation: an
+untargeted grant cannot bypass its constraints. Wildcard targets are refused; asset collections
+are never expanded. This projects scope only from an already verified mandate.
+
+`createPodMandateVerifier({ credentialUrl, ownerWebId, agentId, fetch,
+profileFetch?, now? })` is available from the root and `./verify`. `now` is an
+optional clock function. The derived sibling `status.ttl` must end in
+`/agent/mandates/status.ttl`, otherwise construction throws a fixed TypeError.
+Key/profile and status resolvers are recreated for every load.
+All evidence fetches (credential, WebID profiles, verification keys and status lists)
+are HTTPS-only, no-store, redirect-refusing and byte-capped. Non-HTTPS targets are
+refused before transport I/O, including loopback. Credential and profile/key bodies
+share an inclusive 256 KiB streaming cap; exceeding it cancels the reader without
+consuming the remainder. Status-list bodies retain solid-vc's streaming byte cap.
+Each load fetches the exact credential with `Accept: application/trig`, refuses
+failed responses, and requires its signed ID to equal the fetched URL. Profile/key
+responses retain their status, headers, URL and redirect evidence after bounding.
+It delegates WebID key control and signed,
+confirmed-clear owner-issued status verification to solid-vc and the existing
+VC verifier. Failures return undefined without exposing transport/parser details.
+Inject scoped fetches; `profileFetch` can keep public WebID resolution separate
+from private credential/status access. The helper uses no Node builtins and is
+browser-bundleable. Provision credentials and the status list separately.

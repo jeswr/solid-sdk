@@ -68,6 +68,7 @@ const KINDS = {
   "tool-call": "Tool used",
   conversation: "Conversation recorded",
   "tamper-suspected": "Record mismatch suspected",
+  "personal-data-read": "Personal data read",
 };
 const ICONS = {
   ingest: FileInput,
@@ -82,6 +83,7 @@ const ICONS = {
   "tool-call": Activity,
   conversation: FileText,
   "tamper-suspected": CircleAlert,
+  "personal-data-read": Shield,
   "ledger-checkpoint": Activity,
 };
 function Summary({ entry }: { entry: AuditEntry }) {

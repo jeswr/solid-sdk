@@ -1,19 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { verifyApproval } from "@jeswr/agent-mandate";
-import type { Fact, Nanopublications } from "@jeswr/pkg-memory";
+import type { Fact, MemoryMandate, Nanopublications } from "@jeswr/pkg-memory";
 import type { RdfEngine } from "@jeswr/rdf-engine";
 import type { StorageClient } from "@jeswr/storage-client";
 
-/** Projection of a verified, unrevoked owner mandate. The host verifies its signed memoryScope. */
-export interface MemoryMandate {
-  readonly id: string;
-  readonly issuer: string;
-  readonly subject: string;
-  readonly validFrom: string;
-  readonly validUntil: string;
-  /** Exact DPV personal-data category IRIs or pd: names; absent selects the preference default. */
-  readonly memoryScope?: readonly string[];
-}
+export type { MemoryMandate } from "@jeswr/pkg-memory";
 export interface RecallQuery {
   readonly about?: string;
   readonly categories?: readonly string[];

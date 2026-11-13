@@ -4,7 +4,9 @@ import { verifyApproval } from "@jeswr/agent-mandate";
 import {
   type Batch,
   buildNanopublications,
+  memoryCategory as category,
   createFactAssertion,
+  DEFAULT_MEMORY_SCOPE,
   type Nanopublications,
   parseNanopublications,
   pkgId,
@@ -19,20 +21,15 @@ import { communicationRules } from "./rules.js";
 import type { AgentMemory, AgentMemoryOptions, RecalledMemory, RememberProposal } from "./types.js";
 
 const PD = "https://w3id.org/dpv/pd#";
-/** Exact categories only: health and financial categories require an explicit mandate entry. */
-export const DEFAULT_MEMORY_SCOPE: readonly string[] = Object.freeze([`${PD}Preference`]);
+
+export { DEFAULT_MEMORY_SCOPE } from "@jeswr/pkg-memory";
+
 const PROV = "http://www.w3.org/ns/prov#";
 const MAX_BYTES = 1_048_576;
 function iri(value: string): string {
   if (!/^[a-z][a-z0-9+.-]*:[^\s<>"{}|\\^`]+$/i.test(value))
     throw new TypeError("Expected an absolute IRI");
   return value;
-}
-function category(value: string): string {
-  const expanded = value.startsWith("pd:") ? PD + value.slice(3) : value;
-  if (!expanded.startsWith(PD) || !/^[A-Za-z][A-Za-z0-9]*$/.test(expanded.slice(PD.length)))
-    throw new TypeError("Expected a DPV personal-data category");
-  return expanded;
 }
 function strongEtag(value: string | null): string {
   if (!value || !/^"[^"\r\n]*"$/.test(value))
