@@ -13,6 +13,6 @@ for (const [name, schema] of [
   writeFileSync(
     new URL(`${name}.schema.json`, directory),
     // biome-ignore lint/style/useNamingConvention: JSON Schema keyword
-    `${JSON.stringify({ $comment: "AUTHORED-BY Codex GPT-6.1-Sol", ...z.toJSONSchema(schema) }, null, 2)}\n`,
+    `${JSON.stringify({ $comment: "AUTHORED-BY Codex GPT-6.1-Sol", ...z.toJSONSchema(schema, { io: "input" }) }, null, 2)}\n`,
   );
 }

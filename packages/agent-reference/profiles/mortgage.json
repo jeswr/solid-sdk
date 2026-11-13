@@ -6,8 +6,8 @@
     {
       "kind": "income.*",
       "sources": [
-        "registered payroll provider",
-        "tax authority"
+        "https://paywell.example/#org",
+        "https://tax-authority.example/#org"
       ],
       "methods": [
         "recorded-by-authority"
@@ -17,7 +17,8 @@
     {
       "kind": "deposit.*",
       "sources": [
-        "holding bank"
+        "https://harbourbank.example/#org",
+        "https://canalbank.example/#org"
       ],
       "methods": [
         "recorded-by-authority"
@@ -27,7 +28,7 @@
     {
       "kind": "mortgage.decision-in-principle",
       "sources": [
-        "lender"
+        "https://northbank.example/#org"
       ],
       "methods": [
         "decided-by-authority"
@@ -37,7 +38,8 @@
     {
       "kind": "mortgage.product",
       "sources": [
-        "registered lender"
+        "https://northbank.example/#org",
+        "https://harbourbank.example/#org"
       ],
       "methods": [
         "published-by-lender"
@@ -47,7 +49,7 @@
     {
       "kind": "identity.*",
       "sources": [
-        "accepted identity provider"
+        "https://id-provider.example/#org"
       ],
       "methods": [
         "certified-face-check"
@@ -127,10 +129,10 @@
     }
   ],
   "personDecisions": [
-    "discretion",
-    "novel-request",
-    "term-with-no-agreed-meaning",
-    "accept-offer"
+    "https://w3id.org/jeswr/awp#op/mortgage-discretion",
+    "https://w3id.org/jeswr/awp#op/novel-mortgage-request",
+    "https://w3id.org/jeswr/awp#op/mortgage-unknown-term",
+    "https://w3id.org/jeswr/awp#op/accept-mortgage-offer"
   ],
   "readingSteps": [
     "product-search"
@@ -184,5 +186,266 @@
         "text": "A stronger approval must be a certified face check made today."
       }
     ]
+  },
+  "operations": {
+    "https://w3id.org/jeswr/awp#op/mortgage-prequalification": {
+      "terms": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "const": "https://w3id.org/jeswr/awp#model/mortgage-application"
+              },
+              "propertyPrice": {
+                "type": "integer",
+                "minimum": 1000,
+                "maximum": 1000000000
+              },
+              "loanAmount": {
+                "type": "integer",
+                "minimum": 1000,
+                "maximum": 1000000000
+              },
+              "currency": {
+                "type": "string",
+                "const": "USD"
+              },
+              "applicant": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "synthetic": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "model",
+              "propertyPrice",
+              "loanAmount",
+              "currency",
+              "applicant",
+              "synthetic"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "modelVersion": {
+                "type": "string",
+                "maxLength": 16
+              },
+              "application": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "const": "https://w3id.org/jeswr/awp#model/mortgage-application"
+                  },
+                  "propertyPrice": {
+                    "type": "integer",
+                    "minimum": 1000,
+                    "maximum": 1000000000
+                  },
+                  "loanAmount": {
+                    "type": "integer",
+                    "minimum": 1000,
+                    "maximum": 1000000000
+                  },
+                  "currency": {
+                    "type": "string",
+                    "const": "USD"
+                  },
+                  "applicant": {
+                    "type": "string",
+                    "maxLength": 512
+                  },
+                  "synthetic": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "model",
+                  "propertyPrice",
+                  "loanAmount",
+                  "currency",
+                  "applicant",
+                  "synthetic"
+                ],
+                "additionalProperties": false
+              },
+              "applicationId": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "evidenceRequest": {
+                "minItems": 1,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "claimType": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "periodMonths": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 36
+                    },
+                    "currency": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{3}$"
+                    }
+                  },
+                  "required": [
+                    "claimType",
+                    "periodMonths",
+                    "currency"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "purpose": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "recipients": {
+                "minItems": 1,
+                "maxItems": 4,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 512
+                }
+              },
+              "onward": {
+                "maxItems": 4,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "recipient": {
+                      "type": "string",
+                      "maxLength": 512
+                    },
+                    "purpose": {
+                      "type": "string",
+                      "maxLength": 512
+                    },
+                    "fields": {
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  "required": [
+                    "recipient",
+                    "purpose",
+                    "fields"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "retentionDays": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3650
+              },
+              "prohibitedPurposes": {
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 512
+                }
+              },
+              "fee": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "const": 0
+                  }
+                },
+                "required": [
+                  "amount"
+                ],
+                "additionalProperties": false
+              },
+              "synthetic": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "model",
+              "modelVersion",
+              "application",
+              "applicationId",
+              "evidenceRequest",
+              "purpose",
+              "recipients",
+              "onward",
+              "retentionDays",
+              "prohibitedPurposes",
+              "fee",
+              "synthetic"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "https://w3id.org/jeswr/awp#op/mortgage-product-search": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "propertyUse": {
+            "type": "string"
+          },
+          "rateType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "propertyUse",
+          "rateType"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "https://w3id.org/jeswr/awp#op/balance-statement": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "asOf": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [
+          "account",
+          "asOf"
+        ],
+        "additionalProperties": false
+      }
+    }
   }
 }

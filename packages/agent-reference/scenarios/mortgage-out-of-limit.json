@@ -628,7 +628,17 @@
                   ]
                 },
                 "conversation": "urn:awp:ref:sam:0001"
-              }
+              },
+              "input": [
+                {
+                  "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                  "propertyPrice": 450000,
+                  "loanAmount": 380000,
+                  "currency": "USD",
+                  "applicant": "https://sam.example/#me",
+                  "synthetic": true
+                }
+              ]
             }
           ],
           "onProposal": [
@@ -654,7 +664,65 @@
                   },
                   "conversation": "urn:awp:ref:sam:0001"
                 }
-              }
+              },
+              "input": [
+                {
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "version": "0.1"
+                  },
+                  "terms": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+                    "modelVersion": "0.1",
+                    "application": {
+                      "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                      "propertyPrice": 450000,
+                      "loanAmount": 380000,
+                      "currency": "USD",
+                      "applicant": "https://sam.example/#me",
+                      "synthetic": true
+                    },
+                    "applicationId": "urn:awp:ref:sam:0001#application",
+                    "evidenceRequest": [
+                      {
+                        "claimType": "income.gross.monthly-series",
+                        "periodMonths": 12,
+                        "currency": "USD"
+                      },
+                      {
+                        "claimType": "deposit.balance",
+                        "periodMonths": 1,
+                        "currency": "USD"
+                      }
+                    ],
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                    "recipients": [
+                      "https://northbank.example/#org"
+                    ],
+                    "onward": [
+                      {
+                        "recipient": "https://underwriter.example/#org",
+                        "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                        "fields": [
+                          "annualGrossIncome",
+                          "depositBalance"
+                        ]
+                      }
+                    ],
+                    "retentionDays": 90,
+                    "prohibitedPurposes": [
+                      "https://w3id.org/dpv#Marketing"
+                    ],
+                    "fee": {
+                      "amount": 0
+                    },
+                    "synthetic": true
+                  },
+                  "termsDigest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b",
+                  "round": 2,
+                  "counters": "urn:awp:ref:sam:0003"
+                }
+              ]
             }
           ],
           "onAgreement": [],
@@ -759,7 +827,25 @@
                   },
                   "conversation": "urn:awp:ref:sam:0001"
                 }
-              }
+              },
+              "input": [
+                {
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "version": "0.1"
+                  },
+                  "terms": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "termsDigest": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59",
+                  "round": 1
+                }
+              ]
             }
           ],
           "onAgreement": [],

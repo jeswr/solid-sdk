@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Fitness and item terms: the parts of the gates that read the quality information and the
  * terms of use a statement carries. Fitness applies the reliance profile (method and age per
@@ -12,6 +13,7 @@ import { idWords } from "./common.js";
 
 export interface QualityClaim {
   readonly claimType: string;
+  readonly step?: string;
   readonly method?: string;
   readonly asOf?: string;
   readonly issuedAt?: string;
@@ -51,6 +53,12 @@ export function fitnessOf(
   );
   if (!rule) return { verdict: "indeterminate", reason: "missing-context" };
   const ruleRef = { id: rule.id, text: rule.text };
+  if (
+    c.method === "model-output" &&
+    profile?.readingSteps &&
+    (!c.step || !profile.readingSteps.includes(c.step))
+  )
+    return { verdict: "fail", reason: "method-not-accepted", rule: ruleRef };
   if (!c.method || !rule.methods.includes(c.method))
     return { verdict: "fail", reason: "method-not-accepted", rule: ruleRef };
   if (c.validUntil && Date.parse(c.validUntil) <= Date.parse(at))

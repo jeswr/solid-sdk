@@ -1244,7 +1244,17 @@
                   ]
                 },
                 "conversation": "urn:awp:main:sam:0003"
-              }
+              },
+              "input": [
+                {
+                  "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                  "propertyPrice": 450000,
+                  "loanAmount": 380000,
+                  "currency": "USD",
+                  "applicant": "https://sam.example/#me",
+                  "synthetic": true
+                }
+              ]
             }
           ],
           "onProposal": [
@@ -1270,7 +1280,65 @@
                   },
                   "conversation": "urn:awp:main:sam:0003"
                 }
-              }
+              },
+              "input": [
+                {
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "version": "0.1"
+                  },
+                  "terms": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+                    "modelVersion": "0.1",
+                    "application": {
+                      "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                      "propertyPrice": 450000,
+                      "loanAmount": 380000,
+                      "currency": "USD",
+                      "applicant": "https://sam.example/#me",
+                      "synthetic": true
+                    },
+                    "applicationId": "urn:awp:main:sam:0003#application",
+                    "evidenceRequest": [
+                      {
+                        "claimType": "income.gross.monthly-series",
+                        "periodMonths": 12,
+                        "currency": "USD"
+                      },
+                      {
+                        "claimType": "deposit.balance",
+                        "periodMonths": 1,
+                        "currency": "USD"
+                      }
+                    ],
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                    "recipients": [
+                      "https://northbank.example/#org"
+                    ],
+                    "onward": [
+                      {
+                        "recipient": "https://underwriter.example/#org",
+                        "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                        "fields": [
+                          "annualGrossIncome",
+                          "depositBalance"
+                        ]
+                      }
+                    ],
+                    "retentionDays": 60,
+                    "prohibitedPurposes": [
+                      "https://w3id.org/dpv#Marketing"
+                    ],
+                    "fee": {
+                      "amount": 0
+                    },
+                    "synthetic": true
+                  },
+                  "termsDigest": "sha-256:19acdef007a01b2e3c53f526bec8d7e7aa8ec394eaee54678d5b5deeabe73fd2",
+                  "round": 2,
+                  "counters": "urn:awp:main:sam:0005"
+                }
+              ]
             }
           ],
           "onAgreement": [
@@ -1334,19 +1402,157 @@
                     ]
                   }
                 ]
-              }
+              },
+              "input": [
+                {
+                  "type": "agreement",
+                  "id": "urn:awp:agreement:00d3b8c574caec52623580d3890ce046",
+                  "conversation": "urn:awp:main:sam:0003",
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "version": "0.1"
+                  },
+                  "offer": "urn:awp:main:northbank-intake:0002",
+                  "acceptance": "urn:awp:main:sam:0010",
+                  "termsDigest": "sha-256:19acdef007a01b2e3c53f526bec8d7e7aa8ec394eaee54678d5b5deeabe73fd2",
+                  "terms": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+                    "modelVersion": "0.1",
+                    "application": {
+                      "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                      "propertyPrice": 450000,
+                      "loanAmount": 380000,
+                      "currency": "USD",
+                      "applicant": "https://sam.example/#me",
+                      "synthetic": true
+                    },
+                    "applicationId": "urn:awp:main:sam:0003#application",
+                    "evidenceRequest": [
+                      {
+                        "claimType": "income.gross.monthly-series",
+                        "periodMonths": 12,
+                        "currency": "USD"
+                      },
+                      {
+                        "claimType": "deposit.balance",
+                        "periodMonths": 1,
+                        "currency": "USD"
+                      }
+                    ],
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                    "recipients": [
+                      "https://northbank.example/#org"
+                    ],
+                    "onward": [
+                      {
+                        "recipient": "https://underwriter.example/#org",
+                        "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                        "fields": [
+                          "annualGrossIncome",
+                          "depositBalance"
+                        ]
+                      }
+                    ],
+                    "retentionDays": 60,
+                    "prohibitedPurposes": [
+                      "https://w3id.org/dpv#Marketing"
+                    ],
+                    "fee": {
+                      "amount": 0
+                    },
+                    "synthetic": true
+                  },
+                  "offeror": {
+                    "actor": "https://northbank.example/agents/intake#agent",
+                    "onBehalfOf": "https://northbank.example/#org"
+                  },
+                  "acceptor": {
+                    "actor": "https://agents.hostco.example/sam#agent",
+                    "onBehalfOf": "https://sam.example/#me",
+                    "operator": "https://hostco.example/#org"
+                  },
+                  "formedAt": "2026-11-13T09:02:00.000Z"
+                },
+                "acceptor"
+              ]
             }
           ],
           "onReceipt": [
             {
               "result": {
                 "type": "none"
-              }
+              },
+              "input": [
+                {
+                  "ref": "urn:awp:agreement:00d3b8c574caec52623580d3890ce046",
+                  "activity": "urn:awp:main:sam:0003#intake-check",
+                  "outcome": "completed",
+                  "observed": {
+                    "stage": "received-and-checked",
+                    "received": 2,
+                    "checked": [
+                      {
+                        "integrity": "valid",
+                        "protectedObject": "sha-256:e21fa2c0a78a8cc4b62a3696d4abd487d5c2a8a1825e08a73e8c5b0ef759f45f",
+                        "id": "urn:awp:evidence:paywell-income-2026-10",
+                        "claimType": "income.gross.monthly-series",
+                        "issuer": "https://paywell.example/#org",
+                        "sourceAuthority": "accepted",
+                        "accepted": true
+                      },
+                      {
+                        "integrity": "valid",
+                        "protectedObject": "sha-256:0391ed8d6a621e0fd4c4f95cd19f9c6c5ee92f7614e4ce84799cd4679e38f0a0",
+                        "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                        "claimType": "deposit.balance",
+                        "issuer": "https://harbourbank.example/#org",
+                        "sourceAuthority": "accepted",
+                        "accepted": true
+                      }
+                    ],
+                    "derived": {
+                      "annualGrossIncome": 90000,
+                      "currency": "USD",
+                      "rule": "https://w3id.org/jeswr/awp#rule/annualise-12-consecutive-months",
+                      "derivedFrom": "urn:awp:evidence:paywell-income-2026-10"
+                    },
+                    "missing": [],
+                    "completeness": "all requested evidence types accepted",
+                    "notClaimed": [
+                      "approval",
+                      "truth of the income figures",
+                      "completeness of the applicant's finances"
+                    ]
+                  },
+                  "final": false
+                }
+              ]
             },
             {
               "result": {
                 "type": "none"
-              }
+              },
+              "input": [
+                {
+                  "ref": "urn:awp:agreement:00d3b8c574caec52623580d3890ce046",
+                  "activity": "urn:awp:main:sam:0003#decision",
+                  "outcome": "completed",
+                  "observed": {
+                    "stage": "decided",
+                    "decided": {
+                      "status": "indicatively-eligible",
+                      "by": "https://northbank.example/#org",
+                      "basis": "synthetic decision-in-principle rule; indicative only"
+                    },
+                    "notClaimed": [
+                      "loan approval",
+                      "truth of evidence",
+                      "complete financial picture"
+                    ]
+                  },
+                  "final": true
+                }
+              ]
             }
           ]
         }
@@ -1397,14 +1603,70 @@
                   }
                 },
                 "conversation": "urn:awp:main:sam:0001"
-              }
+              },
+              "input": [
+                {
+                  "propertyUse": "residential",
+                  "rateType": "fixed"
+                }
+              ]
             }
           ],
           "onDeliver": [
             {
               "result": {
                 "type": "none"
-              }
+              },
+              "input": [
+                {
+                  "ref": "urn:awp:main:sam:0002",
+                  "basis": {
+                    "kind": "invocation",
+                    "invocation": "urn:awp:main:sam:0002"
+                  },
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                    "version": "0.1"
+                  },
+                  "output": {
+                    "query": {
+                      "propertyUse": "residential",
+                      "rateType": "fixed"
+                    },
+                    "aggregatedAt": "2026-11-13T09:00:00.000Z",
+                    "products": [
+                      {
+                        "id": "urn:awp:product:northbank-fixed-5",
+                        "lender": "https://northbank.example/#org",
+                        "publishedAt": "2026-11-01T09:00:00Z",
+                        "retrievedFrom": "https://northbank.example/#org"
+                      },
+                      {
+                        "id": "urn:awp:product:harbourbank-fixed-2",
+                        "lender": "https://harbourbank.example/#org",
+                        "publishedAt": "2026-11-01T09:00:00Z",
+                        "retrievedFrom": "https://harbourbank.example/#org"
+                      }
+                    ]
+                  }
+                },
+                [
+                  {
+                    "role": "credential",
+                    "format": "jws-compact",
+                    "value": {
+                      "$statement": "statement-2"
+                    }
+                  },
+                  {
+                    "role": "credential",
+                    "format": "jws-compact",
+                    "value": {
+                      "$statement": "statement-3"
+                    }
+                  }
+                ]
+              ]
             }
           ]
         }
@@ -1450,7 +1712,13 @@
                 "recipient": "https://harbourbank.example/#org",
                 "parameters": {},
                 "conversation": "urn:awp:main:sam:0006"
-              }
+              },
+              "input": [
+                {
+                  "account": "current account",
+                  "asOf": "2026-10-31"
+                }
+              ]
             },
             {
               "result": {
@@ -1461,7 +1729,13 @@
                 "recipient": "https://harbourbank.example/#org",
                 "parameters": {},
                 "conversation": "urn:awp:main:sam:0008"
-              }
+              },
+              "input": [
+                {
+                  "account": "current account",
+                  "asOf": "2026-10-31"
+                }
+              ]
             },
             {
               "result": {
@@ -1472,14 +1746,46 @@
                 "recipient": "https://harbourbank.example/#org",
                 "parameters": {},
                 "conversation": "urn:awp:main:sam:0008"
-              }
+              },
+              "input": [
+                {
+                  "account": "current account",
+                  "asOf": "2026-10-31"
+                }
+              ]
             }
           ],
           "onDeliver": [
             {
               "result": {
                 "type": "none"
-              }
+              },
+              "input": [
+                {
+                  "ref": "urn:awp:main:sam:0009",
+                  "basis": {
+                    "kind": "invocation",
+                    "invocation": "urn:awp:main:sam:0009"
+                  },
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/balance-statement",
+                    "version": "0.1"
+                  },
+                  "output": {
+                    "statement": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                    "accountHolder": "https://sam.example/#me"
+                  }
+                },
+                [
+                  {
+                    "role": "credential",
+                    "format": "jws-compact",
+                    "value": {
+                      "$statement": "statement-1"
+                    }
+                  }
+                ]
+              ]
             }
           ]
         }
@@ -1582,7 +1888,25 @@
                   },
                   "conversation": "urn:awp:main:sam:0003"
                 }
-              }
+              },
+              "input": [
+                {
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "version": "0.1"
+                  },
+                  "terms": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "termsDigest": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59",
+                  "round": 1
+                }
+              ]
             }
           ],
           "onAgreement": [
@@ -1591,7 +1915,80 @@
                 "requiredOutcomes": [
                   "self"
                 ]
-              }
+              },
+              "input": [
+                {
+                  "type": "agreement",
+                  "id": "urn:awp:agreement:00d3b8c574caec52623580d3890ce046",
+                  "conversation": "urn:awp:main:sam:0003",
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "version": "0.1"
+                  },
+                  "offer": "urn:awp:main:northbank-intake:0002",
+                  "acceptance": "urn:awp:main:sam:0010",
+                  "termsDigest": "sha-256:19acdef007a01b2e3c53f526bec8d7e7aa8ec394eaee54678d5b5deeabe73fd2",
+                  "terms": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+                    "modelVersion": "0.1",
+                    "application": {
+                      "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                      "propertyPrice": 450000,
+                      "loanAmount": 380000,
+                      "currency": "USD",
+                      "applicant": "https://sam.example/#me",
+                      "synthetic": true
+                    },
+                    "applicationId": "urn:awp:main:sam:0003#application",
+                    "evidenceRequest": [
+                      {
+                        "claimType": "income.gross.monthly-series",
+                        "periodMonths": 12,
+                        "currency": "USD"
+                      },
+                      {
+                        "claimType": "deposit.balance",
+                        "periodMonths": 1,
+                        "currency": "USD"
+                      }
+                    ],
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                    "recipients": [
+                      "https://northbank.example/#org"
+                    ],
+                    "onward": [
+                      {
+                        "recipient": "https://underwriter.example/#org",
+                        "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+                        "fields": [
+                          "annualGrossIncome",
+                          "depositBalance"
+                        ]
+                      }
+                    ],
+                    "retentionDays": 60,
+                    "prohibitedPurposes": [
+                      "https://w3id.org/dpv#Marketing"
+                    ],
+                    "fee": {
+                      "amount": 0
+                    },
+                    "synthetic": true
+                  },
+                  "offeror": {
+                    "actor": "https://northbank.example/agents/intake#agent",
+                    "onBehalfOf": "https://northbank.example/#org",
+                    "operator": "https://northbank.example/#org"
+                  },
+                  "acceptor": {
+                    "actor": "https://agents.hostco.example/sam#agent",
+                    "onBehalfOf": "https://sam.example/#me",
+                    "operator": "https://hostco.example/#org"
+                  },
+                  "formedAt": "2026-11-13T09:02:00.000Z"
+                },
+                "offeror"
+              ]
             }
           ],
           "onDeliver": [
@@ -1651,6 +2048,39 @@
                   "value": 90000,
                   "currency": "USD"
                 }
+              ],
+              "input": [
+                {
+                  "ref": "urn:awp:agreement:00d3b8c574caec52623580d3890ce046",
+                  "basis": {
+                    "kind": "agreement",
+                    "agreement": "urn:awp:agreement:00d3b8c574caec52623580d3890ce046"
+                  },
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "version": "0.1"
+                  },
+                  "output": {
+                    "evidenceCount": 2,
+                    "note": "issuer-signed statements relayed in evidence; the consumer's agent is not their author"
+                  }
+                },
+                [
+                  {
+                    "role": "credential",
+                    "format": "jws-compact",
+                    "value": {
+                      "$statement": "statement-0"
+                    }
+                  },
+                  {
+                    "role": "credential",
+                    "format": "jws-compact",
+                    "value": {
+                      "$statement": "statement-1"
+                    }
+                  }
+                ]
               ]
             }
           ]
@@ -1727,7 +2157,39 @@
                     }
                   }
                 ]
-              }
+              },
+              "input": [
+                {
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/balance-statement",
+                    "version": "0.1"
+                  },
+                  "input": {
+                    "account": "current account",
+                    "asOf": "2026-10-31"
+                  },
+                  "basis": {
+                    "kind": "represented"
+                  },
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                [
+                  {
+                    "role": "representation",
+                    "format": "jws-compact",
+                    "value": {
+                      "$statement": "statement-8"
+                    }
+                  },
+                  {
+                    "role": "credential",
+                    "format": "jws-compact",
+                    "value": {
+                      "$statement": "statement-5"
+                    }
+                  }
+                ]
+              ]
             }
           ]
         }
@@ -1814,6 +2276,23 @@
                   "requesterIdentified": false,
                   "note": "no identity, consent or credential requested"
                 }
+              ],
+              "input": [
+                {
+                  "operation": {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                    "version": "0.1"
+                  },
+                  "input": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                []
               ]
             }
           ]
@@ -4639,6 +5118,27 @@
           "note": "a decision in principle, not an offer; synthetic and indicative only"
         },
         "synthetic": true
+      }
+    },
+    {
+      "id": "statement-8",
+      "key": "sam/owner",
+      "typ": "awp-representation+jws",
+      "value": {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
+        "party": "https://sam.example/#me",
+        "actor": "https://agents.hostco.example/sam#agent",
+        "actorKid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+        "operator": "https://hostco.example/#org",
+        "operations": [
+          "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+          "https://w3id.org/jeswr/awp#op/valuation-order",
+          "https://w3id.org/jeswr/awp#op/balance-statement"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
       }
     }
   ],

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The transport-neutral interaction model (framework draft parts A1, A2, A4, A6, A8, A11).
  *
@@ -253,6 +254,14 @@ export interface Message<K extends MessageKind = MessageKind> {
   readonly inReplyTo?: Iri;
   readonly body: BodyByKind[K];
   readonly evidence?: readonly EvidenceItem[];
+  /** Unstructured model-written words. Never interpreted as a structured commitment. */
+  readonly freeText?: {
+    readonly text: string;
+    readonly authoredBy: "model";
+    readonly actsFor: Iri;
+    readonly purpose: Iri;
+    readonly digest: string;
+  };
 }
 
 export type AnyMessage = { [K in MessageKind]: Message<K> }[MessageKind];
@@ -327,6 +336,8 @@ export interface ActionIntent {
   readonly recipient?: Iri;
   /** Consequential parameters (exact terms digest, amounts, fields). */
   readonly parameters: JsonObject;
+  /** The runtime binds the current context digest before evaluating or requesting approval. */
+  readonly freeText?: { readonly text: string; readonly contextDigest?: string };
   readonly conversation: Iri;
 }
 

@@ -4,11 +4,12 @@
 import { readdirSync, readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
-import { canonicalJson } from "../core/canonical.js";
+import { z } from "zod";
+import { canonicalJson, digestOf } from "../core/canonical.js";
 import type { Json } from "../core/types.js";
 import type { GateContext } from "../gates/common.js";
 import { type OwnerMandate, signMandate } from "../mechanisms/mandate.js";
-import { signStatement } from "../mechanisms/statements.js";
+import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import { idSource, testKey } from "../reference/keys.js";
 import type { AgentRuntime } from "../runtime/agent.js";
@@ -17,6 +18,7 @@ import { Cast } from "../scenarios/common.js";
 import { baselineRegistry } from "../suites/baseline.js";
 import { withPublicRead } from "../suites/public-read.js";
 import type { Configuration } from "../suites/registry.js";
+import { peekWire } from "../trace/packet.js";
 import { TraceRecorder } from "../trace/recorder.js";
 import { outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
 import { type OwnListEntry, TrustResolver, type TrustRoot } from "../trust/resolver.js";
@@ -71,7 +73,13 @@ export function applyChanges(
   }
   return validateScenario(copy);
 }
+class MissingOutbound extends Error {}
 function getPath(value: unknown, path: string): unknown {
+  const outgoing = /^([^.]+)\.outbound\.0\.wire$/.exec(path);
+  if (outgoing && value && typeof value === "object") {
+    const result = (value as Record<string, {outbound?: unknown[]} | undefined>)[outgoing[1] ?? ""];
+    if (result?.outbound?.length === 0) throw new MissingOutbound(path);
+  }
   for (const p of path.split(".")) {
     if (!value || typeof value !== "object" || !Object.hasOwn(value, p))
       throw new Error(`unresolved script reference ${path}`);
@@ -128,6 +136,34 @@ export async function runScenario(
   }
   const statements = new Map<string, string>();
   for (const statement of scenario.statements) {
+    const derivation = statement.value.derivation;
+    if (!derivation && statement.value.method !== "derived") continue;
+    const detail =
+      derivation && typeof derivation === "object" && !Array.isArray(derivation)
+        ? derivation
+        : statement.value;
+    const rule = profile.rules.find((rule) => rule.id === detail.rule);
+    if (!rule) throw new Error("rule-not-accepted");
+    if (
+      !rule.assurances.includes(
+        detail.assurance as DomainProfile["rules"][number]["assurances"][number],
+      )
+    )
+      throw new Error("assurance-insufficient");
+    if (detail.assurance === "by-source") {
+      const accepted = profile.claims.some(claim =>
+        (claim.kind === rule.produces || (claim.kind.endsWith(".*") && rule.produces.startsWith(claim.kind.slice(0, -1)))) && claim.sources.includes(String(statement.value.issuer)));
+      if (!accepted) throw new Error("source-not-authoritative");
+      continue;
+    }
+    // A proposed/signed answer is never substituted for an actual proof or computation.
+    if (detail.assurance === "proved") throw new Error("needs the proof system");
+    if (detail.assurance === "joint") throw new Error("needs the joint computation");
+    throw new Error(
+      "needs a verified rule evaluator; scripted answers are not derivation evidence",
+    );
+  }
+  for (const statement of scenario.statements) {
     if (!scenario.parties.some((p) => p.key === statement.key))
       throw new Error(`unlisted issuer ${statement.key}`);
     statements.set(
@@ -153,12 +189,49 @@ export async function runScenario(
     const own = scenario.trust[p.id];
     const setting = scenario.settings[p.id];
     if (!own || !setting) throw new Error(`missing settings ${p.id}`);
-    const trust = await TrustStore.load(own.data);
+    const trustData = structuredClone(own.data);
+    const allowed = (source: string, kind: string) =>
+      profile.claims.some(
+        (claim) =>
+          (claim.kind === kind ||
+            (claim.kind.endsWith(".*") && kind.startsWith(claim.kind.slice(0, -1)))) &&
+          claim.sources.includes(source),
+      );
+    // Source lists are scoped in the profile as well as in each party's trust list.
+    const rules = trustData.sourceAuthority as unknown as {
+      source: string;
+      claimTypes: string[];
+    }[];
+    trustData.sourceAuthority = rules
+      .map((rule) => ({
+        ...rule,
+        claimTypes: rule.claimTypes.filter((kind) => allowed(rule.source, kind)),
+      }))
+      .filter((rule) => rule.claimTypes.length) as unknown as Json;
+    const root = structuredClone(own.root) as unknown as TrustRoot | undefined;
+    const scopedRoot = root
+      ? {
+          ...root,
+          delegates: root.delegates.map((register) => ({
+            ...register,
+            entries: register.entries.map((entry) => ({
+              ...entry,
+              claimTypes: entry.claimTypes?.filter((kind) => allowed(entry.party, kind)),
+            })),
+          })),
+        }
+      : undefined;
+    const trust = await TrustStore.load(trustData);
     cast.trust.set(p.id, trust.data);
     // The scenario has no functions: each hook is an ordered list of core proposals.
     const handlers = (scenario.core[p.id] ?? []).map((spec) => {
+      const domain = profile.operations[String(spec.description.id)];
+      if (!domain || (spec.description.pattern === "negotiate" ? !domain.terms : !domain.input))
+        throw new Error(`missing domain schema for ${spec.description.id}`);
       const handler: Record<string, unknown> = {
         description: spec.description,
+        ...(domain.terms ? { termsSchema: z.fromJSONSchema(domain.terms) } : {}),
+        ...(domain.input ? { inputSchema: z.fromJSONSchema(domain.input) } : {}),
         requiresRepresentation: spec.requiresRepresentation,
         ...(spec.agreementDelivery ? { agreementDelivery: spec.agreementDelivery } : {}),
         ...(spec.requiredApproval ? { requiredApproval: spec.requiredApproval } : {}),
@@ -168,9 +241,24 @@ export async function runScenario(
         handler[hook] = (...args: unknown[]) => {
           const response = responses[index++];
           if (!response) throw new Error(`script exhausted: ${p.id} ${hook}`);
-          const ctx = args[0] as { record: (value: unknown) => void };
+          const ctx = args[0] as { record: (value: unknown) => void; conversation?: unknown };
+          if (
+            response.input &&
+            canonicalJson(render(response.input, args)) !==
+              canonicalJson(ctx.conversation ? args.slice(1) : args)
+          )
+            throw new Error(`script input mismatch: ${p.id} ${hook}`);
           for (const record of response.records ?? []) ctx.record(render(record, args));
-          return response.result === null ? undefined : render(response.result, args);
+          const reply = response.result === null ? undefined : render(response.result, args);
+          if (reply && typeof reply === "object" && "type" in reply && reply.type === "counter") {
+            const counter = reply as unknown as {
+              terms: unknown;
+              intent: { parameters: { termsDigest?: string } };
+            };
+            if (counter.intent.parameters.termsDigest !== digestOf(counter.terms))
+              throw new Error("counterproposal intent digest does not match its terms");
+          }
+          return reply;
         };
       }
       return handler as unknown as OperationHandler;
@@ -189,12 +277,26 @@ export async function runScenario(
       claimLabel: (st) =>
         scenario.labels[String(st.id)]?.claimLabel ?? String(st.claimType ?? st.id),
       tellPrincipal: (st) => scenario.labels[String(st.id)]?.tellPrincipal,
-      reliance: profile.reliance,
+      reliance: {
+        id: profile.reliance.id,
+        readingSteps: profile.readingSteps,
+        rules: profile.claims.map(claim => {
+          const label = profile.reliance.rules.find(rule => rule.claimType === claim.kind);
+          const unchanged = label && label.maxAgeDays === claim.maxAgeDays && canonicalJson(label.methods) === canonicalJson(claim.methods);
+          return {
+            id: label?.id ?? `${profile.id}#${claim.kind}`,
+            claimType: claim.kind, methods: claim.methods, maxAgeDays: claim.maxAgeDays,
+            text: unchanged ? label.text : `${claim.kind} requires ${claim.methods.join(" or ")} and an age of at most ${claim.maxAgeDays} days.`,
+          };
+        }),
+      },
+      personDecisions: profile.personDecisions,
+      purposeClaims: Object.fromEntries(profile.purposes.map((p) => [p.id, p.claims])),
       resolver: new TrustResolver({
         principal: own.principal,
         trust,
         name,
-        ...(own.root ? { root: own.root as unknown as TrustRoot } : {}),
+        ...(scopedRoot ? { root: scopedRoot } : {}),
         ...(own.ownList ? { ownList: own.ownList as unknown as OwnListEntry[] } : {}),
       }),
       ...(setting.principalLimits ? { principalLimits: setting.principalLimits } : {}),
@@ -216,7 +318,15 @@ export async function runScenario(
       if (!built) throw new Error(`no runtime ${command.by}`);
       time = Date.parse(command.at);
       recorder.step(command.step);
-      const args = render(command.args) as unknown[];
+      let args: unknown[];
+      try { args = render(command.args) as unknown[]; }
+      catch (error) {
+        // A prevented action has no wire to deliver. Finish that path at the real gate's
+        // stop/hold; do not invent a message or call the next core with fixture data.
+        if (error instanceof MissingOutbound && recorder.events().some(event =>
+          event.kind === "decision" && ["stop", "refuse", "ask-principal", "ask-more"].includes(event.outcome ?? ""))) break;
+        throw error;
+      }
       const runtime = built.runtime;
       // Closed dispatch: data cannot name arbitrary runtime methods.
       switch (command.method) {
@@ -246,8 +356,10 @@ export async function runScenario(
           for (const injection of scenario.inject.filter(
             (i) => i.step === command.step && i.by === command.by,
           )) {
-            // Wire patches deliberately do not re-sign: integrity must detect alterations.
-            const holder = { ...scenario, script: [{ ...command, args: [wire] }] };
+            // An altered wire is not re-signed; hostile content can be issued by a fictional sender.
+            const content = injection.signAs ? peekWire(wire) : wire;
+            if (!content) throw new Error("injection needs a decodable message");
+            const holder = { ...scenario, script: [{ ...command, args: [content as Json] }] };
             wire = applyChanges(
               holder,
               injection.patches.map((patch) => ({
@@ -255,6 +367,11 @@ export async function runScenario(
                 path: `/script/0/args/0${patch.path}`,
               })),
             ).script[0]?.args[0] as Json;
+            if (injection.signAs)
+              wire = {
+                format: "awp-jws-compact/0.1",
+                jws: await signStatement(cast.get(injection.signAs).actorKey, TYP.message, wire),
+              };
           }
           results[command.id] = await runtime.receive(
             wire,
@@ -296,13 +413,16 @@ export async function runScenario(
     for (const { runtime } of runtimes.values()) runtime.close();
   }
 }
+export class OutlineMismatch extends Error {
+  constructor(readonly trace: TraceFile, detail: string) { super(detail); }
+}
 export function assertOutline(trace: TraceFile, expected: Scenario["expect"]): void {
   const actual = outlineOf(trace);
   if (canonicalJson(actual) !== canonicalJson(expected)) {
     const index = actual.findIndex(
       (entry, i) => canonicalJson(entry) !== canonicalJson(expected[i] ?? null),
     );
-    throw new Error(
+    throw new OutlineMismatch(trace,
       `${trace.scenario.id}: outline mismatch at ${index < 0 ? actual.length : index}: ${JSON.stringify(actual[index])} expected ${JSON.stringify(expected[index])}`,
     );
   }

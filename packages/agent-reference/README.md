@@ -70,6 +70,31 @@ Branch `changes` are JSON-pointer replacements in the world or script, and `expe
 full expected outline for that path. `inject` patches a received wire at a specified step
 without re-signing it, so altered messages are checked by the integrity gate.
 
+Profiles also supply JSON Schemas for each operation's terms or input. Hooks may pin their
+expected inputs with `input`; a different input fails the run rather than reusing an answer
+prepared for another request. Commands cannot move the clock or step labels backwards.
+Claim sources, methods and freshness compile into each party's trust and reliance inputs.
+Purpose claim lists govern context disclosure, `personDecisions` names operations requiring
+a person, and `readingSteps` limits where a model reading may be used. Derived-rule and
+assurance declarations are checked; unconnected computation and proof systems fail explicitly
+instead of being represented by a scripted answer or signature.
+
+A proposed action can carry `freeText: { text }`. The runtime binds its current task context
+digest into the action before evaluating it, requesting approval, or signing the message.
+The signed envelope marks the text as model-written, names the principal and purpose, and
+carries the text digest. Text never supplies structured offer, acceptance, payment or consent
+fields. Unstructured protocol prose without an authorised intent stops before entering the
+outbox; the injected-fee scenario models hostile sender content at the receiving boundary.
+
+`admitStatements(..., { taskId, task, purpose })` and `recallForTask(taskId, ids)` track the
+statements recalled into a task. Incoming messages, verified statements and memory reads
+are tracked when they reach the core. Context labels survive restart and cannot be erased by
+the core. A restricted or unknown context gives `ask-principal/context-not-clear` when the
+mandate allows approval, otherwise a stop. The principal sees the exact text; adding context
+changes the action digest and prevents reuse of an earlier approval. `recordReading` records
+and signs a new statement by the reading agent with `method: model-output`, the original
+content digest, inherited terms, and a reference to its signed program/tool declaration.
+
 The mortgage scripts preserve the existing committed outlines. The personal-agent pilot
 keeps its original domain handlers locally for compatibility; the reference engine has no
 domain-specific handlers. A scripted answer is a core proposal, not evidence of a live

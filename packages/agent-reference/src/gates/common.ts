@@ -1,10 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * What both gates share: the verdict record every check returns, the context a runtime hands
  * its gates (trace sink, configuration, names, resolver, the principal's limits), and rule
  * text generated from the policy that produced a verdict.
  */
 import type { OdrlRule } from "@jeswr/solid-odrl";
+import { digestOf } from "../core/canonical.js";
 import type { Iri } from "../core/types.js";
 import type { Configuration, LayerId } from "../suites/registry.js";
 import type { Namer } from "../trace/packet.js";
@@ -70,6 +72,7 @@ export interface RelianceRule {
 export interface RelianceProfile {
   readonly id: string;
   readonly rules: readonly RelianceRule[];
+  readonly readingSteps?: readonly string[];
 }
 
 /** Terms an issuer attaches to a statement: ODRL (pilot subset) plus a deletion duty. */
@@ -90,14 +93,47 @@ export interface AdmittedFact {
   readonly label: string;
   readonly claimType: string;
   readonly source: string;
+  readonly statementDigest?: string;
+  readonly subject?: string;
   readonly method?: string;
   readonly asOf?: string;
   readonly terms?: ItemTerms;
 }
 
 /** What the two gates of one agent share: the labels of admitted facts. */
+export interface ContextItem extends AdmittedFact {
+  readonly kind: "statement" | "memory" | "message" | "reading";
+  readonly subject: string;
+  readonly digest: string;
+  /** The interaction purpose where default, non-transferable terms were admitted. */
+  readonly purpose?: string;
+}
+
 export class GateMemory {
   readonly facts = new Map<string, AdmittedFact>();
+  private readonly contexts = new Map<string, Map<string, ContextItem>>();
+  constructor(private readonly changed?: () => void) {}
+  beginTask(task: string): void {
+    if (!this.contexts.has(task)) this.contexts.set(task, new Map());
+  }
+  enter(task: string, item: ContextItem): void {
+    this.beginTask(task);
+    // A changed version never erases an item the core already saw.
+    this.contexts.get(task)?.set(`${item.id}:${item.digest}`, structuredClone(item));
+    this.changed?.();
+  }
+  context(task: string): readonly ContextItem[] | undefined {
+    const items = this.contexts.get(task);
+    return items ? structuredClone([...items.values()]) : undefined;
+  }
+  contextDigest(task: string): string {
+    return digestOf(this.context(task) ?? null);
+  }
+  snapshot(): Record<string, ContextItem[]> {
+    return Object.fromEntries(
+      [...this.contexts].map(([id, items]) => [id, structuredClone([...items.values()])]),
+    );
+  }
 }
 
 export interface GateContext {
@@ -118,6 +154,9 @@ export interface GateContext {
   /** Plain name for a statement ("Harbour Bank's balance at 31 October 2026"). */
   readonly claimLabel?: (statement: Readonly<Record<string, unknown>>) => string;
   readonly reliance?: RelianceProfile;
+  /** Claim kinds that a purpose needs; used for the conservative free-text context rule. */
+  readonly purposeClaims?: Readonly<Record<string, readonly string[]>>;
+  readonly personDecisions?: readonly string[];
   /** What the agent tells its principal when a claim is admitted, if anything. */
   readonly tellPrincipal?: (statement: Readonly<Record<string, unknown>>) => string | undefined;
 }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The inspector's view of one verifiable message: the carriage (never trusted) and, inside
  * the signature, header and proof, authority, content, evidence, terms, and provenance and
@@ -182,12 +183,17 @@ export function packetView(
           digest: digestOf(reps),
         }
       : { present: false, summary: "No statement of who the sender acts for." };
-  const freeText = freeTextOf(message.body as unknown as JsonObject);
+  const freeText = [
+    ...freeTextOf(message.body as unknown as JsonObject),
+    ...(message.freeText ? [{ path: "freeText", text: message.freeText.text }] : []),
+  ];
   const content: PacketLayerView = {
     present: true,
     summary: contentSummary(message, name),
-    raw: message.body,
-    digest: digestOf(message.body as unknown as JsonObject),
+    raw: message.freeText ? { structured: message.body, freeText: message.freeText } : message.body,
+    digest: digestOf(
+      message.freeText ? { structured: message.body, freeText: message.freeText } : message.body,
+    ),
     ...(freeText.length > 0 ? { untrusted: freeText } : {}),
   };
   const evidence: PacketLayerView =

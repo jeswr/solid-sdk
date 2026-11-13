@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The inbound gate. Every message is checked before the core sees it: integrity, source,
  * authority, terms, fitness, in that order. Each check returns its own verdict record and
@@ -604,6 +605,8 @@ export class InboundGate {
       label,
       claimType: c.claimType,
       source: c.issuer,
+      statementDigest: digestOf(item.value),
+      ...(c.subject ? { subject: c.subject } : {}),
       ...(c.method ? { method: c.method } : {}),
       ...(c.asOf ? { asOf: c.asOf } : {}),
       ...(terms ? { terms } : {}),

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The outbound gate. Every action and disclosure the core proposes is checked before anything
  * leaves: mandate, recipient, disclosure, data terms, limits and approval, evidence, in that
@@ -19,7 +20,7 @@ import type {
 import { actionDigest, type OwnerMandate } from "../mechanisms/mandate.js";
 import { configurationById } from "../profile/configurations.js";
 import type { WireMessage } from "../store/state.js";
-import { packetView } from "../trace/packet.js";
+import { freeTextOf, packetView } from "../trace/packet.js";
 import type { OutboundCheck, OutboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
 import {
   type CheckVerdict,
@@ -58,6 +59,9 @@ export interface OutboundDeps {
   readonly isReplyTo: (conversation: Iri, party: Iri) => boolean;
   /** The offered terms with this digest, as received in this agent's conversations. */
   readonly offerTerms: (termsDigest: string) => JsonObject | undefined;
+  readonly principalApproval?: (
+    intent: ActionIntent,
+  ) => { id: Iri; decision: "approve" | "deny" } | undefined;
   /** A stronger approval the recipient asked for in a challenge to this kind of action. */
   readonly demandedApproval?: (intent: ActionIntent) =>
     | {
@@ -348,11 +352,116 @@ export class OutboundGate {
       return { outcome: "stop", verdicts, decision: { ...decision, outcome: "deny" } };
     }
 
+    // UNS-8/9: assess everything the core saw, not what a model says influenced its words.
+    if (intent.freeText) {
+      const items = this.deps.memory.context(intent.conversation);
+      const wanted = intent.purpose ? ctx.purposeClaims?.[intent.purpose] : undefined;
+      const clear =
+        items !== undefined &&
+        wanted !== undefined &&
+        items.every((item) => {
+          const needed = wanted.some(
+            (kind) =>
+              kind === item.claimType ||
+              (kind.endsWith(".*") && item.claimType.startsWith(kind.slice(0, -1))),
+          );
+          if (!needed || !item.subject || !item.terms || !intent.recipient || !intent.purpose)
+            return false;
+          const terms = evaluateItemTerms(item.terms, {
+            agent: this.deps.identity.actor,
+            action: "distribute",
+            target: item.id,
+            purpose: intent.purpose,
+            recipient: intent.recipient,
+            at: this.deps.now(),
+            ...(typeof intent.parameters.retentionDays === "number"
+              ? { retentionDays: intent.parameters.retentionDays }
+              : {}),
+          });
+          if (terms.verdict !== "pass") return false;
+          if (!item.terms.recipientMustBe) return true;
+          return (
+            ctx.resolver?.resolveRecipient({
+              party: intent.recipient,
+              task: intent.operation,
+              taskLabel: item.terms.recipientMustBe.task,
+              at: this.deps.now(),
+            }).outcome === "accepted"
+          );
+        });
+      const bound =
+        intent.freeText.contextDigest === this.deps.memory.contextDigest(intent.conversation);
+      if (!bound || (!clear && decision.basis !== "owner-approval")) {
+        const canAsk = bound && matched?.withApproval;
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          canAsk ? "ask-principal" : "fail",
+          "The core's context is not clear for this recipient and purpose.",
+          {
+            reason: "context-not-clear",
+            rule: {
+              id: "UNS-9",
+              text: "Every context item must pass disclosure and data terms, or the principal must approve the exact text and context.",
+            },
+          },
+        );
+        const effective: AuthorisationDecision = {
+          ...decision,
+          outcome: canAsk ? "approval-required" : "deny",
+          reason: "context-not-clear",
+        };
+        this.decide(
+          canAsk ? "ask-principal" : "stop",
+          canAsk
+            ? `The gate holds the free text and asks ${this.owner}.`
+            : "The free text is stopped; nothing leaves.",
+          "context-not-clear",
+        );
+        if (canAsk)
+          this.emit({
+            part: "principal",
+            kind: "ask-principal",
+            chat: {
+              who: "agent",
+              text: `The context includes items this recipient may not receive for this purpose. May I send this exact text?\n\n${intent.freeText.text}`,
+            },
+            caption:
+              "The principal sees the exact model-written text; approval binds the text and the context digest.",
+          });
+        return { outcome: canAsk ? "ask-principal" : "stop", verdicts, decision: effective };
+      }
+      if (!Array.isArray(intent.parameters.evidence)) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "pass",
+          clear
+            ? "Every item in the task context may be disclosed to this recipient for this purpose."
+            : "The principal approved this exact text and context.",
+          {
+            reason: "minimal-disclosure",
+            rule: { id: "UNS-9", text: "Disclosure is bounded by the complete task context." },
+          },
+        );
+        this.verdict(
+          verdicts,
+          subject,
+          "data-terms",
+          "pass",
+          "Context terms were checked for this recipient and purpose; any required text approval is bound to this action.",
+        );
+      }
+    }
+
     // 3. Disclosure, then 4. data terms: either can stop the release.
     // Without a configuration (the pilot's own callers) the gate adds no checks of its own.
-    const blocked = ctx.configuration
-      ? (this.disclosure(verdicts, subject, intent) ?? this.dataTerms(verdicts, subject, intent))
-      : undefined;
+    const blocked =
+      ctx.configuration && (!intent.freeText || Array.isArray(intent.parameters.evidence))
+        ? (this.disclosure(verdicts, subject, intent) ?? this.dataTerms(verdicts, subject, intent))
+        : undefined;
     if (blocked) {
       this.decide("stop", "The action is stopped; nothing leaves.", blocked);
       return { outcome: "stop", verdicts, decision: { ...decision, outcome: "deny" } };
@@ -368,6 +477,32 @@ export class OutboundGate {
         ? `${this.name(intent.recipient)} asked for ${demanded.label} before it will do this.`
         : undefined;
     let effective = decision;
+    const personDecision = ctx.personDecisions?.find(
+      (id) => id === intent.operation || id === intent.parameters.decision,
+    );
+    const personal = personDecision ? this.deps.principalApproval?.(intent) : undefined;
+    if (personDecision && personal?.decision === "deny") {
+      this.verdict(
+        verdicts,
+        subject,
+        "limits-approval",
+        "fail",
+        "The principal declined this decision.",
+        { reason: "approval-denied" },
+      );
+      this.decide("stop", "The action is stopped; the principal declined.", "approval-denied");
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "approval-denied" },
+      };
+    }
+    if (personDecision && !personal)
+      effective = {
+        ...decision,
+        outcome: "approval-required",
+        reason: "profile decision belongs to a person",
+      };
     if (decision.outcome === "permit" && decision.basis === "autonomous" && limitText) {
       effective = {
         ...decision,
@@ -703,13 +838,45 @@ export class OutboundGate {
     this.decide("stop", `${this.owner} declined; the action is stopped.`, "approval-denied");
   }
 
+  /** A free-text envelope must consume a release for its exact text and context. */
+  canSeal(intent: ActionIntent): boolean {
+    return this.pendingGo.has(actionDigest(intent));
+  }
+
   /** Evidence, then go, for a message about to leave (signed, recorded). */
   seal(
     message: AnyMessage,
     wire: WireMessage,
     opts: { intent?: ActionIntent; operation?: Iri },
   ): void {
-    if (!this.deps.gate.sink) return;
+    const words = freeTextOf(message.body as unknown as JsonObject);
+    if (
+      (words.length > 0 || message.freeText) &&
+      (!opts.intent?.freeText ||
+        !message.freeText ||
+        message.freeText.text !== opts.intent.freeText.text ||
+        words.some((part) => part.text !== opts.intent?.freeText?.text) ||
+        opts.intent.freeText.contextDigest !==
+          this.deps.memory.contextDigest(opts.intent.conversation))
+    ) {
+      const verdicts: CheckVerdict[] = [];
+      this.verdict(
+        verdicts,
+        message.id,
+        "disclosure",
+        "fail",
+        "Unstructured text has no release bound to its text, purpose and task context.",
+        { reason: "context-not-clear" },
+      );
+      this.decide("stop", "The free text is stopped; nothing leaves.", "context-not-clear");
+      throw new Error("context-not-clear: unstructured text requires an authorised proposal");
+    }
+    if (opts.intent?.freeText && !this.canSeal(opts.intent))
+      throw new Error("free text has no release for this context");
+    if (!this.deps.gate.sink) {
+      if (opts.intent) this.pendingGo.delete(actionDigest(opts.intent));
+      return;
+    }
     const verdicts: CheckVerdict[] = [];
     if (opts.intent) {
       this.pendingGo.delete(actionDigest(opts.intent));

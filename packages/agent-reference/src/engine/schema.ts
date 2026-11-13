@@ -65,6 +65,10 @@ export const profileSchema = z.strictObject({
         .min(1),
     }),
   ),
+  operations: z.record(
+    text,
+    z.strictObject({ terms: object.optional(), input: object.optional() }),
+  ),
   personDecisions: strings,
   readingSteps: strings,
   reliance: z.strictObject({
@@ -174,7 +178,13 @@ export const scenarioSchema = z.strictObject({
         requiredApproval: z.strictObject({ level: text, label: text, claimType: text }).optional(),
         hooks: z.partialRecord(
           hook,
-          z.array(z.strictObject({ result: z.json(), records: z.array(object).optional() })),
+          z.array(
+            z.strictObject({
+              result: z.json(),
+              input: z.array(z.json()).optional(),
+              records: z.array(object).optional(),
+            }),
+          ),
         ),
       }),
     ),
@@ -185,6 +195,7 @@ export const scenarioSchema = z.strictObject({
       step: z.number().int().nonnegative(),
       by: text,
       patches: z.array(patch).min(1),
+      signAs: text.optional(),
     }),
   ),
   branches: z.array(
@@ -245,6 +256,14 @@ export function validateScenario(value: unknown): Scenario {
       throw new Error(`incomplete agent ${p.id}`);
     if (p.role === "agent" && !s.parties.some((principal) => principal.id === p.actsFor))
       throw new Error(`unknown principal for ${p.id}`);
+  }
+  let previous = Date.parse(s.start);
+  let previousStep = 0;
+  for (const c of s.script) {
+    if (Date.parse(c.at) < previous || c.step < previousStep)
+      throw new Error("script time and steps must be nondecreasing from scenario.start");
+    previous = Date.parse(c.at);
+    previousStep = c.step;
   }
   for (const c of s.script)
     if (!s.parties.some((p) => p.id === c.by && p.runs === "agent"))

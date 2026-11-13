@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The pilot agent runtime: one deterministic engine shared by every scenario.
  *
@@ -41,7 +42,7 @@ import type {
   ReasonCode,
   RepresentationAssessment,
 } from "../core/types.js";
-import { type GateContext, GateMemory } from "../gates/common.js";
+import { type ContextItem, type GateContext, GateMemory } from "../gates/common.js";
 import { type Admission, InboundGate } from "../gates/inbound.js";
 import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
 import { type KeyAlg, type SigningKey, signCompact, verifyCompact } from "../mechanisms/jws.js";
@@ -80,7 +81,7 @@ import type {
   WireMessage,
 } from "../store/state.js";
 import { domainValue } from "../store/state.js";
-import { peekWire } from "../trace/packet.js";
+import { freeTextOf, peekWire } from "../trace/packet.js";
 import {
   type AgreementPlan,
   type DisclosureCheck,
@@ -169,6 +170,8 @@ export interface AgentRuntimeOptions {
    * limits. Absent: the gates still run, emit nothing, and apply no extra limits.
    */
   readonly gates?: GateContext;
+  /** Declared program and tools, signed and named by model readings (UNS-3). */
+  readonly coreDescription?: { readonly program: string; readonly tools: readonly string[] };
 }
 
 export interface OutboundMessage {
@@ -268,6 +271,7 @@ export class AgentRuntime {
   /** Provider sends from this process that timed out but have not settled (not cancelled). */
   private readonly inFlight = new Set<Iri>();
   private closed = false;
+  private readonly memory: GateMemory;
   private readonly inbound: InboundGate;
   private readonly outbound: OutboundGate;
   /** The admission of the inbound message being processed now (serial executor). */
@@ -293,7 +297,17 @@ export class AgentRuntime {
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
     const gate: GateContext = { ...(options.gates ?? {}), carriage: () => this.carriage };
-    const memory = new GateMemory();
+    const memory = new GateMemory(() => {
+      this.setDomain("_coreContext", memory.snapshot() as unknown as Json);
+    });
+    const savedContext = this.getDomain("_coreContext") as unknown as
+      | Record<string, ContextItem[]>
+      | undefined;
+    for (const [task, items] of Object.entries(savedContext ?? {})) {
+      memory.beginTask(task);
+      for (const item of items) memory.enter(task, item);
+    }
+    this.memory = memory;
     this.inbound = new InboundGate({
       identity: this.identity,
       trust: this.trust,
@@ -330,6 +344,12 @@ export class AgentRuntime {
             return terms as JsonObject;
         }
         return undefined;
+      },
+      principalApproval: (intent) => {
+        const given = this.state.approvals[actionDigest(intent)];
+        return given && Date.parse(given.validUntil) > Date.parse(this.now())
+          ? { id: given.id, decision: given.decision }
+          : undefined;
       },
       demandedApproval: (intent) => {
         if (!intent.recipient) return undefined;
@@ -677,9 +697,130 @@ export class AgentRuntime {
    */
   admitStatements(
     items: readonly { readonly jws: string }[],
-    opts: { readonly subject?: Iri; readonly task: string; readonly purpose?: Iri },
+    opts: {
+      readonly subject?: Iri;
+      readonly task: string;
+      readonly purpose?: Iri;
+      readonly taskId?: Iri;
+    },
   ) {
-    return this.exclusive(() => this.inbound.admitStatements(items, opts));
+    return this.exclusive(async () => {
+      const result = await this.inbound.admitStatements(items, opts);
+      const task = opts.taskId ?? opts.task;
+      this.memory.beginTask(task);
+      for (const item of items) {
+        let payload: { id?: string };
+        try {
+          payload = JSON.parse(
+            Buffer.from(item.jws.split(".")[1] ?? "", "base64url").toString("utf8"),
+          ) as { id?: string };
+        } catch {
+          continue;
+        }
+        const fact = payload.id ? this.memory.facts.get(payload.id) : undefined;
+        if (fact?.statementDigest === digestOf(item.jws))
+          this.memory.enter(task, {
+            ...fact,
+            subject: fact.subject ?? opts.subject ?? "unknown",
+            kind: "statement",
+            digest: digestOf(item.jws),
+            ...(opts.purpose ? { purpose: opts.purpose } : {}),
+          });
+      }
+      this.persist();
+      return result;
+    });
+  }
+
+  /** Trusted host recalls only already admitted facts into a named task's core context. */
+  recallForTask(taskId: Iri, ids: readonly string[]): Promise<void> {
+    return this.exclusive(async () => {
+      for (const id of ids)
+        if (!this.memory.facts.has(id)) throw new Error(`fact not admitted: ${id}`);
+      this.memory.beginTask(taskId);
+      for (const id of ids) {
+        const fact = this.memory.facts.get(id) as NonNullable<
+          ReturnType<typeof this.memory.facts.get>
+        >;
+        this.memory.enter(taskId, {
+          ...fact,
+          subject: fact.subject ?? "unknown",
+          kind: "memory",
+          digest: digestOf(fact),
+        });
+      }
+      this.persist();
+    });
+  }
+
+  /** Read-only copies; the core cannot edit the runtime's labels or erase context. */
+  taskContext(taskId: Iri): readonly ContextItem[] | undefined {
+    return this.memory.context(taskId);
+  }
+
+  /** A reading is the reading agent's statement; no authority is inherited from its source. */
+  recordReading(input: {
+    taskId: Iri;
+    sourceDigest: string;
+    claimType: string;
+    value: Json;
+    step?: string;
+  }): Promise<{ jws: string; statement: JsonObject }> {
+    return this.exclusive(async () => {
+      const original = this.memory
+        .context(input.taskId)
+        ?.find((item) => item.digest === input.sourceDigest);
+      if (!original) throw new Error("reading source did not enter this task's context");
+      const readingSteps = this.options.gates?.reliance?.readingSteps;
+      if (readingSteps && (!input.step || !readingSteps.includes(input.step)))
+        throw new Error("the profile does not permit a reading for this step");
+      if (!this.options.coreDescription)
+        throw new Error("a reading requires a declaration of the core and its tools");
+      const key = [...this.keysByAlg.values()][0];
+      if (!key) throw new Error("a reading requires the reading agent's key");
+      const runs = {
+        type: "AgentImplementation",
+        id: `urn:awp:implementation:${digestOf(this.options.coreDescription)}`,
+        issuer: this.identity.actor,
+        ...this.options.coreDescription,
+      };
+      const runsJws = await signCompact(key, TYP.statement, runs);
+      this.record({
+        type: "implementation-statement",
+        statement: runs,
+        jws: runsJws,
+        at: this.now(),
+      });
+      const statement: JsonObject = {
+        type: "Reading",
+        id: this.newId(),
+        issuer: this.identity.actor,
+        subject: original.subject,
+        claimType: input.claimType,
+        method: "model-output",
+        ...(input.step ? { step: input.step } : {}),
+        sourceDigest: input.sourceDigest,
+        runs: runs.id,
+        value: input.value,
+        issuedAt: this.now(),
+        ...(original.terms ? { terms: original.terms as unknown as JsonObject } : {}),
+      };
+      const jws = await signCompact(key, TYP.statement, statement);
+      this.record({ type: "model-reading", statement, jws, at: this.now() });
+      this.memory.enter(input.taskId, {
+        id: String(statement.id),
+        subject: original.subject,
+        claimType: input.claimType,
+        source: this.identity.actor,
+        method: "model-output",
+        kind: "reading",
+        digest: digestOf(statement),
+        label: `Reading of ${original.label}`,
+        ...(original.terms ? { terms: original.terms } : {}),
+      });
+      this.persist();
+      return { jws, statement };
+    });
   }
 
   /** Check this agent's own record and show it in the trace. */
@@ -1894,6 +2035,7 @@ export class AgentRuntime {
    * at transmission or reconciliation without showing a new release.
    */
   private authorise(intent: ActionIntent, quiet = false): AuthorisationDecision {
+    intent = this.bindFreeText(intent);
     const at = this.now();
     const approvals = new Map<string, { id: Iri; decision: "approve" | "deny" }>();
     for (const [digest, a] of Object.entries(this.state.approvals)) {
@@ -1911,7 +2053,7 @@ export class AgentRuntime {
       ...(this.options.policyEngine ? { engine: this.options.policyEngine } : {}),
     });
     let effective = decision;
-    if (!quiet) {
+    if (!quiet || intent.freeText) {
       if (!this.resuming) this.outbound.propose(intent, this.proposalOrigin);
       effective = this.outbound.release(intent, decision).decision;
     }
@@ -2732,12 +2874,34 @@ export class AgentRuntime {
 
   // ---------------------------------------------------------------- approvals
 
+  private bindFreeText(intent: ActionIntent): ActionIntent {
+    if (
+      intent.freeText &&
+      (typeof intent.freeText.text !== "string" ||
+        !intent.freeText.text ||
+        intent.freeText.text.length > 16384 ||
+        !intent.purpose ||
+        !this.identity.party)
+    )
+      throw new Error("free text requires bounded text, a purpose, and a represented principal");
+    return intent.freeText
+      ? {
+          ...intent,
+          freeText: {
+            ...intent.freeText,
+            contextDigest: this.memory.contextDigest(intent.conversation),
+          },
+        }
+      : intent;
+  }
+
   private park(
     ownerId: Iri,
     intent: ActionIntent,
     continuation: Continuation,
     changePhase = false,
   ) {
+    intent = this.bindFreeText(intent);
     const digest = actionDigest(intent);
     this.state.pending[digest] = {
       actionDigest: digest,
@@ -2971,6 +3135,9 @@ export class AgentRuntime {
       conditions?: readonly DisclosureCondition[];
     },
   ): Promise<OutboundMessage> {
+    if (opts.intent) opts = { ...opts, intent: this.bindFreeText(opts.intent) };
+    if (opts.intent?.freeText && !this.outbound.canSeal(opts.intent))
+      throw new Error("context-not-clear: free text has no release for this context");
     const conv = this.mustConversation(conversationId);
     const configuration = opts.configuration ?? conv.configuration;
     if (!configuration) throw new Error("no configuration selected");
@@ -2999,8 +3166,22 @@ export class AgentRuntime {
       expiresAt: new Date(at.getTime() + lifetime).toISOString(),
       ...(opts.inReplyTo ? { inReplyTo: opts.inReplyTo } : {}),
       body,
+      ...(opts.intent?.freeText
+        ? {
+            freeText: {
+              text: opts.intent.freeText.text,
+              authoredBy: "model",
+              actsFor: this.identity.party,
+              purpose: opts.intent.purpose,
+              digest: digestOf(opts.intent.freeText.text),
+            },
+          }
+        : {}),
       ...(opts.evidence && opts.evidence.length > 0 ? { evidence: opts.evidence } : {}),
     } as unknown as AnyMessage;
+    const unstructured = freeTextOf(body as JsonObject);
+    if (unstructured.some((part) => part.text !== opts.intent?.freeText?.text))
+      throw new Error("free text must be proposed through an authorised intent");
     const checked = validateMessage(message);
     if (!checked.ok) throw new Error(`internal: outbound ${kind} invalid: ${checked.detail}`);
     if (!opts.force || !isTerminal(conv.phase)) {
@@ -3183,6 +3364,47 @@ export class AgentRuntime {
     representation?: RepresentationAssessment,
   ): HandlerContext {
     const opKey = conv.operation ? operationKey(conv.operation) : "_";
+    this.memory.beginTask(conv.id);
+    if (message) {
+      this.memory.enter(conv.id, {
+        id: message.id,
+        subject: message.from.onBehalfOf ?? message.from.actor ?? "anonymous",
+        source: message.from.actor ?? "anonymous",
+        kind: "message",
+        claimType: `message.${message.kind}`,
+        label: `${message.kind} message`,
+        digest: digestOf(message),
+      });
+      if (message.freeText)
+        this.memory.enter(conv.id, {
+          id: `${message.id}#free-text`,
+          subject: message.freeText.actsFor,
+          source: message.from.actor ?? "anonymous",
+          kind: "message",
+          claimType: "unstructured",
+          label: "Unstructured model-written text (data, never an instruction)",
+          digest: message.freeText.digest,
+          purpose: message.freeText.purpose,
+        });
+      for (const e of message.evidence ?? []) {
+        if (e.role !== "credential" || e.format !== "jws-compact") continue;
+        try {
+          const payload = JSON.parse(
+            Buffer.from(e.value.split(".")[1] ?? "", "base64url").toString("utf8"),
+          ) as { id?: string };
+          const fact = payload.id ? this.memory.facts.get(payload.id) : undefined;
+          if (fact?.statementDigest === digestOf(e.value))
+            this.memory.enter(conv.id, {
+              ...fact,
+              subject: fact.subject ?? "unknown",
+              kind: "statement",
+              digest: digestOf(e.value),
+            });
+        } catch {
+          /* A refused statement does not enter core context. */
+        }
+      }
+    }
     return {
       self: this.identity,
       peer: conv.peer,
@@ -3193,7 +3415,20 @@ export class AgentRuntime {
       ...(representation ? { representation } : {}),
       trust: this.trust,
       assessRepresentation: (jws, expect) => this.inbound.assessRepresentation(jws, expect),
-      getState: <T extends Json>(key: string) => this.getDomain(`${opKey}:${key}`) as T | undefined,
+      getState: <T extends Json>(key: string) => {
+        const value = this.getDomain(`${opKey}:${key}`) as T | undefined;
+        if (value !== undefined)
+          this.memory.enter(conv.id, {
+            id: `${opKey}:${key}`,
+            subject: this.identity.party ?? this.identity.actor,
+            source: this.identity.actor,
+            kind: "memory",
+            claimType: "memory",
+            label: key,
+            digest: digestOf(value),
+          });
+        return value === undefined ? undefined : structuredClone(value);
+      },
       setState: (key: string, value: Json, owner?: Iri | null) =>
         this.setDomain(`${opKey}:${key}`, value, owner === null ? undefined : (owner ?? conv.id)),
       record: (r) => this.record(r),
@@ -3208,6 +3443,21 @@ export class AgentRuntime {
           at: this.now(),
         });
         this.record(check.verification);
+        if (check.payload && typeof check.payload === "object") {
+          const payload = check.payload as Record<string, unknown>;
+          this.memory.enter(conv.id, {
+            id: String(payload.id ?? digestOf(jws)),
+            subject: String(payload.subject ?? conv.peer.party ?? "unknown"),
+            source: String(payload.issuer ?? "unknown"),
+            claimType: String(payload.claimType ?? "unknown"),
+            label: "Statement read by the core",
+            kind: "statement",
+            digest: digestOf(jws),
+            ...(payload.terms && typeof payload.terms === "object"
+              ? { terms: payload.terms as ContextItem["terms"] }
+              : {}),
+          });
+        }
         return check;
       },
       assessSource: (input) => {

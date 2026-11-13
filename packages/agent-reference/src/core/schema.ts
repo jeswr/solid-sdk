@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Structural validation of decoded messages. Strict: an unknown field anywhere in the
  * envelope or a core body is refused (`unsupported-term`), because an unrecognised
@@ -5,6 +6,7 @@
  * `input` and `output` are validated by the operation's own schema.
  */
 import { z } from "zod";
+import { digestOf } from "./canonical.js";
 import {
   type AnyMessage,
   MESSAGE_KINDS,
@@ -101,6 +103,15 @@ const evidenceItem = z.strictObject({
 });
 
 const envelope = z.strictObject({
+  freeText: z
+    .strictObject({
+      text: z.string().min(1).max(16384),
+      authoredBy: z.literal("model"),
+      actsFor: id,
+      purpose: id,
+      digest: z.string().min(1),
+    })
+    .optional(),
   profile: id,
   configuration: id,
   id,
@@ -134,6 +145,16 @@ export function validateMessage(value: unknown): SchemaResult {
       detail: summarise(outer.error),
     };
   }
+  if (
+    outer.data.freeText &&
+    (outer.data.freeText.digest !== digestOf(outer.data.freeText.text) ||
+      outer.data.freeText.actsFor !== outer.data.from.onBehalfOf)
+  )
+    return {
+      ok: false,
+      reason: "malformed",
+      detail: "free text digest or represented principal does not match",
+    };
   const kind = outer.data.kind;
   const inner = bodies[kind].safeParse(outer.data.body);
   if (!inner.success) {
