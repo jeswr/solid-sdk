@@ -44,6 +44,8 @@ export interface TaskExecutor extends Executor {
   reject?(id: string): boolean;
   /** Host-side redaction; never sent to the planner. */
   redact?(text: string): string;
+  /** Rebuild with a learned model while retaining all host executor configuration. */
+  withModel?(model: SiteModel): TaskExecutor;
 }
 
 export type TaskExecutionResult = ExecutionResult & { refreshError?: string };

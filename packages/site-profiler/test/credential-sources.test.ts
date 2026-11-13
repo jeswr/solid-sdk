@@ -52,6 +52,50 @@ describe("explicit credential sources", () => {
       ),
     ).toEqual(new Map());
   });
+  it.each([
+    "window.csrfToken=1234567890;",
+    "const csrfToken=1234567890;",
+    "csrfToken=1234567890;",
+    "self.settings={csrfToken:1234567890};",
+    "const value=1234567890;window.csrfToken=String(value);",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: JavaScript fixture, never evaluated here
+    "const value=1234567890;window.csrfToken=`${value}`;",
+    'window.csrfToken="1234567890";',
+    "broken( window.csrfToken=1234567890;",
+  ])("registers numeric credential values and string forms without inventing a source: %s", (source) => {
+    const result = discoverCredentialSources([{ url, html: `<script>${source}</script>` }], []);
+    expect(result.secrets.has("1234567890")).toBe(true);
+    expect(result.tokens.size).toBe(0);
+  });
+  it.each([
+    ["0x499602d2", "1234567890"],
+    ["1.23456789e9", "1234567890"],
+    ["1_234_567_890", "1234567890"],
+    ["-1234567890", "-1234567890"],
+  ])("registers numeric source and transmitted spellings: %s", (raw, transmitted) => {
+    for (const prefix of ["", "broken( "]) {
+      const result = discoverCredentialSources(
+        [],
+        [],
+        [
+          {
+            seq: 0,
+            phase: "crawl",
+            method: "GET",
+            url,
+            resourceType: "script",
+            requestHeaders: {},
+            cookieNames: [],
+            status: 200,
+            contentType: "application/javascript",
+            bodySample: `${prefix}window.csrfToken=${raw};`,
+          },
+        ],
+      );
+      expect(result.secrets).toEqual(new Set([raw, transmitted]));
+      expect(result.tokens.size).toBe(0);
+    }
+  });
   it("scans external script variables, global assignments, aliases and nested JSON credentials", () => {
     const sources = [
       [

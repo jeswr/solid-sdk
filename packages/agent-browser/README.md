@@ -192,8 +192,15 @@ const updatedModel = trace.model ?? model; // host decides where to store it
 Fallback runs once for an action that returns `no-path` with no matched effect or missing
 known inputs. Its step has `via: "fallback"` and `learned` operation IDs. The next planner
 call receives the updated catalogue, and subsequent actions use a new executor over that
-model. Without `fallback`, the return shape and execution path stay unchanged. The ordinary
-RDF planner receives only bounded executor observations, including untrusted-text wrappers.
+model. Executors returned by `createTaskExecutor` expose `withModel(model)`, which rebuilds
+from the original host options, retaining response declarations, transport, session/persona,
+clock and limits. Custom executors can
+provide the same `withModel` hook or pass `executorFactory: (model) => executor` to
+`createFallback`. Without either hook, learning retains the prior model/executor pair and
+reports rejection rather than discarding host policy. The ordinary approval loop and task
+commitment memory continue across learning. Without `fallback`, the return shape and execution
+path stay unchanged. The ordinary RDF planner receives only bounded executor observations,
+including untrusted-text wrappers.
 `Fallback.run` and `learnFallback` also return `proposed` operations and `rejected` reasons.
 No model-backed fallback planner or prompt is supplied. `scriptedFallbackPlanner` accepts
 steps, `done`, `give-up`, and input callbacks; an exhausted script gives up. A planner factory
@@ -212,8 +219,10 @@ so task repeat blocking also covers fallback writes and failures after submissio
 
 `snapshot()` returns Chromium accessibility roles, names, values and stable interactive refs,
 labelled `UNTRUSTED PAGE CONTENT` and `untrusted: true`. Defaults are 100 nodes and 8,000 text
-characters, with explicit truncation. Refs expire after navigation or DOM removal. Actions
-are `goto`, `click`, `fill`, `select`, `press`, and `back`, with a 200 ms minimum interval;
+characters, with explicit truncation. Individual names and values are capped at 300 characters
+including a visible `[truncated]` marker; clipping either sets the snapshot's `truncated` flag.
+Refs expire after navigation or DOM removal. Actions are `goto`, `click`, `fill`, `select`,
+`press`, and `back`, with a 200 ms minimum interval;
 `clock` and bounds are injectable. `launch` allows host browser configuration and launch
 counting. `SAB_CHROMIUM_PATH` is respected by the default launcher.
 
@@ -223,8 +232,9 @@ must replay through the HTTP executor with the session and extract an item. Read
 approved successful writes become write operations; they are never replayed while learning.
 No flow is inferred. Aborts, other origins and credential-bearing candidates are excluded.
 Explicit credential sources (meta/hidden tokens, cookies and recognised script variables) are
-registered as secrets on their first use. Verified sources use CSRF slots, including path slots;
-unsupported sources and unresolved secret constants are rejected. Ordinary opaque IDs still need
+registered as secrets on their first use, including numeric script literals and their string
+spellings. Verified sources use CSRF slots, including path slots; unsupported sources and
+unresolved secret constants are rejected. Ordinary opaque IDs still need
 the profiler's source/repetition evidence. Models validate, round-trip through site-model RDF,
 and pass a dry executor construction before admission.
 Writes currently support flat JSON string/number/boolean fields and URL-encoded forms; unsupported bodies fail closed.
@@ -266,3 +276,7 @@ cause unresolved templates to be rejected before replay. Session headers retain 
 scheme-normalized and credential-only secret spellings. Snapshots and trace text share URL
 scrubbing for queries, fragments, userinfo and registered-secret path segments. Approval and
 snapshot strings render Unicode formatting and control characters as visible escapes.
+
+`test/fallback-review-r3.test.ts` covers numeric credential discovery before snapshots/trace,
+rejection of unresolved credential constants before replay, retained host executor options
+and custom factories across learning, and visible per-value snapshot truncation.

@@ -90,7 +90,12 @@ Browser fallback:
 - Trigger only on `no-path` with unknown matched effect and no missing known inputs. Retain
   all existing ambiguous/refused/denied/error paths. Update the task catalogue and executor
   together after learning; return the new model to the host for storage.
+- Rebuild through the current executor's `withModel` hook (provided by `createTaskExecutor`)
+  or the host's `executorFactory`. Replace only the model, retaining every host option,
+  including write-response/payment declarations, transport, persona, clock and limits.
+  A custom executor without either seam keeps its prior model/executor pair on rejection.
 - All snapshot names/values are untrusted. Bound nodes/text and preserve explicit truncation.
+  Per-value clipping includes `[truncated]` within the value bound and sets `truncated: true`.
   Use Chromium AX refs, fail cleanly on removed/navigated nodes, and retain human pacing.
 - Block off-origin traffic, windows, frames, downloads and WebSockets. Dismiss dialogs.
   Each non-GET requires the same task approver before dispatch; grants bind concrete wire
@@ -134,6 +139,8 @@ Fallback review invariants:
   exposure or learning/replay; include external scripts and unsuccessful/non-GET sources. Reuse
   profiler script analysis for token variables/global assignments. Unsupported sources stay secret
   and unresolved token constants must be rejected with a reason.
+- Register numeric script credential literals alongside their string/source spellings, including
+  first-use credentials, before snapshots, traces or learning. Never replay unresolved constants.
 - Trim session headers, canonicalize recognized scheme prefixes case-insensitively, and remember
   both source and transmitted spellings plus the credential. Share URL scrubbing across snapshot
   names/values and trace text, covering sensitive query/fragment parameters, opaque bare fragments,

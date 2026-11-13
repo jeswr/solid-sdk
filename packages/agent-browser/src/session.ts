@@ -153,6 +153,7 @@ export function createTaskExecutor(options: Omit<ExecutorOptions, "gate">): Task
     approve: gate.approve,
     reject: gate.reject,
     redact: (text) => redact(values, text),
+    withModel: (model) => createTaskExecutor({ ...options, model }),
     async execute(request, opts) {
       const remember = async () => {
         const bundle = await options.sessions.get(siteOrigin(options.model.site), options.persona);

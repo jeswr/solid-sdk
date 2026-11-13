@@ -74,6 +74,18 @@ function stringLiteral(n: N | undefined): string | undefined {
   return undefined;
 }
 
+/** Numeric credentials have the same wire/display spelling as String(number). */
+function credentialLiteral(n: N | undefined): string | undefined {
+  if (n?.type === "Literal" && typeof n.value === "number" && Number.isFinite(n.value))
+    return String(n.value);
+  if (n?.type === "UnaryExpression" && (n.operator === "+" || n.operator === "-")) {
+    const arg = prop(n, "argument");
+    if (arg?.type === "Literal" && typeof arg.value === "number")
+      return String(n.operator === "-" ? -arg.value : arg.value);
+  }
+  return stringLiteral(n);
+}
+
 type Part = { lit: string } | { hole: string };
 
 interface FnInfo {
@@ -105,9 +117,9 @@ function hint(n: N): string {
   return "value";
 }
 
-function evalString(n: N | undefined, env: Env): Part[] | undefined {
+function evalString(n: N | undefined, env: Env, literal = stringLiteral): Part[] | undefined {
   if (!n) return undefined;
-  const lit = stringLiteral(n);
+  const lit = literal(n);
   if (lit !== undefined) return [{ lit }];
   if (n.type === "TemplateLiteral") {
     const quasis = list(n, "quasis");
@@ -117,15 +129,15 @@ function evalString(n: N | undefined, env: Env): Part[] | undefined {
       const cooked = (q.value as { cooked?: string }).cooked ?? "";
       if (cooked) parts.push({ lit: cooked });
       const e = exprs[i];
-      if (e) parts.push(...(evalString(e, env) ?? [{ hole: hint(e) }]));
+      if (e) parts.push(...(evalString(e, env, literal) ?? [{ hole: hint(e) }]));
     });
     return parts;
   }
   if (n.type === "BinaryExpression" && n.operator === "+") {
     const left = prop(n, "left");
     const right = prop(n, "right");
-    const l = evalString(left, env) ?? (left ? [{ hole: hint(left) }] : []);
-    const r = evalString(right, env) ?? (right ? [{ hole: hint(right) }] : []);
+    const l = evalString(left, env, literal) ?? (left ? [{ hole: hint(left) }] : []);
+    const r = evalString(right, env, literal) ?? (right ? [{ hole: hint(right) }] : []);
     return [...l, ...r];
   }
   if (n.type === "Identifier") {
@@ -137,7 +149,7 @@ function evalString(n: N | undefined, env: Env): Part[] | undefined {
     const name = ident(callee);
     const arg = list(n, "arguments")[0];
     if (arg && name && /^(encodeURIComponent|encodeURI|String)$/.test(name)) {
-      const inner = evalString(arg, env);
+      const inner = evalString(arg, env, literal);
       if (inner?.every((p) => "lit" in p)) return inner;
       return [{ hole: hint(arg) }];
     }
@@ -347,7 +359,7 @@ function optionsShape(opts: N | undefined, env: Env, origin: string, bodyKey = "
   return out;
 }
 
-function collectEnv(program: N): Env {
+function collectEnv(program: N, literal = stringLiteral): Env {
   const env: Env = {
     functions: new Map(),
     objects: new Map(),
@@ -378,7 +390,7 @@ function collectEnv(program: N): Env {
           });
       } else if (init.type === "ObjectExpression") env.objects.set(name, init);
       else {
-        const lit = stringLiteral(init);
+        const lit = literal(init);
         if (lit !== undefined && n.kind === "const") env.strings.set(name, lit);
       }
     }
@@ -455,10 +467,10 @@ export function scriptCredentialSecrets(source: string): Set<string> {
   try {
     if (Buffer.byteLength(source, "utf8") > SCRIPT_SIZE_LIMIT) throw new Error("large script");
     const program = parseScript(source);
-    const env = collectEnv(program);
+    const env = collectEnv(program, credentialLiteral);
     const remember = (node: N | undefined) => {
       if (!node) return;
-      const parts = evalString(node, env);
+      const parts = evalString(node, env, credentialLiteral);
       if (parts?.every((p) => "lit" in p))
         secrets.add(parts.map((p) => ("lit" in p ? p.lit : "")).join(""));
       // Only value fragments belong to this assignment. Literals inside arbitrary calls or
@@ -472,10 +484,31 @@ export function scriptCredentialSecrets(source: string): Set<string> {
       if (name && sensitive.test(name))
         remember(prop(node, "init") ?? prop(node, "right") ?? prop(node, "value"));
     });
+    // Retain source spellings too (hex, exponents, separators), including numeric aliases.
+    walk(program, (node) => {
+      const value = credentialLiteral(node);
+      if (
+        (node.type === "UnaryExpression" || typeof node.value === "number") &&
+        value !== undefined &&
+        secrets.has(value) &&
+        typeof node.start === "number"
+      )
+        secrets.add(source.slice(node.start, node.end as number));
+    });
   } catch {
     // Parse/size failures must not silently turn obvious credential assignments into constants.
     for (const match of source.matchAll(/([\w$]+)["']?\s*[:=]\s*["']([^"'\r\n]+)["']/g))
       if (sensitive.test(match[1] ?? "")) secrets.add(match[2] ?? "");
+    for (const match of source.matchAll(
+      /([\w$]+)["']?\s*[:=]\s*([+-]?(?:0[xX][\da-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?[\d_]+)?))(?![\w$.])/g,
+    )) {
+      const raw = match[2] ?? "";
+      const value = Number(raw.replaceAll("_", ""));
+      if (sensitive.test(match[1] ?? "") && Number.isFinite(value)) {
+        secrets.add(raw);
+        secrets.add(String(value));
+      }
+    }
   }
   secrets.delete("");
   return secrets;
