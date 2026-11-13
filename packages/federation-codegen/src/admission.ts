@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * L1 (tier-a) — the STRUCTURAL admission validator (design §4). Pure JS,
  * FAIL-CLOSED, run on every generation: it refuses to generate from an ontology /
@@ -19,7 +20,7 @@
 
 import { literalMapper, VALIDATED_DATATYPES } from "@jeswr/model-runtime";
 import type { NormalizedOntology } from "./adapter.js";
-import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
+import { isFailClosedSeverity, isHttpPattern, stringPatternGuard } from "./compile.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
 import { Graph, RDF, SH } from "./rdf.js";
 import {
@@ -228,7 +229,9 @@ export function admit(
           (c?.datatype !== undefined && literalMapper(c.datatype).jsType === "string");
         if (
           !c ||
-          (!(c.kind === "iri" && isHttpPattern(c.pattern)) && !(isString && c.pattern === "\\S"))
+          (!(c.kind === "iri" && isHttpPattern(c.pattern)) &&
+            !(isString && c.pattern === "\\S") &&
+            stringPatternGuard(c) === undefined)
         )
           unsupported("unknown pattern; no reviewed closed guard");
       }

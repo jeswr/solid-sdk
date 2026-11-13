@@ -47,8 +47,10 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
   silently-incomplete model (missing labels, un-domained/ranged properties, a literal without a
   datatype, a class without a NodeShape). SHACL components are allowlisted: direct property paths,
   datatype/IRI term kinds, cardinality, enums, numeric bounds, string minimum length, and composite
-  `sh:class`/`sh:node` links. Only `^https?://`, `^https://` (emits `iriScheme: "https"`), and
-  the nonblank string pattern `\S` have reviewed closed guards; other patterns and components
+  `sh:class`/`sh:node` links. Only `^https?://`, `^https://` (emits `iriScheme: "https"`),
+  the nonblank string pattern `\S`, and `^[A-Z]{3}$` on an `xsd:string` literal (emits
+  `stringPattern: "upper-alpha-3"`, the ISO 4217 code shape) have reviewed closed guards,
+  matched by exact pattern text; other patterns and components
   are admission errors, including on node shapes. Reject implicit class targets: a shape
   that is a SHACL instance of `rdfs:Class` or `owl:Class` in the shapes graph (directly or via
   `rdfs:subClassOf*` there) has no exact runtime projection. At the root,
@@ -60,6 +62,13 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
   stores values and cannot preserve noncanonical spellings such as `"01"^^xsd:integer`.
   `error` violations block; an unbounded-set `missing-cardinality`
   is an advisory `warning`.
+- **Exact decimals (opt-in):** `"decimal": "exact"` on a field in `codegen.config.json`
+  (flat entity or composite node field) types an `xsd:decimal` field as `string` and emits
+  `"decimal": "exact"` into `model.json`, so drift tests pin the choice. The runtime keeps
+  the lexical byte-for-byte (`10.50`, `9007199254740993.01`) within a closed 64-character
+  grammar. Compilation rejects it on other datatypes (including integer subtypes), IRI
+  fields, `sh:in` and numeric bounds; fidelity requires its config provenance. Unconfigured
+  fields keep the number mapping and byte-identical output.
 - **The fidelity assertion** re-derives an order-independent projection of the merged shapes and
   asserts, field-for-field and constraint-for-constraint, that `model.json` covers it exactly — and
   that every guard flag with no shapes source traces to the committed config. A seeded manifest

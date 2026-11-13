@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * THE P0 EXIT CRITERION — the build-time FIDELITY ASSERTION (design §7.2). model.json
  * is a VERIFIED PROJECTION of shapes.ttl, not a bespoke schema: at generation time
@@ -34,6 +35,7 @@ import {
   isFailClosedSeverity,
   isHttpPattern,
   linkTargetConforms,
+  stringPatternGuard,
 } from "./compile.js";
 import {
   implicitClassTargets,
@@ -283,6 +285,10 @@ function guardIsShapeDerived(
   if (guard === "minLength")
     return constraint.minLength !== undefined && guards.minLength === constraint.minLength;
   if (guard === "nonBlank") return guards.nonBlank === true && constraint.pattern === "\\S";
+  if (guard === "stringPattern")
+    return (
+      guards.stringPattern !== undefined && guards.stringPattern === stringPatternGuard(constraint)
+    );
   return false;
 }
 
@@ -302,6 +308,8 @@ function requiredShapeGuards(c: ShapeConstraint): ManifestFieldGuards {
   if (stringValue && c.pattern === "\\S") {
     required.nonBlank = true;
   }
+  const stringPattern = stringPatternGuard(c);
+  if (stringPattern !== undefined) required.stringPattern = stringPattern;
   return required;
 }
 
@@ -358,6 +366,9 @@ function assertFieldGuardsTraceable(
   }
   if (field.defaultNow !== undefined && !configGuards.has("defaultNow")) {
     throw new FidelityError(`${where} field ${field.name} defaultNow is not config-declared`);
+  }
+  if (field.decimal !== undefined && !configGuards.has("decimal")) {
+    throw new FidelityError(`${where} field ${field.name} decimal mapping is not config-declared`);
   }
   if (field.materializeDefault !== undefined && !configGuards.has("materializeDefault")) {
     throw new FidelityError(

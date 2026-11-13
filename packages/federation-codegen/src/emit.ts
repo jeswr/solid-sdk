@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Emit the generated artifacts (design §7): model.json (the verified projection),
  * model.js (a FIXED-TEMPLATE shim that inlines the manifest and calls
@@ -21,8 +22,8 @@
 
 import {
   type AnyManifestEntity,
+  fieldLiteralMapper,
   isCompositeEntity,
-  literalMapper,
   type ManifestField,
   type ModelManifest,
 } from "@jeswr/model-runtime";
@@ -107,8 +108,9 @@ function baseTsType(field: ManifestField): string {
   // Single-source the datatype → TS-type decision through the audited runtime's
   // `literalMapper` (the SAME resolution the runtime reads/writes against, and that
   // `shapes.ts` coerces `sh:in` scalars by), so the emitted type can never disagree
-  // with the runtime's JS surface type — e.g. the unsigned XSD integer subtypes.
-  switch (literalMapper(field.datatype).jsType) {
+  // with the runtime's JS surface type — e.g. the unsigned XSD integer subtypes, or
+  // an opt-in exact xsd:decimal (`decimal: "exact"` ⇒ a lexical `string`).
+  switch (fieldLiteralMapper(field.datatype, field.decimal).jsType) {
     case "number":
       return "number";
     case "boolean":

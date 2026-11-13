@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Claude Opus 5.5
 /**
  * `@jeswr/model-runtime` — the ONE audited generic runtime for the
  * federation-codegen pipeline. It interprets a JSON shape-manifest to parse /
@@ -23,8 +24,13 @@
 
 export {
   type DatatypeMapper,
+  type DecimalMapping,
+  EXACT_DECIMAL_MAX_LENGTH,
+  exactDecimalMapper,
   expandDatatype,
+  fieldLiteralMapper,
   iriMapper,
+  isExactDecimalLexical,
   isKnownDatatype,
   isXsdDate,
   isXsdDateTime,
@@ -40,6 +46,9 @@ export {
   isHttpIri,
   isSafeAbsoluteIri,
   isTurtlePrefixName,
+  isUpperAlpha3,
+  matchesStringPattern,
+  type StringPattern,
   sanitizeText,
   subjectIri,
   tryRead,
