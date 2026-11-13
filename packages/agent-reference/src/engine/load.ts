@@ -37,6 +37,13 @@ export function validateReferences(profile: DomainProfile, scenario: Scenario): 
     if (new Set(values).size !== values.length) throw new Error(`duplicate ${label}`);
   };
   unique(
+    scenario.configurations.map((entry) => entry.id),
+    "configuration",
+  );
+  for (const branch of scenario.branches)
+    if (branch.onlyUnder && !scenario.configurations.some((entry) => entry.id === branch.onlyUnder))
+      throw new Error("branch names an unknown configuration");
+  unique(
     scenario.parties.map((p) => p.id),
     "party",
   );
@@ -102,6 +109,14 @@ export function validateReferences(profile: DomainProfile, scenario: Scenario): 
   const requireParty = (id: string) => {
     if (!parties.has(id)) throw new Error(`unknown party ${id}`);
   };
+  if (scenario.carriage) {
+    unique(scenario.carriage.parties, "carriage party");
+    for (const id of scenario.carriage.parties) {
+      requireParty(id);
+      if (parties.get(id)?.runs !== "agent")
+        throw new Error("a carriage endpoint must be an agent");
+    }
+  }
   for (const party of scenario.parties) {
     if (party.actsFor) requireParty(party.actsFor);
     if (party.runs === "agent" && (!party.actor || !party.actsFor))

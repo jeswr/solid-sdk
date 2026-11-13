@@ -69,7 +69,7 @@ export function readJson(
 }
 
 /** RFC 8785/I-JSON forbids duplicate member names, including differently escaped spellings. */
-function assertUniqueKeys(text: string): void {
+export function assertUniqueKeys(text: string): void {
   const stack: Array<{ object: boolean; key: boolean; names: Set<string> }> = [];
   for (let i = 0; i < text.length; i++) {
     const char = text[i];

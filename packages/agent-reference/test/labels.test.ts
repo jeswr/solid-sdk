@@ -32,7 +32,7 @@ it("uses ontology and profile RDF labels and retains each replaced identifier as
 it("keeps generated captions and rule explanations free of identifiers in every produced scenario trace", () => {
   const root = join(import.meta.dirname, "..");
   const manifest = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8")) as {
-    paths: { trace?: string; status: string }[];
+    paths: { trace?: string; status: string; configuration?: string }[];
   };
   let traces = 0;
   for (const path of manifest.paths) {
@@ -46,10 +46,14 @@ it("keeps generated captions and rule explanations free of identifiers in every 
       );
     }
   }
-  expect(traces).toBe(157);
-  expect(manifest.paths.filter((path) => path.status === "runs")).toHaveLength(146);
-  expect(manifest.paths.filter((path) => path.status === "disagrees")).toHaveLength(11);
-  expect(manifest.paths.filter((path) => path.status === "blocked")).toHaveLength(9);
+  const baseline = manifest.paths.filter((path) => !path.configuration);
+  const alternatives = manifest.paths.filter((path) => path.configuration);
+  expect(traces).toBe(157 + alternatives.filter((path) => path.trace).length);
+  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(146);
+  expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(11);
+  expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
+  expect(alternatives).toHaveLength(8);
+  expect(alternatives.every((path) => path.status === "runs")).toBe(true);
 });
 
 it("preserves exact original content in principal review even when it contains a URI", () => {

@@ -9,6 +9,8 @@ import { chainPolicySchema } from "../mechanisms/authority-chain.js";
 import { mappingPolicySchema, mappingTableSchema } from "../mechanisms/code-mapping.js";
 import { datasetRowSchema, protocolSchema, queryGrantSchema } from "../mechanisms/dataset-query.js";
 import { dutyRuleSchema } from "../runtime/duties.js";
+import { LAYER_IDS } from "../suites/registry.js";
+import { scenarioRegistry } from "../suites/scenario.js";
 import { INBOUND_CHECKS, OUTBOUND_CHECKS } from "../trace/types.js";
 
 const iri = z.string().regex(/^[a-z][a-z0-9+.-]*:[^\s<>"{}|\\^`]+$/i);
@@ -16,7 +18,12 @@ const slug = z.string().regex(/^[a-z0-9][a-z0-9-]*$/);
 const json = z.json();
 const object = z.record(z.string(), json);
 const strings = z.array(z.string());
-const reason = z.enum(CORE_REASON_CODES);
+const reason = z.enum([
+  ...CORE_REASON_CODES,
+  "no-structured-content",
+  "conflicting-structured-copies",
+  "human-parity-mismatch",
+]);
 const check = z.enum([...INBOUND_CHECKS, ...OUTBOUND_CHECKS]);
 const ref = z.strictObject({ id: iri, version: z.string() });
 const contentType = z.strictObject({
@@ -241,7 +248,19 @@ const party = z.strictObject({
   operator: iri.optional(),
   traceId: z.string().optional(),
   handlers: strings.default([]),
-  configurations: z.array(z.enum(["baseline", "public-read"])).default(["baseline"]),
+  configurations: z
+    .array(
+      z.enum([
+        "baseline",
+        "public-read",
+        ...LAYER_IDS.flatMap((layer) =>
+          scenarioRegistry()
+            .suitesFor(layer)
+            .map((suite) => `${layer}-${suite.id}`),
+        ),
+      ]),
+    )
+    .default(["baseline"]),
   representationOperations: z.array(iri).optional(),
   name: z.string(),
   role: z.enum(["principal", "agent", "source", "register"]),
@@ -580,7 +599,37 @@ const step = z.discriminatedUnion("type", [
   }),
 ]);
 const blocked = z.array(z.strictObject({ path: z.string(), reason: z.string() }));
+const registry = scenarioRegistry();
+const configurationOptions = LAYER_IDS.flatMap((layer) =>
+  registry
+    .suitesFor(layer)
+    .filter((suite) => suite.id !== registry.configuration("baseline")?.layers[layer])
+    .map((suite) =>
+      z.strictObject({
+        id: z.literal(`${layer}-${suite.id}`),
+        change: z.strictObject({ [layer]: z.literal(suite.id) }),
+        world: object.default({}),
+      }),
+    ),
+);
+export const scenarioConfigurationSchema = z.union(configurationOptions);
 export const scenarioSchema = z.strictObject({
+  configurations: z.array(scenarioConfigurationSchema).default([]),
+  carriage: z
+    .strictObject({
+      parties: strings.min(2).max(2),
+      fault: z
+        .enum([
+          "email-readable-copy-differs",
+          "a2a-text-part-instruction",
+          "a2a-task-state-lies",
+          "mcp-tool-description-poisoned",
+          "mcp-token-passed-on",
+        ])
+        .optional(),
+      at: slug.optional(),
+    })
+    .optional(),
   requiredMethods: strings.default([]),
   catalogueAssurance: z.enum(["proved", "joint", "attested"]).optional(),
   recordedAssurance: z.enum(["proved", "joint", "attested"]).optional(),
@@ -865,6 +914,7 @@ export const scenarioSchema = z.strictObject({
     z.strictObject({
       id: slug,
       what: z.string(),
+      onlyUnder: slug.optional(),
       change: object,
       profileChange: object.optional(),
       expect: expectation,

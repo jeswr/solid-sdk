@@ -40,6 +40,7 @@ import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import { LabelIndex } from "../model/labels.js";
 import {
+  alternativeWireId,
   CONFIG_AGREEMENT,
   CONFIG_CORROBORATION,
   CONFIG_EMAIL,
@@ -53,6 +54,7 @@ import {
   CONFIG_QUERY,
   CONFIG_REFERENCE_LOCAL,
   CONFIG_SELECTIVE_LOCAL,
+  configurationById,
 } from "../profile/configurations.js";
 import { idSource, testKey } from "../reference/keys.js";
 import type { AgentRuntime, OutboundMessage, StepResult } from "../runtime/agent.js";
@@ -66,20 +68,30 @@ import type {
 import { Cast, mandateOf, signClaim } from "../scenarios/common.js";
 import { MemoryLedger } from "../store/ledger.js";
 import { MemoryStateStore } from "../store/state.js";
-import { BASELINE, baselineRegistry } from "../suites/baseline.js";
-import { PUBLIC_READ, withPublicRead } from "../suites/public-read.js";
+import { BASELINE } from "../suites/baseline.js";
+import { PUBLIC_READ } from "../suites/public-read.js";
+import { scenarioRegistry } from "../suites/scenario.js";
 import { TraceRecorder } from "../trace/recorder.js";
 import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
 import { TrustResolver } from "../trust/resolver.js";
+import { ScenarioCarriage } from "./carriage.js";
 import { decisionsOf, firstBranchDivergence } from "./compare.js";
 import { installHandler } from "./handlers.js";
 import { validateReferences } from "./load.js";
+import {
+  advertisedConfigurations,
+  matrixConfiguration,
+  matrixSink,
+  matrixWorld,
+  preferredConfiguration,
+} from "./matrix.js";
 import {
   type DomainProfile,
   domainProfileSchema,
   type Scenario,
   scenarioSchema,
 } from "./schema.js";
+import { withScriptedReplies } from "./scripted-replies.js";
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("a validated scenario reference is missing");
@@ -89,6 +101,8 @@ function required<T>(value: T | undefined): T {
 export interface PathResult {
   readonly usedTestDouble?: boolean;
   readonly path: string;
+  readonly configuration?: string;
+  readonly what?: string;
   readonly trace?: TraceFile;
   readonly blocked?: string;
   readonly actual?: { outcome: string; reason: string; check?: string };
@@ -106,9 +120,29 @@ export interface PathResult {
 }
 
 /** A literal deep patch; arrays replace, objects merge. No code is evaluated. */
-export function patch<T>(original: T, change: unknown): T {
+export function patch<T>(original: T, change: unknown, listKey = "id"): T {
   if (!change || typeof change !== "object" || Array.isArray(change))
     return structuredClone(change) as T;
+  // A map over an existing id-keyed list upserts entries by id. Literal arrays still replace.
+  // This extends the branch patch syntax without changing any existing branch arrays.
+  if (Array.isArray(original)) {
+    const result = structuredClone(original) as Array<Record<string, unknown>>;
+    for (const [id, value] of Object.entries(change)) {
+      if (
+        ["__proto__", "prototype", "constructor"].includes(id) ||
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value)
+      )
+        throw new Error("unsafe keyed-list patch");
+      if (listKey in value && (value as Record<string, unknown>)[listKey] !== id)
+        throw new Error("keyed-list identity mismatch");
+      const index = result.findIndex((entry) => entry[listKey] === id);
+      if (index < 0) result.push({ [listKey]: id, ...structuredClone(value) });
+      else result[index] = patch(required(result[index]), value);
+    }
+    return result as T;
+  }
   const out: Record<string, unknown> =
     original && typeof original === "object" && !Array.isArray(original)
       ? (structuredClone(original) as Record<string, unknown>)
@@ -116,7 +150,7 @@ export function patch<T>(original: T, change: unknown): T {
   for (const [key, value] of Object.entries(change)) {
     if (["__proto__", "prototype", "constructor"].includes(key))
       throw new Error("unsafe patch key");
-    out[key] = patch(out[key], value);
+    out[key] = patch(out[key], value, key === "mandates" ? "agent" : "id");
   }
   return out as T;
 }
@@ -244,6 +278,7 @@ export async function runScenario(
   profileInput: unknown,
   scenarioInput: unknown,
   options: {
+    configuration?: string;
     commit?: string;
     compare?: boolean;
     registry?: VerifierRegistry;
@@ -257,6 +292,21 @@ export async function runScenario(
   const verifiers = options.registry ?? (await availableAdapters());
   if (profile.id !== scenario.profile) throw new Error("profile/scenario id mismatch");
   validateReferences(profile, scenario);
+  if (options.configuration === "all") {
+    const results = await runScenario(profile, scenario, { ...options, configuration: undefined });
+    for (const entry of scenario.configurations)
+      results.push(
+        ...(await runScenario(profile, scenario, { ...options, configuration: entry.id })),
+      );
+    return results;
+  }
+  const alternative = options.configuration
+    ? scenario.configurations.find((c) => c.id === options.configuration)
+    : undefined;
+  if (options.configuration && !alternative) throw new Error("unknown scenario configuration");
+  const configured = alternative
+    ? scenarioSchema.parse(matrixWorld(scenario, alternative))
+    : scenario;
   const paths = [
     {
       id: "main",
@@ -266,21 +316,48 @@ export async function runScenario(
       expect: scenario.result,
       catalogueExpected: scenario.catalogueExpected,
     },
-    ...scenario.branches,
+    ...configured.branches.filter((b) => !b.onlyUnder || b.onlyUnder === alternative?.id),
   ];
   const results: PathResult[] = [];
   const exercisedStress = new Set<Scenario["stress"][number]>();
   for (const path of paths) {
-    const world = scenarioSchema.parse(patch(scenario, path.change));
+    const world = scenarioSchema.parse(patch(configured, path.change));
     if (profile.id !== world.profile) throw new Error("branch profile mismatch");
     validateReferences(profile, world);
     const pathProfile = domainProfileSchema.parse(
       patch(profile, "profileChange" in path && path.profileChange ? path.profileChange : {}),
     );
     validateReferences(pathProfile, world);
-    const blocker = path.blocked ?? unsupported(pathProfile, world, path.id, verifiers);
+    const combinationProblems = alternative
+      ? scenarioRegistry().check({ layers: { ...BASELINE.layers, ...alternative.change } })
+      : [];
+    const blocker =
+      path.blocked ??
+      (combinationProblems.length
+        ? "A registered suite constraint excludes this single-layer combination."
+        : undefined) ??
+      (alternative &&
+      "transport" in alternative.change &&
+      !world.carriage &&
+      world.parties.filter((party) => party.runs === "agent").length !== 2
+        ? "This transport needs an explicit pair of agents in its world carriage scope."
+        : undefined) ??
+      (alternative?.change.transport === "mcp" &&
+      !world.parties.some(
+        (party) => party.id === "channel-authority" && party.runs === "issuer-only",
+      )
+        ? "The MCP channel needs a separately keyed fictional authorization-server party in its world."
+        : undefined) ??
+      (alternative && configurationById(alternativeWireId(alternative.id))?.status !== "executable"
+        ? "The selected suite has no executable runtime configuration installed. The wire implementation alone is insufficient."
+        : unsupported(pathProfile, world, path.id, verifiers));
     if (blocker) {
-      results.push({ path: path.id, blocked: blocker });
+      results.push({
+        path: path.id,
+        ...("what" in path ? { what: path.what } : {}),
+        ...(alternative ? { configuration: alternative.id } : {}),
+        blocked: blocker,
+      });
       continue;
     }
     const usedTestDouble = world.requiredMethods.some(
@@ -300,7 +377,7 @@ export async function runScenario(
       path.id,
       options.commit ?? "unknown",
       tracked.registry,
-      options,
+      { ...options, alternative },
     );
     if (tracked.usedTestDouble() && !options.testOnly)
       throw new Error(
@@ -345,7 +422,7 @@ export async function runScenario(
       }
     }
     const diff = difference(path.outline, outlineOf(trace));
-    if (diff && options.compare !== false)
+    if (diff && options.compare !== false && !alternative)
       throw new Error(
         `${scenario.id}/${path.id}: outline differs at ${diff.index}: ${JSON.stringify(diff)}`,
       );
@@ -398,6 +475,8 @@ export async function runScenario(
         : undefined);
     results.push({
       path: path.id,
+      ...("what" in path ? { what: path.what } : {}),
+      ...(alternative ? { configuration: alternative.id } : {}),
       ...(tracked.usedTestDouble() ? { usedTestDouble: true } : {}),
       trace,
       actual,
@@ -405,7 +484,7 @@ export async function runScenario(
       consequences,
       ...(noDivergence ? { note: "branch does not diverge from the main path" } : {}),
       disagrees:
-        noDivergence ||
+        (noDivergence && !("onlyUnder" in path && path.onlyUnder)) ||
         (!!expected &&
           ((actual?.outcome === "refuse" ? "stop" : actual?.outcome) !==
             (expected.outcome === "refuse" ? "stop" : expected.outcome) ||
@@ -429,122 +508,13 @@ async function runPath(
   path: string,
   commit: string,
   verifiers: VerifierRegistry,
-  options: { proofCache?: ProofCache; generateProofs?: boolean },
+  options: {
+    proofCache?: ProofCache;
+    generateProofs?: boolean;
+    alternative?: Scenario["configurations"][number];
+  },
 ): Promise<TraceFile> {
-  const registry = withPublicRead(baselineRegistry());
-  registry.register({
-    layer: "meaning",
-    id: "registry-lookup",
-    name: "Signed code-list mappings",
-    vocabulary: "profile-selected signed mapping tables",
-    summary:
-      "A derived local statement names the mapping version and original digest and retains its source and quality; current status is resolved afresh.",
-  });
-  registry.register({
-    layer: "transport",
-    id: "email",
-    name: "Plain-text email",
-    binding: "scripted-mailbox/0.1",
-    summary: "Unsigned plain text to a scripted mailbox; the correspondent has no agent or gates.",
-  });
-  registry.register({
-    layer: "identity",
-    id: "email-endpoint",
-    name: "Email endpoint only",
-    resolution: "pinned",
-    summary: "An owner-signed pin recognizes only an address, never a person or claims authority.",
-  });
-  registry.register({
-    layer: "usage-control",
-    id: "human-approval",
-    name: "Approve each email",
-    rulesOnly: false,
-    policyLanguage: "exact-text owner approval",
-    summary:
-      "The principal sees the exact email including its footer before every send; task context is checked.",
-  });
-  registry.register({
-    layer: "commitments",
-    id: "agreement-credential",
-    name: "Local multi-party agreement credentials",
-    agreement: "agreement-credential",
-    summary:
-      "Every required party signs one digest; durable local holds, conditional completion and fresh signed status.",
-  });
-  registry.register({
-    layer: "commitments",
-    id: "payment",
-    name: "Local structured payments",
-    agreement: "signed-offer-acceptance",
-    summary:
-      "The local extension releases a structured payment instruction under a signed mandate, reserves cumulative limits before release, and records a signed stand-in bank submission; no settlement claim.",
-  });
-  registry.register({
-    layer: "reliance",
-    id: "corroboration",
-    name: "Exact-value corroboration",
-    enforcedAtGate: true,
-    summary:
-      "Accepted issuers with separately configured controllers must agree on the exact subject, claim, value and period; authenticity alone never establishes truth.",
-  });
-  registry.register({
-    layer: "trust",
-    id: "pinned-list",
-    name: "Scoped own-list pins",
-    anchors: "pinned",
-    summary:
-      "Reviewed verification keys require a purpose-scoped, expiring own-list pin; unknown trust is held for a digest-bound principal decision.",
-  });
-  registry.register({
-    layer: "meaning",
-    vocabulary: "profile-declared types",
-    id: "plain-language-upgrade",
-    name: "Structured form from the source",
-    summary:
-      "Content remains unstructured data. Typed quarantined readings retain agent authorship and digest; unaccepted readings require source-signed claims.",
-  });
-  registry.register({
-    layer: "data-access",
-    id: "by-reference-local-holder",
-    name: "Signed grants and local resource holder",
-    mode: "by-reference",
-    summary:
-      "A separately keyed local holder verifies signed reader identity, item, purpose and expiry; this does not implement Solid access control.",
-  });
-  registry.register({
-    layer: "identity",
-    id: "organization-document-local",
-    name: "Registrar-served current organization documents",
-    resolution: "resolved",
-    summary:
-      "A local resolver serves registrar-signed current key and delegated-agent lists; no live DID method is claimed.",
-  });
-  registry.register({
-    layer: "authority",
-    id: "mandate-credential",
-    name: "Organization mandate credentials",
-    mandateFormat: "awp-organization-mandate+jws",
-    approvalFormat: "exact-action",
-    summary:
-      "Organization-signed agent-key, entity, role and action scope, with issuer-signed status and bounded freshness.",
-  });
-  registry.register({
-    layer: "authenticity",
-    id: "selective-disclosure",
-    name: "Salted claim digests inside signed credentials",
-    mechanism: "JWS and salted SHA-256 claim commitments",
-    algs: ["EdDSA"],
-    summary:
-      "Each revealed claim is checked against issuer-signed salted digests; no proof about hidden values or unlinkability is claimed.",
-  });
-  registry.register({
-    layer: "accountability",
-    id: "regulator-claim",
-    name: "Local signed-record forum",
-    record: "hash-chained-local",
-    summary:
-      "A separately keyed fictional forum verifies signed segments and compares records and admitted observations; it never re-runs a core.",
-  });
+  const registry = scenarioRegistry();
   const local =
     scenario.suites.meaning === "registry-lookup"
       ? CONFIG_MAPPING
@@ -573,14 +543,16 @@ async function runPath(
                           : scenario.suites.trust === "pinned-list"
                             ? CONFIG_PINNED_LIST
                             : undefined;
-  const configuration = local
-    ? {
-        id: `${scenario.id}-local`,
-        pilotConfiguration: local,
-        layers: { ...BASELINE.layers, ...scenario.suites },
-      }
-    : BASELINE;
-  if (local) registry.configure(configuration);
+  const configuration = options.alternative
+    ? matrixConfiguration(options.alternative, registry)
+    : local
+      ? {
+          id: `${scenario.id}-local`,
+          pilotConfiguration: local,
+          layers: { ...BASELINE.layers, ...scenario.suites },
+        }
+      : BASELINE;
+  if (local && !options.alternative) registry.configure(configuration);
   let clock = Date.parse("2026-11-13T09:00:00.000Z");
   const now = () => new Date(clock);
   const ids = idSource(`engine-${scenario.id}-${path}`);
@@ -1230,6 +1202,13 @@ async function runPath(
     const party = scenario.parties.find((p) => p.identity === iri || p.actor === iri);
     return party ? partyName(party) : labels.name(iri);
   };
+  const carriage = new ScenarioCarriage(
+    scenario,
+    configuration.layers.transport,
+    (party) =>
+      cast.agents.has(party) ? cast.get(party).actorKey : required(sourceKeys.get(party)),
+    name,
+  );
   const task = `urn:scenario:${scenario.id}:task`;
   const variables = (current?: HandlerContext) => ({
     steps: outputs,
@@ -1290,7 +1269,11 @@ async function runPath(
           }
         : {}),
       configuration: agent.configurations[0] === "public-read" ? PUBLIC_READ : configuration,
-      configurations: { [CONFIG_PUBLIC]: PUBLIC_READ },
+      configurations: {
+        [CONFIG_PUBLIC]: PUBLIC_READ,
+        [BASELINE.pilotConfiguration]: BASELINE,
+        [configuration.pilotConfiguration]: configuration,
+      },
       ...(profile.authorityChains
         ? { authorityChains: { policy: profile.authorityChains, resolver } }
         : {}),
@@ -1307,7 +1290,7 @@ async function runPath(
       ...(profile.organizations
         ? { organizations: { policy: profile.organizations, resolver } }
         : {}),
-      sink: recorder.sink(agent.traceId ?? agent.id),
+      sink: matrixSink(recorder.sink(agent.traceId ?? agent.id), configuration, name),
       taskId: task,
       name,
       taskLabel: (operation) =>
@@ -1372,9 +1355,21 @@ async function runPath(
         : {}),
     };
     const handlers: OperationHandler[] = agent.handlers.length
-      ? agent.handlers.map((id) =>
-          installHandler(required(scenario.handlerImplementations[id]), signed, stores),
-        )
+      ? agent.handlers.map((id) => {
+          const handler = installHandler(
+            required(scenario.handlerImplementations[id]),
+            signed,
+            stores,
+          );
+          return options.alternative
+            ? withScriptedReplies(handler, (context) => {
+                const proposal = responses.get(agent.id)?.reply;
+                return proposal
+                  ? (resolveTemplate(proposal, variables(context)) as HandlerReply)
+                  : undefined;
+              })
+            : handler;
+        })
       : profile.operations.map((op) => {
           const reply = (ctx: HandlerContext): HandlerReply =>
             resolveTemplate(
@@ -1574,11 +1569,12 @@ async function runPath(
           }),
         },
       ],
-      agent.configurations.map((c) =>
-        c === "public-read" ? CONFIG_PUBLIC : configuration.pilotConfiguration,
-      ),
+      advertisedConfigurations(agent.configurations, configuration),
       {
         gates: gate,
+        ...(options.alternative && "transport" in options.alternative.change
+          ? { bindings: carriage.advertisements(agent.id) }
+          : {}),
         ...(profile.forum ? { limits: RECORD_LIMITS } : {}),
         ...(scenario.requiredMethods.length ? { limits: DERIVATION_LIMITS } : {}),
         disclosureChecks: Object.fromEntries(
@@ -2080,7 +2076,9 @@ async function runPath(
           models: operation.models,
           discover: step.discover,
           configuration:
-            step.configuration === "public-read" ? CONFIG_PUBLIC : configuration.pilotConfiguration,
+            step.configuration === "public-read"
+              ? CONFIG_PUBLIC
+              : preferredConfiguration(required(parties.get(step.agent)), peer, configuration),
           evidence: [
             ...step.evidence.map((id) => required(signed[id]).evidence),
             ...step.derivedEvidence.map((jws) => ({
@@ -2161,7 +2159,10 @@ async function runPath(
               ? required(step.outboundAtStep)
               : current,
           );
-        result = await runtime.receive(wire, { binding: "direct-local/0.1" });
+        const carried = options.alternative
+          ? await carriage.carry(item.out, wire, item.from, step.agent, step.id)
+          : { input: wire, binding: "direct-local/0.1" };
+        result = await runtime.receive(carried.input, { binding: carried.binding });
         recorder.label(undefined);
         enqueue(step.agent, result as StepResult);
         break;

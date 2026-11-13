@@ -2,6 +2,767 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "configurations": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "transport-email"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "transport": {
+                    "type": "string",
+                    "const": "email"
+                  }
+                },
+                "required": [
+                  "transport"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "transport-a2a"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "transport": {
+                    "type": "string",
+                    "const": "a2a"
+                  }
+                },
+                "required": [
+                  "transport"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "transport-mcp"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "transport": {
+                    "type": "string",
+                    "const": "mcp"
+                  }
+                },
+                "required": [
+                  "transport"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "data-access-by-query"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "data-access": {
+                    "type": "string",
+                    "const": "by-query"
+                  }
+                },
+                "required": [
+                  "data-access"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "data-access-by-reference-local-holder"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "data-access": {
+                    "type": "string",
+                    "const": "by-reference-local-holder"
+                  }
+                },
+                "required": [
+                  "data-access"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "identity-anonymous"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "identity": {
+                    "type": "string",
+                    "const": "anonymous"
+                  }
+                },
+                "required": [
+                  "identity"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "identity-email-endpoint"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "identity": {
+                    "type": "string",
+                    "const": "email-endpoint"
+                  }
+                },
+                "required": [
+                  "identity"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "identity-organization-document-local"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "identity": {
+                    "type": "string",
+                    "const": "organization-document-local"
+                  }
+                },
+                "required": [
+                  "identity"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "meaning-registry-lookup"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "meaning": {
+                    "type": "string",
+                    "const": "registry-lookup"
+                  }
+                },
+                "required": [
+                  "meaning"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "meaning-plain-language-upgrade"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "meaning": {
+                    "type": "string",
+                    "const": "plain-language-upgrade"
+                  }
+                },
+                "required": [
+                  "meaning"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "authority-mandate-credential"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "authority": {
+                    "type": "string",
+                    "const": "mandate-credential"
+                  }
+                },
+                "required": [
+                  "authority"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "authenticity-selective-disclosure"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "authenticity": {
+                    "type": "string",
+                    "const": "selective-disclosure"
+                  }
+                },
+                "required": [
+                  "authenticity"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "authenticity-data-integrity"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "authenticity": {
+                    "type": "string",
+                    "const": "data-integrity"
+                  }
+                },
+                "required": [
+                  "authenticity"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "trust-pinned-list"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "trust": {
+                    "type": "string",
+                    "const": "pinned-list"
+                  }
+                },
+                "required": [
+                  "trust"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "reliance-corroboration"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "reliance": {
+                    "type": "string",
+                    "const": "corroboration"
+                  }
+                },
+                "required": [
+                  "reliance"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "usage-control-human-approval"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "usage-control": {
+                    "type": "string",
+                    "const": "human-approval"
+                  }
+                },
+                "required": [
+                  "usage-control"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "commitments-agreement-credential"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "commitments": {
+                    "type": "string",
+                    "const": "agreement-credential"
+                  }
+                },
+                "required": [
+                  "commitments"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "commitments-payment"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "commitments": {
+                    "type": "string",
+                    "const": "payment"
+                  }
+                },
+                "required": [
+                  "commitments"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "accountability-regulator-claim"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "accountability": {
+                    "type": "string",
+                    "const": "regulator-claim"
+                  }
+                },
+                "required": [
+                  "accountability"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "carriage": {
+      "type": "object",
+      "properties": {
+        "parties": {
+          "minItems": 2,
+          "maxItems": 2,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fault": {
+          "type": "string",
+          "enum": [
+            "email-readable-copy-differs",
+            "a2a-text-part-instruction",
+            "a2a-task-state-lies",
+            "mcp-tool-description-poisoned",
+            "mcp-token-passed-on"
+          ]
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        }
+      },
+      "required": [
+        "parties"
+      ],
+      "additionalProperties": false
+    },
     "requiredMethods": {
       "default": [],
       "type": "array",
@@ -326,7 +1087,10 @@
             "no-claims",
             "no-principal",
             "no-data",
-            "no-personal-data"
+            "no-personal-data",
+            "no-structured-content",
+            "conflicting-structured-copies",
+            "human-parity-mismatch"
           ]
         }
       },
@@ -434,7 +1198,10 @@
             "no-claims",
             "no-principal",
             "no-data",
-            "no-personal-data"
+            "no-personal-data",
+            "no-structured-content",
+            "conflicting-structured-copies",
+            "human-parity-mismatch"
           ]
         }
       },
@@ -488,7 +1255,37 @@
               "type": "string",
               "enum": [
                 "baseline",
-                "public-read"
+                "public-read",
+                "transport-direct-http",
+                "transport-email",
+                "transport-a2a",
+                "transport-mcp",
+                "data-access-by-value",
+                "data-access-by-query",
+                "data-access-by-reference-local-holder",
+                "identity-pinned-key",
+                "identity-anonymous",
+                "identity-email-endpoint",
+                "identity-organization-document-local",
+                "meaning-fixed-vocabulary",
+                "meaning-registry-lookup",
+                "meaning-plain-language-upgrade",
+                "authority-mandate-signed",
+                "authority-mandate-credential",
+                "authenticity-jws",
+                "authenticity-selective-disclosure",
+                "authenticity-data-integrity",
+                "trust-register-chain",
+                "trust-pinned-list",
+                "reliance-precedence-rules",
+                "reliance-corroboration",
+                "usage-control-odrl-rules",
+                "usage-control-human-approval",
+                "commitments-signed-offer-acceptance",
+                "commitments-agreement-credential",
+                "commitments-payment",
+                "accountability-local-ledger",
+                "accountability-regulator-claim"
               ]
             }
           },
@@ -5846,6 +6643,10 @@
           "what": {
             "type": "string"
           },
+          "onlyUnder": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
           "change": {
             "type": "object",
             "propertyNames": {
@@ -5977,7 +6778,10 @@
                   "no-claims",
                   "no-principal",
                   "no-data",
-                  "no-personal-data"
+                  "no-personal-data",
+                  "no-structured-content",
+                  "conflicting-structured-copies",
+                  "human-parity-mismatch"
                 ]
               }
             },
@@ -6085,7 +6889,10 @@
                   "no-claims",
                   "no-principal",
                   "no-data",
-                  "no-personal-data"
+                  "no-personal-data",
+                  "no-structured-content",
+                  "conflicting-structured-copies",
+                  "human-parity-mismatch"
                 ]
               }
             },
@@ -6235,7 +7042,10 @@
                     "no-claims",
                     "no-principal",
                     "no-data",
-                    "no-personal-data"
+                    "no-personal-data",
+                    "no-structured-content",
+                    "conflicting-structured-copies",
+                    "human-parity-mismatch"
                   ]
                 }
               },
@@ -6401,7 +7211,10 @@
               "no-claims",
               "no-principal",
               "no-data",
-              "no-personal-data"
+              "no-personal-data",
+              "no-structured-content",
+              "conflicting-structured-copies",
+              "human-parity-mismatch"
             ]
           }
         },
@@ -6479,6 +7292,7 @@
     }
   },
   "required": [
+    "configurations",
     "requiredMethods",
     "proofCredentials",
     "x-authored-by",

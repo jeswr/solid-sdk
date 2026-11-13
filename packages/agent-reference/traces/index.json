@@ -2010,6 +2010,206 @@
     "events": 333
   },
   {
+    "file": "mortgage-main--transport-email.json",
+    "scenario": {
+      "id": "mortgage-main",
+      "title": "A mortgage in principle",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
+      }
+    },
+    "configuration": "transport-email",
+    "events": 333
+  },
+  {
+    "file": "mortgage-main--email-readable-copy-differs--transport-email.json",
+    "scenario": {
+      "id": "mortgage-main--email-readable-copy-differs",
+      "title": "A mortgage in principle: The readable email states a different loan amount.",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
+      }
+    },
+    "configuration": "transport-email",
+    "events": 208
+  },
+  {
+    "file": "mortgage-main--transport-a2a.json",
+    "scenario": {
+      "id": "mortgage-main",
+      "title": "A mortgage in principle",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
+      }
+    },
+    "configuration": "transport-a2a",
+    "events": 337
+  },
+  {
+    "file": "mortgage-main--a2a-text-part-instruction--transport-a2a.json",
+    "scenario": {
+      "id": "mortgage-main--a2a-text-part-instruction",
+      "title": "A mortgage in principle: An A2A text part says approval is not needed; it is dropped and Sam is still asked.",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
+      }
+    },
+    "configuration": "transport-a2a",
+    "events": 338
+  },
+  {
+    "file": "mortgage-main--a2a-task-state-lies--transport-a2a.json",
+    "scenario": {
+      "id": "mortgage-main--a2a-task-state-lies",
+      "title": "A mortgage in principle: The task says completed, while the signed reply refuses; the conversation remains refused.",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
+      }
+    },
+    "configuration": "transport-a2a",
+    "events": 122
+  },
+  {
+    "file": "mortgage-main--transport-mcp.json",
+    "scenario": {
+      "id": "mortgage-main",
+      "title": "A mortgage in principle",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
+      }
+    },
+    "configuration": "transport-mcp",
+    "events": 335
+  },
+  {
+    "file": "mortgage-main--mcp-tool-description-poisoned--transport-mcp.json",
+    "scenario": {
+      "id": "mortgage-main--mcp-tool-description-poisoned",
+      "title": "A mortgage in principle: The tool description tries to bypass approval; it is dropped and Sam is still asked.",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
+      }
+    },
+    "configuration": "transport-mcp",
+    "events": 335
+  },
+  {
+    "file": "mortgage-main--mcp-token-passed-on--transport-mcp.json",
+    "scenario": {
+      "id": "mortgage-main--mcp-token-passed-on",
+      "title": "A mortgage in principle: The tool asks for its token at a different server; the hand-off is refused.",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
+      }
+    },
+    "configuration": "transport-mcp",
+    "events": 85
+  },
+  {
     "file": "mortgage-out-of-limit--baseline.json",
     "scenario": {
       "id": "mortgage-out-of-limit",
