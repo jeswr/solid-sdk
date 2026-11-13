@@ -136,3 +136,25 @@
     display: none;
   }
 }
+
+.summary {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  margin: 16px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.summary h3,
+.summary h4 {
+  font-weight: 600;
+}
+.summary a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.summary li {
+  margin-block: 8px;
+}

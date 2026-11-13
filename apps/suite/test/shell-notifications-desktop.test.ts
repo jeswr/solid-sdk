@@ -47,7 +47,7 @@ it("uses an existing worker's ready registration and otherwise the browser const
   const Notification = vi.fn(class {});
   Object.assign(Notification, { permission: "granted" });
   vi.stubGlobal("Notification", Notification);
-  const showNotification = vi.fn(async () => {});
+  const showNotification = vi.fn(async (_title: string, _options?: NotificationOptions) => {});
   const registration = { active: {}, showNotification };
   const serviceWorker = {
     getRegistration: vi.fn(async () => registration),
@@ -60,6 +60,15 @@ it("uses an existing worker's ready registration and otherwise the browser const
     item.title,
     expect.objectContaining({ tag: item.id, body: item.body, data: { href: item.href } }),
   );
+  expect(showNotification.mock.calls[0]?.[1]).not.toHaveProperty("renotify");
+  await showDesktopNotification(item, { renotify: true });
+  expect(showNotification).toHaveBeenLastCalledWith(
+    item.title,
+    expect.objectContaining({ tag: item.id, renotify: true }),
+  );
+  // Browsers reject renotify without a tag, so an untagged notification never carries it.
+  await showDesktopNotification({ ...item, id: "" }, { renotify: true });
+  expect(showNotification.mock.lastCall?.[1]).not.toHaveProperty("renotify");
   expect(Notification).not.toHaveBeenCalled();
   vi.stubGlobal("navigator", {
     serviceWorker: {

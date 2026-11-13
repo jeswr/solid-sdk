@@ -83,7 +83,12 @@ export function NotificationItem({
     void onMarkRead(item.id);
   };
   return (
-    <li className={styles.item} data-unread={!item.read} aria-labelledby={`${id}-title`}>
+    <li
+      id={`notification-${item.id}`}
+      className={styles.item}
+      data-unread={!item.read}
+      aria-labelledby={`${id}-title`}
+    >
       <span aria-hidden="true" className={styles.leading}>
         {item.actor ? (
           <Avatar>
