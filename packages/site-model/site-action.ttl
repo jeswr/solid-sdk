@@ -68,11 +68,11 @@ sab:Completed a skos:Concept ;
 
 sab:Uncertain a skos:Concept ;
     rdfs:label "Uncertain"@en ;
-    rdfs:comment "At least one write returned a successful HTTP response, but the execution did not finish. The committed effects must not be repeated."@en .
+    rdfs:comment "At least one write may have reached the site, without a 4xx rejection, but the execution did not finish. The possible effects must not be repeated without explicit recovery authorization."@en .
 
 sab:Failed a skos:Concept ;
     rdfs:label "Failed"@en ;
-    rdfs:comment "The execution failed or was refused before any write returned a successful HTTP response."@en .
+    rdfs:comment "The execution failed or was refused with no committed or uncertain write. A write rejected with HTTP 4xx is failed."@en .
 
 sab:status a owl:ObjectProperty ;
     rdfs:label "status"@en ;

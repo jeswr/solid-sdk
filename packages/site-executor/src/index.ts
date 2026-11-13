@@ -22,6 +22,8 @@ export {
   pathMatches,
   type SessionBundle,
   type SessionProvider,
+  type SessionUpdate,
+  type SessionUpdateResult,
 } from "./cookies.js";
 export { jsonPointer } from "./dom.js";
 export {

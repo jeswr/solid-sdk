@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 7: demonstrations. A scripted Playwright session stands in for a person showing the agent a
 // task once. Its write requests become operations (the only way writes enter a model), and the
@@ -104,6 +105,23 @@ export function buildFlow(
   steps.forEach((st, i) => {
     if (st.operation.effect !== "read") required.add(i);
   });
+  // A demonstrated basket/order total is evidence even when checkout sends no price.
+  steps.forEach((st, payment) => {
+    if (st.operation.effect !== "payment") return;
+    const lastWrite = steps
+      .slice(0, payment)
+      .findLastIndex((step) => step.operation.effect !== "read");
+    steps.forEach((read, i) => {
+      if (i <= lastWrite || i >= payment || read.operation.effect !== "read") return;
+      const ex = read.operation.extraction;
+      if (
+        ex &&
+        ([s("Order"), s("Invoice")].includes(ex.itemType ?? "") ||
+          ex.fields.some((f) => f.property === s("totalPaymentDue")))
+      )
+        required.add(i);
+    });
+  });
   if (required.size === 0) {
     warnings.push(`demonstration ${demo.name}: no write requests, so no flow`);
     return { warnings };
@@ -166,7 +184,16 @@ export function buildFlow(
         const clash = inputs.find((x) => x.name === inputName);
         if (clash && clash.path.join() !== flowInputPath(p, st.operation).join())
           inputName = `${p.name}_${renumber.get(old)}`;
-        if (!inputs.some((x) => x.name === inputName)) {
+        const shared = inputs.find((x) => x.name === inputName);
+        if (shared) {
+          // A retained total read can introduce this input before the payment form does.
+          // Carry the form's default/options to their shared input so both requests agree.
+          if (shared.default === undefined && p.default !== undefined) {
+            shared.default = p.default;
+            shared.required = false;
+          }
+          if (!shared.options && p.options) shared.options = p.options;
+        } else {
           const value = st.values[name] as string;
           const input: Parameter = {
             name: inputName,

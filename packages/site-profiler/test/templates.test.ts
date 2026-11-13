@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import { parseForms } from "../src/forms.js";
@@ -40,6 +41,41 @@ function req(method: string, path: string, extra: Partial<RecordedRequest> = {})
 }
 
 describe("clusterRequests", () => {
+  it("keeps examples local to the endpoint and excludes failed probe guesses", () => {
+    const candidates = mergeCandidates(
+      clusterRequests(
+        [
+          req("GET", "/api/search?delivery=canvas&q=canvas"),
+          req("GET", "/api/checkout?delivery=canvas", { phase: "probe", status: 400 }),
+          req("GET", "/api/checkout?delivery=standard", { phase: "demonstration" }),
+          req("GET", "/api/checkout?delivery=express", { phase: "demonstration" }),
+        ],
+        O,
+      ),
+    );
+    const checkout = candidates.find((c) => c.urlTemplate === `${O}/api/checkout{?delivery}`);
+    expect(checkout?.params).toEqual([
+      { name: "delivery", location: "query", examples: ["standard", "express"], required: true },
+    ]);
+    expect(
+      candidates.find((c) => c.urlTemplate.startsWith(`${O}/api/search`))?.params[0]?.examples,
+    ).toEqual(["canvas"]);
+  });
+
+  it("keeps demonstrated write values when a successful form submission redirects", () => {
+    const [checkout] = clusterRequests(
+      [
+        req("POST", "/checkout", {
+          phase: "demonstration",
+          status: 303,
+          postData: "delivery=express",
+        }),
+      ],
+      O,
+    );
+    expect(checkout?.params[0]?.examples).toEqual(["express"]);
+  });
+
   it("infers numeric, sku and known-id path variables and query parameters", () => {
     const reqs = [
       req("GET", "/product/101"),

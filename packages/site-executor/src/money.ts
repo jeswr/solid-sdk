@@ -6,7 +6,7 @@ import type { ActionRequest, Operation, Parameter } from "@jeswr/site-model";
 import { SAB, SCHEMA } from "@jeswr/site-model";
 import { type CompiledRequest, fillJsonTemplate } from "./compile.js";
 import type { ExtractedItem } from "./extract.js";
-import { canonicalJson, moneyFields } from "./gate.js";
+import { moneyFields } from "./gate.js";
 import { normaliseEffect } from "./match.js";
 import { expandTemplate, templateVariables } from "./uri-template.js";
 import {
@@ -14,7 +14,6 @@ import {
   canonicalValue,
   expandIri,
   ID_PROPERTIES,
-  idFromIri,
   jsonValue,
   RDF,
 } from "./values.js";
@@ -26,19 +25,17 @@ export interface MoneyEvidence {
   currency: string;
   revalidate: number[];
   binding: {
-    step: number;
-    operation: string;
-    url: string;
-    item: number;
-    iri?: string;
-    property: string;
-    currencyProperty: string;
     quantity: string;
-    identity: [string, string[]][];
-    amounts: [string, string[]][];
-    currencies: [string, string[]][];
-    quantities: [number, string][];
-    readings?: MoneyEvidence["binding"][];
+    records: {
+      step: number;
+      operation: string;
+      url: string;
+      item: number;
+      iri?: string;
+      amounts: [string, string[]][];
+      currencies: [string, string[]][];
+      identity: [string, string[]][];
+    }[];
   };
 }
 export interface MoneyRead {
@@ -195,11 +192,12 @@ export function inputIdentities(
 ): ItemIdentity[] {
   const terms = path.map(expandIri);
   const last = terms.at(-1) ?? "";
-  if (ID_PROPERTIES.includes(last)) return value === undefined ? [] : [{ type: last, value }];
-  if (last !== `${SCHEMA}object` && last !== "@id") return [];
+  if ([...ID_PROPERTIES, `${SCHEMA}orderNumber`].includes(last))
+    return value === undefined ? [] : [{ type: last, value }];
+  if (![`${SCHEMA}object`, `${SCHEMA}referencesOrder`, "@id"].includes(last)) return [];
   const result: ItemIdentity[] = [];
   if (request) {
-    for (const type of ID_PROPERTIES)
+    for (const type of [...ID_PROPERTIES, `${SCHEMA}orderNumber`])
       for (const v of request.values([...terms, type])) result.push({ type, value: v });
     for (const v of request.values(terms))
       if (/^https?:/i.test(v)) result.push({ type: "iri", value: normalizedIri(v) ?? v });
@@ -213,14 +211,13 @@ const AMOUNTS = ["totalPaymentDue", "price", "amount", "value"].map((p) => SCHEM
 const CURRENCIES = ["priceCurrency", "currency"].map((p) => SCHEMA + p);
 const identityMatches = (item: ExtractedItem, id: ItemIdentity): boolean => {
   if (id.type === "iri")
-    return [item.iri, ...(item.values.get(`${SCHEMA}object`) ?? [])].some(
-      (v) => v !== undefined && normalizedIri(v) === normalizedIri(id.value),
-    );
-  if (id.type === "fallback") return !!item.iri && idFromIri(item.iri) === id.value;
+    return item.iri !== undefined && normalizedIri(item.iri) === normalizedIri(id.value);
+  // Identifier-free suffixes cannot demonstrate a typed purchase identity.
+  if (id.type === "fallback") return false;
   return item.values.get(id.type)?.includes(id.value) ?? false;
 };
 
-/** Only structured, trusted values from earlier on-origin reads can supply money. */
+/** Payment evidence has two paths: fresh basket totals, or direct-buy unit prices. */
 export function factsMoney(
   origin: string,
   reads: MoneyRead[],
@@ -235,8 +232,19 @@ export function factsMoney(
       return false;
     }
   };
+  const payment = writes.at(-1);
+  if (!payment) return undefined;
+  const ids =
+    payment.identities ??
+    payment.operation.inputs.flatMap((p) =>
+      inputIdentities(
+        p.path.length ? p.path : (payment.sources[p.name] ?? []),
+        payment.values[p.name] ?? p.default,
+      ),
+    );
+  const totalRequired = lastWrite >= 0;
   const candidates = reads
-    .filter((r) => onOrigin(r.url))
+    .filter((r) => onOrigin(r.url) && (!totalRequired || r.step > lastWrite))
     .flatMap((read) =>
       read.items.flatMap((item, index) => {
         if (item.iri && !onOrigin(item.iri)) return [];
@@ -245,205 +253,113 @@ export function factsMoney(
           ...(item.values.get(`${RDF}type`) ?? []),
         ].map(expandIri);
         const total =
-          ["Order", "Invoice"].some((t) => types.includes(SCHEMA + t)) ||
+          types.includes(`${SCHEMA}Order`) ||
+          types.includes(`${SCHEMA}Invoice`) ||
           item.values.has(`${SCHEMA}totalPaymentDue`);
         return [{ read, item, index, total }];
       }),
     );
-  const identities = (w: MoneyWrite): ItemIdentity[] =>
-    w.identities ??
-    w.operation.inputs.flatMap((p) =>
-      inputIdentities(
-        p.path.length ? p.path : (w.sources[p.name] ?? []),
-        w.values[p.name] ?? p.default,
-      ),
-    );
-  const requestIds = request ? inputIdentities([`${SCHEMA}object`], undefined, request) : [];
-  const quantities = (w: MoneyWrite): string[] =>
-    w.operation.inputs.flatMap((p) => {
-      if ((kind(p.path) ?? kind(w.sources[p.name] ?? [])) !== "quantity") return [];
-      const v = w.values[p.name] ?? p.default;
+  const orderIds = ids.filter((id) =>
+    ["iri", "fallback", `${SCHEMA}orderNumber`, `${SCHEMA}identifier`].includes(id.type),
+  );
+  const productIds = [
+    ...ids,
+    ...(ids.length && request ? inputIdentities([`${SCHEMA}object`], undefined, request) : []),
+  ];
+  const selected = candidates.filter((c) =>
+    totalRequired ? c.total : !c.total && productIds.some((id) => identityMatches(c.item, id)),
+  );
+  const refusal = totalRequired
+    ? "needs one fresh basket total"
+    : "needs one unambiguous product price";
+  if (
+    !totalRequired &&
+    !selected.some(
+      (c) => productIds.length && productIds.every((id) => identityMatches(c.item, id)),
+    )
+  )
+    throw new MoneyRefusal(`${refusal}: product identity is ambiguous or does not match`);
+  let quantity = "1";
+  if (!totalRequired) {
+    const quantities = payment.operation.inputs.flatMap((p) => {
+      if ((kind(p.path) ?? kind(payment.sources[p.name] ?? [])) !== "quantity") return [];
+      const v = payment.values[p.name] ?? p.default;
       if (v === undefined) return [];
-      assertSent(w.operation, p, w.values, w.compiled);
-      decimal(v);
+      assertSent(payment.operation, p, payment.values, payment.compiled);
       const wire = jsonValue(p, v);
       if (
         typeof wire === "number" &&
         (!/^\d+(?:\.\d*)?$/.test(String(wire)) || !equal(v, String(wire)))
       )
         throw new BindingError("monetary quantity cannot be represented exactly on the wire");
-      return [v];
+      return [text(decimal(v))];
     });
-  const bound = writes.map((write) => ({
-    write,
-    ids: identities(write),
-    quantities: quantities(write),
-  }));
-  const payment = bound.at(-1);
-  const reading = (
-    { read, item, index }: (typeof candidates)[number],
-    quantity: string,
-  ): MoneyEvidence | undefined => {
+    if (new Set(quantities).size > 1) throw new MoneyRefusal("conflicting mapped quantities");
+    quantity = quantities[0] ?? "1";
+    for (const p of payment.operation.inputs)
+      if (
+        inputIdentities(
+          p.path.length ? p.path : (payment.sources[p.name] ?? []),
+          payment.values[p.name] ?? p.default,
+        ).length
+      )
+        assertSent(payment.operation, p, payment.values, payment.compiled);
+  }
+  const records: MoneyEvidence["binding"]["records"] = [];
+  const pairs = new Map<string, { amount: string; currency: string }>();
+  for (const { read, item, index } of selected) {
     const amounts = AMOUNTS.filter((p) => item.values.get(p)?.length).map(
       (p): [string, string[]] => [p, [...(item.values.get(p) ?? [])]],
     );
     const currencies = CURRENCIES.filter((p) => item.values.get(p)?.length).map(
       (p): [string, string[]] => [p, [...(item.values.get(p) ?? [])]],
     );
-    if (!amounts.length || !currencies.length) return undefined;
-    const values = amounts
-      .flatMap(([, v]) => v)
-      .map((v) => {
-        try {
-          return text(decimal(v));
-        } catch {
-          throw new MoneyRefusal("conflicting or invalid site monetary amounts");
-        }
-      });
-    const codes = currencies.flatMap(([, v]) => v).map((v) => v.toUpperCase());
-    if (new Set(values).size > 1) throw new MoneyRefusal("conflicting site monetary amounts");
-    if (new Set(codes).size > 1) throw new MoneyRefusal("conflicting site currencies");
-    const currency = codes[0];
-    const amount = values[0];
-    if (currency === undefined || amount === undefined) return undefined;
-    if (!/^[A-Z]{3}$/.test(currency)) throw new MoneyRefusal("invalid site currency");
-    return {
-      amount: multiply(amount, quantity),
-      currency,
-      revalidate: [read.step],
-      binding: {
-        step: read.step,
-        operation: read.operation.id,
-        url: read.url,
-        item: index,
-        ...(item.iri ? { iri: item.iri } : {}),
-        property: amounts[0]?.[0] ?? "",
-        currencyProperty: currencies[0]?.[0] ?? "",
-        quantity,
-        amounts,
-        currencies,
-        quantities: bound.flatMap(({ write, quantities }) =>
-          quantities.map((q): [number, string] => [write.step, q]),
-        ),
-        identity: [...item.values].filter(([p]) =>
-          [
-            ...ID_PROPERTIES,
-            `${SCHEMA}orderNumber`,
-            `${SCHEMA}url`,
-            `${SCHEMA}object`,
-            `${SCHEMA}orderQuantity`,
-          ].includes(p),
-        ),
-      },
-    };
-  };
-  // Inspect every fresh total for conflicts before checking its purchase binding.
-  const totals = candidates
-    .filter((c) => c.total && c.read.step > lastWrite)
-    .flatMap((c) => {
-      const evidence = reading(c, "1");
-      return evidence ? [{ candidate: c, evidence }] : [];
-    });
-  const totalIdentity = (e: MoneyEvidence): string =>
-    canonicalJson({
-      amount: text(decimal(e.amount)),
-      currency: e.currency,
-      iri: e.binding.iri ? normalizedIri(e.binding.iri) : undefined,
-      identity: e.binding.identity
-        .map(([p, values]) => [
-          p,
-          values
-            .map((v) =>
-              p === `${SCHEMA}orderQuantity`
-                ? text(decimal(v))
-                : p === `${SCHEMA}url` || p === `${SCHEMA}object`
-                  ? (normalizedIri(v) ?? v)
-                  : v,
-            )
-            .sort(),
-        ])
-        .sort(([a], [b]) => String(a).localeCompare(String(b))),
-    });
-  if (new Set(totals.map(({ evidence }) => totalIdentity(evidence))).size > 1)
-    throw new MoneyRefusal("conflicting fresh basket totals");
-  const total = totals.find(({ candidate: { item } }) => {
-    if (!payment) return true;
+    if (!amounts.length || !currencies.length) continue;
     if (
-      ![...payment.ids, ...(payment.ids.length ? requestIds : [])].every((id) =>
-        identityMatches(item, id),
-      )
+      totalRequired &&
+      orderIds.length &&
+      !orderIds.every((id) => {
+        if (id.type === "iri") return identityMatches(item, id);
+        const values = item.values.get(id.type) ?? [];
+        return values.length > 0 && values.every((value) => value === id.value);
+      })
     )
-      return false;
-    const quantity = item.values.get(`${SCHEMA}orderQuantity`) ?? [];
-    return payment.quantities.every(
-      (q) => quantity.length > 0 && quantity.every((v) => equal(v, q)),
-    );
-  });
-  if (total) {
-    total.evidence.revalidate = [...new Set(totals.map(({ evidence }) => evidence.binding.step))];
-    total.evidence.binding.readings = totals.map(({ evidence }) => ({ ...evidence.binding }));
-    return total.evidence;
-  }
-  if (!candidates.length) {
-    if (bound.slice(0, -1).some((b) => b.quantities.length))
-      throw new MoneyRefusal(
-        "needs a fresh basket total: quantities cannot be related to product prices",
-      );
-    return undefined;
-  }
-  const identified = bound.filter(({ ids }) => ids.length);
-  const ids = [...requestIds, ...identified.flatMap((b) => b.ids)];
-  if (!ids.length && !bound.some((b) => b.quantities.length)) return undefined;
-  const products = candidates.filter((c) => !c.total);
-  if (ids.some((id) => id.type === "fallback")) {
-    // A fallback is never permission to exchange SKU, productID and identifier.
-    if (requestIds.some((id) => ID_PROPERTIES.includes(id.type)))
-      throw new MoneyRefusal("needs a fresh basket total: typed identity cannot use IRI fallback");
-    for (const id of ids.filter((id) => id.type === "fallback")) {
-      const matches = products.filter(
-        ({ item }) =>
-          identityMatches(item, id) ||
-          ID_PROPERTIES.some((p) => item.values.get(p)?.includes(id.value)),
-      );
-      if (matches.length > 1) throw new MoneyRefusal("ambiguous product identifier fallback");
+      throw new MoneyRefusal(`${refusal}: order identity does not match`);
+    for (const raw of amounts.flatMap(([, values]) => values)) {
+      let amount: string;
+      try {
+        amount = multiply(text(decimal(raw)), quantity);
+      } catch {
+        throw new MoneyRefusal(`${refusal}: conflicting or invalid site monetary amounts`);
+      }
+      for (const code of currencies.flatMap(([, values]) => values)) {
+        const currency = code.toUpperCase();
+        if (!/^[A-Z]{3}$/.test(currency))
+          throw new MoneyRefusal(`${refusal}: invalid site currency`);
+        pairs.set(`${amount}:${currency}`, { amount, currency });
+      }
     }
+    records.push({
+      step: read.step,
+      operation: read.operation.id,
+      url: read.url,
+      item: index,
+      ...(item.iri ? { iri: item.iri } : {}),
+      amounts,
+      currencies,
+      identity: [...item.values].filter(([p]) =>
+        [...ID_PROPERTIES, `${SCHEMA}orderNumber`, `${SCHEMA}referencesOrder`].includes(p),
+      ),
+    });
   }
-  const selected = products.find(
-    ({ item }) => ids.length && ids.every((id) => identityMatches(item, id)),
-  );
-  if (!selected) {
-    if (writes.length)
-      throw new MoneyRefusal(
-        "needs a fresh basket total: product identity or price cannot be established",
-      );
-    return undefined;
-  }
-  // A total explains the entire basket; unit prices require every quantity write
-  // to identify this same product and agree on its quantity.
-  if (
-    bound.some((b) => b.quantities.length && !b.ids.length) ||
-    bound.filter(
-      (b) => b.quantities.length && normaliseEffect(b.write.operation.effect) !== "payment",
-    ).length > 1 ||
-    identified.filter((b) => normaliseEffect(b.write.operation.effect) === "reversible-write")
-      .length > 1
-  )
-    throw new MoneyRefusal(
-      "needs a fresh basket total: quantities cannot be related to product prices",
-    );
-  const qs = bound.flatMap((b) => b.quantities);
-  if (qs.some((q) => !equal(q, qs[0] ?? "1")))
-    throw new MoneyRefusal("needs a fresh basket total: conflicting quantities across writes");
-  for (const { write } of identified)
-    for (const p of write.operation.inputs)
-      if (
-        inputIdentities(
-          p.path.length ? p.path : (write.sources[p.name] ?? []),
-          write.values[p.name] ?? p.default,
-        ).length
-      )
-        assertSent(write.operation, p, write.values, write.compiled);
-  return reading(selected, qs[0] ?? "1");
+  if (pairs.size !== 1)
+    throw new MoneyRefusal(`${refusal}: conflicting or missing site amounts/currencies`);
+  const pair = [...pairs.values()][0] as { amount: string; currency: string };
+  return {
+    ...pair,
+    revalidate: [...new Set(records.map((r) => r.step))],
+    binding: { quantity, records },
+  };
 }
 
 export function assertFactsCap(
@@ -539,11 +455,9 @@ export function resolvedMoney(
   }
   if (
     normaliseEffect(operation.effect) === "payment" &&
-    (amount === undefined || currency === undefined)
+    (!facts || amount === undefined || currency === undefined)
   )
-    throw new MoneyRefusal(
-      "needs a fresh basket total: payment requires wire-mapped amount and currency or trusted site facts",
-    );
+    throw new MoneyRefusal("payment needs trusted site price evidence");
   return {
     ...(amount !== undefined ? { amount } : {}),
     ...(currency !== undefined ? { currency } : {}),

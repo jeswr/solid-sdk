@@ -4,7 +4,7 @@
 // parameter's declared range and options before they reach a request.
 
 import type { ActionRequest, Parameter } from "@jeswr/site-model";
-import { SAB, SCHEMA } from "@jeswr/site-model";
+import { actionRequestTerms, SAB, SCHEMA } from "@jeswr/site-model";
 
 export const XSD = "http://www.w3.org/2001/XMLSchema#";
 export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
@@ -101,12 +101,32 @@ export interface Resolved {
 export function resolveParameter(param: Parameter, request: ActionRequest): Resolved {
   if (param.path.length > 0) {
     const path = param.path.map(normaliseIri);
+    const terms = actionRequestTerms(request, path);
+    const term = terms?.[0];
     const value = request.values(path)[0];
     if (value !== undefined) {
-      if (!isClassRange(param.range)) return { value, fromRequest: true };
+      if (!isClassRange(param.range)) {
+        if (terms?.some((t) => t.termType === "BlankNode") || (!terms && value.startsWith("_:")))
+          throw new BindingError(`blank node for scalar input "${param.name}"`);
+        return {
+          value:
+            term?.termType === "NamedNode" || (!terms && /^https?:/i.test(value))
+              ? new URL(value).href
+              : value,
+          fromRequest: true,
+        };
+      }
       for (const idProp of ID_PROPERTIES) {
         const direct = request.values([...path, idProp])[0];
-        if (direct !== undefined) return { value: direct, fromRequest: true };
+        if (direct !== undefined) {
+          const idTerm = actionRequestTerms(request, [...path, idProp])?.[0];
+          if (idTerm?.termType === "BlankNode" || (!idTerm && direct.startsWith("_:")))
+            throw new BindingError(`blank node identifier for "${param.name}"`);
+          return {
+            value: idTerm?.termType === "NamedNode" ? new URL(idTerm.value).href : direct,
+            fromRequest: true,
+          };
+        }
       }
       if (isAbsoluteIri(value) && !value.startsWith("_:"))
         return { value: idFromIri(value), fromRequest: true };

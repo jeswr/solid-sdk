@@ -2,6 +2,8 @@
 name: site-profiler
 description: Use when changing @jeswr/site-profiler, the semantic agent browser's profiler that crawls a site, analyses its forms and scripts, runs demonstrations and writes a SiteModel.
 ---
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/site-profiler
@@ -18,6 +20,13 @@ Invariants the tests keep:
 - The trace never holds cookie values, authorization headers, passwords or CSRF tokens.
   `sanitiseHeaders` and `redactBody` own that.
 - Third-party text (descriptions, reviews, authors) is extracted with `untrusted: true`.
+- Retain demonstrated Order/Invoice/totalPaymentDue reads after the last write before payment,
+  even when no wire binding consumes their amount. Prefer the JSON total object over nested lines.
+- Failed probes supply no parameter examples. Probe search fields with the crawl word; skip other
+  required query values when no endpoint-specific value is known.
+- Verify with complete recorded 2xx request values matching the operation's own method, origin,
+  path and fixed query; prefer demonstrations, then crawl, and retry a failure once with recorded
+  successful values. Total reads and payment share delivery defaults/options through their flow input.
 - Generated selectors stay inside the subset `html.ts` implements.
 
 Tests use only 127.0.0.1: `@jeswr/test-shop` and small fixtures in the test files. Playwright

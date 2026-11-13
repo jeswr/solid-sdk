@@ -1,4 +1,6 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 # @jeswr/site-profiler
 
 Part of the semantic agent browser. The profiler learns a website once and returns a
@@ -35,7 +37,7 @@ overrides the executable), `now`, `modelId` (default `urn:sab:model:<host>`), `v
 | Labelling | `labeller.ts` | `Labeller` seam with deterministic heuristics; unknown writes are `irreversible-write`. |
 | Operations | `operations.ts` | Parameters mapped onto property paths of the action node, request template, CSRF, session. |
 | Demonstrations | `demonstrations.ts` | Runs scripted sessions, turns their writes into operations and the session into a Flow with inferred bindings. |
-| Verify | `verify.ts` | Replays each read once (signed out, then signed in), sets `session` and provenance counters, drops reads that fail. Never replays a write. |
+| Verify | `verify.ts` | Replays each read (signed out, then signed in), preferring a successful recorded request to that operation's examples. Retries a failure once with recorded successful values before dropping the read. Sets `session` and provenance counters; never replays a write. |
 
 ## The learning rule
 
@@ -46,13 +48,23 @@ the login operation: the password form the profiler submitted with the user's cr
 confidence), each referenced from a `LoginRoute`. Their username and password parameters have an
 empty path, so only the credential vault can supply them.
 
+Request examples stay with their endpoint; failed probes supply no parameter examples. Script
+probes use the crawl word only for search fields and skip required query values they cannot infer.
+Verification prefers successful demonstration requests, then crawl requests, keeping each request's
+values together rather than mixing independent examples or defaults. Matching includes the method,
+origin, path template and any fixed query values.
+
 ## Flow bindings
 
 Every write of a demonstration is kept. For each value a kept step sent, the profiler looks for
 the value on an earlier step's first extracted item (exact match first, then an IRI whose last
 segment equals it). A write binds to the latest such step (the page the person acted on); a read
 binds to the earliest (the shortest chain back to the inputs). Reads that supply a kept step are
-kept too. Other values become flow inputs; a search query becomes `schema:object/schema:name`.
+kept too. Order/Invoice/totalPaymentDue reads demonstrated after the last write before payment
+are also retained as money evidence, even when checkout sends no price. JSON totalPaymentDue
+objects become Order extractions before considering nested product lines. Other values become flow inputs; a search query becomes `schema:object/schema:name`.
+When a total read and payment share a delivery input, both bind to that input, which inherits the
+payment form's default and options even when the read introduces it first.
 Trivial values (`1`, `true`, ...) are never matched.
 
 ## Extraction selectors

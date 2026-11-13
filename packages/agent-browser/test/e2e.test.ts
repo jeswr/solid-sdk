@@ -15,6 +15,22 @@ beforeAll(async () => {
   shop = await startShop();
   model = await learnShop(shop);
   expect(shop.state.orders).toHaveLength(1); // The demonstration really checked out.
+  const flow = model.flows.find((f) => f.actionType === "https://schema.org/BuyAction");
+  const operations =
+    flow?.steps.map((step) => model.operations.find((op) => op.id === step.operation)) ?? [];
+  const payment = operations.findIndex((op) => op?.effect === "payment");
+  const lastWrite = operations.slice(0, payment).findLastIndex((op) => op?.effect !== "read");
+  expect(
+    operations
+      .slice(lastWrite + 1, payment)
+      .some(
+        (op) =>
+          op?.effect === "read" &&
+          op.extraction?.fields.some(
+            (field) => field.property === "https://schema.org/totalPaymentDue",
+          ),
+      ),
+  ).toBe(true);
 });
 beforeEach(() => shop.state.reset());
 afterAll(async () => {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // End to end: profile the fictional test shop with a login and one demonstration (search, view a
 // product, add it to the basket, check out) and check the learned model and the learning rule.
@@ -40,6 +41,9 @@ function demonstration(): Demonstration {
       ]);
       await page.goto(`${shop.url}/checkout`);
       await page.selectOption("#delivery", "express");
+      await page.waitForFunction(
+        () => document.querySelector(".total")?.textContent === "Total GBP 24.99",
+      );
       await Promise.all([page.waitForURL(/\/orders\/\d+$/), page.click("#place-order")]);
       demoWindow = { from: before, to: new Date().toISOString() };
     },
@@ -184,9 +188,11 @@ describe("profiling the test shop", () => {
       "SearchAction",
       "ViewAction",
       "AddToCartAction",
+      "ViewAction", // the basket total, read after the last write (payment evidence)
       "OrderAction",
     ]);
-    const [search, view, add, order] = flow.steps;
+    const [search, view, add, total, order] = flow.steps;
+    expect(total?.bind).toEqual({ delivery: "$input.delivery" });
     expect(search?.bind).toEqual({ q: "$input.q" });
     expect(view?.bind).toEqual({ id: `$step0.${s("identifier")}` });
     expect(add?.bind).toEqual({ sku: `$step1.${s("sku")}`, qty: "$input.qty" });

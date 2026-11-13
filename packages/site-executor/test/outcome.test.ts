@@ -25,6 +25,14 @@ function fixture(): { model: SiteModel; operation: Operation } {
     },
     inputs: [
       {
+        name: "item",
+        path: [`${S}object`, `${S}productID`],
+        range: `${xsd}string`,
+        required: false,
+        default: "104",
+        location: "body",
+      },
+      {
         name: "amount",
         path: [`${S}amount`, `${S}value`],
         range: `${xsd}decimal`,
@@ -43,7 +51,7 @@ function fixture(): { model: SiteModel; operation: Operation } {
       method: "POST",
       urlTemplate: `${origin}/checkout`,
       contentType: "application/json",
-      bodyTemplate: '{"amount":{amount},"currency":{currency}}',
+      bodyTemplate: '{"item":{item},"amount":{amount},"currency":{currency}}',
     },
     extraction: {
       format: "json",
@@ -56,6 +64,23 @@ function fixture(): { model: SiteModel; operation: Operation } {
       ],
     },
   };
+  const quote: Operation = {
+    ...operation,
+    id: `${origin}/model#quote`,
+    actionType: `${S}ViewAction`,
+    effect: "read",
+    inputs: [],
+    request: { method: "GET", urlTemplate: `${origin}/quote` },
+    extraction: {
+      format: "json",
+      itemType: `${S}Product`,
+      fields: [
+        { property: `${S}productID`, path: "/productID" },
+        { property: `${S}price`, path: "/price" },
+        { property: `${S}currency`, path: "/currency" },
+      ],
+    },
+  };
   return {
     operation,
     model: {
@@ -63,8 +88,24 @@ function fixture(): { model: SiteModel; operation: Operation } {
       site: origin,
       version: "1",
       generatedAt: operation.provenance.learnedAt,
-      operations: [operation],
-      flows: [],
+      operations: [operation, quote],
+      flows: [
+        {
+          id: `${origin}/model#pay-flow`,
+          label: operation.label,
+          actionType: operation.actionType,
+          effect: "payment",
+          provenance: operation.provenance,
+          inputs: operation.inputs,
+          steps: [
+            { operation: quote.id, bind: {} },
+            {
+              operation: operation.id,
+              bind: { amount: "$input.amount", currency: "$input.currency" },
+            },
+          ],
+        },
+      ],
     },
   };
 }
@@ -93,7 +134,10 @@ describe("execution outcomes", () => {
     const result = await createExecutor({
       model,
       sessions: new InMemorySessions(),
-      fetch,
+      fetch: async (url, init) =>
+        String(url).endsWith("/quote")
+          ? Response.json({ productID: "104", price: "18.50", currency: "GBP" })
+          : fetch(url, init),
       gate: { authorize: async () => ({ kind: "allow" }) },
     }).execute(request());
     expect(result.status).toBe("done");
@@ -120,21 +164,24 @@ describe("execution outcomes", () => {
     expect(fetch).toHaveBeenCalledTimes(mode === "extracted-iri" ? 1 : 2);
   });
 
-  it("emits Failed with the authorized money when the write fails", async () => {
+  it("emits Uncertain with the authorized money when the write returns 500", async () => {
     const { model } = fixture();
     const result = await createExecutor({
       model,
       sessions: new InMemorySessions(),
-      fetch: async () => new Response("private response", { status: 500 }),
+      fetch: async (url) =>
+        String(url).endsWith("/quote")
+          ? Response.json({ productID: "104", price: "18.50", currency: "GBP" })
+          : new Response("private response", { status: 500 }),
       gate: { authorize: async () => ({ kind: "allow" }) },
     }).execute(request());
     expect(result).toMatchObject({
       status: "error",
       errorKind: "http",
-      outcome: { status: "failed", amount: "18.5", currency: "GBP", effect: "payment" },
+      outcome: { status: "uncertain", amount: "18.5", currency: "GBP", effect: "payment" },
     });
     expect(result.outcome?.result).toBeUndefined();
-    expect(result.observations[0]?.turtle).toContain("sab:Failed");
+    expect(result.observations[0]?.turtle).toContain("sab:Uncertain");
     expect(JSON.stringify(result)).not.toContain("private response");
   });
 
@@ -169,7 +216,10 @@ describe("execution outcomes", () => {
     const result = await createExecutor({
       model,
       sessions: new InMemorySessions(),
-      fetch,
+      fetch: async (url, init) =>
+        String(url).endsWith("/quote")
+          ? Response.json({ productID: "104", price: "18.50", currency: "GBP" })
+          : fetch(url, init),
       gate: { authorize: async () => ({ kind: "allow" }) },
     }).execute(actionRequest("[] a schema:CreateAction."));
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -209,15 +259,30 @@ describe("execution outcomes", () => {
       inputs: [],
       provenance: operation.provenance,
       steps: [
+        { operation: `${origin}/model#quote`, bind: {} },
         { operation: operation.id, bind: { amount: "0.1234567890123456789", currency: "GBP" } },
+        { operation: `${origin}/model#total`, bind: {} },
         { operation: operation.id, bind: { amount: "0.2", currency: "GBP" } },
         { operation: audit.id, bind: {} },
       ],
     });
+    const quote = model.operations.find((op) => op.id.endsWith("#quote"));
+    if (!quote?.extraction) throw new Error("Missing quote extraction");
+    model.operations.push({
+      ...quote,
+      id: `${origin}/model#total`,
+      request: { method: "GET", urlTemplate: `${origin}/total` },
+      extraction: { ...quote.extraction, itemType: `${S}Order` },
+    });
     const result = await createExecutor({
       model,
       sessions: new InMemorySessions(),
-      fetch: async () => Response.json({}),
+      fetch: async (url) =>
+        Response.json({
+          productID: "104",
+          price: String(url).endsWith("/quote") ? "0.1234567890123456789" : "0.2",
+          currency: "GBP",
+        }),
       gate: { authorize: async () => ({ kind: "allow" }) },
     }).execute(actionRequest("[] a schema:BuyAction."));
     expect(result.status, result.error).toBe("done");
@@ -262,7 +327,10 @@ describe("execution outcomes", () => {
     const result = await createExecutor({
       model,
       sessions,
-      fetch: async () => Response.json({ url, number: "42" }),
+      fetch: async (target) =>
+        String(target).endsWith("/quote")
+          ? Response.json({ productID: "104", price: "18.50", currency: "GBP" })
+          : Response.json({ url, number: "42" }),
       gate: { authorize: async () => ({ kind: "allow" }) },
     }).execute(request());
     expect(result.status).toBe("done");

@@ -21,13 +21,12 @@ The shared contract belongs to site-model; keep adaptations local to this packag
 - Handle every per-write approval and price-change reapproval in the same action, bounded by
   `maxApprovals` (default 25). Record all prompts in `TraceStep.approvals`; `approval` is the latest.
   Payment summaries must contain the site's real amount (the shop asserts "GBP 20.00"). Money
-  comes from executor-verified wire mappings or trusted, on-origin reads earlier in the same
-  flow: fresh basket/order totals first, otherwise the matching product price times bound
-  quantity. The planner's price is a cap/cross-check, never evidence. Above-cap/different-currency
-  site facts return `refused` without invoking the approver; absent planner price is allowed.
-  A fact source is re-read on retry and changed money/items require new consent. Keep completed
-  writes single-use and never authorize from observations cached by a separate planner action.
-  Model session fixtures with a preparatory Buy-flow read when checkout sends no price.
+  requires site evidence: after any preceding write, all trusted fresh basket totals must agree;
+  only first-write direct buys may use all matching product prices times quantity. Wire money is
+  a cross-check and planner money a cap. Bind/revalidate every source record, reject mismatched
+  order IDs and never borrow product identity from schema:object. Keep completed/uncertain writes
+  single-use and never authorize from a separate planner action's observations. The learned shop
+  flow must retain a total read after adding to the basket and still display "for GBP 20.00".
 - Use `createTaskExecutor` to expose the existing gate methods. Never let the planner
   manufacture approvals or replace the gate with unconditional permission.
 - Run `loginWithPassword` only in host code, with `createExecutorFetch` sharing the
@@ -49,9 +48,11 @@ Repeat guard and recovery:
   method/URL/body fingerprints exclude unused inputs and equate typed lexical variants. Never
   infer lack of commitment from result.status, and do not replay a sab:Uncertain receipt.
 - Preserve commitment memory on host denial, approval-limit exhaustion and later execution errors.
+  5xx, resets, network errors, timeouts and post-success extraction failures retain uncertain
+  fingerprints; only 4xx is uncommitted. allowRetryOf grants host recovery for specific fingerprints;
   allowRepeats explicitly disables this task guard.
 - Surface no-path.missing as safe planner-history error text. A Buy flow learned from a product-name
   search still requires that name; an object IRI cannot resolve the search input. Let the planner
   correct the mapped inputs instead of weakening typed identity matching.
-- Session revisions belong to the executor/vault seam. Keep the original revision unchanged in
-  cookie updates; model learning and planner history must never carry it.
+- Session revisions belong to the executor/vault seam. Advance accepted update revisions; rejection stops persistence for the rest of the execution
+  while keeping the in-memory jar; void retains the prior token. Never fetch a new token for old cookies; model learning and planner history must never carry it.

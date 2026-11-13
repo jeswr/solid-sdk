@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /** parseActionRequest: the planner's RDF action -> an ActionRequest over its single action node. */
 import type { Term } from "@rdfjs/types";
 import { DataFactory, type Store } from "n3";
@@ -38,7 +39,7 @@ class Request implements ActionRequest {
     return label(this.term);
   }
 
-  values(path: string[]): string[] {
+  terms(path: string[]): Term[] {
     let current: Term[] = [this.term];
     for (const step of path) {
       const predicate = DataFactory.namedNode(normaliseSchemaIri(step));
@@ -54,8 +55,23 @@ class Request implements ActionRequest {
       }
       current = [...next.values()];
     }
-    return [...new Set(current.map(label))];
+    return current;
   }
+
+  values(path: string[]): string[] {
+    return [...new Set(this.terms(path).map(label))];
+  }
+}
+
+/** Term-preserving access for parsed requests, without changing the shared contract.
+ * Custom ActionRequest implementations may supply the same optional terms method.
+ */
+export function actionRequestTerms(
+  request: ActionRequest,
+  path: string[],
+): readonly Term[] | undefined {
+  const typed = request as ActionRequest & { terms?: (path: string[]) => readonly Term[] };
+  return typed.terms?.(path);
 }
 
 /**

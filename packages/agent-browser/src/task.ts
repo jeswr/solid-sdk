@@ -56,8 +56,15 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
     for (const entry of result.committed)
       completed.set(entry.fingerprint, redact(entry.target.label));
   };
+  const retryAllowed = new Set(options.allowRetryOf ?? []);
   const exclusions = () =>
-    !options.allowRepeats && completed.size ? { excludeFingerprints: [...completed.keys()] } : {};
+    !options.allowRepeats && completed.size
+      ? {
+          excludeFingerprints: [...completed.keys()].filter(
+            (fingerprint) => !retryAllowed.has(fingerprint),
+          ),
+        }
+      : {};
   const start = performance.now();
   const trace: TaskTrace = {
     format: "agent-browser-trace/0.1",
@@ -130,7 +137,11 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
       try {
         const plan = executor.planToRequests(request);
         for (const write of plan.requests) {
-          if (write.fingerprint && completed.has(write.fingerprint)) {
+          if (
+            write.fingerprint &&
+            !retryAllowed.has(write.fingerprint) &&
+            completed.has(write.fingerprint)
+          ) {
             previous = completed.get(write.fingerprint);
             break;
           }

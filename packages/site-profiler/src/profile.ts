@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // profileSite: learn a site once and return its SiteModel. Runs the steps in order (login, crawl,
 // script analysis and probes, demonstrations, templates, forms, extraction, labelling, flows,
@@ -80,20 +81,28 @@ export function proposeExtraction(c: EndpointCandidate): Extraction | undefined 
   return best?.ex;
 }
 
-function probeValues(
+export function probeValues(
   c: EndpointCandidate,
   word: string,
   knownIds: Set<string>,
 ): Record<string, string> | undefined {
   const values: Record<string, string> = {};
   for (const p of c.params) {
+    const example = p.examples[0] ?? p.selected;
+    if (example !== undefined) {
+      values[p.name] = example;
+      continue;
+    }
     if (p.location === "path") {
       const want = p.kind === "sku" ? "sku" : "numeric";
       const id = [...knownIds].find((v) => valueKind(v) === want);
       if (!id) return undefined;
       values[p.name] = id;
     } else if (p.location === "query") {
-      values[p.name] = /^(page|p)$/i.test(p.name) ? "1" : word;
+      if (/^(page|p)$/i.test(p.name)) values[p.name] = "1";
+      else if (/^(q|query|search|keyword|keywords|term|s|text)$/i.test(p.name))
+        values[p.name] = word;
+      else if (p.required) return undefined;
     }
   }
   return values;
@@ -296,6 +305,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         replayer: verifier,
         now,
         haveSession: Boolean(login?.success),
+        recordedRequests: recorder.trace.slice(),
       });
       verifiedOps = v.operations;
       warnings.push(...v.warnings);
@@ -314,6 +324,10 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         for (const [id, c] of matchable) {
           const values = matchRequest(c, r);
           if (!values) continue;
+          // A page often repeats a read (for example a total refetched after an option changes);
+          // a read immediately repeated by the same operation is superseded, so keep the latest.
+          const prev = steps.at(-1);
+          if (prev?.operation.id === id && prev.operation.effect === "read") steps.pop();
           steps.push({ request: r, operation: byId.get(id) as Operation, values });
           break;
         }

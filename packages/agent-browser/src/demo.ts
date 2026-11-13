@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { InMemorySessions } from "@jeswr/site-executor";
 import { readSiteModel, SCHEMA, type SiteModel, writeSiteModel } from "@jeswr/site-model";
@@ -41,6 +42,9 @@ export async function learnShop(shop: RunningShop): Promise<SiteModel> {
           ]);
           await page.goto(`${shop.url}/checkout`);
           await page.selectOption("#delivery", "standard");
+          await page.waitForFunction(
+            () => document.querySelector(".total")?.textContent === "Total GBP 20.00",
+          );
           await Promise.all([page.waitForURL(/\/orders\/\d+$/), page.click("#place-order")]);
         },
       },
