@@ -1,0 +1,97 @@
+{
+  "id": "intro",
+  "title": "A short tour",
+  "stops": [
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=1&level=checks",
+      "target": null,
+      "title": "What you are looking at",
+      "text": "This site replays traces of software agents handling one request, event by event. Every light on the screen comes from an event in the trace. The parties are fictional, and both sides of every exchange run the same code."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=2&level=checks&focus=sams-agent.principal-reply",
+      "target": "chat",
+      "title": "Sam's request",
+      "text": "Sam asks an agent for a mortgage in principle for a flat at 300,000. Sam's side of the conversation stays here, in the chat column. Everything else happens between agents."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=3&level=checks&focus=sams-agent.propose",
+      "target": "stage.agent",
+      "title": "An agent is two gates around a black box",
+      "text": "The core, usually a model, can only propose. An inbound gate checks everything that comes in, and an outbound gate checks everything that goes out. Both are ordinary code, and both write to the record."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=10&level=checks&focus=sams-agent.check.fitness",
+      "target": "stage.inbound-gate",
+      "title": "Five checks on the way in",
+      "text": "Integrity, source, authority, terms and fitness, always in that order. Each gives its own verdict, and the gate fills up as you step. Here a payroll figure wins over Sam's own note of income."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=8&level=checks&focus=bank.check.authority",
+      "target": "inspector.resolution",
+      "title": "Trust is looked up",
+      "text": "The trust store is not one list. It checks its own short list first, then follows a chain from a root to the register that can answer, like a name lookup. The inspector shows the path each answer came from."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=11&level=checks&focus=sams-agent.check.evidence",
+      "target": "stage.outbound-gate",
+      "title": "Six checks on the way out",
+      "text": "Mandate, recipient, disclosure, data terms, limits and approval, evidence. Only the income figure and a balance summary leave, with their terms and provenance attached."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=11&level=checks&focus=sams-agent.message-out",
+      "target": "inspector.message",
+      "title": "The verifiable message",
+      "text": "Every message has the same layers. The carriage is never trusted. Everything inside the sender's signature can be checked. Open any layer to see its raw content and digest."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=7&level=checks&focus=bank.check.authority",
+      "target": "stage.check",
+      "title": "Ask for more",
+      "text": "Harbour Bank does not say yes or no. Sam approved the mandate with a password only, so the bank asks for a certified face check before it shares a balance."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=13&level=checks&focus=sams-agent.ask-principal",
+      "target": "chat",
+      "title": "An approval",
+      "text": "Accepting an offer is a commitment, so the outbound gate asks Sam first. The approval is bound to the exact terms of the offer by its digest."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=transport-email&step=11&level=checks&focus=sams-agent.message-out",
+      "target": "config.transport",
+      "title": "Switch a layer",
+      "text": "Each selector picks one suite for one layer. Here the transport is email. The checks give the same answers, and the timeline marks the steps whose outline changed."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=10&level=steps",
+      "target": "controls.levels",
+      "title": "Three levels of detail",
+      "text": "Steps stops once per step of the worked example and sums up its checks. Checks stops at every event. Raw shows the event as it is in the trace file."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=1&level=checks",
+      "target": "controls.play",
+      "title": "Play, or step by hand",
+      "text": "Press play to watch it run, or use the arrow keys and the space bar. Add present=1 to the address for a clean view to record."
+    },
+    {
+      "view": "explore",
+      "state": "scenario=mortgage-main&config=baseline&step=1&level=checks",
+      "target": "nav",
+      "title": "Where to read more",
+      "text": "Architecture explains the design, Message the layers of a verifiable message, and Layers and suites every option a selector can offer. Requirements, Specifications and Tests say how far each part has got."
+    }
+  ]
+}

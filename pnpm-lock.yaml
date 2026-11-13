@@ -205,6 +205,8 @@ importers:
         specifier: 5.5.1
         version: 5.5.1
 
+  apps/agent-explorer: {}
+
   apps/app-store: {}
 
   apps/app-store/web:

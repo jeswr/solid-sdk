@@ -1,0 +1,79 @@
+{
+  "mortgage-core": {
+    "summary": "The core flow, run by the real gates: Sam's agent and North Bank agree a configuration, North Bank asks for evidence, Sam approves the exact sharing, and both sides keep a record.",
+    "steps": {
+      "2": "Sam asks for a mortgage in principle",
+      "3": "Sam's agent introduces itself",
+      "4": "Agree a configuration with North Bank",
+      "5": "North Bank asks for evidence, and Sam is asked",
+      "10": "Store the evidence with its labels",
+      "11": "Sam approves; accept and deliver",
+      "12": "North Bank admits and sends a receipt",
+      "13": "A signed receipt of what was agreed",
+      "14": "Each side checks its record"
+    }
+  },
+  "mortgage-main": {
+    "summary": "Sam asks an agent for a mortgage in principle. The agent finds a lender, collects signed evidence, applies, and asks Sam before accepting the offer.",
+    "steps": {
+      "1": "Sam signs a mandate",
+      "2": "Sam asks for a mortgage in principle",
+      "3": "Find products and check the lender",
+      "4": "Agree a configuration with North Bank",
+      "5": "North Bank lists the evidence it needs",
+      "6": "Ask Harbour Bank for a balance summary",
+      "7": "Harbour Bank asks for more",
+      "8": "Face check, then the request again",
+      "9": "Harbour Bank returns a signed statement",
+      "10": "Check, label and store the evidence",
+      "11": "Prepare and send the application",
+      "12": "North Bank admits the application",
+      "13": "Offer, approval and acceptance",
+      "14": "Each side records its decisions"
+    }
+  },
+  "mortgage-out-of-limit": {
+    "summary": "North Bank's terms go beyond Sam's limits. Sam is asked, declines, and the agent refuses.",
+    "steps": {
+      "2": "Sam asks for a mortgage in principle",
+      "3": "Sam's agent introduces itself",
+      "4": "Agree a configuration with North Bank",
+      "5": "North Bank asks for more than Sam's limits",
+      "10": "Store the evidence with its labels",
+      "11": "Sam declines, and the agent refuses",
+      "12": "North Bank admits and sends a receipt",
+      "13": "A signed receipt of what was agreed",
+      "14": "Each side checks its record"
+    }
+  },
+  "mortgage-over-ask": {
+    "summary": "North Bank asks for more data than Sam's mandate allows. The outbound gate's mandate check fails and the data never leaves.",
+    "steps": {
+      "1": "Sam signs a mandate",
+      "2": "Sam asks for a mortgage in principle",
+      "3": "Sam's agent introduces itself",
+      "4": "Agree a configuration with North Bank",
+      "5": "North Bank asks for too much, and is refused",
+      "10": "Store the evidence with its labels",
+      "11": "Sam approves; accept and deliver",
+      "12": "North Bank admits and sends a receipt",
+      "13": "A signed receipt of what was agreed",
+      "14": "Each side checks its record"
+    }
+  },
+  "mortgage-injected-fee": {
+    "summary": "A message carries an instruction to pay a fee. The core is fooled and proposes the payment. The outbound gate stops it.",
+    "steps": {
+      "1": "Sam signs a mandate",
+      "2": "Sam asks for a mortgage in principle",
+      "3": "Sam's agent introduces itself",
+      "4": "Agree a configuration with North Bank",
+      "5": "North Bank asks for evidence, and Sam is asked",
+      "10": "Store the evidence with its labels",
+      "11": "Sam approves; accept and deliver",
+      "12": "North Bank admits and sends a receipt",
+      "13": "A receipt, and a fee the gate stops",
+      "14": "Each side checks its record"
+    }
+  }
+}

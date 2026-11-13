@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Answerable Agent Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Step through how two software agents handle a mortgage request: every message, every gate check, every decision.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#/explore" data-anchor="brand">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="2.5" y="5" width="7" height="14" rx="2" class="brand-a"/><rect x="14.5" y="5" width="7" height="14" rx="2" class="brand-a"/><path d="M9.5 12h5" class="brand-b"/></svg>
+      <span>Answerable <small>agent explorer</small></span>
+    </a>
+    <nav class="nav" id="nav" aria-label="Views" data-anchor="nav"></nav>
+    <div class="top-actions">
+      <button type="button" class="btn ghost" id="tour-btn" data-anchor="tour">Take the tour</button>
+      <button type="button" class="icon-btn" id="theme-btn" aria-label="Theme: system" title="Theme: system">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="M10 3.5a6.5 6.5 0 0 1 0 13z" class="fill"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+<div class="evidence" id="evidence" role="note"></div>
+<main id="view" class="view"></main>
+<div id="tour-layer"></div>
+<noscript><p class="empty">This page needs JavaScript to replay the traces.</p></noscript>
+<script src="data/bundle.js"></script>
+<script src="js/util.js"></script>
+<script src="js/markdown.js"></script>
+<script src="js/diagram.js"></script>
+<script src="js/explore.js"></script>
+<script src="js/views.js"></script>
+<script src="js/requirements.js"></script>
+<script src="js/specs.js"></script>
+<script src="js/tour.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

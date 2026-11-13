@@ -1,0 +1,5096 @@
+{
+  "schema": "agent-trace/0.1",
+  "scenario": {
+    "id": "mortgage-core",
+    "title": "Sam's mortgage in principle, core flow (no index, no step-up)"
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "sams-agent",
+      "name": "Sam's agent",
+      "actsFor": "sam",
+      "role": "Personal agent"
+    },
+    {
+      "id": "lender",
+      "name": "North Bank",
+      "actsFor": "lender",
+      "role": "Lender"
+    }
+  ],
+  "generated": {
+    "commit": "3b92f890a10257dff4aaa11aa1c07139e421954c",
+    "core": "scripted"
+  },
+  "events": [
+    {
+      "seq": 1,
+      "step": 2,
+      "agent": "sams-agent",
+      "part": "principal",
+      "kind": "principal-reply",
+      "chat": {
+        "who": "principal",
+        "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+      },
+      "caption": "Sam asks the agent in chat."
+    },
+    {
+      "seq": 2,
+      "step": 3,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "No action is proposed by this message, so there is no mandate decision."
+    },
+    {
+      "seq": 3,
+      "step": 3,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "resolution": {
+        "question": "Is North Bank a party I can send a mortgage application to?",
+        "path": [
+          {
+            "at": "Sam's own list",
+            "kind": "own-list",
+            "says": "No entry for North Bank."
+          },
+          {
+            "at": "National trust root",
+            "kind": "root",
+            "says": "Lenders are answered by the Sector register."
+          },
+          {
+            "at": "Sector register",
+            "kind": "register",
+            "says": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+          }
+        ],
+        "answer": "Accepted, for a mortgage application only."
+      },
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
+        "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+      },
+      "caption": "North Bank: Accepted, for a mortgage application only."
+    },
+    {
+      "seq": 4,
+      "step": 3,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No least-disclosure step in this configuration."
+    },
+    {
+      "seq": 5,
+      "step": 3,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "This message proposes no disclosure."
+    },
+    {
+      "seq": 6,
+      "step": 3,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "No action, so no limit or approval applies."
+    },
+    {
+      "seq": 7,
+      "step": 3,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with Sam's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 8,
+      "step": 3,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The describe message goes to North Bank's agent."
+    },
+    {
+      "seq": 9,
+      "step": 3,
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:ref:sam:0002",
+        "from": "Sam's agent",
+        "to": "North Bank's agent",
+        "kind": "describe",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:8d9aad1b188…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Sam's agent to North Bank's agent; describe; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:sam:0002",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "describe",
+              "from": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "onBehalfOf": "https://sam.example/#me",
+                "operator": "https://hostco.example/#org"
+              },
+              "to": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "party": "https://northbank.example/#org"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:262ebbe9280b5d71ffdd999564ce0477e6321b952c8e8719933a4efb6624f802"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Asks the other agent to describe itself: configurations, operations and models.",
+            "raw": {},
+            "digest": "sha-256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "Sam's agent sends a describe message to North Bank's agent."
+    },
+    {
+      "seq": 10,
+      "step": 4,
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:ref:sam:0002",
+        "from": "Sam's agent",
+        "to": "North Bank's agent",
+        "kind": "describe",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:8d9aad1b188…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Sam's agent to North Bank's agent; describe; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:sam:0002",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "describe",
+              "from": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "onBehalfOf": "https://sam.example/#me",
+                "operator": "https://hostco.example/#org"
+              },
+              "to": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "party": "https://northbank.example/#org"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:262ebbe9280b5d71ffdd999564ce0477e6321b952c8e8719933a4efb6624f802"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Asks the other agent to describe itself: configurations, operations and models.",
+            "raw": {},
+            "digest": "sha-256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A describe message from Sam's agent reaches the inbound gate."
+    },
+    {
+      "seq": 11,
+      "step": 4,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a JWS from a pinned key, this agent as audience, a valid time window and a one-time message id (urn:awp:ref:sam:0002)."
+      },
+      "caption": "The message is intact, signed with Sam's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 12,
+      "step": 4,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 13,
+      "step": 4,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "Describing capabilities asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 14,
+      "step": 4,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "reason": "not-yet-agreed",
+      "caption": "Nothing is exchanged under terms by this message."
+    },
+    {
+      "seq": 15,
+      "step": 4,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness, completeness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 16,
+      "step": 4,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core."
+    },
+    {
+      "seq": 17,
+      "step": 4,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "No action is proposed by this message, so there is no mandate decision."
+    },
+    {
+      "seq": 18,
+      "step": 4,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "The recipient is reached only through its pinned key; no lookup in this configuration."
+    },
+    {
+      "seq": 19,
+      "step": 4,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No least-disclosure step in this configuration."
+    },
+    {
+      "seq": 20,
+      "step": 4,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "This message proposes no disclosure."
+    },
+    {
+      "seq": 21,
+      "step": 4,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "No action, so no limit or approval applies."
+    },
+    {
+      "seq": 22,
+      "step": 4,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 23,
+      "step": 4,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The description message goes to Sam's agent."
+    },
+    {
+      "seq": 24,
+      "step": 4,
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:ref:northbank-intake:0001",
+        "from": "North Bank's agent",
+        "to": "Sam's agent",
+        "kind": "description",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:ad8ce4d663b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From North Bank's agent to Sam's agent; description; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:northbank-intake:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:northbank-intake:0001",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "description",
+              "from": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org"
+              },
+              "to": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "party": "https://sam.example/#me"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:ref:sam:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:1555c9a9583d12006294a382bf091e0a609ab70ecc364da1631260eeaaebedc7"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Describes this agent: the configurations it accepts and the operations it offers.",
+            "raw": {
+              "description": {
+                "type": "ImplementationDescription",
+                "describes": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org",
+                "profile": {
+                  "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+                  "version": "0.1.2"
+                },
+                "acceptedProfiles": [
+                  {
+                    "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+                    "versions": "0.1.x"
+                  }
+                ],
+                "vocabularies": [
+                  {
+                    "iri": "http://www.w3.org/ns/prov#Agent",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/prov#actedOnBehalfOf",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/prov#Activity",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/prov#wasDerivedFrom",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/odrl/2/Policy",
+                    "relation": "narrower"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/odrl/2/Agreement",
+                    "relation": "related"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/dx/prof/Profile",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "https://schema.org/Action",
+                    "relation": "related"
+                  },
+                  {
+                    "iri": "https://schema.org/Event",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "https://w3id.org/dpv#hasPurpose",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/dcat#DataService",
+                    "relation": "related"
+                  }
+                ],
+                "configurations": {
+                  "implemented": [
+                    "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+                    "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
+                  ],
+                  "accepted": [
+                    "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+                  ]
+                },
+                "operations": [
+                  {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "version": "0.1",
+                    "label": "Mortgage prequalification with a bounded evidence request (synthetic)",
+                    "pattern": "negotiate",
+                    "access": "represented",
+                    "roles": [
+                      "responder"
+                    ],
+                    "models": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+                        "version": "0.1"
+                      }
+                    ],
+                    "purposes": [
+                      "https://example.org/awp-fixture#MortgagePrequalification",
+                      "https://example.org/awp-fixture#CreditChecking"
+                    ],
+                    "effects": [
+                      "evidence disclosed under agreed terms",
+                      "indicative eligibility (not approval)"
+                    ],
+                    "outcomes": [
+                      "application-state receipt: received / checked / decided"
+                    ],
+                    "limitations": [
+                      "synthetic lender; indicative only; no credit decision or institutional approval"
+                    ]
+                  }
+                ],
+                "bindings": [
+                  {
+                    "id": "direct-local/0.1"
+                  }
+                ],
+                "policyModule": {
+                  "policyProfile": "https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1",
+                  "evaluator": {
+                    "name": "@jeswr/solid-odrl",
+                    "version": "b8fabc729c56245f4b63846261f1f06b6503f1c8",
+                    "interface": "evaluate() via awp pilot-subset adapter 0.1 (in-process)"
+                  },
+                  "status": "ready"
+                },
+                "conformance": [],
+                "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
+              }
+            },
+            "digest": "sha-256:cd48de99590d27bc0340571e0d8bc9676a28830527e99f9b24a694b3ade3538a"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:ref:sam:0002.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "inReplyTo": "urn:awp:ref:sam:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "North Bank's agent sends a description message to Sam's agent."
+    },
+    {
+      "seq": 25,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:ref:northbank-intake:0001",
+        "from": "North Bank's agent",
+        "to": "Sam's agent",
+        "kind": "description",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:ad8ce4d663b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From North Bank's agent to Sam's agent; description; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:northbank-intake:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:northbank-intake:0001",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "description",
+              "from": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org"
+              },
+              "to": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "party": "https://sam.example/#me"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:ref:sam:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:1555c9a9583d12006294a382bf091e0a609ab70ecc364da1631260eeaaebedc7"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Describes this agent: the configurations it accepts and the operations it offers.",
+            "raw": {
+              "description": {
+                "type": "ImplementationDescription",
+                "describes": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org",
+                "profile": {
+                  "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+                  "version": "0.1.2"
+                },
+                "acceptedProfiles": [
+                  {
+                    "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+                    "versions": "0.1.x"
+                  }
+                ],
+                "vocabularies": [
+                  {
+                    "iri": "http://www.w3.org/ns/prov#Agent",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/prov#actedOnBehalfOf",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/prov#Activity",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/prov#wasDerivedFrom",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/odrl/2/Policy",
+                    "relation": "narrower"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/odrl/2/Agreement",
+                    "relation": "related"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/dx/prof/Profile",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "https://schema.org/Action",
+                    "relation": "related"
+                  },
+                  {
+                    "iri": "https://schema.org/Event",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "https://w3id.org/dpv#hasPurpose",
+                    "relation": "uses"
+                  },
+                  {
+                    "iri": "http://www.w3.org/ns/dcat#DataService",
+                    "relation": "related"
+                  }
+                ],
+                "configurations": {
+                  "implemented": [
+                    "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+                    "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
+                  ],
+                  "accepted": [
+                    "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+                  ]
+                },
+                "operations": [
+                  {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "version": "0.1",
+                    "label": "Mortgage prequalification with a bounded evidence request (synthetic)",
+                    "pattern": "negotiate",
+                    "access": "represented",
+                    "roles": [
+                      "responder"
+                    ],
+                    "models": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+                        "version": "0.1"
+                      }
+                    ],
+                    "purposes": [
+                      "https://example.org/awp-fixture#MortgagePrequalification",
+                      "https://example.org/awp-fixture#CreditChecking"
+                    ],
+                    "effects": [
+                      "evidence disclosed under agreed terms",
+                      "indicative eligibility (not approval)"
+                    ],
+                    "outcomes": [
+                      "application-state receipt: received / checked / decided"
+                    ],
+                    "limitations": [
+                      "synthetic lender; indicative only; no credit decision or institutional approval"
+                    ]
+                  }
+                ],
+                "bindings": [
+                  {
+                    "id": "direct-local/0.1"
+                  }
+                ],
+                "policyModule": {
+                  "policyProfile": "https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1",
+                  "evaluator": {
+                    "name": "@jeswr/solid-odrl",
+                    "version": "b8fabc729c56245f4b63846261f1f06b6503f1c8",
+                    "interface": "evaluate() via awp pilot-subset adapter 0.1 (in-process)"
+                  },
+                  "status": "ready"
+                },
+                "conformance": [],
+                "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
+              }
+            },
+            "digest": "sha-256:cd48de99590d27bc0340571e0d8bc9676a28830527e99f9b24a694b3ade3538a"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:ref:sam:0002.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "inReplyTo": "urn:awp:ref:sam:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A description message from North Bank's agent reaches the inbound gate."
+    },
+    {
+      "seq": 26,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a JWS from a pinned key, this agent as audience, a valid time window and a one-time message id (urn:awp:ref:northbank-intake:0001)."
+      },
+      "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "Describing capabilities asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "reason": "not-yet-agreed",
+      "caption": "Nothing is exchanged under terms by this message."
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness, completeness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use mortgage prequalification with North Bank for mortgage prequalification."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
+        "text": "Sam's mandate lets the agent use mortgage prequalification for mortgage prequalification with North Bank or https://valleybank.example/#org, on its own."
+      },
+      "caption": "Sam's mandate covers this action."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "resolution": {
+        "question": "Is North Bank a party I can send a mortgage application to?",
+        "path": [
+          {
+            "at": "Sam's own list",
+            "kind": "own-list",
+            "says": "No entry for North Bank."
+          },
+          {
+            "at": "National trust root",
+            "kind": "root",
+            "says": "Lenders are answered by the Sector register."
+          },
+          {
+            "at": "Sector register",
+            "kind": "register",
+            "says": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+          }
+        ],
+        "answer": "Accepted, for a mortgage application only."
+      },
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
+        "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+      },
+      "caption": "North Bank: Accepted, for a mortgage application only."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No least-disclosure step in this configuration: what was asked for goes by value."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "caption": "Inside what the agent may do on its own, and within Sam's limits."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with Sam's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The propose message goes to North Bank's agent."
+    },
+    {
+      "seq": 40,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:ref:sam:0003",
+        "from": "Sam's agent",
+        "to": "North Bank's agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:bfa0bf7b9b5…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Sam's agent to North Bank's agent; propose; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:sam:0003",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "onBehalfOf": "https://sam.example/#me",
+                "operator": "https://hostco.example/#org"
+              },
+              "to": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "party": "https://northbank.example/#org"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:eea800fadf89972e263b4a306e5b597a64421f46c406451f96c42997c3fa99e3"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
+                "party": "https://sam.example/#me",
+                "actor": "https://agents.hostco.example/sam#agent",
+                "actorKid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "operator": "https://hostco.example/#org",
+                "operations": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d56ef09a048670ad5deea446661e5127f815c94c13e5077e1913ee70e5d87474"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start mortgage-prequalification, with terms (round 1).",
+            "raw": {
+              "operation": {
+                "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "version": "0.1"
+              },
+              "terms": {
+                "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                "propertyPrice": 450000,
+                "loanAmount": 380000,
+                "currency": "USD",
+                "applicant": "https://sam.example/#me",
+                "synthetic": true
+              },
+              "termsDigest": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59",
+              "round": 1
+            },
+            "digest": "sha-256:ab87cc1fe7492e6d1b354b7cbe19e850f8f9f164e5253f77798fd1da40662a09"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+              "propertyPrice": 450000,
+              "loanAmount": 380000,
+              "currency": "USD",
+              "applicant": "https://sam.example/#me",
+              "synthetic": true
+            },
+            "digest": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "Sam's agent sends a propose message to North Bank's agent."
+    },
+    {
+      "seq": 41,
+      "step": 5,
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:ref:sam:0003",
+        "from": "Sam's agent",
+        "to": "North Bank's agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:bfa0bf7b9b5…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Sam's agent to North Bank's agent; propose; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:sam:0003",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "onBehalfOf": "https://sam.example/#me",
+                "operator": "https://hostco.example/#org"
+              },
+              "to": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "party": "https://northbank.example/#org"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:eea800fadf89972e263b4a306e5b597a64421f46c406451f96c42997c3fa99e3"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
+                "party": "https://sam.example/#me",
+                "actor": "https://agents.hostco.example/sam#agent",
+                "actorKid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "operator": "https://hostco.example/#org",
+                "operations": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d56ef09a048670ad5deea446661e5127f815c94c13e5077e1913ee70e5d87474"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start mortgage-prequalification, with terms (round 1).",
+            "raw": {
+              "operation": {
+                "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "version": "0.1"
+              },
+              "terms": {
+                "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                "propertyPrice": 450000,
+                "loanAmount": 380000,
+                "currency": "USD",
+                "applicant": "https://sam.example/#me",
+                "synthetic": true
+              },
+              "termsDigest": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59",
+              "round": 1
+            },
+            "digest": "sha-256:ab87cc1fe7492e6d1b354b7cbe19e850f8f9f164e5253f77798fd1da40662a09"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+              "propertyPrice": 450000,
+              "loanAmount": 380000,
+              "currency": "USD",
+              "applicant": "https://sam.example/#me",
+              "synthetic": true
+            },
+            "digest": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A propose message from Sam's agent reaches the inbound gate."
+    },
+    {
+      "seq": 42,
+      "step": 5,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a JWS from a pinned key, this agent as audience, a valid time window and a one-time message id (urn:awp:ref:sam:0003)."
+      },
+      "caption": "The message is intact, signed with Sam's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 44,
+      "step": 5,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
+        "text": "A representation statement signed with Sam's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "Sam signed a statement that Sam's agent acts for it in this operation."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "reason": "not-yet-agreed",
+      "caption": "Terms are being negotiated; none are in force yet."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness, completeness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 47,
+      "step": 5,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core."
+    },
+    {
+      "seq": 48,
+      "step": 5,
+      "agent": "lender",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use mortgage prequalification with Sam for credit checking."
+    },
+    {
+      "seq": 49,
+      "step": 5,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
+        "text": "North Bank's mandate lets the agent use mortgage prequalification for credit checking, on its own."
+      },
+      "caption": "North Bank's mandate covers this action."
+    },
+    {
+      "seq": 50,
+      "step": 5,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "reason": "no-register-for-party",
+      "resolution": {
+        "question": "Is Sam a party I can send a mortgage application to?",
+        "path": [
+          {
+            "at": "North Bank's own list",
+            "kind": "own-list",
+            "says": "No entry for Sam."
+          },
+          {
+            "at": "National trust root",
+            "kind": "root",
+            "says": "No register it delegates to lists Sam."
+          }
+        ],
+        "answer": "No register answers for this party."
+      },
+      "caption": "No register answers for Sam; it is reached through its pinned key and its signed representation."
+    },
+    {
+      "seq": 51,
+      "step": 5,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No least-disclosure step in this configuration: what was asked for goes by value."
+    },
+    {
+      "seq": 52,
+      "step": 5,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 53,
+      "step": 5,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "caption": "Inside what the agent may do on its own, and within North Bank's limits."
+    },
+    {
+      "seq": 54,
+      "step": 5,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 55,
+      "step": 5,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The propose message goes to Sam's agent."
+    },
+    {
+      "seq": 56,
+      "step": 5,
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:ref:northbank-intake:0002",
+        "from": "North Bank's agent",
+        "to": "Sam's agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:14ca1554ae5…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From North Bank's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:northbank-intake:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:northbank-intake:0002",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org"
+              },
+              "to": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "party": "https://sam.example/#me"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:ref:sam:0003",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:4685fb2d626f44d0566543c97a1613804f8ad7a986cedd82ba136d1c572fda25"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): North Bank says North Bank's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
+                "party": "https://northbank.example/#org",
+                "actor": "https://northbank.example/agents/intake#agent",
+                "actorKid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "operator": "https://northbank.example/#org",
+                "operations": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:c74ba742481d37055c991ee8293078656ed126fbbfe3d82ba3223a89d6f7b1f6"
+          },
+          "content": {
+            "present": true,
+            "summary": "A counter-offer (round 2) with new terms.",
+            "raw": {
+              "operation": {
+                "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "version": "0.1"
+              },
+              "terms": {
+                "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+                "modelVersion": "0.1",
+                "application": {
+                  "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                  "propertyPrice": 450000,
+                  "loanAmount": 380000,
+                  "currency": "USD",
+                  "applicant": "https://sam.example/#me",
+                  "synthetic": true
+                },
+                "applicationId": "urn:awp:ref:sam:0001#application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "income.gross.monthly-series",
+                    "periodMonths": 12,
+                    "currency": "USD"
+                  },
+                  {
+                    "claimType": "deposit.balance",
+                    "periodMonths": 1,
+                    "currency": "USD"
+                  }
+                ],
+                "purpose": "https://example.org/awp-fixture#CreditChecking",
+                "recipients": [
+                  "https://northbank.example/#org"
+                ],
+                "onward": [
+                  {
+                    "recipient": "https://underwriter.example/#org",
+                    "purpose": "https://example.org/awp-fixture#CreditChecking",
+                    "fields": [
+                      "annualGrossIncome",
+                      "depositBalance"
+                    ]
+                  }
+                ],
+                "retentionDays": 90,
+                "prohibitedPurposes": [
+                  "https://w3id.org/dpv#Marketing"
+                ],
+                "fee": {
+                  "amount": 0
+                },
+                "synthetic": true
+              },
+              "termsDigest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+              "round": 2,
+              "counters": "urn:awp:ref:sam:0003"
+            },
+            "digest": "sha-256:a8a2e764c33860e2744bb50a890273cffee7fcaf412c9eb65f160c8a8f1b5ba6"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose CreditChecking; kept at most 90 days; never for Marketing; passed on only to 1 named recipient(s).",
+            "raw": {
+              "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+              "modelVersion": "0.1",
+              "application": {
+                "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                "propertyPrice": 450000,
+                "loanAmount": 380000,
+                "currency": "USD",
+                "applicant": "https://sam.example/#me",
+                "synthetic": true
+              },
+              "applicationId": "urn:awp:ref:sam:0001#application",
+              "evidenceRequest": [
+                {
+                  "claimType": "income.gross.monthly-series",
+                  "periodMonths": 12,
+                  "currency": "USD"
+                },
+                {
+                  "claimType": "deposit.balance",
+                  "periodMonths": 1,
+                  "currency": "USD"
+                }
+              ],
+              "purpose": "https://example.org/awp-fixture#CreditChecking",
+              "recipients": [
+                "https://northbank.example/#org"
+              ],
+              "onward": [
+                {
+                  "recipient": "https://underwriter.example/#org",
+                  "purpose": "https://example.org/awp-fixture#CreditChecking",
+                  "fields": [
+                    "annualGrossIncome",
+                    "depositBalance"
+                  ]
+                }
+              ],
+              "retentionDays": 90,
+              "prohibitedPurposes": [
+                "https://w3id.org/dpv#Marketing"
+              ],
+              "fee": {
+                "amount": 0
+              },
+              "synthetic": true
+            },
+            "digest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:ref:sam:0003.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "inReplyTo": "urn:awp:ref:sam:0003"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "North Bank's agent sends a propose message to Sam's agent."
+    },
+    {
+      "seq": 57,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:ref:northbank-intake:0002",
+        "from": "North Bank's agent",
+        "to": "Sam's agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:14ca1554ae5…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From North Bank's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:northbank-intake:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:northbank-intake:0002",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org"
+              },
+              "to": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "party": "https://sam.example/#me"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:ref:sam:0003",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:4685fb2d626f44d0566543c97a1613804f8ad7a986cedd82ba136d1c572fda25"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): North Bank says North Bank's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
+                "party": "https://northbank.example/#org",
+                "actor": "https://northbank.example/agents/intake#agent",
+                "actorKid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "operator": "https://northbank.example/#org",
+                "operations": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:c74ba742481d37055c991ee8293078656ed126fbbfe3d82ba3223a89d6f7b1f6"
+          },
+          "content": {
+            "present": true,
+            "summary": "A counter-offer (round 2) with new terms.",
+            "raw": {
+              "operation": {
+                "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "version": "0.1"
+              },
+              "terms": {
+                "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+                "modelVersion": "0.1",
+                "application": {
+                  "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                  "propertyPrice": 450000,
+                  "loanAmount": 380000,
+                  "currency": "USD",
+                  "applicant": "https://sam.example/#me",
+                  "synthetic": true
+                },
+                "applicationId": "urn:awp:ref:sam:0001#application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "income.gross.monthly-series",
+                    "periodMonths": 12,
+                    "currency": "USD"
+                  },
+                  {
+                    "claimType": "deposit.balance",
+                    "periodMonths": 1,
+                    "currency": "USD"
+                  }
+                ],
+                "purpose": "https://example.org/awp-fixture#CreditChecking",
+                "recipients": [
+                  "https://northbank.example/#org"
+                ],
+                "onward": [
+                  {
+                    "recipient": "https://underwriter.example/#org",
+                    "purpose": "https://example.org/awp-fixture#CreditChecking",
+                    "fields": [
+                      "annualGrossIncome",
+                      "depositBalance"
+                    ]
+                  }
+                ],
+                "retentionDays": 90,
+                "prohibitedPurposes": [
+                  "https://w3id.org/dpv#Marketing"
+                ],
+                "fee": {
+                  "amount": 0
+                },
+                "synthetic": true
+              },
+              "termsDigest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+              "round": 2,
+              "counters": "urn:awp:ref:sam:0003"
+            },
+            "digest": "sha-256:a8a2e764c33860e2744bb50a890273cffee7fcaf412c9eb65f160c8a8f1b5ba6"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose CreditChecking; kept at most 90 days; never for Marketing; passed on only to 1 named recipient(s).",
+            "raw": {
+              "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+              "modelVersion": "0.1",
+              "application": {
+                "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                "propertyPrice": 450000,
+                "loanAmount": 380000,
+                "currency": "USD",
+                "applicant": "https://sam.example/#me",
+                "synthetic": true
+              },
+              "applicationId": "urn:awp:ref:sam:0001#application",
+              "evidenceRequest": [
+                {
+                  "claimType": "income.gross.monthly-series",
+                  "periodMonths": 12,
+                  "currency": "USD"
+                },
+                {
+                  "claimType": "deposit.balance",
+                  "periodMonths": 1,
+                  "currency": "USD"
+                }
+              ],
+              "purpose": "https://example.org/awp-fixture#CreditChecking",
+              "recipients": [
+                "https://northbank.example/#org"
+              ],
+              "onward": [
+                {
+                  "recipient": "https://underwriter.example/#org",
+                  "purpose": "https://example.org/awp-fixture#CreditChecking",
+                  "fields": [
+                    "annualGrossIncome",
+                    "depositBalance"
+                  ]
+                }
+              ],
+              "retentionDays": 90,
+              "prohibitedPurposes": [
+                "https://w3id.org/dpv#Marketing"
+              ],
+              "fee": {
+                "amount": 0
+              },
+              "synthetic": true
+            },
+            "digest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:ref:sam:0003.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "inReplyTo": "urn:awp:ref:sam:0003"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A propose message from North Bank's agent reaches the inbound gate."
+    },
+    {
+      "seq": 58,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a JWS from a pinned key, this agent as audience, a valid time window and a one-time message id (urn:awp:ref:northbank-intake:0002)."
+      },
+      "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 59,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 60,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
+        "text": "A representation statement signed with North Bank's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "North Bank signed a statement that North Bank's agent acts for it in this operation."
+    },
+    {
+      "seq": 61,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "reason": "not-yet-agreed",
+      "caption": "Terms are being negotiated; none are in force yet."
+    },
+    {
+      "seq": 62,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness, completeness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 63,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core."
+    },
+    {
+      "seq": 64,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share 2 statement(s) with North Bank for credit checking."
+    },
+    {
+      "seq": 65,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
+        "text": "Sam's mandate lets the agent distribute evidence disclosure for credit checking with North Bank or https://valleybank.example/#org, after Sam approves."
+      },
+      "caption": "Sam's mandate covers this action, with approval."
+    },
+    {
+      "seq": 66,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "resolution": {
+        "question": "Is North Bank a party I can send a mortgage application to?",
+        "path": [
+          {
+            "at": "Sam's own list",
+            "kind": "own-list",
+            "says": "No entry for North Bank."
+          },
+          {
+            "at": "National trust root",
+            "kind": "root",
+            "says": "Lenders are answered by the Sector register."
+          },
+          {
+            "at": "Sector register",
+            "kind": "register",
+            "says": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+          }
+        ],
+        "answer": "Accepted, for a mortgage application only."
+      },
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
+        "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+      },
+      "caption": "North Bank: Accepted, for a mortgage application only."
+    },
+    {
+      "seq": 67,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No least-disclosure step in this configuration: what was asked for goes by value."
+    },
+    {
+      "seq": 68,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+        "text": "The agreed terms (digest sha-256:05458d21…) go out with the data."
+      },
+      "caption": "The statements carry no terms of their own; these terms go out with them: purpose credit checking; kept at most 90 days; passed on only to the underwriter."
+    },
+    {
+      "seq": 69,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "approval-required",
+      "rule": {
+        "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
+        "text": "Sam's mandate lets the agent distribute evidence disclosure for credit checking with North Bank or https://valleybank.example/#org, after Sam approves."
+      },
+      "caption": "The mandate says to ask Sam first."
+    },
+    {
+      "seq": 70,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "approval-required",
+      "caption": "The gate holds the action and asks Sam."
+    },
+    {
+      "seq": 71,
+      "step": 5,
+      "agent": "sams-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "chat": {
+        "who": "agent",
+        "text": "North Bank asks me to share 2 statement(s) with North Bank, for credit checking, kept for 90 days, passed on only to the underwriter. The statements: urn:awp:evidence:deposit 2026 09, urn:awp:evidence:payroll 2026 09. May I go ahead?"
+      },
+      "caption": "Sam is asked to approve this exact action; the approval will be bound to its digest."
+    },
+    {
+      "seq": 72,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "caption": "The income.gross.monthly-series statement is intact and signed with Paywell's pinned key."
+    },
+    {
+      "seq": 73,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#rule/sam/payroll-income",
+        "text": "Paywell is accepted for income.gross.monthly-series claims."
+      },
+      "resolution": {
+        "question": "Is Paywell an authority for income.gross.monthly-series claims about Sam?",
+        "path": [
+          {
+            "at": "Sam's own list",
+            "kind": "own-list",
+            "says": "Paywell is accepted for income.gross.monthly-series (rule https://w3id.org/jeswr/awp#rule/sam/payroll-income)."
+          }
+        ],
+        "answer": "Accepted, for income.gross.monthly-series claims only."
+      },
+      "caption": "Paywell is an accepted source for income.gross.monthly-series, for a mortgage application."
+    },
+    {
+      "seq": 74,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "The statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 75,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "The statement carries no terms of use in this configuration."
+    },
+    {
+      "seq": 76,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 77,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The income.gross.monthly-series statement from Paywell is admitted."
+    },
+    {
+      "seq": 78,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:awp:evidence:payroll-2026-09",
+        "claimType": "income.gross.monthly-series",
+        "subject": "https://sam.example/#me",
+        "value": [
+          {
+            "month": "2025-10",
+            "gross": 7500
+          },
+          {
+            "month": "2025-11",
+            "gross": 7500
+          },
+          {
+            "month": "2025-12",
+            "gross": 7500
+          },
+          {
+            "month": "2026-01",
+            "gross": 7500
+          },
+          {
+            "month": "2026-02",
+            "gross": 7500
+          },
+          {
+            "month": "2026-03",
+            "gross": 7500
+          },
+          {
+            "month": "2026-04",
+            "gross": 7500
+          },
+          {
+            "month": "2026-05",
+            "gross": 7500
+          },
+          {
+            "month": "2026-06",
+            "gross": 7500
+          },
+          {
+            "month": "2026-07",
+            "gross": 7500
+          },
+          {
+            "month": "2026-08",
+            "gross": 7500
+          },
+          {
+            "month": "2026-09",
+            "gross": 7500
+          }
+        ],
+        "source": "https://payroll.example/#org",
+        "sourceKind": "authority",
+        "confidence": 1,
+        "terms": "none attached (baseline)",
+        "provenance": "signed by Paywell; issued 2026-10-01T09:00:00Z"
+      },
+      "caption": "The statement is stored with its source, its origin and how sure the source is."
+    },
+    {
+      "seq": 79,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "caption": "The deposit.balance statement is intact and signed with Harbour Bank's pinned key."
+    },
+    {
+      "seq": 80,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#rule/sam/own-bank-balances",
+        "text": "Harbour Bank is accepted for deposit.balance claims."
+      },
+      "resolution": {
+        "question": "Is Harbour Bank an authority for deposit.balance claims about Sam?",
+        "path": [
+          {
+            "at": "Sam's own list",
+            "kind": "own-list",
+            "says": "Harbour Bank is accepted for deposit.balance (rule https://w3id.org/jeswr/awp#rule/sam/own-bank-balances)."
+          }
+        ],
+        "answer": "Accepted, for deposit.balance claims only."
+      },
+      "caption": "Harbour Bank is an accepted source for deposit.balance, for a mortgage application."
+    },
+    {
+      "seq": 81,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "The statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 82,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "The statement carries no terms of use in this configuration."
+    },
+    {
+      "seq": 83,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 84,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The deposit.balance statement from Harbour Bank is admitted."
+    },
+    {
+      "seq": 85,
+      "step": 10,
+      "agent": "sams-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:awp:evidence:deposit-2026-09",
+        "claimType": "deposit.balance",
+        "subject": "https://sam.example/#me",
+        "value": 90000,
+        "source": "https://depositbank.example/#org",
+        "sourceKind": "authority",
+        "confidence": 1,
+        "terms": "none attached (baseline)",
+        "provenance": "signed by Harbour Bank; issued 2026-10-01T09:00:00Z",
+        "asOf": "2026-09-30T23:59:59Z"
+      },
+      "caption": "The statement is stored with its source, its origin and how sure the source is."
+    },
+    {
+      "seq": 86,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "principal",
+      "kind": "principal-reply",
+      "chat": {
+        "who": "principal",
+        "text": "Yes, share them with North Bank for the credit check."
+      },
+      "caption": "Approves by signing an answer bound to the exact action."
+    },
+    {
+      "seq": 87,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
+        "text": "Sam's mandate lets the agent distribute evidence disclosure for credit checking with North Bank or https://valleybank.example/#org, after Sam approves."
+      },
+      "caption": "Sam's mandate covers this action, with approval."
+    },
+    {
+      "seq": 88,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "resolution": {
+        "question": "Is North Bank a party I can send a mortgage application to?",
+        "path": [
+          {
+            "at": "Sam's own list",
+            "kind": "own-list",
+            "says": "No entry for North Bank."
+          },
+          {
+            "at": "National trust root",
+            "kind": "root",
+            "says": "Lenders are answered by the Sector register."
+          },
+          {
+            "at": "Sector register",
+            "kind": "register",
+            "says": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:02:00.000Z."
+          }
+        ],
+        "answer": "Accepted, for a mortgage application only."
+      },
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
+        "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:02:00.000Z."
+      },
+      "caption": "North Bank: Accepted, for a mortgage application only."
+    },
+    {
+      "seq": 89,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No least-disclosure step in this configuration: what was asked for goes by value."
+    },
+    {
+      "seq": 90,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+        "text": "The agreed terms (digest sha-256:05458d21…) go out with the data."
+      },
+      "caption": "The statements carry no terms of their own; these terms go out with them: purpose credit checking; kept at most 90 days; passed on only to the underwriter."
+    },
+    {
+      "seq": 91,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:ref:sam-approval:0001",
+        "text": "Sam's signed approval, bound to digest sha-256:4d6afa61…."
+      },
+      "caption": "Sam approved this exact action."
+    },
+    {
+      "seq": 92,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with Sam's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 93,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The accept message goes to North Bank's agent."
+    },
+    {
+      "seq": 94,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:ref:sam:0004",
+        "from": "Sam's agent",
+        "to": "North Bank's agent",
+        "kind": "accept",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:15bff7b9279…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Sam's agent to North Bank's agent; accept; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:ref:sam:0004.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:sam:0004",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "accept",
+              "from": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "onBehalfOf": "https://sam.example/#me",
+                "operator": "https://hostco.example/#org"
+              },
+              "to": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "party": "https://northbank.example/#org"
+              },
+              "createdAt": "2026-11-13T09:02:00.000Z",
+              "expiresAt": "2026-11-13T15:02:00.000Z",
+              "inReplyTo": "urn:awp:ref:northbank-intake:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:382a191463206f4a928e4e8ca4a3a9e80d4d1cdb30078c16a879bc8937f6f126"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
+                "party": "https://sam.example/#me",
+                "actor": "https://agents.hostco.example/sam#agent",
+                "actorKid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "operator": "https://hostco.example/#org",
+                "operations": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d56ef09a048670ad5deea446661e5127f815c94c13e5077e1913ee70e5d87474"
+          },
+          "content": {
+            "present": true,
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id.",
+            "raw": {
+              "proposal": "urn:awp:ref:northbank-intake:0002",
+              "termsDigest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+              "agreement": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407"
+            },
+            "digest": "sha-256:da4f5dac3ecc7ff307ef81a76848deb42ab2e280f25e748821ff78e702d8dcef"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Binds to the offered terms by their digest.",
+            "raw": {
+              "termsDigest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583"
+            },
+            "digest": "sha-256:1b127f6c6f7f89c284a1d06496dea7b016497f7607e3246a04d07a1aab3e87ba"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:ref:northbank-intake:0002.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "inReplyTo": "urn:awp:ref:northbank-intake:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "Sam's agent sends an accept message to North Bank's agent."
+    },
+    {
+      "seq": 95,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
+        "text": "Sam's mandate lets the agent distribute evidence disclosure for credit checking with North Bank or https://valleybank.example/#org, after Sam approves."
+      },
+      "caption": "Sam's mandate covers this action, with approval."
+    },
+    {
+      "seq": 96,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "resolution": {
+        "question": "Is North Bank a party I can send a mortgage application to?",
+        "path": [
+          {
+            "at": "Sam's own list",
+            "kind": "own-list",
+            "says": "No entry for North Bank."
+          },
+          {
+            "at": "National trust root",
+            "kind": "root",
+            "says": "Lenders are answered by the Sector register."
+          },
+          {
+            "at": "Sector register",
+            "kind": "register",
+            "says": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:02:00.000Z."
+          }
+        ],
+        "answer": "Accepted, for a mortgage application only."
+      },
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
+        "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:02:00.000Z."
+      },
+      "caption": "North Bank: Accepted, for a mortgage application only."
+    },
+    {
+      "seq": 97,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No least-disclosure step in this configuration: what was asked for goes by value."
+    },
+    {
+      "seq": 98,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+        "text": "The agreed terms (digest sha-256:05458d21…) go out with the data."
+      },
+      "caption": "The statements carry no terms of their own; these terms go out with them: purpose credit checking; kept at most 90 days; passed on only to the underwriter."
+    },
+    {
+      "seq": 99,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:ref:sam-approval:0001",
+        "text": "Sam's signed approval, bound to digest sha-256:4d6afa61…."
+      },
+      "caption": "Sam approved this exact action."
+    },
+    {
+      "seq": 100,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with Sam's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 101,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The deliver message goes to North Bank's agent."
+    },
+    {
+      "seq": 102,
+      "step": 11,
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:ref:sam:0005",
+        "from": "Sam's agent",
+        "to": "North Bank's agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:b32d0af4d0b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Sam's agent to North Bank's agent; deliver; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:ref:sam:0005.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:sam:0005",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "onBehalfOf": "https://sam.example/#me",
+                "operator": "https://hostco.example/#org"
+              },
+              "to": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "party": "https://northbank.example/#org"
+              },
+              "createdAt": "2026-11-13T09:02:00.000Z",
+              "expiresAt": "2026-11-13T15:02:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:1ada12fa05e97b39d6c951d150577fd97e7f72ef4de8044907dea4d4fef468b4"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement.",
+            "raw": {
+              "ref": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407",
+              "basis": {
+                "kind": "agreement",
+                "agreement": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407"
+              },
+              "operation": {
+                "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "version": "0.1"
+              },
+              "output": {
+                "evidenceCount": 2,
+                "note": "issuer-signed statements relayed in evidence; the consumer's agent is not their author"
+              }
+            },
+            "digest": "sha-256:77243613310bb1abf09b60fc293722e8ab02d4afa78d7753c1aef3ea80a6a896"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "2 statement(s) signed by their sources: income.gross.monthly-series from Paywell; deposit.balance from Harbour Bank.",
+            "raw": [
+              {
+                "type": "EvidenceStatement",
+                "subject": "https://sam.example/#me",
+                "version": 1,
+                "currency": "USD",
+                "issuedAt": "2026-10-01T09:00:00Z",
+                "synthetic": true,
+                "id": "urn:awp:evidence:payroll-2026-09",
+                "issuer": "https://payroll.example/#org",
+                "claimType": "income.gross.monthly-series",
+                "period": {
+                  "start": "2025-10",
+                  "end": "2026-09"
+                },
+                "monthly": [
+                  {
+                    "month": "2025-10",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2025-11",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2025-12",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-01",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-02",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-03",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-04",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-05",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-06",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-07",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-08",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-09",
+                    "gross": 7500
+                  }
+                ]
+              },
+              {
+                "type": "EvidenceStatement",
+                "subject": "https://sam.example/#me",
+                "version": 1,
+                "currency": "USD",
+                "issuedAt": "2026-10-01T09:00:00Z",
+                "synthetic": true,
+                "id": "urn:awp:evidence:deposit-2026-09",
+                "issuer": "https://depositbank.example/#org",
+                "claimType": "deposit.balance",
+                "period": {
+                  "start": "2026-09",
+                  "end": "2026-09"
+                },
+                "balance": 90000,
+                "asOf": "2026-09-30T23:59:59Z"
+              }
+            ],
+            "digest": "sha-256:2f94dce965b223ab3166360bd2566eadfd89943ce2f1bffcb0382502a14eae83"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Sent under agreement urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407; its terms bind the data.",
+            "raw": {
+              "kind": "agreement",
+              "agreement": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407"
+            },
+            "digest": "sha-256:f5956f603f777aac4f8a20edb9d3ac907dc329d7f64594e7af9121771e43d355"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by Sam's agent; as of 2026-10-01T09:00:00Z, 2026-09-30T23:59:59Z.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "statements": [
+                {
+                  "id": "urn:awp:evidence:payroll-2026-09",
+                  "issuer": "https://payroll.example/#org",
+                  "issuedAt": "2026-10-01T09:00:00Z",
+                  "asOf": null
+                },
+                {
+                  "id": "urn:awp:evidence:deposit-2026-09",
+                  "issuer": "https://depositbank.example/#org",
+                  "issuedAt": "2026-10-01T09:00:00Z",
+                  "asOf": "2026-09-30T23:59:59Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "Sam's agent sends a deliver message to North Bank's agent."
+    },
+    {
+      "seq": 103,
+      "step": 12,
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:ref:sam:0004",
+        "from": "Sam's agent",
+        "to": "North Bank's agent",
+        "kind": "accept",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:15bff7b9279…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Sam's agent to North Bank's agent; accept; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:ref:sam:0004.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:sam:0004",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "accept",
+              "from": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "onBehalfOf": "https://sam.example/#me",
+                "operator": "https://hostco.example/#org"
+              },
+              "to": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "party": "https://northbank.example/#org"
+              },
+              "createdAt": "2026-11-13T09:02:00.000Z",
+              "expiresAt": "2026-11-13T15:02:00.000Z",
+              "inReplyTo": "urn:awp:ref:northbank-intake:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:382a191463206f4a928e4e8ca4a3a9e80d4d1cdb30078c16a879bc8937f6f126"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
+                "party": "https://sam.example/#me",
+                "actor": "https://agents.hostco.example/sam#agent",
+                "actorKid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "operator": "https://hostco.example/#org",
+                "operations": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d56ef09a048670ad5deea446661e5127f815c94c13e5077e1913ee70e5d87474"
+          },
+          "content": {
+            "present": true,
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id.",
+            "raw": {
+              "proposal": "urn:awp:ref:northbank-intake:0002",
+              "termsDigest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+              "agreement": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407"
+            },
+            "digest": "sha-256:da4f5dac3ecc7ff307ef81a76848deb42ab2e280f25e748821ff78e702d8dcef"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Binds to the offered terms by their digest.",
+            "raw": {
+              "termsDigest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583"
+            },
+            "digest": "sha-256:1b127f6c6f7f89c284a1d06496dea7b016497f7607e3246a04d07a1aab3e87ba"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:ref:northbank-intake:0002.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "inReplyTo": "urn:awp:ref:northbank-intake:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An accept message from Sam's agent reaches the inbound gate."
+    },
+    {
+      "seq": 104,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a JWS from a pinned key, this agent as audience, a valid time window and a one-time message id (urn:awp:ref:sam:0004)."
+      },
+      "caption": "The message is intact, signed with Sam's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 105,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 106,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
+        "text": "A representation statement signed with Sam's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "Sam signed a statement that Sam's agent acts for it in this operation."
+    },
+    {
+      "seq": 107,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "reason": "not-yet-agreed",
+      "caption": "Nothing is exchanged under terms by this message."
+    },
+    {
+      "seq": 108,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness, completeness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 109,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core."
+    },
+    {
+      "seq": 110,
+      "step": 12,
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:ref:sam:0005",
+        "from": "Sam's agent",
+        "to": "North Bank's agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:b32d0af4d0b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Sam's agent to North Bank's agent; deliver; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:ref:sam:0005.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:sam:0005",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "onBehalfOf": "https://sam.example/#me",
+                "operator": "https://hostco.example/#org"
+              },
+              "to": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "party": "https://northbank.example/#org"
+              },
+              "createdAt": "2026-11-13T09:02:00.000Z",
+              "expiresAt": "2026-11-13T15:02:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:1ada12fa05e97b39d6c951d150577fd97e7f72ef4de8044907dea4d4fef468b4"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement.",
+            "raw": {
+              "ref": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407",
+              "basis": {
+                "kind": "agreement",
+                "agreement": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407"
+              },
+              "operation": {
+                "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "version": "0.1"
+              },
+              "output": {
+                "evidenceCount": 2,
+                "note": "issuer-signed statements relayed in evidence; the consumer's agent is not their author"
+              }
+            },
+            "digest": "sha-256:77243613310bb1abf09b60fc293722e8ab02d4afa78d7753c1aef3ea80a6a896"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "2 statement(s) signed by their sources: income.gross.monthly-series from Paywell; deposit.balance from Harbour Bank.",
+            "raw": [
+              {
+                "type": "EvidenceStatement",
+                "subject": "https://sam.example/#me",
+                "version": 1,
+                "currency": "USD",
+                "issuedAt": "2026-10-01T09:00:00Z",
+                "synthetic": true,
+                "id": "urn:awp:evidence:payroll-2026-09",
+                "issuer": "https://payroll.example/#org",
+                "claimType": "income.gross.monthly-series",
+                "period": {
+                  "start": "2025-10",
+                  "end": "2026-09"
+                },
+                "monthly": [
+                  {
+                    "month": "2025-10",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2025-11",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2025-12",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-01",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-02",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-03",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-04",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-05",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-06",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-07",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-08",
+                    "gross": 7500
+                  },
+                  {
+                    "month": "2026-09",
+                    "gross": 7500
+                  }
+                ]
+              },
+              {
+                "type": "EvidenceStatement",
+                "subject": "https://sam.example/#me",
+                "version": 1,
+                "currency": "USD",
+                "issuedAt": "2026-10-01T09:00:00Z",
+                "synthetic": true,
+                "id": "urn:awp:evidence:deposit-2026-09",
+                "issuer": "https://depositbank.example/#org",
+                "claimType": "deposit.balance",
+                "period": {
+                  "start": "2026-09",
+                  "end": "2026-09"
+                },
+                "balance": 90000,
+                "asOf": "2026-09-30T23:59:59Z"
+              }
+            ],
+            "digest": "sha-256:2f94dce965b223ab3166360bd2566eadfd89943ce2f1bffcb0382502a14eae83"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Sent under agreement urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407; its terms bind the data.",
+            "raw": {
+              "kind": "agreement",
+              "agreement": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407"
+            },
+            "digest": "sha-256:f5956f603f777aac4f8a20edb9d3ac907dc329d7f64594e7af9121771e43d355"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by Sam's agent; as of 2026-10-01T09:00:00Z, 2026-09-30T23:59:59Z.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "statements": [
+                {
+                  "id": "urn:awp:evidence:payroll-2026-09",
+                  "issuer": "https://payroll.example/#org",
+                  "issuedAt": "2026-10-01T09:00:00Z",
+                  "asOf": null
+                },
+                {
+                  "id": "urn:awp:evidence:deposit-2026-09",
+                  "issuer": "https://depositbank.example/#org",
+                  "issuedAt": "2026-10-01T09:00:00Z",
+                  "asOf": "2026-09-30T23:59:59Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A deliver message from Sam's agent reaches the inbound gate."
+    },
+    {
+      "seq": 111,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a JWS from a pinned key, this agent as audience, a valid time window and a one-time message id (urn:awp:ref:sam:0005)."
+      },
+      "caption": "The message is intact, signed with Sam's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 112,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#rule/nb/payroll-income",
+        "text": "Paywell is accepted for income.gross.monthly-series claims."
+      },
+      "resolution": {
+        "question": "Is Paywell an authority for income.gross.monthly-series claims about Sam?",
+        "path": [
+          {
+            "at": "North Bank's own list",
+            "kind": "own-list",
+            "says": "Paywell is accepted for income.gross.monthly-series (rule https://w3id.org/jeswr/awp#rule/nb/payroll-income)."
+          }
+        ],
+        "answer": "Accepted, for income.gross.monthly-series claims only."
+      },
+      "caption": "Paywell is an accepted source for income.gross.monthly-series."
+    },
+    {
+      "seq": 113,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#rule/nb/bank-deposits",
+        "text": "Harbour Bank is accepted for deposit.balance claims."
+      },
+      "resolution": {
+        "question": "Is Harbour Bank an authority for deposit.balance claims about Sam?",
+        "path": [
+          {
+            "at": "North Bank's own list",
+            "kind": "own-list",
+            "says": "Harbour Bank is accepted for deposit.balance (rule https://w3id.org/jeswr/awp#rule/nb/bank-deposits)."
+          }
+        ],
+        "answer": "Accepted, for deposit.balance claims only."
+      },
+      "caption": "Harbour Bank is an accepted source for deposit.balance."
+    },
+    {
+      "seq": 114,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "conversation-bound",
+      "caption": "Authority was checked when this conversation was opened; the sender is bound to it."
+    },
+    {
+      "seq": 115,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407",
+        "text": "Signed offer and acceptance of the exact terms (by digest)."
+      },
+      "caption": "This comes under the agreement both sides signed; its terms bind what is sent."
+    },
+    {
+      "seq": 116,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness, completeness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 117,
+      "step": 12,
+      "agent": "lender",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core."
+    },
+    {
+      "seq": 118,
+      "step": 12,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "No action is proposed by this message, so there is no mandate decision."
+    },
+    {
+      "seq": 119,
+      "step": 12,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "reason": "no-register-for-party",
+      "resolution": {
+        "question": "Is Sam a party I can send a mortgage application to?",
+        "path": [
+          {
+            "at": "North Bank's own list",
+            "kind": "own-list",
+            "says": "No entry for Sam."
+          },
+          {
+            "at": "National trust root",
+            "kind": "root",
+            "says": "No register it delegates to lists Sam."
+          }
+        ],
+        "answer": "No register answers for this party."
+      },
+      "caption": "No register answers for Sam; it is reached through its pinned key and its signed representation."
+    },
+    {
+      "seq": 120,
+      "step": 12,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No least-disclosure step in this configuration."
+    },
+    {
+      "seq": 121,
+      "step": 12,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "This message proposes no disclosure."
+    },
+    {
+      "seq": 122,
+      "step": 12,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "No action, so no limit or approval applies."
+    },
+    {
+      "seq": 123,
+      "step": 12,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 124,
+      "step": 12,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The receipt message goes to Sam's agent."
+    },
+    {
+      "seq": 125,
+      "step": 12,
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:ref:northbank-intake:0003",
+        "from": "North Bank's agent",
+        "to": "Sam's agent",
+        "kind": "receipt",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:0035b390fc0…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From North Bank's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:ref:northbank-intake:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:northbank-intake:0003",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "receipt",
+              "from": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org"
+              },
+              "to": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "party": "https://sam.example/#me"
+              },
+              "createdAt": "2026-11-13T09:02:00.000Z",
+              "expiresAt": "2026-11-13T15:02:00.000Z",
+              "inReplyTo": "urn:awp:ref:sam:0005",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:45006f25e822233b3f93ae2e11b112daaa5b1bafab2d6cec77e30a39238e9613"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Reports an activity outcome: completed.",
+            "raw": {
+              "ref": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407",
+              "activity": "urn:awp:ref:sam:0001#intake-check",
+              "outcome": "completed",
+              "observed": {
+                "stage": "received-and-checked",
+                "received": 2,
+                "checked": [
+                  {
+                    "integrity": "valid",
+                    "protectedObject": "sha-256:ec9edf28e63381cdb0fc92ecdd2d3fd0be4bcbd8386e31f04e239262706b802e",
+                    "id": "urn:awp:evidence:payroll-2026-09",
+                    "claimType": "income.gross.monthly-series",
+                    "issuer": "https://payroll.example/#org",
+                    "sourceAuthority": "accepted",
+                    "accepted": true
+                  },
+                  {
+                    "integrity": "valid",
+                    "protectedObject": "sha-256:f9572a31c84ab49e960eff4a64b4a883f5d1f22bba369bf9fb4cf8f3a94db95d",
+                    "id": "urn:awp:evidence:deposit-2026-09",
+                    "claimType": "deposit.balance",
+                    "issuer": "https://depositbank.example/#org",
+                    "sourceAuthority": "accepted",
+                    "accepted": true
+                  }
+                ],
+                "derived": {
+                  "annualGrossIncome": 90000,
+                  "currency": "USD",
+                  "rule": "https://w3id.org/jeswr/awp#rule/annualise-12-consecutive-months",
+                  "derivedFrom": "urn:awp:evidence:payroll-2026-09"
+                },
+                "missing": [],
+                "completeness": "all requested evidence types accepted",
+                "notClaimed": [
+                  "approval",
+                  "truth of the income figures",
+                  "completeness of the applicant's finances"
+                ]
+              },
+              "final": false
+            },
+            "digest": "sha-256:7d884d69cc8e054f687435e6ccde4505920a5690f1078bf96d89bbf72f655598"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:ref:sam:0005.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "inReplyTo": "urn:awp:ref:sam:0005"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "North Bank's agent sends a receipt message to Sam's agent."
+    },
+    {
+      "seq": 126,
+      "step": 12,
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:ref:northbank-intake:0003",
+        "from": "North Bank's agent",
+        "to": "Sam's agent",
+        "kind": "receipt",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:0035b390fc0…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From North Bank's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:ref:northbank-intake:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:northbank-intake:0003",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "receipt",
+              "from": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org"
+              },
+              "to": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "party": "https://sam.example/#me"
+              },
+              "createdAt": "2026-11-13T09:02:00.000Z",
+              "expiresAt": "2026-11-13T15:02:00.000Z",
+              "inReplyTo": "urn:awp:ref:sam:0005",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:45006f25e822233b3f93ae2e11b112daaa5b1bafab2d6cec77e30a39238e9613"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Reports an activity outcome: completed.",
+            "raw": {
+              "ref": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407",
+              "activity": "urn:awp:ref:sam:0001#intake-check",
+              "outcome": "completed",
+              "observed": {
+                "stage": "received-and-checked",
+                "received": 2,
+                "checked": [
+                  {
+                    "integrity": "valid",
+                    "protectedObject": "sha-256:ec9edf28e63381cdb0fc92ecdd2d3fd0be4bcbd8386e31f04e239262706b802e",
+                    "id": "urn:awp:evidence:payroll-2026-09",
+                    "claimType": "income.gross.monthly-series",
+                    "issuer": "https://payroll.example/#org",
+                    "sourceAuthority": "accepted",
+                    "accepted": true
+                  },
+                  {
+                    "integrity": "valid",
+                    "protectedObject": "sha-256:f9572a31c84ab49e960eff4a64b4a883f5d1f22bba369bf9fb4cf8f3a94db95d",
+                    "id": "urn:awp:evidence:deposit-2026-09",
+                    "claimType": "deposit.balance",
+                    "issuer": "https://depositbank.example/#org",
+                    "sourceAuthority": "accepted",
+                    "accepted": true
+                  }
+                ],
+                "derived": {
+                  "annualGrossIncome": 90000,
+                  "currency": "USD",
+                  "rule": "https://w3id.org/jeswr/awp#rule/annualise-12-consecutive-months",
+                  "derivedFrom": "urn:awp:evidence:payroll-2026-09"
+                },
+                "missing": [],
+                "completeness": "all requested evidence types accepted",
+                "notClaimed": [
+                  "approval",
+                  "truth of the income figures",
+                  "completeness of the applicant's finances"
+                ]
+              },
+              "final": false
+            },
+            "digest": "sha-256:7d884d69cc8e054f687435e6ccde4505920a5690f1078bf96d89bbf72f655598"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:ref:sam:0005.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001",
+              "inReplyTo": "urn:awp:ref:sam:0005"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A receipt message from North Bank's agent reaches the inbound gate."
+    },
+    {
+      "seq": 127,
+      "step": 12,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a JWS from a pinned key, this agent as audience, a valid time window and a one-time message id (urn:awp:ref:northbank-intake:0003)."
+      },
+      "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 128,
+      "step": 12,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 129,
+      "step": 12,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "conversation-bound",
+      "caption": "Authority was checked when this conversation was opened; the sender is bound to it."
+    },
+    {
+      "seq": 130,
+      "step": 12,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407",
+        "text": "Signed offer and acceptance of the exact terms (by digest)."
+      },
+      "caption": "This comes under the agreement both sides signed; its terms bind what is sent."
+    },
+    {
+      "seq": 131,
+      "step": 12,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness, completeness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 132,
+      "step": 12,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core."
+    },
+    {
+      "seq": 133,
+      "step": 13,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "No action is proposed by this message, so there is no mandate decision."
+    },
+    {
+      "seq": 134,
+      "step": 13,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "reason": "no-register-for-party",
+      "resolution": {
+        "question": "Is Sam a party I can send a mortgage application to?",
+        "path": [
+          {
+            "at": "North Bank's own list",
+            "kind": "own-list",
+            "says": "No entry for Sam."
+          },
+          {
+            "at": "National trust root",
+            "kind": "root",
+            "says": "No register it delegates to lists Sam."
+          }
+        ],
+        "answer": "No register answers for this party."
+      },
+      "caption": "No register answers for Sam; it is reached through its pinned key and its signed representation."
+    },
+    {
+      "seq": 135,
+      "step": 13,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No least-disclosure step in this configuration."
+    },
+    {
+      "seq": 136,
+      "step": 13,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "This message proposes no disclosure."
+    },
+    {
+      "seq": 137,
+      "step": 13,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "no-action-intent",
+      "caption": "No action, so no limit or approval applies."
+    },
+    {
+      "seq": 138,
+      "step": 13,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 139,
+      "step": 13,
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The receipt message goes to Sam's agent."
+    },
+    {
+      "seq": 140,
+      "step": 13,
+      "agent": "lender",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:ref:northbank-intake:0004",
+        "from": "North Bank's agent",
+        "to": "Sam's agent",
+        "kind": "receipt",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:ef4a9862d3a…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From North Bank's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:ref:northbank-intake:0004.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:northbank-intake:0004",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "receipt",
+              "from": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org"
+              },
+              "to": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "party": "https://sam.example/#me"
+              },
+              "createdAt": "2026-11-13T09:03:00.000Z",
+              "expiresAt": "2026-11-13T15:03:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:2e94379de30a943bc0415954d24877f8ef6ba46459dd9840f82395727e770a32"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Reports an activity outcome: completed (final).",
+            "raw": {
+              "ref": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407",
+              "activity": "urn:awp:ref:sam:0001#decision",
+              "outcome": "completed",
+              "final": true,
+              "observed": {
+                "stage": "decided",
+                "decided": {
+                  "status": "indicatively-eligible",
+                  "by": "https://northbank.example/#org",
+                  "basis": "synthetic prequalification rule; indicative only"
+                },
+                "notClaimed": [
+                  "loan approval",
+                  "truth of evidence",
+                  "complete financial picture"
+                ]
+              }
+            },
+            "digest": "sha-256:eb45bfee6a5b9c9d73881bff0b2699aecf695297f0fa42c79d0abc8e0810907d"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "North Bank's agent sends a receipt message to Sam's agent."
+    },
+    {
+      "seq": 141,
+      "step": 13,
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:ref:northbank-intake:0004",
+        "from": "North Bank's agent",
+        "to": "Sam's agent",
+        "kind": "receipt",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:ef4a9862d3a…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From North Bank's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:ref:northbank-intake:0004.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:ref:northbank-intake:0004",
+              "conversation": "urn:awp:ref:sam:0001",
+              "kind": "receipt",
+              "from": {
+                "actor": "https://northbank.example/agents/intake#agent",
+                "onBehalfOf": "https://northbank.example/#org",
+                "operator": "https://northbank.example/#org"
+              },
+              "to": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "party": "https://sam.example/#me"
+              },
+              "createdAt": "2026-11-13T09:03:00.000Z",
+              "expiresAt": "2026-11-13T15:03:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:2e94379de30a943bc0415954d24877f8ef6ba46459dd9840f82395727e770a32"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Reports an activity outcome: completed (final).",
+            "raw": {
+              "ref": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407",
+              "activity": "urn:awp:ref:sam:0001#decision",
+              "outcome": "completed",
+              "final": true,
+              "observed": {
+                "stage": "decided",
+                "decided": {
+                  "status": "indicatively-eligible",
+                  "by": "https://northbank.example/#org",
+                  "basis": "synthetic prequalification rule; indicative only"
+                },
+                "notClaimed": [
+                  "loan approval",
+                  "truth of evidence",
+                  "complete financial picture"
+                ]
+              }
+            },
+            "digest": "sha-256:eb45bfee6a5b9c9d73881bff0b2699aecf695297f0fa42c79d0abc8e0810907d"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:ref:sam:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A receipt message from North Bank's agent reaches the inbound gate."
+    },
+    {
+      "seq": 142,
+      "step": 13,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a JWS from a pinned key, this agent as audience, a valid time window and a one-time message id (urn:awp:ref:northbank-intake:0004)."
+      },
+      "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 143,
+      "step": 13,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 144,
+      "step": 13,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed"
+        }
+      ],
+      "reason": "conversation-bound",
+      "caption": "Authority was checked when this conversation was opened; the sender is bound to it."
+    },
+    {
+      "seq": 145,
+      "step": 13,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:agreement:9e92de3276c4ddd03915e18b480ff407",
+        "text": "Signed offer and acceptance of the exact terms (by digest)."
+      },
+      "caption": "This comes under the agreement both sides signed; its terms bind what is sent."
+    },
+    {
+      "seq": 146,
+      "step": 13,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules"
+        }
+      ],
+      "reason": "not-in-configuration",
+      "caption": "No freshness, completeness or confidence rule applies at the gate in this configuration."
+    },
+    {
+      "seq": 147,
+      "step": 13,
+      "agent": "sams-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core."
+    },
+    {
+      "seq": 148,
+      "step": 14,
+      "agent": "sams-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "27 entries in this agent's hash-chained record; the chain verifies."
+    },
+    {
+      "seq": 149,
+      "step": 14,
+      "agent": "lender",
+      "part": "record",
+      "kind": "record",
+      "caption": "25 entries in this agent's hash-chained record; the chain verifies."
+    }
+  ]
+}
