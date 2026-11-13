@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { sharedAccountKey, sharedItemsForAccount } from "@jeswr/suite-sdk/shared";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { clearHiddenSharedForAccount, hideSharedForAccount } from "@/lib/shared/hidden";
 import {
   defaultPreferences,
   type PreferenceAction,
@@ -16,8 +18,7 @@ export type { PreferenceAction, TasksPreferences } from "./preferences-reducer";
 
 const KEY = "suite.tasks.prefs";
 /** Shared with me is per account: another WebID signing in on this browser never sees it. */
-export const sharedProjectsKey = (webId: string) =>
-  `suite.tasks.shared:${encodeURIComponent(webId)}`;
+export const sharedProjectsKey = (webId: string) => sharedAccountKey(webId, "suite.tasks.shared");
 export const favouritesKey = (webId: string) =>
   `suite.tasks.favourites:${encodeURIComponent(webId)}`;
 let identity: string | undefined;
@@ -41,7 +42,12 @@ function readShared(): TasksPreferences["sharedProjects"] {
   try {
     return parseSharedProjects(window.localStorage.getItem(sharedProjectsKey(identity)));
   } catch {
-    return snapshot.sharedOwner === identity ? snapshot.sharedProjects : [];
+    return [
+      ...sharedItemsForAccount(identity, {
+        owner: snapshot.sharedOwner,
+        items: snapshot.sharedProjects,
+      }),
+    ];
   }
 }
 function readFavourites(): string[] {
@@ -110,10 +116,21 @@ export function useTasksPreferences() {
       const favourite = action.type === "favouriteProject";
       if ((shared || favourite) && !identity) return;
       // A menu callback retained across an account switch cannot write to the new account.
-      if (favourite && owner !== identity) return;
+      if ((shared || favourite) && owner !== identity) return;
+      if (action.type === "removeSharedProject" && identity) {
+        removeSharedProjectForAccount(identity, action.url);
+        return;
+      }
       const next = preferencesReducer(snapshot, action);
+      if (
+        action.type === "sharedProject" &&
+        identity &&
+        next.sharedProjects.some((p) => p.url === action.url)
+      )
+        clearHiddenSharedForAccount(identity, action.url);
       if (next === snapshot) return;
       snapshot = next;
+
       try {
         if (shared && identity)
           window.localStorage.setItem(
@@ -135,8 +152,44 @@ export function useTasksPreferences() {
         /* Storage may be full or disabled. */
       }
       emit();
+      if (shared) window.dispatchEvent(new Event("suite-shared-change"));
     },
     [owner],
   );
   return { preferences, dispatch };
+}
+
+/** Notify every mounted Tasks cache before removing its account preference entry. */
+const removalListeners = new Set<(owner: string, url: string) => void>();
+export function subscribeSharedProjectRemoval(listener: (owner: string, url: string) => void) {
+  removalListeners.add(listener);
+  return () => {
+    removalListeners.delete(listener);
+  };
+}
+export function removeSharedProjectForAccount(owner: string, url: string) {
+  for (const listener of removalListeners) listener(owner, url);
+  const projects =
+    identity === owner
+      ? snapshot.sharedProjects
+      : (() => {
+          try {
+            return parseSharedProjects(localStorage.getItem(sharedProjectsKey(owner)));
+          } catch {
+            return [];
+          }
+        })();
+  const next = preferencesReducer(
+    { ...defaultPreferences, sharedProjects: projects },
+    { type: "removeSharedProject", url },
+  );
+  hideSharedForAccount(owner, url);
+  if (identity === owner) snapshot = { ...snapshot, sharedProjects: next.sharedProjects };
+  try {
+    localStorage.setItem(sharedProjectsKey(owner), JSON.stringify(next.sharedProjects));
+  } catch {
+    /* Account memory remains usable when storage is unavailable. */
+  }
+  emit();
+  window.dispatchEvent(new Event("suite-shared-change"));
 }

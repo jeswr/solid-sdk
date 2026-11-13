@@ -41,7 +41,7 @@ describe("demo seed and binary fixtures", () => {
   it("seeds a profile, owner-only ACL, registered calendars, Contacts type index, agent type registration and the Drive acceptance tree", async () => {
     const seed = await buildDemoSeed(NOW);
     const pod = createDemoPod({ root: DEMO_ROOT, seed, now: () => NOW });
-    expect(seed.filter((file) => !file.path.startsWith("agent/"))).toHaveLength(93);
+    expect(seed.filter((file) => !file.path.startsWith("agent/"))).toHaveLength(101);
     expect(DRIVE_ROOT_CLASS).toBe("https://jeswr.org/ns/pod-drive#DriveRoot");
     for (const file of seed) {
       const url = new URL(file.path, DEMO_ROOT).href;
@@ -170,6 +170,8 @@ describe("demo pod HTTP contract", () => {
       `${DEMO_ROOT}notes/`,
       `${DEMO_ROOT}profile/`,
       `${DEMO_ROOT}settings/`,
+      `${DEMO_ROOT}sheets/`,
+      `${DEMO_ROOT}tasks/`,
     ]);
     const work = `${DEMO_ROOT}drive/Work/`;
     const listing = await graph(await pod.fetch(work), work);

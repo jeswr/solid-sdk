@@ -385,6 +385,22 @@ describe("pending and decided lists", () => {
     expect(lists.unreadable).toEqual([]);
   });
 
+  it("leaves recognised share notifications out of unreadable, but not malformed items", () => {
+    const lists = splitRequests(
+      [
+        request({ id: "a" }),
+        { id: "share", status: "unreadable" },
+        { id: "broken", status: "unreadable" },
+      ],
+      new Date(),
+      new Set(),
+      new Set(["share", "a"]),
+    );
+    expect(lists.unreadable).toEqual([{ id: "broken", status: "unreadable" }]);
+    // The set only narrows the unreadable note: a readable request is never hidden by it.
+    expect(lists.pending.map((entry) => entry.id)).toEqual(["a"]);
+  });
+
   it("labels decisions", () => {
     const format = (value: string) => value.slice(0, 10);
     expect(

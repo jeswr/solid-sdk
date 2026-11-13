@@ -5,7 +5,8 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { decide, listRequests } from "@jeswr/pod-access/requests-solid";
 import { describe, expect, it } from "vitest";
-import { requestCards } from "../src/apps/home/lib/requests/model";
+import { listInboxRequests } from "../src/apps/home/lib/requests/listing";
+import { requestCards, splitRequests } from "../src/apps/home/lib/requests/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import {
@@ -15,6 +16,7 @@ import {
   DEMO_REQUEST_PURPOSE,
   DEMO_REQUESTER,
 } from "../src/lib/demo-pod/seed-requests";
+import { seedShared } from "../src/lib/demo-pod/seed-shared";
 
 const NOW = Date.UTC(2026, 10, 1, 12);
 const DPV = "https://w3id.org/dpv#";
@@ -24,6 +26,26 @@ const SOLID = "http://www.w3.org/ns/solid/terms#";
 async function pod() {
   const demo = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW), now: () => NOW });
   return { demo, options: { fetch: demo.fetch, webId: DEMO_WEBID, storage: DEMO_ROOT } };
+}
+/**
+ * The same seed hosted at an IP literal, as in shared-inbox.test.ts: the share reader's guarded
+ * transport refuses hostnames it cannot DNS-pin outside a browser. The inbox is named, since the
+ * seeded profile names the hostname pod's inbox.
+ */
+const IP_ROOT = "https://8.8.8.8/";
+async function ipPod() {
+  const demo = createDemoPod({ root: IP_ROOT, seed: await buildDemoSeed(NOW), now: () => NOW });
+  return {
+    demo,
+    options: { fetch: demo.fetch, webId: DEMO_WEBID, storage: IP_ROOT, inbox: `${IP_ROOT}inbox/` },
+  };
+}
+/** The share notifications the demo seed puts in the inbox. */
+async function shareIds(root = DEMO_ROOT) {
+  return (await seedShared(NOW))
+    .filter((file) => file.path.startsWith("inbox/"))
+    .map((file) => `${root}${file.path}`)
+    .sort();
 }
 async function graph(fetchFn: typeof fetch, url: string) {
   const response = await fetchFn(url);
@@ -37,7 +59,8 @@ function objects(dataset: Awaited<ReturnType<typeof graph>>, predicate: string) 
 describe("demo access request fixture", () => {
   it("lists MaraCoach's pending one-month Activity request", async () => {
     const { options } = await pod();
-    const [entry, ...rest] = await listRequests(options);
+    const entries = await listRequests(options);
+    const [entry, ...rest] = entries.filter((candidate) => candidate.status !== "unreadable");
     expect(rest).toEqual([]);
     expect(entry).toMatchObject({
       id: `${DEMO_ROOT}${DEMO_REQUEST}`,
@@ -51,6 +74,44 @@ describe("demo access request fixture", () => {
     });
     if (entry?.status === "unreadable" || !entry) throw new Error("unreadable");
     expect(requestCards(entry).map((card) => card.label)).toEqual(["Activity"]);
+    // listRequests reports every other inbox member as unreadable: here, exactly the seeded shares.
+    expect(
+      entries
+        .filter((candidate) => candidate.status === "unreadable")
+        .map((candidate) => candidate.id)
+        .sort(),
+    ).toEqual(await shareIds());
+  });
+
+  it("Home lists the request alone: the seeded share notifications are not unreadable", async () => {
+    const { options } = await ipPod();
+    const { entries, shares } = await listInboxRequests(options);
+    expect([...shares].sort()).toEqual(await shareIds(IP_ROOT));
+    const lists = splitRequests(entries, new Date(NOW), new Set(), shares);
+    expect(lists.pending).toHaveLength(1);
+    expect(lists.pending[0]).toMatchObject({
+      id: `${IP_ROOT}${DEMO_REQUEST}`,
+      requesterName: "MaraCoach",
+      dataTypes: [ACTIVITY_CLASS],
+    });
+    expect(lists.decided).toEqual([]);
+    expect(lists.unreadable).toEqual([]);
+  });
+
+  it("Home still counts a genuinely malformed inbox item as unreadable", async () => {
+    const { demo, options } = await ipPod();
+    const broken = `${IP_ROOT}inbox/broken.ttl`;
+    const put = await demo.fetch(broken, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: "this is not turtle",
+    });
+    expect(put.ok).toBe(true);
+    const { entries, shares } = await listInboxRequests(options);
+    expect([...shares].sort()).toEqual(await shareIds(IP_ROOT));
+    const lists = splitRequests(entries, new Date(NOW), new Set(), shares);
+    expect(lists.unreadable).toEqual([{ id: broken, status: "unreadable" }]);
+    expect(lists.pending.map((request) => request.id)).toEqual([`${IP_ROOT}${DEMO_REQUEST}`]);
   });
 
   it("registers Activity as its one document, never the whole health/ folder", async () => {

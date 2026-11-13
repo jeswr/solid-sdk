@@ -5,10 +5,11 @@
  * original stays untouched. Pure decisions plus the Docs-folder access probe.
  */
 
+import { isSuiteDocsDocument } from "@jeswr/suite-sdk/shared";
 import { encodeRef } from "../../../../lib/refs";
 import { isImportableName, MAX_IMPORT_BYTES } from "../../../docs/lib/convert/import-file";
 import { DOCX_FORMATTING_WARNING, type SkippedItem } from "../../../docs/lib/convert/skipped";
-import { DOCS_SLUG, isDirectChild, LEGACY_DOCS_SLUG } from "../../../docs/lib/model/layout";
+import { DOCS_SLUG } from "../../../docs/lib/model/layout";
 
 export const FOREIGN_FILE_REASON = "Only files in your pod can be opened with Docs";
 export const TOO_LARGE_REASON = "Docs can open files of 50 MB or less";
@@ -24,10 +25,7 @@ interface Target {
  * Docs container (or the legacy Pod Docs one), mirroring the Docs store's scope.
  */
 export function isDocsDocument(item: Target, storageUrl: string): boolean {
-  if (item.kind !== "file" || !item.url.endsWith(".ttl")) return false;
-  return [DOCS_SLUG, LEGACY_DOCS_SLUG].some((slug) =>
-    isDirectChild(item.url, new URL(slug, storageUrl).href),
-  );
+  return item.kind === "file" && isSuiteDocsDocument(item.url, storageUrl);
 }
 
 export function docsHref(url: string): string {
