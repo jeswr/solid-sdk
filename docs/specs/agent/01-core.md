@@ -296,6 +296,13 @@ rules. Deciding to accept an issuer is validation, not verification.
 - **CORE-IN-18.** An agent MUST limit the size of messages it will read and the rate at which
   it will accept them from one sender, and MUST refuse beyond those limits before doing any
   costly work.
+- **CORE-IN-19.** Where no register covers a sender, a profile MAY let the principal decide.
+  The gate then holds the message, shows none of it to the core, and asks the principal
+  whether to add the sender's key to their own list. The request is built by the gate: the
+  key, how the message arrived, and what the sender says it is. The record shows
+  `source-unknown` and the question. A yes adds an entry limited to that party and purpose,
+  with an expiry, and the message is checked again from the start. A no refuses it. An entry
+  made this way is never treated as more than the principal's own word.
 
 ### 5.3 Outbound checks
 
