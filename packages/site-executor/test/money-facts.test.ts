@@ -377,7 +377,7 @@ describe("money from trusted reads in the same flow", () => {
       gate: allow(),
       sessions: new InMemorySessions(),
     }).execute(request());
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("refused");
     expect(result.error).toContain("sent exactly once as a whole value");
     expect(fetch).toHaveBeenCalledTimes(1);
   });

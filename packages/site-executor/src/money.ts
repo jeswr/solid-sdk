@@ -8,7 +8,7 @@ import { type CompiledRequest, compileOperation, fillJsonTemplate } from "./comp
 import type { ExtractedItem } from "./extract.js";
 import { moneyFields } from "./gate.js";
 import { normaliseEffect } from "./match.js";
-import { expandTemplate, templateVariables } from "./uri-template.js";
+import { expandTemplate, parseTemplate, templateVariables } from "./uri-template.js";
 import {
   BindingError,
   canonicalValue,
@@ -111,8 +111,8 @@ function kind(path: string[]): "amount" | "price" | "currency" | "quantity" | un
   return undefined;
 }
 
-// Verify a monetary mapping actually reaches the compiled request as a whole
-// value. Unused inputs or interpolations like "1{charge}" cannot authorize it.
+// Verify a checked input reaches the compiled request exactly once as a whole
+// value, across every wire surface. Unused or transformed inputs cannot bind it.
 function assertSent(
   operation: Operation,
   param: Parameter,
@@ -131,6 +131,15 @@ function assertSent(
     else if (value !== null && typeof value === "object") Object.values(value).forEach(inspect);
   };
   if (templateVariables(operation.request.urlTemplate).includes(param.name)) {
+    // A second, shortened use must not disappear from marker counting.
+    if (
+      parseTemplate(operation.request.urlTemplate).some(
+        (part) =>
+          typeof part !== "string" &&
+          part.vars.some((v) => v.name === param.name && v.prefix !== undefined),
+      )
+    )
+      embedded = true;
     const url = new URL(expandTemplate(operation.request.urlTemplate, marked), compiled.url);
     // Only entire query values or path segments can carry monetary values.
     for (const [name, value] of url.searchParams) {
@@ -153,8 +162,8 @@ function assertSent(
       canonicalValue(param, values[param.name] ?? param.default ?? "")
   )
     count++;
-  if (param.location === "body" || param.location === "form") {
-    if (operation.request.bodyTemplate !== undefined && compiled.body?.kind === "json") {
+  if (compiled.body) {
+    if (operation.request.bodyTemplate !== undefined && compiled.body.kind === "json") {
       inspect(
         fillJsonTemplate(
           operation.request.bodyTemplate,
@@ -163,17 +172,69 @@ function assertSent(
           new Set([param.name]),
         ),
       );
-    } else if (operation.request.bodyTemplate !== undefined && compiled.body) {
+    } else if (operation.request.bodyTemplate !== undefined) {
       const fields = new URLSearchParams(operation.request.bodyTemplate);
       for (const [name, value] of fields) {
         const replaced = value.replaceAll(`{${param.name}}`, marker);
         inspect(replaced);
         if (replaced.includes(marker) && fields.getAll(name).length !== 1) embedded = true;
       }
-    } else if (compiled.body) count++;
+    } else if (param.location === "body" || param.location === "form") count++;
   }
   if (count !== 1 || embedded)
     throw new BindingError("monetary input must be sent exactly once as a whole value");
+}
+
+/** Static fields named for a quote or checked identity can override the checked value. */
+function assertNoStaticShadows(payment: MoneyWrite, names: ReadonlySet<string>): void {
+  const prefix = `sab_${randomUUID().replaceAll("-", "")}_`;
+  const marked = Object.fromEntries(
+    payment.operation.inputs.flatMap((p) =>
+      (payment.values[p.name] ?? p.default) === undefined ? [] : [[p.name, prefix + p.name]],
+    ),
+  );
+  const dynamic = (value: unknown): boolean => {
+    if (typeof value === "string") return value.includes(prefix);
+    if (Array.isArray(value)) return value.some(dynamic);
+    return value !== null && typeof value === "object" && Object.values(value).some(dynamic);
+  };
+  const inspect = (name: string, value: unknown): void => {
+    if (names.has(name) && !dynamic(value))
+      throw new BindingError("static payment field shadows a quoted input or checked identity");
+  };
+  const url = new URL(
+    expandTemplate(payment.operation.request.urlTemplate, marked),
+    payment.compiled.url,
+  );
+  for (const [name, value] of url.searchParams) inspect(name, value);
+  const template = payment.operation.request.bodyTemplate;
+  if (template === undefined || !payment.compiled.body) return;
+  if (payment.compiled.body.kind === "json") {
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) node.forEach(walk);
+      else if (node !== null && typeof node === "object")
+        for (const [name, value] of Object.entries(node)) {
+          inspect(name, value);
+          walk(value);
+        }
+    };
+    walk(
+      fillJsonTemplate(
+        template,
+        marked,
+        new Map(payment.operation.inputs.map((p) => [p.name, p])),
+        new Set(Object.keys(marked)),
+      ),
+    );
+  } else
+    for (const [name, value] of new URLSearchParams(template))
+      inspect(
+        name,
+        value.replace(
+          /\{([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\}/g,
+          (_all, p: string) => marked[p] ?? "",
+        ),
+      );
 }
 
 export interface ItemIdentity {
@@ -289,6 +350,34 @@ export function factsMoney(
   const selected = candidates.filter((c) =>
     totalRequired ? c.total : !c.total && productIds.some((id) => identityMatches(c.item, id)),
   );
+  if (totalRequired) {
+    // A duplicate can carry only identity claims and need not repeat the total's
+    // type. Follow shared own IRIs/typed order IDs, including chains of records.
+    const identities = (item: ExtractedItem): ItemIdentity[] => [
+      ...(item.iri ? [{ type: "iri", value: item.iri }] : []),
+      ...[`${SCHEMA}orderNumber`, `${SCHEMA}identifier`].flatMap((type) =>
+        (item.values.get(type) ?? []).map((value) => ({ type, value })),
+      ),
+    ];
+    const remaining = new Set(candidates.filter((c) => !selected.includes(c)));
+    for (const { item } of selected) {
+      const ids = identities(item);
+      for (const candidate of remaining)
+        if (ids.some((id) => identityMatches(candidate.item, id))) {
+          selected.push(candidate);
+          remaining.delete(candidate);
+        }
+    }
+    const claims = new Map<string, Set<string>>();
+    for (const { item } of selected)
+      for (const id of identities(item)) {
+        const values = claims.get(id.type) ?? new Set<string>();
+        values.add(id.type === "iri" ? (normalizedIri(id.value) ?? id.value) : id.value);
+        claims.set(id.type, values);
+      }
+    if ([...claims.values()].some((values) => values.size > 1))
+      throw new MoneyRefusal(`${refusal}: conflicting order identity claims`);
+  }
   if (
     !totalRequired &&
     !selected.some(
@@ -298,6 +387,8 @@ export function factsMoney(
     throw new MoneyRefusal(`${refusal}: product identity is ambiguous or does not match`);
   let quantity = "1";
   if (!totalRequired) {
+    if (normaliseEffect(payment.operation.effect) === "payment")
+      assertPaymentConfiguration(payment, origin);
     const quantities = payment.operation.inputs.flatMap((p) => {
       if ((kind(p.path) ?? kind(payment.sources[p.name] ?? [])) !== "quantity") return [];
       const v = payment.values[p.name] ?? p.default;
@@ -332,10 +423,9 @@ export function factsMoney(
     const currencies = CURRENCIES.filter((p) => item.values.get(p)?.length).map(
       (p): [string, string[]] => [p, [...(item.values.get(p) ?? [])]],
     );
-    // A partial claim contributes to the same consistency check and retry binding.
-    if (!amounts.length && !currencies.length) continue;
     if (
       totalRequired &&
+      (amounts.length || currencies.length) &&
       orderIds.length &&
       !orderIds.every((id) => {
         if (id.type === "iri") return identityMatches(item, id);
@@ -344,6 +434,8 @@ export function factsMoney(
       })
     )
       throw new MoneyRefusal(`${refusal}: order identity does not match`);
+    // Identity-only records contribute to consistency and retry binding too.
+    if (!amounts.length && !currencies.length && !totalRequired) continue;
     for (const raw of amounts.flatMap(([, values]) => values)) {
       try {
         allAmounts.add(multiply(text(decimal(raw)), quantity));
@@ -356,8 +448,12 @@ export function factsMoney(
       if (!/^[A-Z]{3}$/.test(currency)) throw new MoneyRefusal(`${refusal}: invalid site currency`);
       allCurrencies.add(currency);
     }
-    if (normaliseEffect(payment.operation.effect) === "payment")
-      assertPaymentConfiguration(payment, origin, totalRequired ? read : undefined);
+    if (
+      totalRequired &&
+      (amounts.length || currencies.length) &&
+      normaliseEffect(payment.operation.effect) === "payment"
+    )
+      assertPaymentConfiguration(payment, origin, read);
     records.push({
       step: read.step,
       operation: read.operation.id,
@@ -387,11 +483,44 @@ export function factsMoney(
 function assertPaymentConfiguration(payment: MoneyWrite, origin: string, total?: MoneyRead): void {
   const path = (p: Parameter, sources: Record<string, string[]> = {}) =>
     (p.path.length ? p.path : (sources[p.name] ?? [])).map(expandIri);
+  const protectedNames = new Set(
+    total?.operation.inputs
+      .filter((p) => (total.values?.[p.name] ?? p.default) !== undefined)
+      .map((p) => p.name),
+  );
   for (const p of payment.operation.inputs) {
     const value = payment.values[p.name] ?? p.default;
     if (value === undefined) continue;
     const semantic = path(p, payment.sources);
     const ids = inputIdentities(semantic, value);
+    const quoted = total?.operation.inputs.some(
+      (candidate) =>
+        candidate.name === p.name ||
+        (semantic.length > 0 && semantic.join("\0") === path(candidate, total.sources).join("\0")),
+    );
+    // CSRF/session decoration is attached separately, after evidence and approval.
+    if (
+      !ids.length &&
+      !semantic.length &&
+      !quoted &&
+      payment.operation.csrf?.some(
+        (rule) =>
+          rule.target.name === p.name &&
+          (rule.target.kind === p.location ||
+            (rule.target.kind === "form" && p.location === "body")),
+      )
+    )
+      continue;
+    // Quote matching and identity checks are meaningful only for the effective
+    // payment request, with no unused, embedded, duplicated or shadowed values.
+    try {
+      assertSent(payment.operation, p, payment.values, payment.compiled);
+    } catch {
+      throw new MoneyRefusal(
+        "needs a fresh basket total for these options: payment input must be sent exactly once as a whole value",
+      );
+    }
+    protectedNames.add(p.name);
     // Identity checks above already bind these identifiers to the evidence.
     if (
       ids.length &&
@@ -399,16 +528,6 @@ function assertPaymentConfiguration(payment: MoneyWrite, origin: string, total?:
         ids.every((id) =>
           ["iri", "fallback", `${SCHEMA}orderNumber`, `${SCHEMA}identifier`].includes(id.type),
         ))
-    )
-      continue;
-    // CSRF/session decoration is attached separately, after evidence and approval.
-    if (
-      payment.operation.csrf?.some(
-        (rule) =>
-          rule.target.name === p.name &&
-          (rule.target.kind === p.location ||
-            (rule.target.kind === "form" && p.location === "body")),
-      )
     )
       continue;
     // Direct-buy arithmetic and resolvedMoney cross-check every monetary mapping.
@@ -443,6 +562,17 @@ function assertPaymentConfiguration(payment: MoneyWrite, origin: string, total?:
     )
       continue;
     throw new MoneyRefusal("needs a fresh basket total for these options");
+  }
+  if (payment.operation.csrf?.some((rule) => protectedNames.has(rule.target.name)))
+    throw new MoneyRefusal(
+      "needs a fresh basket total for these options: CSRF target shadows a quoted input or checked identity",
+    );
+  try {
+    assertNoStaticShadows(payment, protectedNames);
+  } catch {
+    throw new MoneyRefusal(
+      "needs a fresh basket total for these options: static payment field shadows a quoted input or checked identity",
+    );
   }
 }
 

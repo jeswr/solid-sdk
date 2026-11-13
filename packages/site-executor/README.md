@@ -195,14 +195,28 @@ excluded. The remaining observations retain their original step order and untrus
   `schema:object` / `schema:referencesOrder`, each contributing total must carry that same identity.
   Different identifiers refuse; empty identity lists never count as a match. An unbound checkout
   may use the fresh basket total read in its own flow.
+  Aggregate orderNumber, identifier and normalized own IRI claims across all records of the
+  selected order, including identity-only records and records linked by those typed identities
+  that do not repeat the Order/Invoice type. Contradictory claims refuse even when the payment
+  does not explicitly bind that identity. Identity-only records and their source reads join the
+  approval digest and retry revalidation; changing them invalidates the previous consent.
 
   Every payment input must be CSRF/session decoration, a checked order/basket identity, or an
   input each contributing total read took with the same value. Match by parameter name or
   nonempty semantic path and compare canonical values, including defaults. Otherwise refuse
   with "needs a fresh basket total for these options". Declared inputs qualify only when sent
-  exactly once as whole values in the total request. A direct buy accounts for mapped quantity
-  in exact price multiplication and cross-checks mapped money; any other non-identity option
-  requires a fresh total. The digest includes the total reads' concrete inputs and semantic paths.
+  exactly once as whole values in the total request. Every quote-bound payment option and every
+  checked order/basket identity must also reach the payment request exactly once as a whole
+  value, across URL, header and body surfaces. Unused, embedded (`9{order}`, `{qty}000`),
+  duplicated and transformed uses (including URI prefix modifiers) refuse. A static JSON field,
+  query parameter or form/multipart field whose name equals a quote parameter's name or a checked
+  payment input's name also refuses as shadowing, even when the checked value is sent elsewhere.
+  Unrelated static literals, such as a submit button value, remain allowed.
+  CSRF decoration cannot exempt a checked input or target a quoted option/identity name.
+  A direct buy applies the same whole-value and shadow checks to quantity and other inputs,
+  accounts for mapped quantity in exact price multiplication and cross-checks mapped money;
+  any other non-identity option requires a fresh total. The digest includes the total reads'
+  concrete inputs and semantic paths.
 
   Bind every contributing record's subject, raw amount/currency values, typed identity, source
   read and quantity in the approval digest. Re-read every contributing source on approval retry;
@@ -258,3 +272,9 @@ bounded item overflow and value truncation (#2), total/payment configuration and
 payment-flow construction and per-step effects (#4), and response IRI kinds and repeat fingerprints (#6).
 Agent-browser's `test/review-r4.test.ts` covers preservation of committed/uncertain results and repeat
 blocking after auxiliary session-refresh failures (#5).
+
+Round 5 regressions are in `test/review-r5.test.ts`: payment-side whole-value transmission for
+quoted options and checked identities, static shadowing across JSON/query/form/multipart,
+direct-buy quantities, and allowed unrelated submit literals (#1); contradictory identity-only
+order records, evidence-digest inclusion and revalidation of identity-only sources (#2).
+Unsafe payment configurations now return `refused` before payment approval or transmission.

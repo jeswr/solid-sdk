@@ -55,6 +55,16 @@ Security review hardening:
   Bind the total reads' concrete inputs and paths in the evidence digest.
   Require the matching total input to reach its request exactly once as a whole value;
   a declared but unused, embedded or partially sent input cannot cover a payment option.
+  Apply the same machinery to each payment option and checked identity, counting all URL,
+  header and body uses. Reject unused, embedded, duplicate and transformed values, including
+  URI prefix modifiers. Static JSON/query/form fields named for a quote parameter or checked
+  payment input shadow it and refuse; unrelated static literals such as submit values are allowed.
+  CSRF decoration cannot exempt checked inputs or target a quoted option/identity name.
+  Direct-buy quantities and options keep these same whole-value and shadow checks.
+- Aggregate orderNumber, identifier and normalized own IRI claims across every record of the
+  selected order before skipping money-empty records. Follow shared typed identities even on
+  records without total types; contradictions refuse. Bind and revalidate identity-only sources
+  alongside monetary sources, so any identity change invalidates the previous approval.
 - Reject payment flows without a payment-effect operation at construction. Preparatory writes
   retain their own effect; strongest steps inherit a stronger declared flow effect. Every write
   gated as payment must pass mandatory money checks.
