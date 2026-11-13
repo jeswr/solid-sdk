@@ -7,7 +7,7 @@
  * chat line before it. The rules for what is offered follow design section 3:
  *
  * - the responses come only from `offered`; the UI never invents one, and `checkResponse`
- *   refuses anything not offered, anything expired, and any malformed limit;
+ *   refuses anything not offered, expired approvals, and any malformed limit;
  * - standing permission (a spending limit) is withheld for irreversible or very large
  *   purchases, unestablished recipients, content-originated proposals, step-ups, sector
  *   profiles that need each approval, and after the principal declined it twice;
@@ -401,7 +401,8 @@ export function checkResponse(
   if (response.digest !== request.digest) return { ok: false, reason: "digest-mismatch" };
   const offered = request.offered.find((o) => o.id === response.offeredId);
   if (!offered || offered.type !== response.type) return { ok: false, reason: "not-offered" };
-  if (now.getTime() >= Date.parse(request.expiresAt)) return { ok: false, reason: "expired" };
+  if (response.type !== "deny" && now.getTime() >= Date.parse(request.expiresAt))
+    return { ok: false, reason: "expired" };
   if (response.type === "set-limit" || response.type === "raise-limit") {
     const rule = ruleFromDraft(response.draft, ruleId, now);
     const action = request.action;

@@ -73,8 +73,8 @@ export interface RunToken {
 }
 
 type Listener = (state: EngineState) => void;
-type Resolver = { resolve: (r: PrincipalResponse) => void; reject: (e: Error) => void };
-type Done = "done" | "denied" | "stopped" | "blocked";
+type Resolver = { resolve: (r: PrincipalResponse | undefined) => void; reject: (e: Error) => void };
+type Done = "done" | "denied" | "stopped" | "blocked" | "expired";
 
 export class StoppedError extends Error {
   constructor() {
@@ -91,12 +91,16 @@ export class Engine {
   private parties!: Parties;
   /** Signed spending rules and revocations, as compact JWS. The gate verifies each use. */
   private readonly ruleRecords: string[] = [];
+  /** Fail closed immediately, including while the signed revocation is being persisted. */
+  private readonly revokedRules = new Set<string>();
   private readonly approvalRecords = new Map<string, string>();
   private readonly attestations = new Map<string, string>();
   private readonly ledger: SpendRecord[] = [];
+  private readonly usedReceipts = new Set<string>();
   private readonly history = new Map<string, { purchases: number; shares: number }>();
   private readonly declined = new Map<string, number>();
   private resolver: Resolver | undefined;
+  private approvalTimer: ReturnType<typeof setTimeout> | undefined;
   private seq = 0;
   private runController = new AbortController();
   private actionQueue: Promise<void> = Promise.resolve();
@@ -341,6 +345,7 @@ export class Engine {
     this.runController.abort();
     this.approvalRecords.clear();
     this.attestations.clear();
+    clearTimeout(this.approvalTimer);
     const pending = this.state.pending;
     if (pending) {
       this.markStub(pending.chatId, pending.request.id, "cancelled");
@@ -376,7 +381,7 @@ export class Engine {
       if (r?.type === "spending-rule") rules.set(r.rule.id, r.rule);
       if (r?.type === "revocation") revoked.add(r.ruleId);
     }
-    return [...rules.values()].filter((r) => !revoked.has(r.id));
+    return [...rules.values()].filter((r) => !revoked.has(r.id) && !this.revokedRules.has(r.id));
   }
 
   private async verifiedApprovals(): Promise<Set<string>> {
@@ -386,8 +391,8 @@ export class Engine {
       if (
         r?.type === "approval" &&
         r.decision === "approve" &&
-        r.issuedAt <= this.now().toISOString() &&
-        r.expiresAt > this.now().toISOString()
+        Date.parse(r.issuedAt) <= this.now().getTime() &&
+        Date.parse(r.expiresAt) > this.now().getTime()
       )
         out.add(r.actionDigest);
     }
@@ -398,20 +403,22 @@ export class Engine {
     const rules = await this.verifiedRules();
     this.guard(run);
     const now = this.now();
-    const views: RuleView[] = rules.map((rule) => {
-      const u = ruleUsage(rule, this.ledger, { minor: 0, currency: rule.limit.currency }, now);
-      const jws =
-        this.ruleRecords.find((j) => j.length > 0 && this.ruleJwsIds.get(j) === rule.id) ?? "";
-      return {
-        rule,
-        jws,
-        label: ruleLabel(rule),
-        summary: summarizeDraft(rule, AGENT_NAME, now),
-        used: u.used,
-        remaining: u.remaining,
-        ...(u.resetsAt ? { resetsAt: u.resetsAt } : {}),
-      };
-    });
+    const views: RuleView[] = rules
+      .filter((rule) => !this.revokedRules.has(rule.id))
+      .map((rule) => {
+        const u = ruleUsage(rule, this.ledger, { minor: 0, currency: rule.limit.currency }, now);
+        const jws =
+          this.ruleRecords.find((j) => j.length > 0 && this.ruleJwsIds.get(j) === rule.id) ?? "";
+        return {
+          rule,
+          jws,
+          label: ruleLabel(rule),
+          summary: summarizeDraft(rule, AGENT_NAME, now),
+          used: u.used,
+          remaining: u.remaining,
+          ...(u.resetsAt ? { resetsAt: u.resetsAt } : {}),
+        };
+      });
     this.set({ rules: views });
   }
 
@@ -429,26 +436,18 @@ export class Engine {
     return jws;
   }
 
-  /** Turn a rule off (from Can do, or Undo). Writes a signed revocation. */
-  revokeRule(ruleId: string, chatId?: string, run = this.createRun()): Promise<void> {
-    return this.withAction(run, () => this.revokeRuleAction(ruleId, chatId, run));
-  }
-
-  private async revokeRuleAction(
-    ruleId: string,
-    chatId: string | undefined,
-    run: RunToken,
-  ): Promise<void> {
+  /** Revocation is an immediate withdrawal of authority, independent of action cancellation. */
+  async revokeRule(ruleId: string, chatId?: string): Promise<void> {
+    this.revokedRules.add(ruleId);
+    const view = this.state.rules.find((r) => r.rule.id === ruleId);
+    this.set({ rules: this.state.rules.filter((r) => r.rule.id !== ruleId) });
+    await this.ready;
     const jws = await signRecord(this.key, {
       type: "revocation",
       ruleId,
       issuedAt: this.now().toISOString(),
     });
-    this.guard(run);
     this.ruleRecords.push(jws);
-    const view = this.state.rules.find((r) => r.rule.id === ruleId);
-    await this.refreshRules(run);
-    this.guard(run);
     if (view) {
       this.log({
         outcome: "go",
@@ -480,14 +479,17 @@ export class Engine {
     run: RunToken,
   ): Promise<{ gate: GateResult; digest: string }> {
     const digest = this.digestOf(action);
+    const rules = await this.verifiedRules();
+    const approvals = await this.verifiedApprovals();
+    const attestations = await this.verifiedAttestations(action, digest, run);
     const gate = evaluateAction({
       action,
       digest,
       policy: SAM_POLICY,
-      rules: await this.verifiedRules(),
+      rules: rules.filter((rule) => !this.revokedRules.has(rule.id)),
       records: this.ledger,
-      approvals: await this.verifiedApprovals(),
-      attestations: await this.verifiedAttestations(action, digest, run),
+      approvals,
+      attestations,
       now: this.now(),
     });
     return { gate, digest };
@@ -536,20 +538,42 @@ export class Engine {
     request: ApprovalRequest,
     summary: string,
     run: RunToken,
-  ): Promise<PrincipalResponse> {
+  ): Promise<PrincipalResponse | undefined> {
     this.guard(run);
-    this.push(chatId, { type: "approval", requestId: request.id, summary, state: "pending" });
-    this.set({ pending: { chatId, request } });
-    this.log({
-      outcome: "ask",
-      filter: "asked",
-      summary: `Asked you: ${request.title}`,
-      checks: request.checks,
-      digest: request.digest,
-    });
     return new Promise((resolve, reject) => {
       this.resolver = { resolve, reject };
+      this.approvalTimer = setTimeout(
+        () => this.expireApproval(request.id),
+        Math.max(0, Date.parse(request.expiresAt) - this.now().getTime()),
+      );
+      this.push(chatId, { type: "approval", requestId: request.id, summary, state: "pending" });
+      this.set({ pending: { chatId, request } });
+      this.log({
+        outcome: "ask",
+        filter: "asked",
+        summary: `Asked you: ${request.title}`,
+        checks: request.checks,
+        digest: request.digest,
+      });
     });
+  }
+
+  private expireApproval(requestId: string): void {
+    const pending = this.state.pending;
+    if (!pending || pending.request.id !== requestId) return;
+    clearTimeout(this.approvalTimer);
+    const waiting = this.resolver;
+    this.resolver = undefined;
+    this.set({ pending: undefined });
+    this.markStub(pending.chatId, requestId, "expired");
+    this.log({
+      outcome: "stop",
+      filter: "asked",
+      summary: `Approval expired: ${pending.request.title}`,
+      checks: pending.request.checks,
+      digest: pending.request.digest,
+    });
+    waiting?.resolve(undefined);
   }
 
   /** The UI answers the open approval. Refused responses leave it open. */
@@ -557,7 +581,15 @@ export class Engine {
     const pending = this.state.pending;
     if (!pending || !this.resolver) return { ok: false, reason: "nothing-pending" };
     const check = checkResponse(pending.request, response, this.now());
-    if (!check.ok) return { ok: false, reason: check.reason };
+    if (!check.ok) {
+      if (check.reason === "expired") this.expireApproval(pending.request.id);
+      return { ok: false, reason: check.reason };
+    }
+    if (this.now().getTime() >= Date.parse(pending.request.expiresAt)) {
+      this.expireApproval(pending.request.id);
+      return { ok: true }; // Dismissing a stale sheet never authorizes its action.
+    }
+    clearTimeout(this.approvalTimer);
     const waiting = this.resolver;
     this.resolver = undefined;
     this.set({ pending: undefined });
@@ -614,6 +646,7 @@ export class Engine {
       await this.leadIn(chatId, action, gate, run);
       const response = await this.ask(chatId, request, summary, run);
       this.guard(run);
+      if (!response) return { result: "expired", action };
       const now = this.now();
       if (response.type === "deny") {
         this.markStub(chatId, request.id, "denied");
@@ -923,20 +956,37 @@ export class Engine {
       }
       return outcome.result;
     }
+    if (
+      outcome.gate.basis === "rule" &&
+      outcome.gate.spend?.outcome === "covered" &&
+      this.revokedRules.has(outcome.gate.spend.usage.rule.id)
+    )
+      return this.completePurchase(chatId, outcome.action, summary, run);
     const a = outcome.action;
     const g = outcome.gate;
     // The store confirms the order with a signed receipt; the inbound gate checks it.
     this.ordinal += 13;
     const orderRef = `SC-${this.ordinal}`;
+    const digest = this.digestOf(a);
     const receiptJws = await this.sign(run, a.recipient.id, {
       order: orderRef,
+      actionDigest: digest,
       total: a.total.minor,
+      currency: a.total.currency,
     });
-    const receipt = await this.receive<{ order: string; total: number }>(
-      run,
-      receiptJws,
-      a.recipient.id,
-      (x) => (x.total === a.total.minor ? undefined : "total differs"),
+    const receipt = await this.receive<{
+      order: string;
+      actionDigest: string;
+      total: number;
+      currency: string;
+    }>(run, receiptJws, a.recipient.id, (x) =>
+      x.order === orderRef &&
+      x.actionDigest === digest &&
+      x.total === a.total.minor &&
+      x.currency === a.total.currency &&
+      !this.usedReceipts.has(receiptJws)
+        ? undefined
+        : "receipt does not match this order or has already been used",
     );
     if (!receipt) {
       await this.say(
@@ -949,6 +999,8 @@ export class Engine {
     const ruleId =
       g.basis === "rule" && g.spend?.outcome === "covered" ? g.spend.usage.rule.id : undefined;
     this.guard(run);
+    // Commit the effect and its evidence together, before any cancellable presentation work.
+    this.usedReceipts.add(receiptJws);
     this.ledger.push({
       id: orderRef,
       ...(ruleId ? { ruleId } : {}),
@@ -959,20 +1011,45 @@ export class Engine {
     });
     const h = this.history.get(a.recipient.id) ?? { purchases: 0, shares: 0 };
     this.history.set(a.recipient.id, { ...h, purchases: h.purchases + 1 });
-    await this.refreshRules(run);
     const authority = outcome.authority ?? "You approved this purchase";
-    this.guard(run);
-    const recordId = this.log({
+    const recordId = this.id("rec");
+    const at = this.now().toISOString();
+    const entry: ActivityEntry = {
+      id: recordId,
+      at,
       outcome: "go",
       filter: "purchases",
       summary: `Bought ${a.items.map((i) => i.name).join(", ")} at ${a.recipient.name}`,
       detail: formatMoney(a.total),
       checks: g.checks,
       inbound: receipt.checks,
-      digest: outcome.digest,
+      digest,
+      orderRef,
+      receiptJws,
       authority,
       ...(outcome.consentJws ? { consentJws: outcome.consentJws } : {}),
+    };
+    const message: ChatMessage = {
+      id: this.id("m"),
+      at,
+      type: "receipt",
+      store: a.recipient.name,
+      items: a.items.map((i) => ({
+        name: `${i.name}${i.variant ? ` (${i.variant})` : ""}`,
+        price: i.price,
+      })),
+      total: a.total,
+      orderRef,
+      authority,
+      recordId,
+    };
+    this.set({
+      activity: [entry, ...this.state.activity],
+      chats: this.state.chats.map((chat) =>
+        chat.id === chatId ? { ...chat, messages: [...chat.messages, message] } : chat,
+      ),
     });
+    await this.refreshRules(run);
     const item = a.items[0] as (typeof a.items)[number];
     const arrives = a.delivery?.replace(/^Free, /, "").replace(/^arrives /, "arriving ") ?? "";
     if (ruleId) {
@@ -989,18 +1066,6 @@ export class Engine {
       );
     }
     this.guard(run);
-    this.push(chatId, {
-      type: "receipt",
-      store: a.recipient.name,
-      items: a.items.map((i) => ({
-        name: `${i.name}${i.variant ? ` (${i.variant})` : ""}`,
-        price: i.price,
-      })),
-      total: a.total,
-      orderRef,
-      authority,
-      recordId,
-    });
     this.limitChip(chatId, ruleId ?? this.ruleFor(a.recipient.id));
     return "done";
   }

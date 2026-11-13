@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The principal's consent records are signed on their own device. The key is a P-256 key
@@ -12,7 +13,7 @@
  */
 import { canonicalJson, digestOf } from "@jeswr/agent-model/core/canonical";
 import { CompactSign, compactVerify, importJWK, type JWK } from "jose";
-import { isSpendingRule, type SpendingRule } from "./rules.js";
+import { isSpendingRule, isUtcTimestamp, type SpendingRule } from "./rules.js";
 
 export const CONSENT_TYPE = "application/agent-consent+json";
 const MAX_JWS = 16 * 1024;
@@ -72,7 +73,6 @@ function wellFormed(value: unknown): value is ConsentRecord {
   if (typeof value !== "object" || value === null) return false;
   const r = value as Record<string, unknown>;
   const keys = Object.keys(r).sort().join(",");
-  const at = (v: unknown) => typeof v === "string" && Number.isFinite(Date.parse(v));
   if (r.type === "approval")
     return (
       keys === "actionDigest,decision,expiresAt,id,issuedAt,type" &&
@@ -80,14 +80,16 @@ function wellFormed(value: unknown): value is ConsentRecord {
       typeof r.actionDigest === "string" &&
       /^sha-256:[0-9a-f]{64}$/.test(r.actionDigest) &&
       (r.decision === "approve" || r.decision === "deny") &&
-      at(r.issuedAt) &&
-      at(r.expiresAt) &&
-      (r.issuedAt as string) < (r.expiresAt as string)
+      isUtcTimestamp(r.issuedAt) &&
+      isUtcTimestamp(r.expiresAt) &&
+      Date.parse(r.issuedAt) <= Date.parse(r.expiresAt)
     );
   if (r.type === "spending-rule")
-    return keys === "issuedAt,rule,type" && at(r.issuedAt) && isSpendingRule(r.rule);
+    return keys === "issuedAt,rule,type" && isUtcTimestamp(r.issuedAt) && isSpendingRule(r.rule);
   if (r.type === "revocation")
-    return keys === "issuedAt,ruleId,type" && typeof r.ruleId === "string" && at(r.issuedAt);
+    return (
+      keys === "issuedAt,ruleId,type" && typeof r.ruleId === "string" && isUtcTimestamp(r.issuedAt)
+    );
   return false;
 }
 

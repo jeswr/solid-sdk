@@ -38,7 +38,8 @@ export interface SpendingRule {
 
 const ID = /^[A-Za-z0-9:._#/-]{1,200}$/;
 
-function instant(value: unknown): value is string {
+/** Consent timestamps use ISO UTC with an explicit Z; precision may vary. */
+export function isUtcTimestamp(value: unknown): value is string {
   return (
     typeof value === "string" &&
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) &&
@@ -87,8 +88,11 @@ export function isSpendingRule(value: unknown): value is SpendingRule {
     if (new Set(r.supersedes).size !== r.supersedes.length) return false;
   }
   if (!isMoney(r.limit) || r.limit.minor === 0) return false;
-  if (!validScope(r.scope) || !instant(r.createdAt)) return false;
-  if (r.expiresAt !== undefined && (!instant(r.expiresAt) || r.expiresAt <= r.createdAt))
+  if (!validScope(r.scope) || !isUtcTimestamp(r.createdAt)) return false;
+  if (
+    r.expiresAt !== undefined &&
+    (!isUtcTimestamp(r.expiresAt) || Date.parse(r.expiresAt) <= Date.parse(r.createdAt))
+  )
     return false;
   if (r.kind === "budget") {
     if (r.period !== "week" && r.period !== "month") return false;

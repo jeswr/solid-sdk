@@ -1,11 +1,20 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-import type { ApprovalRequest, PrincipalResponse } from "@jeswr/agent-consent";
+import {
+  type ApprovalRequest,
+  type DeviceKey,
+  type PrincipalResponse,
+  type SpendRecord,
+  signRecord,
+  verifyRecord,
+} from "@jeswr/agent-consent";
 import { describe, expect, it, vi } from "vitest";
+import type { SampleTool } from "../src/engine/core.js";
 import { Engine, StoppedError } from "../src/engine/engine.js";
 import { Parties } from "../src/engine/parties.js";
 import { Session } from "../src/engine/session.js";
 import type { ChatMessage } from "../src/engine/types.js";
+import { PRODUCTS } from "../src/engine/world.js";
 
 const NOW = new Date("2026-11-13T12:00:00.000Z");
 
@@ -209,6 +218,388 @@ function pauseSigning(matches: (payload: Record<string, unknown>) => boolean) {
   return { entered: entered.promise, release: release.resolve, restore: () => spy.mockRestore() };
 }
 
+describe("second adversarial review", () => {
+  it("revocation immediately disables a rule behind an approval and persists across Stop", async () => {
+    const { session, messages } = harness([limit(10000)]);
+    await session.send("buy socks");
+    const engine = session.engine;
+    const ruleId = engine.getState().rules[0]?.rule.id as string;
+    const application = engine.mortgageApply(engine.getState().activeChat).catch((e: unknown) => e);
+    await vi.waitFor(() => expect(engine.getState().pending?.request.kind).toBe("disclosure"));
+    const revocation = engine.revokeRule(ruleId, engine.getState().activeChat);
+    const removedImmediately = engine.getState().rules.length === 0;
+    engine.stop();
+    engine.resume();
+    const [revoked] = await Promise.allSettled([revocation, application]);
+    const internals = engine as unknown as { ruleRecords: string[]; key: DeviceKey };
+    const records = await Promise.all(
+      internals.ruleRecords.map((jws) => verifyRecord(jws, internals.key.publicJwk)),
+    );
+    const purchase = engine.buy(engine.getState().activeChat, "p:socks");
+    await vi.waitFor(() => expect(engine.getState().pending).toBeDefined()).catch(() => undefined);
+    const pending = engine.getState().pending;
+    if (pending) await engine.respond(deny(pending.request));
+    await purchase;
+    expect(removedImmediately).toBe(true);
+    expect(revoked.status).toBe("fulfilled");
+    expect(records).toContainEqual(expect.objectContaining({ type: "revocation", ruleId }));
+    expect(engine.getState().rules).toHaveLength(0);
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(1);
+  });
+
+  it("can revoke while already stopped without a new action run", async () => {
+    const { session } = harness([limit(10000)]);
+    await session.send("buy socks");
+    const engine = session.engine;
+    const ruleId = engine.getState().rules[0]?.rule.id as string;
+    engine.stop();
+    await expect(engine.revokeRule(ruleId)).resolves.toBeUndefined();
+    expect(engine.getState().rules).toHaveLength(0);
+  });
+
+  it("rechecks a rule revoked after authorization but before the purchase starts", async () => {
+    const { session, messages } = harness([limit(10000), deny]);
+    await session.send("buy socks");
+    const engine = session.engine;
+    const internals = engine as unknown as { passGate(...args: unknown[]): Promise<unknown> };
+    const original = internals.passGate.bind(engine);
+    const entered = deferred();
+    const release = deferred();
+    const spy = vi.spyOn(internals, "passGate").mockImplementation(async (...args) => {
+      const result = await original(...args);
+      entered.resolve();
+      await release.promise;
+      return result;
+    });
+    const purchase = engine.buy(engine.getState().activeChat, "p:socks");
+    await entered.promise;
+    const revocation = engine.revokeRule(engine.getState().rules[0]?.rule.id as string);
+    release.resolve();
+    let result: unknown;
+    try {
+      [result] = await Promise.all([purchase, revocation]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(result).toBe("denied");
+    expect(messages().filter((message) => message.type === "receipt")).toHaveLength(1);
+  });
+
+  it("compares signed approval timestamps as instants, including at expiry", async () => {
+    const { session } = harness([]);
+    const engine = session.engine;
+    await engine.ready;
+    const internals = engine as unknown as {
+      key: DeviceKey;
+      approvalRecords: Map<string, string>;
+      verifiedApprovals(): Promise<Set<string>>;
+    };
+    const digest = `sha-256:${"a".repeat(64)}`;
+    const put = async (issuedAt: string, expiresAt: string) => {
+      internals.approvalRecords.set(
+        digest,
+        await signRecord(internals.key, {
+          type: "approval",
+          id: "time",
+          decision: "approve",
+          actionDigest: digest,
+          issuedAt,
+          expiresAt,
+        }),
+      );
+      return internals.verifiedApprovals();
+    };
+    expect(await put("2026-11-13T12:00:00Z", "2026-11-13T12:10:00Z")).toContain(digest);
+    expect(await put("2026-11-13T11:00:00Z", "2026-11-13T12:00:00Z")).not.toContain(digest);
+    expect(await put("2026-11-13T12:00:00.001Z", "2026-11-13T12:10:00Z")).not.toContain(digest);
+    expect(await put("2026-11-13T10:00:00+02:00", "2026-11-13T13:00:00+02:00")).not.toContain(
+      digest,
+    );
+  });
+
+  it.each([
+    "resolve",
+    "reject",
+  ])("closes retained callbacks on sampling %s before draining or fallback", async (settlement) => {
+    const { session, messages } = harness([limit(10000)]);
+    await session.send("buy socks");
+    let retained!: SampleTool;
+    session.enableLive(async (_input, { tools }) => {
+      retained = tools.find((tool) => tool.name === "buy_product") as SampleTool;
+      if (settlement === "reject") throw new Error("offline before dispatch");
+      return { text: "" };
+    });
+    session.engine.setCore("live");
+    await session.send("buy socks");
+    const receiptsBefore = messages().filter((m) => m.type === "receipt").length;
+    await expect(
+      Promise.resolve().then(() => retained.execute({ product_id: "p:socks" })),
+    ).rejects.toThrow("closed");
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(receiptsBefore);
+  });
+
+  it("drains accepted tools after sampling settles while rejecting new dispatch", async () => {
+    const { session, messages } = harness([limit(10000)]);
+    await session.send("buy socks");
+    const pause = pauseSigning((payload) => typeof payload.order === "string");
+    let retained!: SampleTool;
+    let accepted!: Promise<unknown>;
+    const settled = deferred();
+    session.enableLive(async (_input, { tools }) => {
+      retained = tools.find((tool) => tool.name === "buy_product") as SampleTool;
+      accepted = retained.execute({ product_id: "p:socks" });
+      await pause.entered;
+      settled.resolve();
+      return { text: "" };
+    });
+    session.engine.setCore("live");
+    const request = session.send("buy socks");
+    await settled.promise;
+    // Let the fulfilled sample propagate to the request wrapper, without waiting for the tool.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    let lateError: unknown;
+    const late = Promise.resolve()
+      .then(() => retained.execute({ product_id: "p:roadrunner" }))
+      .catch((error: unknown) => {
+        lateError = error;
+      });
+    pause.release();
+    try {
+      await Promise.all([request, accepted, late]);
+    } finally {
+      pause.restore();
+    }
+    expect(lateError).toBeInstanceOf(Error);
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(2);
+  });
+
+  it("normalizes defaults before deduplication and rejects invalid or unknown arguments", async () => {
+    const { session, messages } = harness([limit(10000)]);
+    await session.send("buy socks");
+    let results: PromiseSettledResult<unknown>[] = [];
+    session.enableLive(async (_input, { tools }) => {
+      const buy = tools.find((tool) => tool.name === "buy_product") as SampleTool;
+      const defaultVariant = PRODUCTS.find((product) => product.id === "p:socks")?.variants[0];
+      results = await Promise.allSettled([
+        buy.execute({ product_id: "p:socks" }),
+        buy.execute({ variant: defaultVariant, product_id: "p:socks" }),
+        buy.execute({ product_id: "p:socks", variant: "invalid" }),
+        buy.execute({ product_id: "p:socks", unused: true }),
+      ]);
+      return { text: "" };
+    });
+    session.engine.setCore("live");
+    await session.send("buy socks");
+    expect(results.map((r) => r.status)).toEqual([
+      "fulfilled",
+      "fulfilled",
+      "rejected",
+      "rejected",
+    ]);
+    expect(results.slice(0, 2)).toEqual([
+      { status: "fulfilled", value: "done" },
+      { status: "fulfilled", value: "done" },
+    ]);
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(2);
+  });
+
+  it("validates every live tool before accepting an operation", async () => {
+    const { session, messages } = harness([limit(10000), deny, deny]);
+    await session.send("buy socks");
+    const invalid: [string, unknown][] = [
+      ["buy_product", null],
+      ["buy_product", []],
+      ["buy_product", {}],
+      ["buy_product", { product_id: 1 }],
+      ["buy_product", { product_id: "unknown" }],
+      ["buy_product", { product_id: "p:socks", variant: 1 }],
+      ["buy_product", { product_id: "p:socks", operation_id: "model-retry-id" }],
+      ["search_products", { category: "unknown" }],
+      ["search_products", { max_price_usd: "20" }],
+      ["search_products", { max_price_usd: NaN }],
+      ["search_products", { max_price_usd: Infinity }],
+      ["search_products", { max_price_usd: -1 }],
+      ["search_products", { max_price_usd: 1.001 }],
+      ["search_products", { unused: true }],
+      ["apply_for_decision_in_principle", {}],
+      ["apply_for_decision_in_principle", { lender_id: "unknown" }],
+      ["find_mortgages", { unused: true }],
+      ["explain_rules", { unused: true }],
+    ];
+    let results: PromiseSettledResult<unknown>[] = [];
+    session.enableLive(async (_input, { tools }) => {
+      results = await Promise.allSettled(
+        invalid.map(([name, input]) => {
+          const tool = tools.find((t) => t.name === name) as SampleTool;
+          return tool.execute(input as Record<string, unknown>);
+        }),
+      );
+      return { text: "" };
+    });
+    session.engine.setCore("live");
+    await session.send("check tools");
+    expect(results).toHaveLength(invalid.length);
+    expect(results.every((result) => result.status === "rejected")).toBe(true);
+    expect(session.engine.getState().core).toBe("live");
+    expect(messages().filter((message) => message.type === "receipt")).toHaveLength(1);
+    expect(session.engine.getState().pending).toBeUndefined();
+  });
+
+  it("automatically settles approval expiry and releases queued actions", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.setSystemTime(NOW);
+    const { session, messages } = harness([], () => new Date());
+    const engine = session.engine;
+    await engine.ready;
+    const pending = deferred();
+    const unsubscribe = engine.subscribe((state) => {
+      if (state.pending) pending.resolve();
+    });
+    const first = engine.buy(engine.getState().activeChat, "p:socks");
+    await pending.promise;
+    unsubscribe();
+    const queued = engine.explainRules(engine.getState().activeChat);
+    try {
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      const released = engine.getState().pending === undefined;
+      if (!released) engine.stop(); // Ensure a failing regression does not leave a promise or timer behind.
+      const results = await Promise.allSettled([first, queued]);
+      expect(released).toBe(true);
+      expect(results[0]).toEqual({ status: "fulfilled", value: "expired" });
+      expect(results[1]?.status).toBe("fulfilled");
+      expect(messages().some((m) => m.type === "approval" && m.state === "expired")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    "approve",
+    "dismiss",
+  ])("settles a stale sheet on %s even before its timer fires", async (answer) => {
+    let time = NOW;
+    const { session, messages } = harness([], () => time);
+    const engine = session.engine;
+    await engine.ready;
+    const purchase = engine
+      .buy(engine.getState().activeChat, "p:socks")
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(engine.getState().pending).toBeDefined());
+    const request = engine.getState().pending?.request as ApprovalRequest;
+    time = new Date(request.expiresAt);
+    const response = await engine.respond(answer === "dismiss" ? deny(request) : once(request));
+    const released = engine.getState().pending === undefined;
+    if (!released) engine.stop();
+    await purchase;
+    expect(response).toEqual(
+      answer === "dismiss" ? { ok: true } : { ok: false, reason: "expired" },
+    );
+    expect(released).toBe(true);
+    expect(messages().some((m) => m.type === "approval" && m.state === "expired")).toBe(true);
+  });
+
+  it.each([
+    "order",
+    "actionDigest",
+    "total",
+    "currency",
+  ])("rejects a validly signed receipt with a different %s", async (field) => {
+    const { session, messages } = harness([limit(10000)]);
+    await session.send("buy socks");
+    const original = Parties.prototype.sign;
+    const spy = vi.spyOn(Parties.prototype, "sign").mockImplementation(function (
+      this: Parties,
+      from,
+      payload,
+    ) {
+      return original.call(
+        this,
+        from,
+        typeof payload.order === "string"
+          ? { ...payload, [field]: field === "total" ? 1201 : "wrong" }
+          : payload,
+      );
+    });
+    try {
+      await session.send("buy socks");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(session.engine.getState().rules[0]?.used.minor).toBe(1200);
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(1);
+  });
+
+  it("rejects a replayed signed receipt for a second purchase", async () => {
+    const { session, messages } = harness([limit(10000)]);
+    const original = Parties.prototype.sign;
+    let firstReceipt: string | undefined;
+    const spy = vi.spyOn(Parties.prototype, "sign").mockImplementation(async function (
+      this: Parties,
+      from,
+      payload,
+    ) {
+      if (typeof payload.order !== "string") return original.call(this, from, payload);
+      firstReceipt ??= await original.call(this, from, payload);
+      return firstReceipt;
+    });
+    try {
+      await session.send("buy socks");
+      await session.send("buy socks");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(session.engine.getState().rules[0]?.used.minor).toBe(1200);
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(1);
+  });
+
+  it("commits Activity and its receipt with the ledger before cancellable rule refresh", async () => {
+    const { session, messages } = harness([limit(10000)]);
+    await session.send("buy socks");
+    const engine = session.engine;
+    const internals = engine as unknown as {
+      ledger: SpendRecord[];
+      parties: Parties;
+      refreshRules(run: unknown): Promise<void>;
+    };
+    const entered = deferred();
+    const release = deferred();
+    const original = internals.refreshRules.bind(engine);
+    const spy = vi.spyOn(internals, "refreshRules").mockImplementation(async (run) => {
+      entered.resolve();
+      await release.promise;
+      await original(run);
+    });
+    const purchase = session.send("buy socks");
+    await entered.promise;
+    const activityAtCommit = engine
+      .getState()
+      .activity.filter((entry) => entry.filter === "purchases");
+    engine.stop();
+    engine.resume();
+    release.resolve();
+    try {
+      await purchase;
+    } finally {
+      spy.mockRestore();
+    }
+    expect(activityAtCommit).toHaveLength(internals.ledger.length);
+    expect(engine.getState().activity.filter((entry) => entry.filter === "purchases")).toHaveLength(
+      2,
+    );
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(2);
+    const entry = activityAtCommit[0];
+    expect(entry?.receiptJws).toBeTypeOf("string");
+    const receipt = await internals.parties.receive(entry?.receiptJws as string, "store:stride");
+    expect(receipt?.payload).toMatchObject({
+      order: internals.ledger[1]?.id,
+      actionDigest: entry?.digest,
+      total: 1200,
+      currency: "USD",
+    });
+    expect(entry?.orderRef).toBe(internals.ledger[1]?.id);
+  });
+});
+
 describe("review security regressions", () => {
   it("binds answers to the displayed request and digest and accepts one answer only", async () => {
     const { session, asked, messages } = harness([]);
@@ -407,14 +798,14 @@ describe("review security regressions", () => {
   });
 
   it("serializes live tools and does not restart purchases after a sampling failure", async () => {
-    const { session, asked, messages } = harness([limit(3600), deny]);
+    const { session, asked, messages } = harness([limit(4400), deny]);
     await session.send("buy socks");
     session.enableLive(async (_input, opts) => {
       const buy = opts.tools.find((t) => t.name === "buy_product");
       if (!buy) throw new Error("missing tool");
       await Promise.all([
         buy.execute({ product_id: "p:socks" }),
-        buy.execute({ product_id: "p:socks", variant: "another pair" }),
+        buy.execute({ product_id: "p:roadrunner", variant: "size 9, grey" }),
       ]);
       throw new Error("transport failed after purchase");
     });
@@ -593,7 +984,9 @@ describe("core execution and standing authority", () => {
         if (!tool) throw new Error(`no tool ${name}`);
         return tool.execute(input);
       };
-      expect(await call("buy_product", { product_id: "unknown" })).toBe("unknown product");
+      await expect(call("buy_product", { product_id: "unknown" })).rejects.toThrow(
+        "unknown product",
+      );
       expect(await call("search_products", { category: "clothing", max_price_usd: 100 })).toEqual([
         expect.objectContaining({ id: "p:stormshell", price_usd: 85 }),
       ]);

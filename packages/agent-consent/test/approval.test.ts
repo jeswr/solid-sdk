@@ -404,6 +404,22 @@ describe("rules from drafts", () => {
 });
 
 describe("checkResponse", () => {
+  it("second review: allows dismissal of an expired sheet without approving it", () => {
+    const request = buildApprovalRequest(evaluateAction(input()), {
+      id: "expired",
+      digest: "sha256:abc",
+      now: NOW,
+      action: purchase(),
+    });
+    const late = new Date(request.expiresAt);
+    expect(
+      checkResponse(
+        request,
+        { requestId: request.id, digest: request.digest, type: "deny", offeredId: "deny" },
+        late,
+      ).ok,
+    ).toBe(true);
+  });
   const req = ask();
   const draft = req.offered[1]?.draft as RuleDraft;
 

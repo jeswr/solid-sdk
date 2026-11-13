@@ -65,6 +65,31 @@ describe("money", () => {
 });
 
 describe("rules", () => {
+  it("second review: orders UTC rule timestamps by instant rather than string precision", () => {
+    expect(
+      isSpendingRule(
+        rule({
+          kind: "allowance",
+          createdAt: "2026-11-13T12:00:00Z",
+          expiresAt: "2026-11-13T12:00:00.100Z",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isSpendingRule(
+        rule({
+          kind: "allowance",
+          createdAt: "2026-11-13T12:00:00.100Z",
+          expiresAt: "2026-11-13T12:00:00Z",
+        }),
+      ),
+    ).toBe(false);
+    for (const field of ["createdAt", "expiresAt"]) {
+      expect(
+        isSpendingRule({ ...rule({ kind: "allowance" }), [field]: "2026-11-13T12:00:00+00:00" }),
+      ).toBe(false);
+    }
+  });
   it("accepts each well-formed kind", () => {
     expect(isSpendingRule(rule({ kind: "per-purchase" }))).toBe(true);
     expect(isSpendingRule(rule({ kind: "budget", period: "week" }))).toBe(true);

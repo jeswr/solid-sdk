@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import type {
   ApprovalRequest,
@@ -136,6 +137,9 @@ export interface ActivityEntry {
   readonly authority?: string;
   /** Compact JWS of the principal's consent record behind it, when there is one. */
   readonly consentJws?: string;
+  /** Completed purchase evidence, committed with the ledger and chat receipt. */
+  readonly orderRef?: string;
+  readonly receiptJws?: string;
 }
 
 export interface RuleView {

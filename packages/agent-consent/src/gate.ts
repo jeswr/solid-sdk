@@ -150,6 +150,15 @@ function purchaseSteps(
     steps.push(pass("You approved this exact purchase.", "approval-given"));
     return { steps, spend, basis: "approval" };
   }
+  if (a.reversibility === "irreversible") {
+    steps.push({
+      result: "ask",
+      plain: "This cannot be undone, so I need your approval for this exact purchase.",
+      code: "irreversible",
+      kind: "purchase",
+    });
+    return { steps, spend };
+  }
   const ceiling = input.policy.singleActionCeiling;
   const overCeiling = a.total.currency !== ceiling.currency || a.total.minor > ceiling.minor;
   if (spend.outcome === "covered" && !overCeiling) {

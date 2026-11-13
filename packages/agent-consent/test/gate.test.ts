@@ -74,6 +74,30 @@ describe("evaluateAction: purchases", () => {
     expect(r.checks[5]).toMatchObject({ result: "pass", code: "record-kept" });
   });
 
+  it.each([
+    "budget",
+    "allowance",
+    "per-purchase",
+  ] as const)("second review: an irreversible purchase needs exact approval even with a %s", (kind) => {
+    const { period: _period, ...base } = budget;
+    const rules = [{ ...base, kind, ...(kind === "budget" ? { period: "month" as const } : {}) }];
+    const action = purchase({ reversibility: "irreversible", total: usd(12) });
+    expect(evaluateAction(input({ action, rules }))).toMatchObject({
+      outcome: "ask",
+      kind: "purchase",
+      decidedBy: { check: "limits-and-approval", reason: "irreversible" },
+    });
+    expect(
+      evaluateAction(input({ action, rules, approvals: new Set(["sha256:other"]) })).outcome,
+    ).toBe("ask");
+    expect(
+      evaluateAction(input({ action, rules, approvals: new Set(["sha256:abc"]) })),
+    ).toMatchObject({
+      outcome: "go",
+      basis: "approval",
+    });
+  });
+
   it("asks when the purchase goes over the rule", () => {
     const r = evaluateAction(
       input({ action: purchase({ total: usd(85) }), rules: [budget], records: [spent(32)] }),

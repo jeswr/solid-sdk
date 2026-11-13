@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { canonicalJson } from "@jeswr/agent-model/core/canonical";
 import { CompactSign } from "jose";
@@ -36,6 +37,34 @@ const ruleRecord: ConsentRecord = {
 };
 
 describe("device-signed consent records", () => {
+  it("second review: accepts UTC precision variants and compares issue and expiry numerically", async () => {
+    const key = await createDeviceKey();
+    for (const [issuedAt, expiresAt] of [
+      ["2026-11-13T12:00:00Z", "2026-11-13T12:00:00.100Z"],
+      ["2026-11-13T12:00:00Z", "2026-11-13T12:00:00.000Z"],
+    ]) {
+      const record = { ...approval, issuedAt: issuedAt as string, expiresAt: expiresAt as string };
+      expect(await verifyRecord(await signRecord(key, record), key.publicJwk)).toEqual(record);
+    }
+    const backwards = {
+      ...approval,
+      issuedAt: "2026-11-13T12:00:00.100Z",
+      expiresAt: "2026-11-13T12:00:00Z",
+    };
+    expect(await verifyRecord(await signRecord(key, backwards), key.publicJwk)).toBeUndefined();
+  });
+
+  it.each([
+    { ...approval, issuedAt: "2026-11-13T10:00:00+02:00", expiresAt: "2026-11-13T13:00:00+02:00" },
+    { ...approval, issuedAt: "2026-11-13" },
+    { ...approval, expiresAt: "2026-11-13T12:10:00+00:00" },
+    { ...ruleRecord, issuedAt: "2026-11-13T12:00:00+00:00" },
+    { type: "revocation", ruleId: "rule:1", issuedAt: "2026-11-13T12:00:00+00:00" } as const,
+  ])("second review: requires UTC Z ISO timestamps: %j", async (record) => {
+    const key = await createDeviceKey();
+    expect(await verifyRecord(await signRecord(key, record), key.publicJwk)).toBeUndefined();
+  });
+
   it("round-trips each record type under the pinned key", async () => {
     const key = await createDeviceKey();
     expect(key.privateKey.extractable).toBe(false);
