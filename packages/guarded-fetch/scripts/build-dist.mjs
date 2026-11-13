@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch installs
@@ -16,9 +17,9 @@
  *   - INLINED  (bundled into dist/index.js + dist/node.js): `ipaddr.js` — by virtue of being
  *     ABSENT from the EXTERNAL lists below.
  *   - EXTERNAL (resolved from npm by the consumer): `undici` — an npm-published runtime
- *     `dependency` used ONLY by the `./node` entry, kept external so it is not inlined into the
- *     browser-safe `.` entry and so a single shared copy + normal npm dedupe/audit apply. The
- *     `.` entry never references undici, so the browser bundle never sees it.
+ *     `dependency` used statically by `./node` and lazily by the root's Node hostname path.
+ *     Kept external so it is not inlined into browser builds and so a single shared copy +
+ *     normal npm dedupe/audit apply. The root's opaque runtime import is invisible to bundlers.
  *   - `./index.js` is kept EXTERNAL for the `./node` bundle so `dist/node.js` references the
  *     SAME runtime `SsrfError` class + guard as `dist/index.js` — an error thrown by
  *     `@jeswr/guarded-fetch/node` therefore satisfies `instanceof SsrfError` imported from

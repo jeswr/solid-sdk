@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { assertSafeUrl, createGuardedFetch, SsrfError } from "@jeswr/guarded-fetch";
 import { describe, expect, it, vi } from "vitest";
@@ -182,7 +183,8 @@ describe("redirect handling (guarded-fetch re-validates + strips creds per hop)"
     }) as unknown as typeof globalThis.fetch;
     // deterministic public-IP resolver so host classification passes for the example hosts
     const dnsLookup = (async () => [{ address: "93.184.216.34", family: 4 }]) as never;
-    const guarded = createGuardedFetch({ fetch: fetcher, dnsLookup });
+    // Inert fixture transport: no socket or independent DNS lookup is opened.
+    const guarded = createGuardedFetch({ pinningFetch: fetcher, dnsLookup });
 
     const res = await guarded("https://origin-a.example/cal", {
       headers: { authorization: "Basic SECRETCREDS" },
@@ -201,7 +203,8 @@ describe("redirect handling (guarded-fetch re-validates + strips creds per hop)"
         headers: { location: "https://169.254.169.254/latest/meta-data/" },
       })) as unknown as typeof globalThis.fetch;
     const dnsLookup = (async () => [{ address: "93.184.216.34", family: 4 }]) as never;
-    const guarded = createGuardedFetch({ fetch: fetcher, dnsLookup });
+    // Inert fixture transport: no socket or independent DNS lookup is opened.
+    const guarded = createGuardedFetch({ pinningFetch: fetcher, dnsLookup });
     await expect(guarded("https://origin-a.example/cal")).rejects.toBeInstanceOf(SsrfError);
   });
 });

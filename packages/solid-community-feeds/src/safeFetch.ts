@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Sonnet — see prod-solid-server docs/MODEL-PROVENANCE.md
 /**
  * SSRF-safe fetch wrapper.
@@ -216,6 +217,8 @@ const SHARED_GUARD_OPTIONS = {
  */
 const INJECTED_FETCH_GUARD_OPTIONS = {
   ...SHARED_GUARD_OPTIONS,
+  // FetchLike has no dispatcher contract; injected transports own their DNS/SSRF policy.
+  requireDnsPinning: false,
   dnsLookup: null,
   allowUnresolvedHosts: true,
 } satisfies GuardOptions;
@@ -226,9 +229,8 @@ const INJECTED_FETCH_GUARD_OPTIONS = {
  * runs its Node DNS-RESOLVING branch: the default `node:dns/promises` resolver
  * (or an injected one for tests) resolves the hostname and EVERY A/AAAA record
  * must be public — so a hostname resolving to a private/internal IP is refused.
- * `requireDnsPinning` is left off: `assertSafeUrl` validates but does not fetch,
- * so there is no socket to pin (real resolution + every-record-public is the
- * correct validator semantic; the fetch path does the actual pinning).
+ * `assertSafeUrl` validates but does not fetch, so it creates no dispatcher;
+ * the fetch path does the actual pinning.
  */
 const REAL_VALIDATION_GUARD_OPTIONS = {
   ...SHARED_GUARD_OPTIONS,

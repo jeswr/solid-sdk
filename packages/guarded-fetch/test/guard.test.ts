@@ -14,7 +14,7 @@
  * All fetches are STUBBED — the guard's classification runs BEFORE the stub is ever called, so a
  * rejected target must never reach the underlying fetch (asserted via `calls`).
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   assertSafeUrl,
   createGuardedFetch,
@@ -55,14 +55,14 @@ function okFetch(): { fetch: typeof globalThis.fetch; calls: string[] } {
 describe("guard — scheme + userinfo", () => {
   it("rejects a non-https (http) URL by default", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await expect(guarded("http://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
 
   it("rejects non-http(s) schemes (file:, data:, gopher:, ftp:)", async () => {
     const { fetch } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     for (const url of ["file:///etc/passwd", "data:text/plain,hi", "gopher://x/", "ftp://x/"]) {
       await expect(guarded(url)).rejects.toBeInstanceOf(SsrfError);
     }
@@ -70,7 +70,7 @@ describe("guard — scheme + userinfo", () => {
 
   it("rejects a URL carrying userinfo (credential leak to host)", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await expect(guarded("https://user:pass@registry.example/doc")).rejects.toBeInstanceOf(
       SsrfError,
     );
@@ -79,7 +79,7 @@ describe("guard — scheme + userinfo", () => {
 
   it("rejects a malformed URL", async () => {
     const { fetch } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await expect(guarded("not a url")).rejects.toBeInstanceOf(SsrfError);
   });
 });
@@ -92,14 +92,18 @@ describe("guard — port gate (production)", () => {
   });
   it("accepts the default https port (explicit :443 and implicit)", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await guarded("https://registry.example:443/doc");
     await guarded("https://registry.example/doc");
     expect(calls).toHaveLength(2);
   });
   it("allows arbitrary ports when enforcePortGate is disabled", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, enforcePortGate: false });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: PUBLIC_DNS,
+      enforcePortGate: false,
+    });
     await guarded("https://registry.example:8443/doc");
     expect(calls).toHaveLength(1);
   });
@@ -128,7 +132,7 @@ describe("guard — IP-literal targets (no DNS needed)", () => {
   for (const [name, url] of cases) {
     it(`rejects ${name}: ${url}`, async () => {
       const { fetch, calls } = okFetch();
-      const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+      const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
       await expect(guarded(url)).rejects.toBeInstanceOf(SsrfError);
       expect(calls).toEqual([]);
     });
@@ -136,7 +140,7 @@ describe("guard — IP-literal targets (no DNS needed)", () => {
 
   it("allows a public IP literal", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     const res = await guarded("https://93.184.216.34/doc");
     expect(res.status).toBe(200);
     expect(calls).toHaveLength(1);
@@ -144,7 +148,7 @@ describe("guard — IP-literal targets (no DNS needed)", () => {
 
   it("refuses alternate-encoded loopback literals (decimal/hex/octal/short-form)", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     for (const url of [
       "https://2130706433/doc", // 127.0.0.1 decimal
       "https://0x7f000001/doc", // 127.0.0.1 hex
@@ -161,7 +165,7 @@ describe("guard — DNS resolution + rebinding (Node branch)", () => {
   it("rejects a hostname that resolves to a private address", async () => {
     const dns: DnsLookup = async () => [{ address: "127.0.0.1", family: 4 }];
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://evil.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -172,7 +176,7 @@ describe("guard — DNS resolution + rebinding (Node branch)", () => {
       { address: "127.0.0.1", family: 4 },
     ];
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://rebind.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -183,7 +187,7 @@ describe("guard — DNS resolution + rebinding (Node branch)", () => {
       { address: "169.254.169.254", family: 4 },
     ];
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://rebind.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -191,7 +195,7 @@ describe("guard — DNS resolution + rebinding (Node branch)", () => {
   it("rejects a host that resolves to no addresses", async () => {
     const dns: DnsLookup = async () => [];
     const { fetch } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://void.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -200,7 +204,7 @@ describe("guard — DNS resolution + rebinding (Node branch)", () => {
       throw new Error("NXDOMAIN");
     };
     const { fetch } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://nope.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -212,7 +216,7 @@ describe("guard — DNS resolution + rebinding (Node branch)", () => {
       throw new Error("node:dns/promises is not importable");
     };
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -220,7 +224,7 @@ describe("guard — DNS resolution + rebinding (Node branch)", () => {
   it("resolves DNS exactly ONCE per hop", async () => {
     const dns = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
     const { fetch } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await guarded("https://good.example/doc");
     expect(dns).toHaveBeenCalledTimes(1);
   });
@@ -231,14 +235,14 @@ describe("guard — DNS resolution + rebinding (Node branch)", () => {
       { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
     ];
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://good.example/doc")).resolves.toBeInstanceOf(Response);
     expect(calls).toHaveLength(1);
   });
 
   it("still classifies an IP literal even when no DNS is available", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: null });
     await expect(guarded("https://127.0.0.1/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -275,7 +279,7 @@ describe("guard — cloud-internal hostname denylist", () => {
   it("refuses a denied hostname BEFORE DNS (denylist short-circuits the resolver)", async () => {
     const dns = vi.fn(async () => [{ address: "8.8.8.8", family: 4 }]);
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://metadata.google.internal/")).rejects.toBeInstanceOf(SsrfError);
     expect(dns).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
@@ -287,7 +291,7 @@ describe("guard — cloud-internal hostname denylist", () => {
     const denied = createGuardedFetch({ dnsLookup: dns, hostnameDenylist: ["corp.example"] });
     await expect(denied("https://api.corp.example/")).rejects.toBeInstanceOf(SsrfError);
     const { fetch, calls } = okFetch();
-    const empty = createGuardedFetch({ fetch, dnsLookup: dns, hostnameDenylist: [] });
+    const empty = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns, hostnameDenylist: [] });
     // With the denylist disabled, `foo.internal` is no longer name-denied — but the IP
     // classifier still applies (it resolves to a public IP here, so it is allowed).
     await expect(empty("https://foo.internal/")).resolves.toBeInstanceOf(Response);
@@ -303,7 +307,7 @@ describe("guard — content-type allowlist (when configured)", () => {
         headers: { "content-type": "text/html" },
       })) as typeof globalThis.fetch;
     const guarded = createGuardedFetch({
-      fetch,
+      pinningFetch: fetch,
       dnsLookup: PUBLIC_DNS,
       allowedContentTypes: ["text/turtle", "application/ld+json"],
     });
@@ -313,7 +317,7 @@ describe("guard — content-type allowlist (when configured)", () => {
   it("rejects a missing content-type when an allowlist is configured", async () => {
     const fetch = (async () => new Response("data", { status: 200 })) as typeof globalThis.fetch;
     const guarded = createGuardedFetch({
-      fetch,
+      pinningFetch: fetch,
       dnsLookup: PUBLIC_DNS,
       allowedContentTypes: ["text/turtle"],
     });
@@ -327,7 +331,7 @@ describe("guard — content-type allowlist (when configured)", () => {
         headers: { "content-type": "text/turtle; charset=utf-8" },
       })) as typeof globalThis.fetch;
     const guarded = createGuardedFetch({
-      fetch,
+      pinningFetch: fetch,
       dnsLookup: PUBLIC_DNS,
       allowedContentTypes: ["text/turtle"],
     });
@@ -338,7 +342,7 @@ describe("guard — content-type allowlist (when configured)", () => {
   it("body-irrelevant statuses (204/304) bypass the allowlist", async () => {
     const f204 = (async () => new Response(null, { status: 204 })) as typeof globalThis.fetch;
     const g204 = createGuardedFetch({
-      fetch: f204,
+      pinningFetch: f204,
       dnsLookup: PUBLIC_DNS,
       allowedContentTypes: ["text/turtle"],
     });
@@ -365,7 +369,7 @@ describe("guard — redirects", () => {
     const { fetch } = redirectingFetch("https://other.example/doc");
     const spy = vi.fn(fetch);
     const guarded = createGuardedFetch({
-      fetch: spy as typeof globalThis.fetch,
+      pinningFetch: spy as typeof globalThis.fetch,
       dnsLookup: PUBLIC_DNS,
     });
     await guarded("https://registry.example/doc");
@@ -376,7 +380,7 @@ describe("guard — redirects", () => {
 
   it("re-validates a redirect target and REFUSES a redirect to a private host", async () => {
     const { fetch, calls } = redirectingFetch("https://169.254.169.254/latest/meta-data/");
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual(["https://registry.example/doc"]);
   });
@@ -387,19 +391,19 @@ describe("guard — redirects", () => {
         ? [{ address: "10.1.2.3", family: 4 }]
         : [{ address: "93.184.216.34", family: 4 }];
     const { fetch } = redirectingFetch("https://internal.example/");
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
   it("refuses a redirect to a non-https scheme", async () => {
     const { fetch } = redirectingFetch("http://registry.example/doc");
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
   it("follows an allowed redirect to another public host", async () => {
     const { fetch, calls } = redirectingFetch("https://other.example/doc");
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     const res = await guarded("https://registry.example/doc");
     expect(res.status).toBe(200);
     expect(calls).toEqual(["https://registry.example/doc", "https://other.example/doc"]);
@@ -414,7 +418,7 @@ describe("guard — redirects", () => {
         headers: { location: "https://registry.example/doc" },
       });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -424,7 +428,11 @@ describe("guard — redirects", () => {
       n += 1;
       return new Response(null, { status: 302, headers: { location: `https://h${n}.example/x` } });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, maxRedirects: 2 });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: PUBLIC_DNS,
+      maxRedirects: 2,
+    });
     await expect(guarded("https://start.example/x")).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -442,7 +450,7 @@ describe("guard — redirects", () => {
       }
       return new Response("ok", { status: 200, headers: { "content-type": "text/turtle" } });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await guarded("https://registry.example/doc", {
       headers: { authorization: "Bearer secret", cookie: "sid=abc", "x-custom": "keep" },
     });
@@ -466,7 +474,7 @@ describe("guard — redirects", () => {
       }
       return new Response("ok", { status: 200, headers: { "content-type": "text/turtle" } });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await guarded("https://registry.example/doc", { headers: { authorization: "Bearer secret" } });
     expect(headersSeen[1]?.get("authorization")).toBe("Bearer secret");
   });
@@ -490,7 +498,7 @@ describe("guard — redirects", () => {
       }
       return new Response("ok", { status: 200, headers: { "content-type": "text/turtle" } });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await guarded("https://registry.example/submit", {
       method: "POST",
       body: "payload",
@@ -517,7 +525,7 @@ describe("guard — redirects", () => {
       }
       return new Response("ok", { status: 200, headers: { "content-type": "text/turtle" } });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await guarded("https://registry.example/submit", { method: "POST", body: "payload" });
     expect(seen[1]?.method).toBe("POST");
     expect(seen[1]?.hasBody).toBe(true);
@@ -541,7 +549,7 @@ describe("guard — redirects", () => {
       }
       return new Response("ok", { status: 200, headers: { "content-type": "text/turtle" } });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     await guarded("https://registry.example/submit", {
       method: "POST",
       body: "payload",
@@ -563,7 +571,7 @@ describe("guard — redirects", () => {
       }
       return new Response("ok", { status: 200, headers: { "content-type": "text/turtle" } });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     const res = await guarded("https://registry.example/start");
     expect(res.url).toBe("https://other.example/final");
   });
@@ -572,7 +580,7 @@ describe("guard — redirects", () => {
 describe("guard — null-body response statuses", () => {
   it("handles a 204 No Content without throwing", async () => {
     const fetch = (async () => new Response(null, { status: 204 })) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     const res = await guarded("https://registry.example/empty");
     expect(res.status).toBe(204);
     expect(await res.text()).toBe("");
@@ -581,7 +589,7 @@ describe("guard — null-body response statuses", () => {
   it("handles a 304 Not Modified without throwing (etag preserved)", async () => {
     const fetch = (async () =>
       new Response(null, { status: 304, headers: { etag: '"abc"' } })) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     const res = await guarded("https://registry.example/cached");
     expect(res.status).toBe(304);
     expect(res.headers.get("etag")).toBe('"abc"');
@@ -589,8 +597,9 @@ describe("guard — null-body response statuses", () => {
 });
 
 describe("guard — requireDnsPinning posture (DNS-rebinding fail-closed)", () => {
-  it("refuses a HOSTNAME through the default fetch when requireDnsPinning is set", async () => {
-    const guarded = createGuardedFetch({ dnsLookup: PUBLIC_DNS, requireDnsPinning: true });
+  it("refuses a HOSTNAME through an unattested custom fetch when requireDnsPinning is set", async () => {
+    const { fetch } = okFetch();
+    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, requireDnsPinning: true });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -600,7 +609,8 @@ describe("guard — requireDnsPinning posture (DNS-rebinding fail-closed)", () =
       lookupCalls += 1;
       return [{ address: "93.184.216.34", family: 4 }];
     };
-    const guarded = createGuardedFetch({ dnsLookup: dns, requireDnsPinning: true });
+    const { fetch } = okFetch();
+    const guarded = createGuardedFetch({ fetch, dnsLookup: dns, requireDnsPinning: true });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(lookupCalls).toBe(0);
   });
@@ -659,7 +669,7 @@ describe("guard — BROWSER branch (no node:dns)", () => {
   function browserGuard() {
     stubBrowser();
     const { fetch, calls } = okFetch();
-    return { guarded: createGuardedFetch({ fetch, dnsLookup: null }), calls };
+    return { guarded: createGuardedFetch({ pinningFetch: fetch, dnsLookup: null }), calls };
   }
 
   it("ALLOWS a public https host in a real browser (no resolver, no shim needed)", async () => {
@@ -748,7 +758,7 @@ describe("guard — BROWSER branch (no node:dns)", () => {
       }
       return new Response("ok", { status: 200, headers: { "content-type": "text/turtle" } });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: null });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual(["https://registry.example/doc"]);
   });
@@ -761,13 +771,17 @@ describe("guard — BROWSER branch (no node:dns)", () => {
         status: 200,
         headers: { "content-type": "text/turtle" },
       })) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null, maxBytes: 1024 });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: null, maxBytes: 1024 });
     await expect(guarded("https://big.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
   it("permits an http://localhost dev registry under allowLoopback (loopback name)", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null, allowLoopback: true });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: null,
+      allowLoopback: true,
+    });
     const res = await guarded("http://localhost:3000/doc");
     expect(res.status).toBe(200);
     expect(calls).toHaveLength(1);
@@ -775,7 +789,11 @@ describe("guard — BROWSER branch (no node:dns)", () => {
 
   it("REFUSES http: to a PUBLIC-looking host even under allowLoopback", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null, allowLoopback: true });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: null,
+      allowLoopback: true,
+    });
     await expect(guarded("http://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -790,7 +808,7 @@ describe("guard — BROWSER branch (no node:dns)", () => {
         "https://local/doc",
       ]) {
         const { fetch, calls } = okFetch();
-        const guarded = createGuardedFetch({ fetch, dnsLookup: null, ...flag });
+        const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: null, ...flag });
         await expect(guarded(url)).rejects.toBeInstanceOf(SsrfError);
         expect(calls).toEqual([]);
       }
@@ -799,13 +817,18 @@ describe("guard — BROWSER branch (no node:dns)", () => {
 
   it("STILL ALLOWS *.localhost loopback names under allowLoopback (distinct from .local)", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null, allowLoopback: true });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: null,
+      allowLoopback: true,
+    });
     const res = await guarded("https://api.localhost/doc");
     expect(res.status).toBe(200);
     expect(calls).toHaveLength(1);
   });
 
   describe("requireDnsPinning on the browser branch (cannot pin without a resolver)", () => {
+    beforeEach(stubBrowser);
     it("fails closed for a hostname when requireDnsPinning is set (no resolver to pin)", async () => {
       const { fetch, calls } = okFetch();
       const guarded = createGuardedFetch({ fetch, dnsLookup: null, requireDnsPinning: true });
@@ -876,28 +899,40 @@ describe("guard — DNS-less NON-browser runtime fails closed", () => {
 
   it("FAILS CLOSED for a public-looking host (no DOM window → treated as edge/worker)", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: null });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
 
   it("ALLOWS a public host only when the caller opts in via allowUnresolvedHosts", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null, allowUnresolvedHosts: true });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: null,
+      allowUnresolvedHosts: true,
+    });
     await expect(guarded("https://registry.example/doc")).resolves.toBeInstanceOf(Response);
     expect(calls).toHaveLength(1);
   });
 
   it("STILL refuses a private literal even with allowUnresolvedHosts (literal block is absolute)", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null, allowUnresolvedHosts: true });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: null,
+      allowUnresolvedHosts: true,
+    });
     await expect(guarded("https://10.0.0.1/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
 
   it("STILL refuses localhost even with allowUnresolvedHosts", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null, allowUnresolvedHosts: true });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: null,
+      allowUnresolvedHosts: true,
+    });
     await expect(guarded("https://localhost/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -905,7 +940,7 @@ describe("guard — DNS-less NON-browser runtime fails closed", () => {
   it("a WebWorker self-global (no window/document) is NOT a browser (fail closed)", async () => {
     vi.stubGlobal("self", {});
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: null });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -914,7 +949,7 @@ describe("guard — DNS-less NON-browser runtime fails closed", () => {
     vi.stubGlobal("window", {});
     vi.stubGlobal("document", {});
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: null });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: null });
     await expect(guarded("https://registry.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -930,7 +965,7 @@ describe("guard — Request object input", () => {
       seenHeader = effective.headers.get("x-trace");
       return new Response("ok", { status: 200, headers: { "content-type": "text/turtle" } });
     }) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     const req = new Request("https://registry.example/doc", {
       method: "POST",
       headers: { "x-trace": "abc" },
@@ -942,7 +977,7 @@ describe("guard — Request object input", () => {
 
   it("still SSRF-guards the url taken from a Request object", async () => {
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PUBLIC_DNS });
     const req = new Request("https://127.0.0.1/doc");
     await expect(guarded(req)).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
@@ -956,7 +991,11 @@ describe("guard — body cap + timeout", () => {
         status: 200,
         headers: { "content-type": "text/turtle", "content-length": "999999" },
       })) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, maxBytes: 1024 });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: PUBLIC_DNS,
+      maxBytes: 1024,
+    });
     await expect(guarded("https://big.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -967,7 +1006,11 @@ describe("guard — body cap + timeout", () => {
         status: 200,
         headers: { "content-type": "text/turtle" },
       })) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, maxBytes: 1024 });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: PUBLIC_DNS,
+      maxBytes: 1024,
+    });
     await expect(guarded("https://big.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -977,7 +1020,11 @@ describe("guard — body cap + timeout", () => {
         status: 200,
         headers: { "content-type": "text/turtle" },
       })) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, maxBytes: 1024 });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: PUBLIC_DNS,
+      maxBytes: 1024,
+    });
     const res = await guarded("https://ok.example/doc");
     expect(await res.text()).toBe("hello world");
   });
@@ -987,7 +1034,11 @@ describe("guard — body cap + timeout", () => {
       new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
       })) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, timeoutMs: 20 });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: PUBLIC_DNS,
+      timeoutMs: 20,
+    });
     await expect(guarded("https://slow.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
@@ -1004,7 +1055,11 @@ describe("guard — body cap + timeout", () => {
         }
         signal?.addEventListener("abort", () => reject(new Error("aborted")));
       })) as typeof globalThis.fetch;
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, timeoutMs: 10_000 });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: PUBLIC_DNS,
+      timeoutMs: 10_000,
+    });
     const ac = new AbortController();
     const p = guarded("https://slow.example/doc", { signal: ac.signal });
     ac.abort();
@@ -1016,7 +1071,11 @@ describe("guard — allowLoopback dev path (Node branch)", () => {
   it("permits http to a loopback address when allowLoopback is set", async () => {
     const dns: DnsLookup = async () => [{ address: "127.0.0.1", family: 4 }];
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns, allowLoopback: true });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: dns,
+      allowLoopback: true,
+    });
     const res = await guarded("http://localhost:3000/doc");
     expect(res.status).toBe(200);
     expect(calls).toHaveLength(1);
@@ -1024,14 +1083,22 @@ describe("guard — allowLoopback dev path (Node branch)", () => {
 
   it("still refuses http to a PUBLIC host even under allowLoopback", async () => {
     const { fetch } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, allowLoopback: true });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: PUBLIC_DNS,
+      allowLoopback: true,
+    });
     await expect(guarded("http://public.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 
   it("still refuses http to a non-loopback PRIVATE host even under allowLoopback", async () => {
     const dns: DnsLookup = async () => [{ address: "10.0.0.5", family: 4 }];
     const { fetch } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns, allowLoopback: true });
+    const guarded = createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: dns,
+      allowLoopback: true,
+    });
     await expect(guarded("http://internal.example/doc")).rejects.toBeInstanceOf(SsrfError);
   });
 });
