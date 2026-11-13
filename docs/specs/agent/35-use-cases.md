@@ -205,9 +205,9 @@ Checks that carry the weight, by number of use cases: source 32, limits-approval
 
 Use cases that convey a derived answer instead of records: 23 (by-source 9, proved 9, joint 3, attested 2).
 
-Use cases with a real run: 68 of 70. The rest are specified and not yet run.
+Use cases with a real run: 70 of 70. The rest are specified and not yet run.
 
-Every use case is written as a profile and a scenario file and run through the reference gates with a scripted core. Of 166 paths, 141 run and give the outcome the catalogue expects, 10 run and differ (a different outcome or reason, or a branch whose run is no different from the main path, so that what goes wrong in it was not exercised), and 15 cannot run yet. By use case: 58 run on every path, 10 run on some, 2 on none.
+Every use case is written as a profile and a scenario file and run through the reference gates with a scripted core. Of 174 paths, 154 run and give the outcome the catalogue expects, 11 run and differ (a different outcome or reason, or a branch whose run is no different from the main path, so that what goes wrong in it was not exercised), and 9 cannot run yet. By use case: 61 run on every path, 9 run on some, 0 on none.
 
 ### Runs that differ from the catalogue
 
@@ -221,6 +221,7 @@ Every use case is written as a profile and a scenario file and run through the r
 | Two people agree to share a flat | One side's identity cannot be tied to any source the other accepts | ask principal (`source-unknown`). No different from the main path | ask principal (`source-unknown`) |
 | Booking a trip | A hotel listing contains text telling the agent to book a different, dearer hotel | ask principal (`context-not-clear`) | stop (`not-authorised`) |
 | Negotiating the wording of a contract | An agent accepts a clause its principal's policy does not cover | ask principal (`approval-required`). No different from the main path | ask principal (`approval-required`) |
+| Competitors compare pay without sharing it | Only two employers contribute | admit (`fit-for-use`). No different from the main path | stop (`prohibited`) |
 | A service agent that keeps asking | The tenth request, like the first, is outside the mandate | refuse (`representation-missing`) | stop (`not-authorised`) |
 | A registered source signs something false | Nothing fails | go (`source-accepted`). No different from the main path | go (`source-accepted`) |
 
@@ -228,21 +229,15 @@ Every use case is written as a profile and a scenario file and run through the r
 
 | Use case | Path | What is missing |
 |---|---|---|
-| An insurance quote with the least disclosure | The main path | Needs a proof system |
-| Proving eligibility for a clinical trial | The main path | Needs a proof system |
-| Hospitals count a cohort together | The main path | Needs joint computation |
-| Hospitals count a cohort together | The result would cover fewer than the minimum number of patients | Needs joint computation |
-| Hospitals count a cohort together | One hospital does not attest its input | Needs joint computation |
-| Hiring: right to work and qualifications | Show valid until at least a date while hiding the actual date | Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates. |
-| Proving income from several platforms | The main path | Needs joint computation |
-| Applying to rent a home | The main path | Needs a proof system |
-| Showing a degree to an employer abroad | The main path | Needs a proof system |
-| Proving age to buy something | The main path | Needs a proof system |
-| Applying for a visa | The main path | Needs a proof system |
-| Proving recycled content along a supply chain | The main path | Needs a proof system |
-| Competitors compare pay without sharing it | The main path | Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result. |
-| Competitors compare pay without sharing it | Only two employers contribute | Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result. |
-| Being introduced to a stranger safely | The main path | Needs a proof system |
+| An insurance quote with the least disclosure | The main path | Blocked: needs a Noir circuit for absence and totals, not yet delivered. |
+| Proving eligibility for a clinical trial | The main path | Blocked: needs a Noir circuit for absence and totals, not yet delivered. |
+| Hiring: right to work and qualifications | Show valid until at least a date while hiding the actual date | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
+| Applying to rent a home | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
+| Showing a degree to an employer abroad | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
+| Proving age to buy something | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
+| Applying for a visa | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
+| Proving recycled content along a supply chain | The main path | Blocked: needs a Noir circuit for absence and totals, not yet delivered. |
+| Being introduced to a stranger safely | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
 
 ## 7. What is missing
 
