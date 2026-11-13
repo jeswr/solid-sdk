@@ -210,6 +210,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../packages/guarded-fetch
       '@jeswr/pod-auth':
         specifier: workspace:*
         version: link:../../packages/pod-auth
@@ -235,9 +238,6 @@ importers:
       '@jeswr/agent-mandate':
         specifier: workspace:*
         version: link:../../packages/agent-mandate
-      '@jeswr/guarded-fetch':
-        specifier: workspace:*
-        version: link:../../packages/guarded-fetch
       '@jeswr/solid-vc':
         specifier: workspace:*
         version: link:../../packages/solid-vc

@@ -5,6 +5,7 @@ import { proposalApprovalTerms } from "@jeswr/agent-executor";
 import { canonicalJson, digestOf, podRecordSchema } from "@jeswr/agent-model";
 import { GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { importInbound } from "@jeswr/agentic-legacy-bridge";
+import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-auth/node";
 import { createNotifications, type Subscription, type Timers } from "@jeswr/pod-notifications";
 import { createPodClient } from "@jeswr/storage-client";
@@ -47,6 +48,15 @@ function hasStructuredEnvelope(blocks: readonly string[] | undefined): boolean {
   });
 }
 
+function insideBoundary(root: string, boundary: readonly string[] | undefined): boolean {
+  // isWithinPodScope resolves relative input against the base; require an absolute URL.
+  return (
+    URL.canParse(root) &&
+    Array.isArray(boundary) &&
+    boundary.some((entry) => typeof entry === "string" && isWithinPodScope(entry, root))
+  );
+}
+
 /** pod-auth retains credentials and supplies every authenticated pod request. */
 export async function composeDaemon(options: {
   credentials: ClientCredentialsOptions;
@@ -57,9 +67,16 @@ export async function composeDaemon(options: {
     workspace: PodWorkspace,
   ) => Promise<Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">>;
 }): Promise<AuthenticatedComposition> {
+  // Credentials attach only inside the boundary; a storage root outside it would fail later
+  // with unauthenticated 401s, so refuse the misconfiguration before logging in.
+  if (!insideBoundary(options.storageRoot, options.credentials.boundary))
+    throw new TypeError("storageRoot must lie inside credentials.boundary");
   const auth = await forClientCredentials(options.credentials);
   try {
     const { storage } = await createPodClient({ fetch: auth.fetch, storage: options.storageRoot });
+    // Discovery may resolve a different root; it must stay inside the boundary too.
+    if (!insideBoundary(storage.root, options.credentials.boundary))
+      throw new Error("Discovered storage root is outside the credential boundary");
     const workspace = new PodWorkspace({
       io: auth.fetch,
       storage,
