@@ -17,9 +17,9 @@ import { DataFactory, Store } from "n3";
 import { buildAs2Message, parseAs2Message } from "./as2.js";
 import { normalizeChatAccount, redactChatAccount } from "./chat-account.js";
 import { ConversationProvenanceDoc } from "./conversation-provenance.js";
-import { safeHttpIri, sanitizeText } from "./iri.js";
+import { safeHttpIri } from "./iri.js";
 import { storeToTurtle } from "./reconcile.js";
-import { redactSecrets } from "./redact.js";
+import { redactConversation } from "./redact.js";
 import { AS_COLLECTION, AS_NAME, DCT, PROV_ACTIVITY, PROV_AGENT, RDF_TYPE } from "./vocab.js";
 
 /** Structural subset of DESIGN §3 PodPort; implementations enforce pod scope. */
@@ -212,15 +212,13 @@ export class ChatWriter {
     if (!CHAT_CHANNELS.includes(conversation.channel as ChatChannel))
       throw new TypeError("Unsupported chat capture channel");
     // Validate and serialize everything before the first write.
+    conversation = redactConversation(conversation);
     const messages = await Promise.all(
       conversation.messages.map(async (message) => {
         if (!CHAT_ROLES.includes(message.role)) throw new TypeError("Unsupported chat role");
         // Redact before deriving the ID, so no stored value or name depends on a secret.
         const normalized = {
           ...message,
-          // Strip control characters first: one inside a credential would defeat the pattern
-          // and then be removed by the AS2 serializer, storing the plaintext secret.
-          text: redactSecrets(sanitizeText(message.text)),
           createdAt: timestamp(message.createdAt),
         };
         const id = await messageId(normalized);
@@ -244,7 +242,7 @@ export class ChatWriter {
     const room = new ChatDoc(`${url}_conversation.ttl#it`, metadata, DataFactory);
     room.types.add(AS_COLLECTION);
     room.identifier = conversation.conversationId;
-    room.title = redactSecrets(sanitizeText(conversation.title));
+    room.title = conversation.title;
     const provenance = new ConversationProvenanceDoc(
       `${url}_conversation.ttl#it`,
       metadata,

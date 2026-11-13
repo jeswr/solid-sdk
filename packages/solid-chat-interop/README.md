@@ -207,6 +207,84 @@ Unquoted value boundaries depend on syntax:
 - Code, object keys, YAML, JSON and CLI flags retain the code delimiters: whitespace,
   `;`, `,`, `)`, `}` and `]`, with escaped whitespace and continuations included.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+`redactSecretFields(fields)` normalizes and redacts an ordered array without mutating it.
+`redactConversation(conversation)` returns a copy with title and message text redacted in
+title → message 1 → message 2 order, preserving all other metadata. The writer, transcript
+renderer and capture paths use this shared helper. Optional
+`redactConversation(conversation, { chunks })` accepts a readonly array of source-chunk
+arrays in message order (one array per message; mismatched counts throw). Chunks
+replace message text, are checked together before joining each message with `\n`
+and trimming it, and the assembled conversation is checked again. Empty chunk arrays
+produce empty text. The helper never mutates conversation metadata or source chunks.
+Export importers use this path instead of mapping fields themselves. After
+per-field redaction, adjacent fields are checked using the last 512 UTF-16 code units
+of the left field and the first 512 of the right, with edges snapped inward to complete
+code points, joined without a separator. A detection whose context spans that join
+replaces each covered value piece with `[REDACTED]`; names, quotes
+and surrounding code stay. Normalized source windows are also checked so an earlier
+per-field marker cannot hide a prefix while exposing its continuation. Existing
+marker text is preserved, including spans contained in a marker; touching fragments
+extend that marker's coverage without duplicating it. Zero-width boundary spans are
+ignored. A URL's trailing `@` counts as context even when its password is wholly in
+the preceding field, provided that field still ends in userinfo. An existing userinfo
+`@` completes the left authority; a later message's `@mention`
+cannot extend it. An undelimited host:port-looking suffix is ambiguous: a following
+field's `@` establishes userinfo even when the password is numeric and wholly on
+the left or continues on the right. These values redact conservatively, including
+when the right field could be an @mention. Unambiguous host:port URLs ending in `/`
+or followed by whitespace or a path stay intact. Appending a neighbour preserves
+already detected messages' text and content-derived IDs. A closing quote at a field
+boundary completes a shell word and keeps its delimiters: appending `Thanks` after
+`export API_KEY="fixture"` leaves `export API_KEY="[REDACTED]"` unchanged. Prefixes
+retain the same redacted text as the full conversation, except that later context
+completing an unresolved secret may add redaction, never remove existing coverage.
+The field-array operation is idempotent.
+A left value already consisting only of markers ends boundary continuation, preventing
+repeated passes from consuming another window of the next field. Source windows still
+detect plaintext continuations on the initial pass.
+Edited fields are checked once more for assignments exposed by boundary removal.
+Capture/import callers must apply this before queueing or splitting saves into batches.
+
+A private-key END delimiter without a preceding BEGIN in the same field conservatively
+redacts everything from that field's start through the last END delimiter. Following
+text survives. This rule applies only to whole fields: appending an orphan END cannot
+redact preceding prose or titles. Both PEM rules accept `PGP PRIVATE KEY BLOCK`.
+Once a BEGIN header is recognized, redact to its first END or the conversation end,
+including entire subsequent fields and arbitrarily long bodies without END. BEGIN
+and END delimiters split across one join are recognized within the window. This
+continuation remains linear and stops before text following END; the per-field
+orphan rule can still cover later orphan END delimiters in the same field.
+
+The boundary pass is linear in total input size plus field count and collects all
+matches before replacing them. It checks adjacent pairs only, within the 512-code-unit
+windows: credentials requiring three fields or more distant context are outside this
+policy, except the PEM-body continuation above. A delimiter itself requiring three
+fields, or more than 512 units of context across a join, remains outside it.
+Separator-free detection errs toward redaction: a complete token at one field's
+end can also cover the next field's first word. A caller that has already redacted each
+source field independently cannot recover a hidden prefix; pass the complete original
+field array to this helper before discarding source text.
+
+Before detection and after boundary replacement, the shared text normalizer strips
+lone surrogates (Unicode Cs), C0/C1 controls except tab/CR/LF,
+and every Unicode General_Category=Cf character except emoji ZWJs and subdivision-flag
+tags. U+200D survives only between Extended_Pictographic characters, each optionally
+followed by U+FE0E/U+FE0F and/or a skin-tone modifier (either order). Variation selectors
+U+FE00–U+FE0F and U+E0100–U+E01EF are removed except U+FE0E/U+FE0F on an emoji
+base (including its modifier) or within a complete keycap. A digit followed by a
+selector without the keycap mark is stripped too, preventing token suffix leaks.
+Subdivision flags require
+U+1F3F4, exactly two tag lowercase letters (U+E0061–U+E007A), then 1–4 tag lowercase
+letters or digits (U+E0030–U+E0039), then U+E007F. All other U+E0000–U+E007F tags are
+removed, including arbitrary hidden instructions. Family/profession emoji, skin-tone
+variants and England/Scotland/Wales flags retain their exact bytes. Zero-width spaces,
+word joiners, BOMs, soft hyphens and bidi controls are removed before persistence
+and again on export, so they cannot split credential patterns.
+
+Package-specific agent guidance lives in [SKILL.md](SKILL.md).
+
 The existing PEM private-key, `sk-`, GitHub, AWS key-ID, JWT and `Authorization:`
 header rules run first with their existing markers. Redaction is pure, emits no
 diagnostics containing input, and produces a fixpoint, so derived message IDs stay

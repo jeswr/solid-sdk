@@ -13,7 +13,7 @@ import { readdir, rename, unlink, writeFile } from "fs/promises";
 import { join } from "path";
 import { isIgnored, MAX_BYTES, readRegular } from "./io.js";
 import { type CapturedSession, digest, record } from "./parsers.js";
-import { redactSecrets } from "./redact.js";
+import { redactConversation } from "./redact.js";
 
 /** Local queue envelope. It never contains authentication credentials or raw transcript records. */
 export interface QueueEntry extends CapturedSession {
@@ -101,6 +101,7 @@ export async function sequenceConversation(
 
 /** Persist a complete redacted snapshot before network I/O, unless all messages were saved. */
 export async function enqueue(directory: string, entry: QueueEntry, signal: AbortSignal) {
+  entry = { ...entry, conversation: redactConversation(entry.conversation) };
   const saved = await acknowledged(directory, progressKey(entry), signal);
   if (entry.conversation.messages.every((message) => saved.has(message.id as string))) return;
   return persist(directory, `${digest(entry)}.json`, entry, signal);
@@ -118,10 +119,10 @@ function conversation(value: unknown): ChatConversation {
     !Array.isArray(c.messages)
   )
     throw new Error("Invalid capture conversation");
-  return {
+  return redactConversation({
     provider: c.provider,
     conversationId: c.conversationId,
-    title: redactSecrets(c.title),
+    title: c.title,
     ...(account === undefined ? {} : { account: redactChatAccount(account) }),
     channel: "hook",
     messages: c.messages.map((value) => {
@@ -134,9 +135,9 @@ function conversation(value: unknown): ChatConversation {
         typeof m.createdAt !== "string"
       )
         throw new Error("Invalid capture message");
-      return { id: m.id, role: m.role, text: redactSecrets(m.text), createdAt: m.createdAt };
+      return { id: m.id, role: m.role, text: m.text, createdAt: m.createdAt };
     }),
-  };
+  });
 }
 
 /** Replay only this account's snapshots; opt-outs added while offline also apply to old entries. */

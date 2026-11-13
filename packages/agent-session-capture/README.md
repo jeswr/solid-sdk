@@ -149,7 +149,30 @@ non-symlink files of at most **16 MiB**. Hook input is limited to **64 KiB**.
 Before queueing or uploading, text is redacted for private-key PEM blocks (including
 unfinished blocks), `sk-` and GitHub tokens, AWS access-key IDs, JWTs,
 `Authorization:`/`Proxy-Authorization:` lines, and shell/.env assignments including
-multiline quoted values. Queue replay redacts again. Source IDs are hashed; titles
+multiline quoted values. All title/message and content-part boundaries are checked
+with separator-free 512-code-unit windows before queueing, timestamp filtering or
+100-message import batches. Replay checks complete snapshots before one-message saves.
+The shared normalizer removes Unicode format characters except admitted emoji ZWJs
+and subdivision flags (two tag lowercase country letters, then 1–4 tag lowercase
+letters/digits, then the terminator), and strips lone surrogates. Window edges retain
+whole code points. Variation selectors are stripped except FE0E/FE0F on emoji
+bases/modifiers and complete keycaps. Capture reuses the shared `redactConversation`;
+export parsers pass `{ chunks }` in message order, leaving raw-chunk checking,
+newline assembly, trimming and final conversation redaction to that helper. Existing markers
+stay byte-for-byte stable across repeated passes. URL password detection includes the
+trailing `@` across a join only while the left field still ends in userinfo; a complete
+authority with existing userinfo cannot absorb a later `@mention`. Undelimited
+host:port-looking suffixes redact conservatively when the following field supplies
+`@`, even for numeric password continuations or ambiguous @mentions. Delimited
+host:port URLs stay intact. Completed quoted assignments keep their quotes when a
+turn is appended, preserving their content-derived IDs. An orphan private-key END
+line redacts only its own field prefix. Recognized BEGIN headers (including PGP PRIVATE
+KEY BLOCK) carry redaction through entire later fields to their first END or the
+conversation end, even for long bodies without END. Other adjacent-pair checks cannot
+detect a secret requiring three fields or context beyond 512 code units; split PEM
+delimiters themselves retain that bound. See the exact
+[redaction rule](../solid-chat-interop/README.md#redaction).
+Queue replay redacts again. Source IDs are hashed; titles
 are fixed provider labels. Pattern redaction does not identify every possible
 secret format, so use project opt-out for sensitive work.
 

@@ -62,6 +62,24 @@ for capture/import callers, independently of the tool's explicit account input.
 Tests use fake fetch and portable pods only. Run lint, build, typecheck and test;
 exercise canonical tools and aliases, read-only enforcement and SSRF regressions.
 The stdio CLI must keep stdout exclusively for MCP messages.
+Chat save/export use the shared normalization and adjacent-field boundary rules in
+[solid-chat-interop](../solid-chat-interop/SKILL.md); do not pre-redact individual fields
+before that conversation-aware pass, since a marker can hide a split token's prefix.
+Boundary replacement preserves per-field markers, keeping IDs stable on incremental
+saves when the earlier message was already fully detected. URL password context
+includes `@` only while the left field remains in userinfo; authorities already
+containing userinfo cannot absorb later @mentions. Undelimited host:port-looking
+suffixes redact conservatively when the next field supplies `@`, including numeric
+password continuations. Delimited host:port URLs stay intact. Completed quoted
+assignments retain their quotes at field boundaries, keeping incremental-save IDs
+stable. Orphan private-key END lines redact their
+own field prefix only. Recognized PEM BEGIN headers, including PGP PRIVATE KEY BLOCK,
+carry through arbitrary body lengths and later fields until END or conversation end. Windows
+stop at code-point boundaries, lone surrogates are stripped, and flag tags follow
+the subdivision grammar. Checks are pairwise: secrets requiring three fields are
+outside the bounded policy, except bodies following a recognized PEM BEGIN. Split
+PEM delimiters themselves retain the adjacent-pair/window bound. Variation selectors
+are stripped except FE0E/FE0F on emoji bases/modifiers or within complete keycaps.
 
 The HTTP transport exports `TemporarilyUnavailable` from `@jeswr/solid-mcp/http`.
 Throw it from `authenticate` when a required dependency cannot be checked: return 503,
