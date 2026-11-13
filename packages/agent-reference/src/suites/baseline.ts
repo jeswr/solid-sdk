@@ -69,8 +69,8 @@ export const BASELINE_SUITES = {
     id: "precedence-rules",
     name: "Precedence and freshness rules",
     summary:
-      "Rules say which kind of source wins when two disagree and how old is too old; memory facts carry source kind and confidence, but the gate does not apply the rules yet.",
-    enforcedAtGate: false,
+      "Methods and freshness are enforced; profiles that declare a precedence policy select a source or ask for an order, retaining superseded statements outside factual support. Legacy profiles without that policy retain their existing behavior.",
+    enforcedAtGate: true,
   },
   "usage-control": {
     layer: "usage-control",

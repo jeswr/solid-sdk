@@ -12,6 +12,7 @@ import {
   purposeStoreReleaseCheck,
 } from "../domains/purpose-store.js";
 import type { GateContext } from "../gates/common.js";
+import { LocalForum, RECORD_LIMITS } from "../mechanisms/forum.js";
 import { LocalDocumentResolver } from "../mechanisms/organizations.js";
 import { LocalResourceHolder, type ResourceReference } from "../mechanisms/references.js";
 import {
@@ -19,10 +20,12 @@ import {
   presentSelective,
   unverifiedEvidenceClaim,
 } from "../mechanisms/selective.js";
+import { LocalSingleUseRegister, type SingleUseItem } from "../mechanisms/single-use.js";
 import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import {
   CONFIG_CORROBORATION,
+  CONFIG_FORUM,
   CONFIG_ORGANIZATIONS,
   CONFIG_PAYMENT,
   CONFIG_PINNED_LIST,
@@ -42,11 +45,13 @@ import type {
 } from "../runtime/operations.js";
 import { Cast, mandateOf, signClaim } from "../scenarios/common.js";
 import { MemoryLedger } from "../store/ledger.js";
+import { MemoryStateStore } from "../store/state.js";
 import { BASELINE, baselineRegistry } from "../suites/baseline.js";
 import { PUBLIC_READ, withPublicRead } from "../suites/public-read.js";
 import { TraceRecorder } from "../trace/recorder.js";
 import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
 import { TrustResolver } from "../trust/resolver.js";
+import { decisionsOf, firstBranchDivergence } from "./compare.js";
 import { installHandler } from "./handlers.js";
 import { validateReferences } from "./load.js";
 import {
@@ -74,6 +79,7 @@ export interface PathResult {
     reason?: string;
   }[];
   readonly disagrees?: boolean;
+  readonly note?: string;
   readonly matches?: boolean;
   readonly difference?: { index: number; expected?: OutlineEntry; actual?: OutlineEntry };
 }
@@ -141,6 +147,7 @@ function unsupported(profile: DomainProfile, scenario: Scenario, path: string): 
       BASELINE.layers[layer as keyof typeof BASELINE.layers] !== suite &&
       (
         {
+          accountability: "regulator-claim",
           commitments: "payment",
           reliance: "corroboration",
           trust: "pinned-list",
@@ -250,8 +257,13 @@ export async function runScenario(
       throw new Error(
         `${scenario.id}/${path.id}: outline differs at ${diff.index}: ${JSON.stringify(diff)}`,
       );
-    const decisions = trace.events.filter((e) => e.kind === "decision" && e.outcome);
-    const firstFailure = decisions.find((e) => !["pass", "admit", "go"].includes(e.outcome ?? ""));
+    const decisions = decisionsOf(trace.events);
+    const mainTrace = results.find((r) => r.path === "main")?.trace;
+    const firstFailure =
+      path.id !== "main" && mainTrace
+        ? firstBranchDivergence(decisionsOf(mainTrace.events), decisions)
+        : decisions.find((e) => !["pass", "admit", "go"].includes(e.outcome ?? ""));
+    const noDivergence = path.id !== "main" && !!mainTrace && !firstFailure;
     const judged = firstFailure ?? decisions.at(-1);
     const check =
       judged &&
@@ -287,11 +299,13 @@ export async function runScenario(
       actual,
       expected,
       consequences,
+      ...(noDivergence ? { note: "branch does not diverge from the main path" } : {}),
       disagrees:
-        !!expected &&
-        ((actual?.outcome === "refuse" ? "stop" : actual?.outcome) !==
-          (expected.outcome === "refuse" ? "stop" : expected.outcome) ||
-          actual?.reason !== expected.reason),
+        noDivergence ||
+        (!!expected &&
+          ((actual?.outcome === "refuse" ? "stop" : actual?.outcome) !==
+            (expected.outcome === "refuse" ? "stop" : expected.outcome) ||
+            actual?.reason !== expected.reason)),
       matches: !diff,
       ...(diff ? { difference: diff } : {}),
     });
@@ -378,22 +392,32 @@ async function runPath(
     summary:
       "Each revealed claim is checked against issuer-signed salted digests; no proof about hidden values or unlinkability is claimed.",
   });
+  registry.register({
+    layer: "accountability",
+    id: "regulator-claim",
+    name: "Local signed-record forum",
+    record: "hash-chained-local",
+    summary:
+      "A separately keyed fictional forum verifies signed segments and compares records and admitted observations; it never re-runs a core.",
+  });
   const local =
-    scenario.suites.authenticity === "selective-disclosure"
-      ? CONFIG_SELECTIVE_LOCAL
-      : scenario.suites.authority === "mandate-credential"
-        ? CONFIG_ORGANIZATIONS
-        : scenario.suites["data-access"] === "by-reference-local-holder"
-          ? CONFIG_REFERENCE_LOCAL
-          : scenario.suites.meaning === "plain-language-upgrade"
-            ? CONFIG_PLAIN_LANGUAGE
-            : scenario.suites.commitments === "payment"
-              ? CONFIG_PAYMENT
-              : scenario.suites.reliance === "corroboration"
-                ? CONFIG_CORROBORATION
-                : scenario.suites.trust === "pinned-list"
-                  ? CONFIG_PINNED_LIST
-                  : undefined;
+    scenario.suites.accountability === "regulator-claim"
+      ? CONFIG_FORUM
+      : scenario.suites.authenticity === "selective-disclosure"
+        ? CONFIG_SELECTIVE_LOCAL
+        : scenario.suites.authority === "mandate-credential"
+          ? CONFIG_ORGANIZATIONS
+          : scenario.suites["data-access"] === "by-reference-local-holder"
+            ? CONFIG_REFERENCE_LOCAL
+            : scenario.suites.meaning === "plain-language-upgrade"
+              ? CONFIG_PLAIN_LANGUAGE
+              : scenario.suites.commitments === "payment"
+                ? CONFIG_PAYMENT
+                : scenario.suites.reliance === "corroboration"
+                  ? CONFIG_CORROBORATION
+                  : scenario.suites.trust === "pinned-list"
+                    ? CONFIG_PINNED_LIST
+                    : undefined;
   const configuration = local
     ? {
         id: `${scenario.id}-local`,
@@ -432,6 +456,7 @@ async function runPath(
         mandate.withApproval as unknown as OdrlRule[],
         mandate.prohibitions as unknown as OdrlRule[],
         mandate.standingRules as unknown as import("../mechanisms/mandate.js").StandingRule[],
+        mandate.duties ?? [],
       ),
       party.representationOperations ?? profile.operations.map((o) => o.id),
       {
@@ -586,6 +611,136 @@ async function runPath(
       payload,
     );
   }
+  const authorityLinks: Record<string, string> = {};
+  for (const link of scenario.authorityLinks) {
+    const subject = required(parties.get(link.subject));
+    const agent = cast.agents.get(link.subject);
+    const issuer = cast.agents.get(link.issuer);
+    const key = issuer ? issuer.ownerKey : required(sourceKeys.get(link.issuer));
+    authorityLinks[link.id] = await signStatement(key, "awp-mandate-link+jws", {
+      ...link,
+      type: "MandateLink",
+      issuer: required(parties.get(link.issuer)).identity,
+      subject: agent ? agent.identity.actor : subject.identity,
+      subjectKey: agent ? agent.actorKey.kid : required(sourceKeys.get(link.subject)).kid,
+    });
+  }
+  const singleUseRegisters: Record<string, LocalSingleUseRegister> = {};
+  const escrowAcceptances: string[] = [];
+  for (const declaration of scenario.singleUseRegisters) {
+    const identity = required(parties.get(declaration.party)).identity;
+    const acceptanceParties = new Set(declaration.acceptances.map((a) => a.party));
+    const registerTrust = await TrustStore.load({
+      version: 1,
+      owner: identity,
+      sourceAuthority: [],
+      keys: [
+        ...agents.map((a) => {
+          const key = cast.get(a.id).actorKey;
+          return {
+            kid: key.kid,
+            alg: key.alg,
+            publicJwk: key.publicJwk,
+            role: "actor",
+            subject: a.actor,
+            party: required(parties.get(required(a.actsFor))).identity,
+          };
+        }),
+        ...[...sourceKeys].map(([id, key]) => ({
+          kid: key.kid,
+          alg: key.alg,
+          publicJwk: key.publicJwk,
+          role: acceptanceParties.has(id) ? "party" : "issuer",
+          subject: required(parties.get(id)).identity,
+        })),
+      ],
+    });
+    const items: SingleUseItem[] = declaration.items.map((i) => ({
+      id: i.id,
+      issuer: required(parties.get(i.issuer)).identity,
+      state: i.state,
+      redeemers: i.redeemers,
+      purposes: i.purposes,
+      ...(i.roleStatement
+        ? {
+            role: {
+              jws: required(signed[i.roleStatement]).jws,
+              source: required(i.roleSource),
+              claimType: required(i.roleClaim),
+            },
+          }
+        : {}),
+      ...(i.escrow ? { escrow: i.escrow } : {}),
+    }));
+    singleUseRegisters[identity] = new LocalSingleUseRegister({
+      identity,
+      key: required(sourceKeys.get(declaration.party)),
+      trust: registerTrust,
+      store: new MemoryStateStore(),
+      ledger: new MemoryLedger(),
+      items,
+      now: () => now().toISOString(),
+      maxAgeSeconds: declaration.maxAgeSeconds,
+      resolver,
+      sink: (event) => recorder.sink(declaration.party).emit(event),
+    });
+    for (const acceptance of declaration.acceptances)
+      escrowAcceptances.push(
+        await signStatement(
+          required(sourceKeys.get(acceptance.party)),
+          "awp-escrow-acceptance+jws",
+          {
+            type: "EscrowAcceptance",
+            issuer: required(parties.get(acceptance.party)).identity,
+            item: acceptance.item,
+            termsDigest: acceptance.termsDigest,
+            issuedAt: now().toISOString(),
+            validUntil: "2026-12-01T00:00:00.000Z",
+          },
+        ),
+      );
+  }
+  let forum: LocalForum | undefined;
+  if (profile.forum) {
+    const declaration = profile.forum;
+    const identity = required(parties.get(declaration.party)).identity;
+    const trust = await TrustStore.load({
+      version: 1,
+      owner: identity,
+      sourceAuthority: [],
+      keys: [
+        ...agents.map((a) => {
+          const key = cast.get(a.id).actorKey;
+          return {
+            kid: key.kid,
+            alg: key.alg,
+            publicJwk: key.publicJwk,
+            role: "actor",
+            subject: a.actor,
+            party: required(parties.get(required(a.actsFor))).identity,
+          };
+        }),
+        ...[...sourceKeys].map(([id, key]) => ({
+          kid: key.kid,
+          alg: key.alg,
+          publicJwk: key.publicJwk,
+          role: "issuer",
+          subject: required(parties.get(id)).identity,
+        })),
+      ],
+    });
+    forum = new LocalForum({
+      identity,
+      key: required(sourceKeys.get(declaration.party)),
+      trust,
+      store: new MemoryStateStore(),
+      ledger: new MemoryLedger(),
+      now: () => now().toISOString(),
+      responseSeconds: declaration.responseSeconds,
+      observers: declaration.observers,
+      sink: (e) => recorder.sink(declaration.party).emit(e),
+    });
+  }
   const grants: Record<string, ResourceReference> = {};
   const holders = new Map<string, LocalResourceHolder>();
   for (const resource of scenario.resources) {
@@ -627,6 +782,16 @@ async function runPath(
         key,
         trust,
         resources,
+        ...(resource.originals
+          ? {
+              originals: Object.fromEntries(
+                resource.statements.map((id) => [
+                  String(required(signed[id]).statement.id),
+                  required(signed[id]).jws,
+                ]),
+              ),
+            }
+          : {}),
         ledger,
         now: () => now().toISOString(),
       }),
@@ -678,7 +843,15 @@ async function runPath(
   const task = `urn:scenario:${scenario.id}:task`;
   const variables = (current?: HandlerContext) => ({
     steps: outputs,
-    statements: signed,
+    statements: Object.fromEntries(
+      Object.entries(signed).map(([id, value]) => [
+        id,
+        { ...value, claimDigest: digestOf(value.statement) },
+      ]),
+    ),
+    representations: Object.fromEntries(
+      [...cast.agents].map(([id, agent]) => [id, agent.representationJws]),
+    ),
     grants,
     grantDigests: Object.fromEntries(
       Object.entries(grants).map(([id, reference]) => [id, digestBytes(reference.grant)]),
@@ -696,6 +869,19 @@ async function runPath(
     const gate: GateContext = {
       configuration: agent.configurations[0] === "public-read" ? PUBLIC_READ : configuration,
       configurations: { [CONFIG_PUBLIC]: PUBLIC_READ },
+      ...(profile.authorityChains
+        ? { authorityChains: { policy: profile.authorityChains, resolver } }
+        : {}),
+      ...(profile.singleUse.length
+        ? {
+            singleUse: {
+              actions: profile.singleUse,
+              registers: singleUseRegisters,
+              evidence: Object.values(signed).map((s) => s.jws),
+              acceptances: escrowAcceptances,
+            },
+          }
+        : {}),
       ...(profile.organizations
         ? { organizations: { policy: profile.organizations, resolver } }
         : {}),
@@ -716,6 +902,7 @@ async function runPath(
       personMayRelyOn: profile.personMayRelyOn,
       requester: scenario.requester[agent.id],
       referenceAction: profile.referenceAction,
+      agreementDeadlineSeconds: profile.agreementDeadlineSeconds,
       notificationRecipients: profile.notificationRecipients,
       trust: profile.trust,
       pins: (scenario.trust.ownLists[agent.id] ?? [])
@@ -739,6 +926,7 @@ async function runPath(
           claimType: c.kind,
           methods: c.methods,
           maxAgeDays: c.maxAgeDays,
+          ...(c.precedence ? { precedence: c.precedence } : {}),
           ...(c.corroboration ? { corroboration: c.corroboration } : {}),
           ...(c.completeness ? { completeness: c.completeness } : {}),
           text: `Accept ${c.kind} from ${c.sources.join(", ")} by ${c.methods.join(", ")}, at most ${c.maxAgeDays} days old.`,
@@ -771,6 +959,16 @@ async function runPath(
               variables(ctx),
             ) as HandlerReply;
           const intent = (ctx: HandlerContext, contents: JsonObject): ActionIntent => {
+            if (["urn:op:erasure-request", "urn:op:general-notice"].includes(op.id))
+              return {
+                action: "use",
+                operation: op.id,
+                target: op.id,
+                recipient: ctx.peer.party,
+                purpose: "urn:purpose:duties",
+                parameters: contents,
+                conversation: ctx.conversation.id,
+              };
             if (op.id === "urn:op:duty-notification")
               return {
                 action: "use",
@@ -801,11 +999,11 @@ async function runPath(
             onInvoke: reply,
             onDeliver: reply,
             onReceipt: reply,
-            onAgreement: (ctx) =>
-              resolveTemplate(
-                responses.get(agent.id)?.agreementPlan ?? { requiredOutcomes: [] },
-                variables(ctx),
-              ) as AgreementPlan,
+            onAgreement: (ctx, agreement) =>
+              resolveTemplate(responses.get(agent.id)?.agreementPlan ?? { requiredOutcomes: [] }, {
+                ...variables(ctx),
+                agreement,
+              }) as AgreementPlan,
           };
         });
     const created = await cast.runtime(
@@ -813,6 +1011,28 @@ async function runPath(
       handlers,
       [
         new SyntheticPaymentRail(),
+        ...(forum
+          ? [
+              {
+                id: "urn:scenario:forum",
+                releasesRecord: true,
+                execute: async (_key: string, params: JsonObject) => {
+                  const result =
+                    params.operation === "submit"
+                      ? await required(forum).submit(String(params.request))
+                      : await required(forum).answer(String(params.request));
+                  return {
+                    conclusion: "completed" as const,
+                    observed: JSON.parse(JSON.stringify(result)) as JsonObject,
+                  };
+                },
+                reconcile: async () => ({
+                  conclusion: "uncertain" as const,
+                  reason: "consult the durable forum case before another submission",
+                }),
+              },
+            ]
+          : []),
         {
           id: "urn:scenario:effect",
           execute: async (_key, params) => ({ conclusion: "completed", observed: params }),
@@ -827,12 +1047,22 @@ async function runPath(
       ),
       {
         gates: gate,
+        ...(profile.forum ? { limits: RECORD_LIMITS } : {}),
         disclosureChecks: Object.fromEntries(
           scenario.stores.map((store) => [
             `${PURPOSE_STORE_RELEASE_CONDITION}/${store.id}`,
             purposeStoreReleaseCheck(required(stores.get(store.id))),
           ]),
         ),
+        ...(scenario.authorityChains[agent.id]
+          ? {
+              authorityChainJws: JSON.stringify(
+                required(scenario.authorityChains[agent.id]).map((chain) =>
+                  chain.map((id) => required(authorityLinks[id])),
+                ),
+              ),
+            }
+          : {}),
         ...(organizationCredentials[agent.id]
           ? { organizationMandateJws: organizationCredentials[agent.id] }
           : {}),
@@ -849,6 +1079,7 @@ async function runPath(
     runtimes.set(agent.id, created.runtime);
     ledgers.set(agent.id, created.ledger);
   }
+  const outsideSystems = new Map<string, Map<string, JsonObject>>();
   const enqueue = (from: string, result: StepResult) => {
     for (const out of result.outbound) queue.push({ from, out });
   };
@@ -859,6 +1090,123 @@ async function runPath(
     const template = <T>(v: unknown) => resolveTemplate(v, variables()) as T;
     let result: unknown;
     switch (step.type) {
+      case "record-segment": {
+        const segment = await runtime.exportRecord(template<string>(step.conversation));
+        if (step.attack) {
+          const payload = JSON.parse(
+            Buffer.from(required(segment.jws.split(".")[1]), "base64url").toString("utf8"),
+          );
+          if (step.attack === "gap") payload.entries.splice(1, 1);
+          else payload.entries[1].entry.record.type = "tampered";
+          segment.jws = await signStatement(
+            cast.get(step.agent).actorKey,
+            "awp-record-segment+jws",
+            payload,
+          );
+        }
+        result = segment;
+        break;
+      }
+      case "offgate-copy": {
+        const original = required(signed[step.statement]);
+        // This host fixture is the dishonest receiver's system outside its outbound gate.
+        const system = outsideSystems.get(step.recipient) ?? new Map<string, JsonObject>();
+        system.set(String(original.statement.id), structuredClone(original.statement));
+        outsideSystems.set(step.recipient, system);
+        const externalCopy = required(system.get(String(original.statement.id)));
+        const observer = required(parties.get(step.observer));
+        const statement = {
+          id: `urn:observation:${scenario.id}:${step.id}`,
+          issuer: observer.identity,
+          claimType: "onward.observation",
+          subject: step.recipient,
+          method: "recorded-by-authority",
+          asOf: now().toISOString(),
+          receiver: cast.get(step.agent).identity.party,
+          dataDigest: digestOf(externalCopy),
+        };
+        result = {
+          jws: await signClaim(required(sourceKeys.get(step.observer)), statement),
+          digest: digestOf(externalCopy),
+        };
+        break;
+      }
+      case "forum-claim":
+      case "forum-answer": {
+        const service = required(forum);
+        const actor = cast.get(step.agent);
+        const source = required(parties.get(required(parties.get(step.agent)?.actsFor))).identity;
+        const request =
+          step.type === "forum-claim"
+            ? {
+                type: "ForumClaim",
+                id: step.case,
+                actor: actor.identity.actor,
+                party: source,
+                respondent: required(parties.get(step.respondent)).identity,
+                conversation: template<string>(step.conversation),
+                segment: template<string>(step.segment),
+                allegation: step.allegation,
+                ...(step.observation ? { observation: template<string>(step.observation) } : {}),
+                at: now().toISOString(),
+              }
+            : {
+                type: "ForumAnswer",
+                case: step.case,
+                actor: actor.identity.actor,
+                party: source,
+                request: required(service.requestFor(step.case)),
+                segment: template<string>(step.segment),
+                at: now().toISOString(),
+              };
+        const params = {
+          evidence: runtime.recordDisclosures(),
+          operation: step.type === "forum-claim" ? "submit" : "answer",
+          request: await signStatement(
+            actor.actorKey,
+            step.type === "forum-claim" ? "awp-forum-claim+jws" : "awp-forum-answer+jws",
+            request,
+          ),
+        };
+        const operation =
+          step.type === "forum-claim" ? "urn:op:forum-claim" : "urn:op:forum-answer";
+        result = await runtime.runTask({
+          taskId: `urn:scenario:${scenario.id}:${step.id}`,
+          kind: "record-release",
+          plan: {
+            adapter: "urn:scenario:forum",
+            key: `urn:scenario:${scenario.id}:${step.id}`,
+            params,
+            activityType: "urn:activity:record-release",
+            intent: {
+              action: "distribute",
+              operation,
+              target: operation,
+              recipient: service.identity,
+              purpose: "urn:purpose:redress",
+              conversation: `urn:scenario:${scenario.id}:${step.id}`,
+              parameters: params,
+            },
+          },
+        });
+        break;
+      }
+      case "forum-audit":
+        result = await required(forum).audit();
+        break;
+      case "forum-decision":
+        result = await runtime.admitStatements(
+          [{ jws: required(required(forum).decisionFor(step.case)) }],
+          { task, taskId: task, purpose: "urn:purpose:redress" },
+        );
+        break;
+      case "general-duties":
+        if (step.event) runtime.triggerDuties(step.event);
+        if (step.discharge) {
+          result = await runtime.dischargeDuties();
+          enqueue(step.agent, result as StepResult);
+        } else result = runtime.auditDuties();
+        break;
       case "instruct":
         runtime.instruct(step.text);
         break;
@@ -1330,12 +1678,37 @@ async function runPath(
         break;
       case "read-reference": {
         const reference = template<ResourceReference>(step.reference);
-        result = await runtime.readReference(
-          reference,
-          holders.get(reference.ref),
-          step.purpose,
-          step.item,
-        );
+        const holder = holders.get(reference.ref);
+        const malicious =
+          step.alterOriginal && holder
+            ? {
+                read: async (ref: ResourceReference, request: string) => {
+                  const answer = await holder.read(ref, request);
+                  if (!answer.ok || !answer.originals) return answer;
+                  const envelope = JSON.parse(
+                    Buffer.from(required(answer.jws.split(".")[1]), "base64url").toString("utf8"),
+                  );
+                  const original = JSON.parse(
+                    Buffer.from(
+                      required(envelope.statements[0].split(".")[1]),
+                      "base64url",
+                    ).toString("utf8"),
+                  );
+                  original.allergy = "altered-by-holder";
+                  const declaration = required(
+                    scenario.resources.find((r) => r.ref === reference.ref),
+                  );
+                  const key = required(sourceKeys.get(declaration.holder));
+                  envelope.statements = [await signStatement(key, TYP.statement, original)];
+                  envelope.statementDigest = digestOf(original);
+                  return {
+                    ...answer,
+                    jws: await signStatement(key, "awp-original-statements+jws", envelope),
+                  };
+                },
+              }
+            : holder;
+        result = await runtime.readReference(reference, malicious, step.purpose, step.item);
         break;
       }
       case "notifications":
@@ -1376,10 +1749,17 @@ async function runPath(
         ),
     },
     configuration: { id: configuration.id, layers: { ...configuration.layers } },
-    agents: agents.map((p) => ({
+    agents: [
+      ...agents,
+      ...scenario.parties.filter(
+        (p) =>
+          scenario.singleUseRegisters.some((r) => r.party === p.id) ||
+          profile.forum?.party === p.id,
+      ),
+    ].map((p) => ({
       id: p.traceId ?? p.id,
       name: partyName(p),
-      actsFor: required(p.actsFor),
+      actsFor: p.actsFor ?? p.id,
       role: p.role,
     })),
     generated: { commit, core: "scripted" },

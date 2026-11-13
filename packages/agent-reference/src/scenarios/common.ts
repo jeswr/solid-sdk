@@ -40,6 +40,7 @@ export function mandateOf(
   withApprovalRules: OdrlRule[] = [],
   prohibitionRules: OdrlRule[] = [],
   standing: readonly import("../mechanisms/mandate.js").StandingRule[] = [],
+  duties: readonly import("../runtime/duties.js").DutyRule[] = [],
 ) {
   return (ids: Ids): OwnerMandate => {
     const mint = (rules: OdrlRule[]): OdrlRule[] =>
@@ -63,6 +64,7 @@ export function mandateOf(
       validFrom: ids.validFrom,
       validUntil: ids.validUntil,
       ...(standing.length ? { standing: [...standing] } : {}),
+      ...(duties.length ? { duties: [...duties] } : {}),
       autonomous: {
         id: scopedUrn("policy", ids.actor, `${label}/autonomous`),
         type: "Set",

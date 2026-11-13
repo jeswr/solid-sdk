@@ -7,67 +7,896 @@
   "profile": "invoice-finance",
   "parties": [
     {
-      "id": "party-1",
-      "identity": "urn:fictional:invoice-finance:party-1",
-      "name": "A supplier",
-      "role": "principal",
+      "id": "owner",
+      "identity": "urn:fictional:invoice-finance:owner",
+      "name": "The first financier",
+      "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "party-2",
-      "identity": "urn:fictional:invoice-finance:party-2",
-      "name": "A buyer",
-      "role": "principal",
+      "id": "second",
+      "identity": "urn:fictional:invoice-finance:second",
+      "name": "The second financier",
+      "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "party-3",
-      "identity": "urn:fictional:invoice-finance:party-3",
-      "name": "Two finance providers",
-      "role": "principal",
+      "id": "issuer",
+      "identity": "urn:fictional:invoice-finance:issuer",
+      "name": "The supplier",
+      "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "party-4",
-      "identity": "urn:fictional:invoice-finance:party-4",
-      "name": "An invoice register",
-      "role": "principal",
+      "id": "authority",
+      "identity": "urn:fictional:invoice-finance:authority",
+      "name": "The buyer",
+      "role": "source",
       "runs": "issuer-only"
+    },
+    {
+      "id": "register",
+      "identity": "urn:fictional:invoice-finance:register",
+      "name": "The invoice register",
+      "role": "register",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "subject",
+      "identity": "urn:fictional:invoice-finance:subject",
+      "name": "The invoice supplier",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:invoice-finance:owner-agent",
+      "actor": "urn:fictional:invoice-finance:owner-agent:actor",
+      "actsFor": "owner",
+      "name": "The first financier’s agent",
+      "role": "agent",
+      "runs": "agent"
+    },
+    {
+      "id": "second-agent",
+      "identity": "urn:fictional:invoice-finance:second-agent",
+      "actor": "urn:fictional:invoice-finance:second-agent:actor",
+      "actsFor": "second",
+      "name": "The second financier’s agent",
+      "role": "agent",
+      "runs": "agent"
     }
   ],
   "trust": {
     "introductions": [],
-    "ownLists": {},
-    "sources": {}
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:invoice-finance:owner",
+          "tasks": [
+            "urn:op:invoice-finance"
+          ]
+        }
+      ],
+      "second-agent": [
+        {
+          "party": "urn:fictional:invoice-finance:second",
+          "tasks": [
+            "urn:op:invoice-finance"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:invoice-finance",
+          "version": "1",
+          "source": "urn:fictional:invoice-finance:authority",
+          "claimTypes": [
+            "invoice.valid"
+          ],
+          "subjects": [
+            "urn:fictional:invoice-finance:subject"
+          ]
+        }
+      ],
+      "second-agent": [
+        {
+          "id": "urn:source:invoice-finance",
+          "version": "1",
+          "source": "urn:fictional:invoice-finance:authority",
+          "claimTypes": [
+            "invoice.valid"
+          ],
+          "subjects": [
+            "urn:fictional:invoice-finance:subject"
+          ]
+        }
+      ]
+    }
   },
-  "statements": [],
-  "mandates": [],
-  "script": [],
+  "statements": [
+    {
+      "id": "item",
+      "issuer": "authority",
+      "subject": "urn:fictional:invoice-finance:subject",
+      "kind": "invoice.valid",
+      "value": {
+        "item": "urn:fictional:invoice-finance:item",
+        "amount": 100
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:invoice-finance:item",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:invoice-finance:item",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:invoice-finance"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "role",
+      "issuer": "authority",
+      "subject": "urn:fictional:invoice-finance:issuer",
+      "kind": "invoice.issuer-standing",
+      "value": {
+        "status": {
+          "ref": "urn:fictional:invoice-finance:standing-status",
+          "id": "registration"
+        }
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:invoice-finance:role",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:invoice-finance:role",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:invoice-finance"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:invoice-finance"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "second-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:invoice-finance"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "admit-item",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "item"
+      ],
+      "purpose": "urn:purpose:invoice-finance"
+    },
+    {
+      "id": "redeem-and-act",
+      "agent": "owner-agent",
+      "type": "effect",
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:invoice-finance",
+        "target": "urn:op:invoice-finance",
+        "recipient": "urn:fictional:invoice-finance:owner",
+        "purpose": "urn:purpose:invoice-finance",
+        "conversation": "urn:scenario:invoice-finance:redeem-and-act",
+        "parameters": {
+          "item": "urn:fictional:invoice-finance:item"
+        }
+      },
+      "params": {
+        "item": "urn:fictional:invoice-finance:item"
+      },
+      "activityType": "urn:activity:invoice-finance"
+    }
+  ],
   "inject": [],
   "branches": [
     {
       "id": "branch-1",
       "what": "The same invoice is offered to a second financier",
-      "change": {},
+      "change": {
+        "script": [
+          {
+            "id": "admit-item",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "item"
+            ],
+            "purpose": "urn:purpose:invoice-finance"
+          },
+          {
+            "id": "redeem-and-act",
+            "agent": "owner-agent",
+            "type": "effect",
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:invoice-finance",
+              "target": "urn:op:invoice-finance",
+              "recipient": "urn:fictional:invoice-finance:owner",
+              "purpose": "urn:purpose:invoice-finance",
+              "conversation": "urn:scenario:invoice-finance:redeem-and-act",
+              "parameters": {
+                "item": "urn:fictional:invoice-finance:item"
+              }
+            },
+            "params": {
+              "item": "urn:fictional:invoice-finance:item"
+            },
+            "activityType": "urn:activity:invoice-finance"
+          },
+          {
+            "id": "second-admits",
+            "agent": "second-agent",
+            "type": "admit",
+            "statements": [
+              "item"
+            ],
+            "purpose": "urn:purpose:invoice-finance"
+          },
+          {
+            "id": "second-redemption",
+            "agent": "second-agent",
+            "type": "effect",
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:invoice-finance",
+              "target": "urn:op:invoice-finance",
+              "recipient": "urn:fictional:invoice-finance:second",
+              "purpose": "urn:purpose:invoice-finance",
+              "conversation": "urn:scenario:invoice-finance:second-redemption",
+              "parameters": {
+                "item": "urn:fictional:invoice-finance:item"
+              }
+            },
+            "params": {
+              "item": "urn:fictional:invoice-finance:item"
+            },
+            "activityType": "urn:activity:invoice-finance"
+          }
+        ]
+      },
       "expect": {
         "outcome": "stop",
         "reason": "status-withdrawn",
-        "check": "source"
+        "check": "evidence"
       },
-      "outline": []
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        }
+      ]
     }
   ],
-  "expect": [],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
   "stress": [
     "source",
     "fitness"
   ],
   "suites": {},
   "assurance": null,
-  "blocked": [
+  "blocked": [],
+  "documents": [
     {
-      "path": "*",
-      "reason": "Needs a shared authoritative invoice-financing register with atomic reservation/redemption and current cross-financier status. An issuer-signed static active/withdrawn flag is not single financing."
+      "id": "urn:fictional:invoice-finance:standing-status",
+      "issuer": "authority",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:invoice-finance:standing-status",
+        "issuer": "urn:fictional:invoice-finance:authority",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "registration": "active"
+        }
+      }
     }
-  ]
+  ],
+  "singleUseRegisters": [
+    {
+      "party": "register",
+      "maxAgeSeconds": 60,
+      "items": [
+        {
+          "id": "urn:fictional:invoice-finance:item",
+          "issuer": "issuer",
+          "state": "active",
+          "roleStatement": "role",
+          "roleSource": "urn:fictional:invoice-finance:authority",
+          "roleClaim": "invoice.issuer-standing",
+          "redeemers": [
+            "urn:fictional:invoice-finance:owner",
+            "urn:fictional:invoice-finance:second"
+          ],
+          "purposes": [
+            "urn:purpose:invoice-finance"
+          ]
+        }
+      ]
+    }
+  ],
+  "traceSteps": {
+    "1": "Check and perform step 1.",
+    "2": "Check and perform step 2.",
+    "3": "Check and perform step 3.",
+    "4": "Check and perform step 4."
+  }
 }

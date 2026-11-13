@@ -26,6 +26,22 @@
     {
       "id": "receiver-agent",
       "name": "The marketing company’s agent"
+    },
+    {
+      "id": "person",
+      "name": "The person"
+    },
+    {
+      "id": "person-agent",
+      "name": "The person’s agent"
+    },
+    {
+      "id": "observer",
+      "name": "The independent local copy observer"
+    },
+    {
+      "id": "forum",
+      "name": "The independent fictional ombudsman"
     }
   ],
   "scenario": {
@@ -35,7 +51,16 @@
       "1": "The lender’s agent checks the signed statements.",
       "2": "The marketing company’s agent sends the signed request.",
       "3": "The lender’s agent checks the message and prepares a response.",
-      "4": "The lender’s agent sends the signed request."
+      "4": "The lender’s agent sends the signed request.",
+      "5": "Restricted data arrives.",
+      "6": "Outside copy.",
+      "7": "Claimant record.",
+      "8": "Respondent record.",
+      "9": "File claim.",
+      "10": "Approve claim.",
+      "11": "Answer.",
+      "12": "Approve answer.",
+      "13": "Decision."
     }
   },
   "configuration": {
@@ -66,13 +91,29 @@
       "name": "The marketing company’s agent",
       "actsFor": "receiver",
       "role": "agent"
+    },
+    {
+      "id": "person-agent",
+      "name": "The person’s agent",
+      "actsFor": "person",
+      "role": "agent"
+    },
+    {
+      "id": "forum",
+      "name": "The independent fictional ombudsman",
+      "actsFor": "forum",
+      "role": "register"
     }
   ],
   "generated": {
-    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+    "commit": "572be274a15f6552e8fc1143e7a6770af3224b55",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Regulator-claim forum and record release transport",
+      "replacedBy": "A separately keyed local forum using signed control requests and source-verified record segments. Each record release is an exact owner-approved effect through the releasing runtime’s gate; no network or legal adjudication is claimed."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -431,7 +472,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:fed6a4e842c…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:b02d217a156…; never trusted."
         },
         "layers": {
           "header": {
@@ -459,7 +500,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:cb4f3eb7d47d328187a8516000ce1287496adbbf8e26fcda4da421b7dac74b73"
+            "digest": "sha-256:520beaf61e39dfc253dfe1f12e052f07d7d586ce27490ec6577cf6a39c78f099"
           },
           "authority": {
             "present": true,
@@ -473,14 +514,17 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:onward-leak",
-                  "urn:op:onward-leak:request"
+                  "urn:op:onward-leak:request",
+                  "urn:op:onward-leak:agreement",
+                  "urn:op:forum-claim",
+                  "urn:op:forum-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:56e548571bb7fcb8129d96c2bf1da8bfec0a2a69bed8cceebae7c3dbd6907667"
+            "digest": "sha-256:c2278bd47bf2fee10eb0642723a9d77380735751d33b8506ff77ec6d93616980"
           },
           "content": {
             "present": true,
@@ -550,7 +594,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:fed6a4e842c…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:b02d217a156…; never trusted."
         },
         "layers": {
           "header": {
@@ -578,7 +622,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:cb4f3eb7d47d328187a8516000ce1287496adbbf8e26fcda4da421b7dac74b73"
+            "digest": "sha-256:520beaf61e39dfc253dfe1f12e052f07d7d586ce27490ec6577cf6a39c78f099"
           },
           "authority": {
             "present": true,
@@ -592,14 +636,17 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:onward-leak",
-                  "urn:op:onward-leak:request"
+                  "urn:op:onward-leak:request",
+                  "urn:op:onward-leak:agreement",
+                  "urn:op:forum-claim",
+                  "urn:op:forum-answer"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:56e548571bb7fcb8129d96c2bf1da8bfec0a2a69bed8cceebae7c3dbd6907667"
+            "digest": "sha-256:c2278bd47bf2fee10eb0642723a9d77380735751d33b8506ff77ec6d93616980"
           },
           "content": {
             "present": true,

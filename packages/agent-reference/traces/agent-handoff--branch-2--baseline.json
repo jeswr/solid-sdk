@@ -1,0 +1,1220 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "agent-handoff",
+  "path": {
+    "index": 2,
+    "what": "The handoff passes on more than the retailer holds"
+  },
+  "parties": [
+    {
+      "id": "subject",
+      "name": "A taxpayer"
+    },
+    {
+      "id": "holder",
+      "name": "An accountant"
+    },
+    {
+      "id": "receiver",
+      "name": "The tax authority"
+    },
+    {
+      "id": "register",
+      "name": "The local authority register"
+    },
+    {
+      "id": "second-holder",
+      "name": "The second registered holder"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The delivery partner’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The receiving agent"
+    }
+  ],
+  "scenario": {
+    "id": "agent-handoff--branch-2",
+    "title": "A service agent hands a customer to a partner's agent: The handoff passes on more than the retailer holds",
+    "steps": {
+      "1": "Admit address.",
+      "2": "Request.",
+      "3": "Receive."
+    }
+  },
+  "configuration": {
+    "id": "agent-handoff-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-credential",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The delivery partner’s agent",
+      "actsFor": "subject",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The receiving agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "572be274a15f6552e8fc1143e7a6770af3224b55",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Retailer delegation and delivery service",
+      "replacedBy": "Separately keyed local parties using direct signed messages. This is a local authority-chain run, not an A2A transport implementation."
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "A taxpayer's delivery.address statement is intact and signed with A taxpayer's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:customer-address",
+        "text": "A taxpayer is accepted for delivery.address claims."
+      },
+      "resolution": {
+        "question": "Is A taxpayer an authority for delivery.address claims about A taxpayer?",
+        "path": [
+          {
+            "at": "A taxpayer's own list",
+            "kind": "own-list",
+            "says": "A taxpayer is accepted for delivery.address."
+          }
+        ],
+        "answer": "Accepted, for delivery.address claims only."
+      },
+      "caption": "A taxpayer's delivery.address statement: A taxpayer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "A taxpayer's delivery.address statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:agent-handoff:address",
+        "text": "Its terms allow this: use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing."
+      },
+      "caption": "A taxpayer's delivery.address statement: its terms allow this: use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:agent-handoff:delivery.address",
+        "text": "Accept delivery.address from urn:fictional:agent-handoff:subject by recorded-by-authority, at most 1 days old."
+      },
+      "caption": "A taxpayer's delivery.address statement is fit for urn:scenario:agent-handoff:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "A taxpayer's delivery.address statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:agent-handoff:address",
+        "label": "A taxpayer's delivery.address statement",
+        "claimType": "delivery.address",
+        "subject": "urn:fictional:agent-handoff:subject",
+        "value": null,
+        "source": "urn:fictional:agent-handoff:subject",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:agent-handoff:address",
+          "summary": "use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing"
+        },
+        "provenance": "signed by A taxpayer"
+      },
+      "caption": "A taxpayer's delivery.address statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:agent handoff with The tax authority."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "A taxpayer's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The tax authority a party I can send A service agent hands a customer to a partner's agent to?",
+        "path": [
+          {
+            "at": "A taxpayer's own list",
+            "kind": "own-list",
+            "says": "The tax authority is accepted for A service agent hands a customer to a partner's agent."
+          }
+        ],
+        "answer": "Accepted, for A service agent hands a customer to a partner's agent only."
+      },
+      "reason": "recipient-established",
+      "caption": "The tax authority: Accepted, for A service agent hands a customer to a partner's agent only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within A taxpayer's limits."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:agent-handoff:address",
+        "text": "The issuer's terms: use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "A taxpayer's delivery.address statement: its terms allow this: use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The delivery partner’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 18,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The receiving agent."
+    },
+    {
+      "seq": 19,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
+        "from": "The delivery partner’s agent",
+        "to": "The receiving agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:d9f81763bb5…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The delivery partner’s agent to The receiving agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-agent-handoff-branch-2:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
+              "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:agent-handoff:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:agent-handoff:subject"
+              },
+              "to": {
+                "actor": "urn:fictional:agent-handoff:receiver-agent:actor",
+                "party": "urn:fictional:agent-handoff:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:f704bda39e18323a658ff465f5870f0b566b3b5245a7e0fffc884f02d24fe1df"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): A taxpayer says A taxpayer acts for it.",
+            "raw": [
+              {
+                "id": "urn:fictional:agent-handoff:power",
+                "issuer": "urn:fictional:agent-handoff:subject",
+                "subject": "urn:fictional:agent-handoff:holder",
+                "entity": "urn:fictional:agent-handoff:subject",
+                "actions": [
+                  "invoke"
+                ],
+                "scope": {
+                  "operations": [
+                    "urn:op:agent-handoff"
+                  ],
+                  "subjects": [
+                    "urn:fictional:agent-handoff:subject"
+                  ],
+                  "purposes": [
+                    "urn:purpose:delivery"
+                  ]
+                },
+                "validFrom": "2026-11-01T00:00:00.000Z",
+                "validUntil": "2026-12-01T00:00:00.000Z",
+                "status": {
+                  "ref": "urn:fictional:agent-handoff:register-status",
+                  "id": "power"
+                },
+                "mayDelegate": {
+                  "depth": 2
+                },
+                "type": "MandateLink",
+                "subjectKey": "4536x475OtEuqMCHt01BySXG6-z7YV9PonSakTzVjeo"
+              }
+            ],
+            "digest": "sha-256:5b27aba9e7bf65b5f4876b4fef2552b902b98b17c0f6e791dd478004d979f7cb"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:agent-handoff",
+                "version": "0.1"
+              },
+              "input": {
+                "subject": "urn:fictional:agent-handoff:subject",
+                "request": "deliver"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:delivery"
+            },
+            "digest": "sha-256:2f038e967060e1e8f0c6107e40e7378b4d155700e60a5fd1313b7095ba2ea8a5"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: delivery.address from A taxpayer.",
+            "raw": [
+              {
+                "address": "urn:fictional:delivery-address",
+                "id": "urn:scenario:agent-handoff:address",
+                "issuer": "urn:fictional:agent-handoff:subject",
+                "subject": "urn:fictional:agent-handoff:subject",
+                "claimType": "delivery.address",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:agent-handoff:address",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:agent-handoff:address",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:delivery"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:agent-handoff:address",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:delivery"
+                          }
+                        ]
+                      }
+                    ],
+                    "prohibitions": [
+                      {
+                        "type": "prohibition",
+                        "action": "distribute",
+                        "target": "urn:scenario:agent-handoff:address",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:marketing"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:80e968a1feb6e9b6f0210ca82179a62ae85425ede28f2a096b857cdfb46bc72f"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The delivery partner’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:agent-handoff:address",
+                  "issuer": "urn:fictional:agent-handoff:subject",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The delivery partner’s agent sends an invoke message to The receiving agent."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
+        "from": "The delivery partner’s agent",
+        "to": "The receiving agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:d9f81763bb5…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The delivery partner’s agent to The receiving agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-agent-handoff-branch-2:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
+              "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:agent-handoff:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:agent-handoff:subject"
+              },
+              "to": {
+                "actor": "urn:fictional:agent-handoff:receiver-agent:actor",
+                "party": "urn:fictional:agent-handoff:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:f704bda39e18323a658ff465f5870f0b566b3b5245a7e0fffc884f02d24fe1df"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): A taxpayer says A taxpayer acts for it.",
+            "raw": [
+              {
+                "id": "urn:fictional:agent-handoff:power",
+                "issuer": "urn:fictional:agent-handoff:subject",
+                "subject": "urn:fictional:agent-handoff:holder",
+                "entity": "urn:fictional:agent-handoff:subject",
+                "actions": [
+                  "invoke"
+                ],
+                "scope": {
+                  "operations": [
+                    "urn:op:agent-handoff"
+                  ],
+                  "subjects": [
+                    "urn:fictional:agent-handoff:subject"
+                  ],
+                  "purposes": [
+                    "urn:purpose:delivery"
+                  ]
+                },
+                "validFrom": "2026-11-01T00:00:00.000Z",
+                "validUntil": "2026-12-01T00:00:00.000Z",
+                "status": {
+                  "ref": "urn:fictional:agent-handoff:register-status",
+                  "id": "power"
+                },
+                "mayDelegate": {
+                  "depth": 2
+                },
+                "type": "MandateLink",
+                "subjectKey": "4536x475OtEuqMCHt01BySXG6-z7YV9PonSakTzVjeo"
+              }
+            ],
+            "digest": "sha-256:5b27aba9e7bf65b5f4876b4fef2552b902b98b17c0f6e791dd478004d979f7cb"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:agent-handoff\"; \"urn:fictional:agent-handoff:subject\"; \"urn:purpose:delivery\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:agent-handoff",
+                "version": "0.1"
+              },
+              "input": {
+                "subject": "urn:fictional:agent-handoff:subject",
+                "request": "deliver"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:delivery"
+            },
+            "digest": "sha-256:2f038e967060e1e8f0c6107e40e7378b4d155700e60a5fd1313b7095ba2ea8a5",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:agent-handoff"
+              },
+              {
+                "path": "input.subject",
+                "text": "urn:fictional:agent-handoff:subject"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:delivery"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: delivery.address from A taxpayer.",
+            "raw": [
+              {
+                "address": "urn:fictional:delivery-address",
+                "id": "urn:scenario:agent-handoff:address",
+                "issuer": "urn:fictional:agent-handoff:subject",
+                "subject": "urn:fictional:agent-handoff:subject",
+                "claimType": "delivery.address",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:agent-handoff:address",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:agent-handoff:address",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:delivery"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:agent-handoff:address",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:delivery"
+                          }
+                        ]
+                      }
+                    ],
+                    "prohibitions": [
+                      {
+                        "type": "prohibition",
+                        "action": "distribute",
+                        "target": "urn:scenario:agent-handoff:address",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:marketing"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:80e968a1feb6e9b6f0210ca82179a62ae85425ede28f2a096b857cdfb46bc72f"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The delivery partner’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:agent-handoff:address",
+                  "issuer": "urn:fictional:agent-handoff:subject",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The delivery partner’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The delivery partner’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:customer-address",
+        "text": "A taxpayer is accepted for delivery.address claims."
+      },
+      "resolution": {
+        "question": "Is A taxpayer an authority for delivery.address claims about A taxpayer?",
+        "path": [
+          {
+            "at": "The tax authority's own list",
+            "kind": "own-list",
+            "says": "A taxpayer is accepted for delivery.address."
+          }
+        ],
+        "answer": "Accepted, for delivery.address claims only."
+      },
+      "caption": "A taxpayer's delivery.address statement: A taxpayer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "representation-out-of-scope",
+      "rule": {
+        "id": "urn:op:agent-handoff",
+        "text": "A representation statement signed with A taxpayer's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The sender has not shown that it acts for A taxpayer here."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "refuse",
+      "reason": "representation-out-of-scope",
+      "caption": "The message is refused (representation-out-of-scope: representation not accepted); the core never sees it."
+    },
+    {
+      "seq": 25,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This protocol message proposes no additional action."
+    },
+    {
+      "seq": 26,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is A taxpayer a party I can send A service agent hands a customer to a partner's agent to?",
+        "path": [
+          {
+            "at": "The tax authority's own list",
+            "kind": "own-list",
+            "says": "A taxpayer is accepted for A service agent hands a customer to a partner's agent."
+          }
+        ],
+        "answer": "Accepted, for A service agent hands a customer to a partner's agent only."
+      },
+      "reason": "recipient-established",
+      "caption": "A taxpayer: Accepted, for A service agent hands a customer to a partner's agent only."
+    },
+    {
+      "seq": 27,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate finds no personal data in this protocol message."
+    },
+    {
+      "seq": 28,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate finds no data terms to apply."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The message release check is complete."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The receiving agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The refuse message goes to The delivery partner’s agent."
+    },
+    {
+      "seq": 32,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-agent-handoff-branch-2:receiver-agent:0001",
+        "from": "The receiving agent",
+        "to": "The delivery partner’s agent",
+        "kind": "refuse",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:0b0a8693202…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The receiving agent to The delivery partner’s agent; refuse; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-agent-handoff-branch-2:receiver-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-agent-handoff-branch-2:receiver-agent:0001",
+              "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+              "kind": "refuse",
+              "from": {
+                "actor": "urn:fictional:agent-handoff:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:agent-handoff:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:agent-handoff:owner-agent:actor",
+                "party": "urn:fictional:agent-handoff:subject"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:bea8a4e92fd322469fec65602361fe58f4658bc9fe2fb9254934d56c6d82ecbe"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Closes the conversation (refuse): representation-out-of-scope.",
+            "raw": {
+              "ref": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
+              "reason": "representation-out-of-scope"
+            },
+            "digest": "sha-256:076010851b9553d2ad5a1c7ead6f6d7156e8ebb75e7ba6217e37c72504e21775"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-agent-handoff-branch-2:owner-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+              "inReplyTo": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The receiving agent sends a refuse message to The delivery partner’s agent."
+    }
+  ]
+}

@@ -3,17 +3,81 @@
   "schema": "agent-profile/0.1",
   "id": "carer-acts-for-parent",
   "parties": {
-    "party-1": "A parent",
-    "party-2": "An adult child",
-    "party-3": "The child's agent",
-    "party-4": "A care provider",
-    "party-5": "A register of powers of attorney"
+    "subject": "A parent",
+    "holder": "An adult child",
+    "receiver": "A care provider",
+    "register": "The local authority register",
+    "second-holder": "The second registered holder"
+  },
+  "sources": {
+    "authority-register": "urn:fictional:carer-acts-for-parent:register"
   },
   "claims": [],
-  "purposes": [],
+  "purposes": [
+    {
+      "id": "urn:purpose:carer-acts-for-parent",
+      "claims": []
+    }
+  ],
   "rules": [],
   "decisionsForPerson": [],
   "modelReadings": [],
-  "vocabulary": {},
-  "operations": []
+  "vocabulary": {
+    "input.subject": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "organise-care",
+        "file-return",
+        "trip-consent",
+        "change-residence"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "identifiers": [
+    "urn:fictional:carer-acts-for-parent:subject",
+    "urn:fictional:carer-acts-for-parent:another-subject"
+  ],
+  "operations": [
+    {
+      "id": "urn:op:carer-acts-for-parent",
+      "version": "0.1",
+      "label": "An adult child acts for a parent",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:carer-acts-for-parent"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "authorityChains": {
+    "roots": [
+      {
+        "issuer": "urn:fictional:carer-acts-for-parent:register",
+        "entity": "urn:fictional:carer-acts-for-parent:subject",
+        "operations": [
+          "urn:op:carer-acts-for-parent"
+        ]
+      }
+    ],
+    "maxStatusAgeSeconds": 60,
+    "holders": "any",
+    "objectionRole": "school-safeguarding-lead",
+    "actionField": "request"
+  },
+  "standIns": [
+    {
+      "what": "Public authority register and care/tax/school endpoints",
+      "replacedBy": "Declared fictional parties with independent introduced keys and local signed current-status documents; no live service or legal authority claim."
+    }
+  ]
 }

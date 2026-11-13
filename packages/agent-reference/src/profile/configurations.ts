@@ -81,6 +81,7 @@ export const CONFIG_PUBLIC = `${AWP}config/public-readonly-ed25519/0.1`;
 export const CONFIG_SD_CANDIDATE = `${AWP}config/selective-disclosure-candidate/0.1`;
 
 export const CONFIG_PLAIN_LANGUAGE = `${AWP}config/plain-language-upgrade-local/0.1`;
+export const CONFIG_FORUM = `${AWP}config/local-record-forum/0.1`;
 export const CONFIG_REFERENCE_LOCAL = `${AWP}config/by-reference-local-holder/0.1`;
 export const CONFIG_ORGANIZATIONS = `${AWP}config/organizations-local-resolver/0.1`;
 export const CONFIG_SELECTIVE_LOCAL = `${AWP}config/salted-selective-disclosure/0.1`;
@@ -106,6 +107,10 @@ const localDefinition = (id: string, label: string): ConfigurationDefinition => 
 });
 
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  [CONFIG_FORUM]: localDefinition(
+    CONFIG_FORUM,
+    "Signed record claims to a separately keyed fictional forum; no core re-execution",
+  ),
   [CONFIG_PLAIN_LANGUAGE]: localDefinition(
     CONFIG_PLAIN_LANGUAGE,
     "Digest-bound unstructured content and source-signed structured form upgrade",

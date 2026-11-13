@@ -7,8 +7,8 @@
     "receiver": "The buyer",
     "vehicle-register": "The fictional vehicle register",
     "other-owner": "The other fictional keeper",
-    "owner-agent": "The seller’s agent",
-    "receiver-agent": "The buyer’s agent"
+    "owner-agent": "The seller\u2019s agent",
+    "receiver-agent": "The buyer\u2019s agent"
   },
   "claims": [
     {
@@ -20,13 +20,35 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "finance.search",
+      "sources": [
+        "urn:fictional:sell-a-car:finance-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    },
+    {
+      "kind": "finance.search.complete",
+      "sources": [
+        "urn:fictional:sell-a-car:finance-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:sell-a-car",
       "claims": [
-        "vehicle.keeper"
+        "vehicle.keeper",
+        "finance.search",
+        "finance.search.complete"
       ]
     }
   ],
@@ -82,6 +104,26 @@
       "claims": [
         "vehicle.keeper"
       ]
+    }
+  ],
+  "singleUse": [
+    {
+      "action": "read",
+      "register": "urn:fictional:sell-a-car:escrow",
+      "item": "urn:fictional:sell-a-car:escrow-hold",
+      "operation": "release",
+      "maxAgeSeconds": 60,
+      "parameters": {
+        "item": "urn:fictional:sell-a-car:escrow-hold",
+        "amount": 7500,
+        "currency": "GBP"
+      }
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Vehicle/finance registers and escrow holding GBP 7500",
+      "replacedBy": "Independent synthetic signing parties, a signed complete finance search and local escrow CAS release; no real money moves."
     }
   ]
 }

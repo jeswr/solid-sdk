@@ -47,6 +47,7 @@ for (const file of readdirSync(join(root, "scenarios"))
             actual: path.actual,
             expected: path.expected,
             consequences: path.consequences,
+            ...(path.note ? { note: path.note } : {}),
             trace: `${stem}--baseline.json`,
           }),
     });

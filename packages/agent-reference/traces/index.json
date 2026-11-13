@@ -15,6 +15,20 @@
     "events": 32
   },
   {
+    "file": "agent-handoff--baseline.json",
+    "scenario": {
+      "id": "agent-handoff",
+      "title": "A service agent hands a customer to a partner's agent",
+      "steps": {
+        "1": "Admit address.",
+        "2": "Request.",
+        "3": "Receive."
+      }
+    },
+    "configuration": "agent-handoff-local",
+    "events": 27
+  },
+  {
     "file": "agent-handoff--branch-1--baseline.json",
     "scenario": {
       "id": "agent-handoff--branch-1",
@@ -28,6 +42,20 @@
     },
     "configuration": "baseline",
     "events": 33
+  },
+  {
+    "file": "agent-handoff--branch-2--baseline.json",
+    "scenario": {
+      "id": "agent-handoff--branch-2",
+      "title": "A service agent hands a customer to a partner's agent: The handoff passes on more than the retailer holds",
+      "steps": {
+        "1": "Admit address.",
+        "2": "Request.",
+        "3": "Receive."
+      }
+    },
+    "configuration": "agent-handoff-local",
+    "events": 32
   },
   {
     "file": "benefit-claim--baseline.json",
@@ -101,6 +129,45 @@
     },
     "configuration": "baseline",
     "events": 64
+  },
+  {
+    "file": "carer-acts-for-parent--baseline.json",
+    "scenario": {
+      "id": "carer-acts-for-parent",
+      "title": "An adult child acts for a parent",
+      "steps": {
+        "1": "Request.",
+        "2": "Receive."
+      }
+    },
+    "configuration": "carer-acts-for-parent-local",
+    "events": 17
+  },
+  {
+    "file": "carer-acts-for-parent--branch-1--baseline.json",
+    "scenario": {
+      "id": "carer-acts-for-parent--branch-1",
+      "title": "An adult child acts for a parent: The agent tries to change where the father lives, outside the power",
+      "steps": {
+        "1": "Request.",
+        "2": "Receive."
+      }
+    },
+    "configuration": "carer-acts-for-parent-local",
+    "events": 23
+  },
+  {
+    "file": "carer-acts-for-parent--branch-2--baseline.json",
+    "scenario": {
+      "id": "carer-acts-for-parent--branch-2",
+      "title": "An adult child acts for a parent: The power is revoked",
+      "steps": {
+        "1": "Request.",
+        "2": "Receive."
+      }
+    },
+    "configuration": "carer-acts-for-parent-local",
+    "events": 23
   },
   {
     "file": "change-of-address--baseline.json",
@@ -249,6 +316,32 @@
     "events": 15
   },
   {
+    "file": "consent-for-a-child--baseline.json",
+    "scenario": {
+      "id": "consent-for-a-child",
+      "title": "A parent consents for a child",
+      "steps": {
+        "1": "Request.",
+        "2": "Receive."
+      }
+    },
+    "configuration": "consent-for-a-child-local",
+    "events": 17
+  },
+  {
+    "file": "consent-for-a-child--branch-1--baseline.json",
+    "scenario": {
+      "id": "consent-for-a-child--branch-1",
+      "title": "A parent consents for a child: The second parent has objected",
+      "steps": {
+        "1": "Request.",
+        "2": "Receive."
+      }
+    },
+    "configuration": "consent-for-a-child-local",
+    "events": 16
+  },
+  {
     "file": "content-licence--branch-1--baseline.json",
     "scenario": {
       "id": "content-licence--branch-1",
@@ -300,6 +393,44 @@
     },
     "configuration": "contract-wording-local",
     "events": 75
+  },
+  {
+    "file": "credit-file-dispute--baseline.json",
+    "scenario": {
+      "id": "credit-file-dispute",
+      "title": "Correcting an error on a credit file",
+      "steps": {
+        "1": "Compare statements.",
+        "2": "Correction offer.",
+        "3": "Correction accept.",
+        "4": "Correction formed.",
+        "5": "Correction completed.",
+        "6": "Person informed.",
+        "7": "Agency gets ack.",
+        "8": "Audit correction."
+      }
+    },
+    "configuration": "credit-file-dispute-local",
+    "events": 86
+  },
+  {
+    "file": "credit-file-dispute--branch-1--baseline.json",
+    "scenario": {
+      "id": "credit-file-dispute--branch-1",
+      "title": "Correcting an error on a credit file: The agency does not answer by its deadline",
+      "steps": {
+        "1": "Compare statements.",
+        "2": "Correction offer.",
+        "3": "Correction accept.",
+        "4": "Correction formed.",
+        "5": "Correction completed.",
+        "6": "Person informed.",
+        "7": "Agency gets ack.",
+        "8": "Audit correction."
+      }
+    },
+    "configuration": "credit-file-dispute-local",
+    "events": 38
   },
   {
     "file": "cross-department-request--baseline.json",
@@ -556,6 +687,74 @@
     "events": 32
   },
   {
+    "file": "erasure-request--baseline.json",
+    "scenario": {
+      "id": "erasure-request",
+      "title": "Withdrawing consent and asking for deletion",
+      "steps": {
+        "1": "Subject admits.",
+        "2": "Initial offer.",
+        "3": "Initial accept.",
+        "4": "Initial formed.",
+        "5": "Initial data arrives.",
+        "6": "Onward offer.",
+        "7": "Onward accept.",
+        "8": "Onward formed.",
+        "9": "Onward data arrives.",
+        "10": "Second onward offer.",
+        "11": "Second onward accept.",
+        "12": "Second onward formed.",
+        "13": "Second onward data arrives.",
+        "14": "Erase.",
+        "15": "Erase arrives.",
+        "16": "Erasure report.",
+        "17": "Company informs.",
+        "18": "Partner erases.",
+        "19": "Company gets ack.",
+        "20": "Partner informs.",
+        "21": "Downstream erases.",
+        "22": "Partner gets ack.",
+        "23": "Final audit."
+      }
+    },
+    "configuration": "baseline",
+    "events": 268
+  },
+  {
+    "file": "erasure-request--branch-1--baseline.json",
+    "scenario": {
+      "id": "erasure-request--branch-1",
+      "title": "Withdrawing consent and asking for deletion: The company passed the data on with no duty to inform",
+      "steps": {
+        "1": "Subject admits.",
+        "2": "Initial offer.",
+        "3": "Initial accept.",
+        "4": "Initial formed.",
+        "5": "Initial data arrives.",
+        "6": "Onward offer.",
+        "7": "Onward accept.",
+        "8": "Onward formed.",
+        "9": "Onward data arrives.",
+        "10": "Second onward offer.",
+        "11": "Second onward accept.",
+        "12": "Second onward formed.",
+        "13": "Second onward data arrives.",
+        "14": "Erase.",
+        "15": "Erase arrives.",
+        "16": "Erasure report.",
+        "17": "Company informs.",
+        "18": "Partner erases.",
+        "19": "Company gets ack.",
+        "20": "Partner informs.",
+        "21": "Downstream erases.",
+        "22": "Partner gets ack.",
+        "23": "Final audit."
+      }
+    },
+    "configuration": "baseline",
+    "events": 201
+  },
+  {
     "file": "expenses--baseline.json",
     "scenario": {
       "id": "expenses",
@@ -635,6 +834,50 @@
     },
     "configuration": "false-but-signed-local",
     "events": 52
+  },
+  {
+    "file": "fee-dispute--baseline.json",
+    "scenario": {
+      "id": "fee-dispute",
+      "title": "Taking a dispute to an ombudsman",
+      "steps": {
+        "1": "Agreement offer.",
+        "2": "Agreement accept.",
+        "3": "Agreement formed.",
+        "4": "Bill arrives.",
+        "5": "Claimant record.",
+        "6": "Respondent record.",
+        "7": "File claim.",
+        "8": "Approve claim.",
+        "9": "Answer.",
+        "10": "Approve answer.",
+        "11": "Decision."
+      }
+    },
+    "configuration": "fee-dispute-local",
+    "events": 97
+  },
+  {
+    "file": "fee-dispute--branch-1--baseline.json",
+    "scenario": {
+      "id": "fee-dispute--branch-1",
+      "title": "Taking a dispute to an ombudsman: The lender's record has a gap",
+      "steps": {
+        "1": "Agreement offer.",
+        "2": "Agreement accept.",
+        "3": "Agreement formed.",
+        "4": "Bill arrives.",
+        "5": "Claimant record.",
+        "6": "Respondent record.",
+        "7": "File claim.",
+        "8": "Approve claim.",
+        "9": "Answer.",
+        "10": "Approve answer.",
+        "11": "Decision."
+      }
+    },
+    "configuration": "fee-dispute-local",
+    "events": 97
   },
   {
     "file": "find-a-time--branch-1--baseline.json",
@@ -842,6 +1085,62 @@
     "events": 8
   },
   {
+    "file": "incident-notice--baseline.json",
+    "scenario": {
+      "id": "incident-notice",
+      "title": "Telling customers about a security incident",
+      "steps": {
+        "1": "Customer offer.",
+        "2": "Customer accept.",
+        "3": "Customer formed.",
+        "4": "Second offer.",
+        "5": "Second accept.",
+        "6": "Second formed.",
+        "7": "Regulator offer.",
+        "8": "Regulator accept.",
+        "9": "Regulator formed.",
+        "10": "Incident.",
+        "11": "Customer notice.",
+        "12": "Customer ack.",
+        "13": "Second notice.",
+        "14": "Second ack.",
+        "15": "Regulator notice.",
+        "16": "Regulator ack.",
+        "17": "Final audit."
+      }
+    },
+    "configuration": "baseline",
+    "events": 198
+  },
+  {
+    "file": "incident-notice--branch-1--baseline.json",
+    "scenario": {
+      "id": "incident-notice--branch-1",
+      "title": "Telling customers about a security incident: A customer's agent does not acknowledge receipt",
+      "steps": {
+        "1": "Customer offer.",
+        "2": "Customer accept.",
+        "3": "Customer formed.",
+        "4": "Second offer.",
+        "5": "Second accept.",
+        "6": "Second formed.",
+        "7": "Regulator offer.",
+        "8": "Regulator accept.",
+        "9": "Regulator formed.",
+        "10": "Incident.",
+        "11": "Customer notice.",
+        "12": "Customer ack.",
+        "13": "Second notice.",
+        "14": "Second ack.",
+        "15": "Regulator notice.",
+        "16": "Regulator ack.",
+        "17": "Final audit."
+      }
+    },
+    "configuration": "baseline",
+    "events": 178
+  },
+  {
     "file": "insurance-claim-photos--baseline.json",
     "scenario": {
       "id": "insurance-claim-photos",
@@ -941,6 +1240,36 @@
     },
     "configuration": "baseline",
     "events": 23
+  },
+  {
+    "file": "invoice-finance--baseline.json",
+    "scenario": {
+      "id": "invoice-finance",
+      "title": "Financing an invoice once",
+      "steps": {
+        "1": "Check and perform step 1.",
+        "2": "Check and perform step 2.",
+        "3": "Check and perform step 3.",
+        "4": "Check and perform step 4."
+      }
+    },
+    "configuration": "baseline",
+    "events": 27
+  },
+  {
+    "file": "invoice-finance--branch-1--baseline.json",
+    "scenario": {
+      "id": "invoice-finance--branch-1",
+      "title": "Financing an invoice once: The same invoice is offered to a second financier",
+      "steps": {
+        "1": "Check and perform step 1.",
+        "2": "Check and perform step 2.",
+        "3": "Check and perform step 3.",
+        "4": "Check and perform step 4."
+      }
+    },
+    "configuration": "baseline",
+    "events": 48
   },
   {
     "file": "joint-mortgage--branch-1--baseline.json",
@@ -1224,6 +1553,30 @@
     "events": 9
   },
   {
+    "file": "onward-leak--baseline.json",
+    "scenario": {
+      "id": "onward-leak",
+      "title": "A receiver passes data on against its terms",
+      "steps": {
+        "1": "Income held.",
+        "2": "Restricted offer.",
+        "3": "Restricted accept.",
+        "4": "Restricted formed.",
+        "5": "Restricted data arrives.",
+        "6": "Outside copy.",
+        "7": "Claimant record.",
+        "8": "Respondent record.",
+        "9": "File claim.",
+        "10": "Approve claim.",
+        "11": "Answer.",
+        "12": "Approve answer.",
+        "13": "Decision."
+      }
+    },
+    "configuration": "onward-leak-local",
+    "events": 111
+  },
+  {
     "file": "onward-leak--branch-1--baseline.json",
     "scenario": {
       "id": "onward-leak--branch-1",
@@ -1232,7 +1585,16 @@
         "1": "The lender’s agent checks the signed statements.",
         "2": "The marketing company’s agent sends the signed request.",
         "3": "The lender’s agent checks the message and prepares a response.",
-        "4": "The lender’s agent sends the signed request."
+        "4": "The lender’s agent sends the signed request.",
+        "5": "Restricted data arrives.",
+        "6": "Outside copy.",
+        "7": "Claimant record.",
+        "8": "Respondent record.",
+        "9": "File claim.",
+        "10": "Approve claim.",
+        "11": "Answer.",
+        "12": "Approve answer.",
+        "13": "Decision."
       }
     },
     "configuration": "baseline",
@@ -1350,6 +1712,51 @@
     },
     "configuration": "baseline",
     "events": 7
+  },
+  {
+    "file": "prescription-dispensing--baseline.json",
+    "scenario": {
+      "id": "prescription-dispensing",
+      "title": "Dispensing a prescription",
+      "steps": {
+        "1": "Check and perform step 1.",
+        "2": "Check and perform step 2.",
+        "3": "Check and perform step 3.",
+        "4": "Check and perform step 4."
+      }
+    },
+    "configuration": "baseline",
+    "events": 27
+  },
+  {
+    "file": "prescription-dispensing--branch-1--baseline.json",
+    "scenario": {
+      "id": "prescription-dispensing--branch-1",
+      "title": "Dispensing a prescription: The same prescription is presented at a second pharmacy",
+      "steps": {
+        "1": "Check and perform step 1.",
+        "2": "Check and perform step 2.",
+        "3": "Check and perform step 3.",
+        "4": "Check and perform step 4."
+      }
+    },
+    "configuration": "baseline",
+    "events": 48
+  },
+  {
+    "file": "prescription-dispensing--branch-2--baseline.json",
+    "scenario": {
+      "id": "prescription-dispensing--branch-2",
+      "title": "Dispensing a prescription: The prescriber's registration lapsed last month",
+      "steps": {
+        "1": "Check and perform step 1.",
+        "2": "Check and perform step 2.",
+        "3": "Check and perform step 3.",
+        "4": "Check and perform step 4."
+      }
+    },
+    "configuration": "baseline",
+    "events": 19
   },
   {
     "file": "price-negotiation--baseline.json",
@@ -1566,6 +1973,34 @@
     },
     "configuration": "baseline",
     "events": 8
+  },
+  {
+    "file": "records-to-new-practice--baseline.json",
+    "scenario": {
+      "id": "records-to-new-practice",
+      "title": "Moving a health record to a new practice",
+      "steps": {
+        "1": "Read patient note.",
+        "2": "Read clinical.",
+        "3": "Read estimate."
+      }
+    },
+    "configuration": "records-to-new-practice-local",
+    "events": 21
+  },
+  {
+    "file": "records-to-new-practice--branch-1--baseline.json",
+    "scenario": {
+      "id": "records-to-new-practice--branch-1",
+      "title": "Moving a health record to a new practice: The patient's note of an allergy differs from the clinical entry",
+      "steps": {
+        "1": "Read patient note.",
+        "2": "Read clinical.",
+        "3": "Read estimate."
+      }
+    },
+    "configuration": "records-to-new-practice-local",
+    "events": 22
   },
   {
     "file": "recycled-content--branch-1--baseline.json",
@@ -1844,6 +2279,19 @@
     "events": 53
   },
   {
+    "file": "sell-a-car--baseline.json",
+    "scenario": {
+      "id": "sell-a-car",
+      "title": "Selling a used car to a stranger",
+      "steps": {
+        "1": "Check the vehicle keeper.",
+        "2": "Release the escrow hold only after every condition and both acceptances."
+      }
+    },
+    "configuration": "baseline",
+    "events": 27
+  },
+  {
     "file": "sell-a-car--branch-1--baseline.json",
     "scenario": {
       "id": "sell-a-car--branch-1",
@@ -2049,6 +2497,32 @@
     },
     "configuration": "supplier-onboarding-local",
     "events": 22
+  },
+  {
+    "file": "tax-agent--baseline.json",
+    "scenario": {
+      "id": "tax-agent",
+      "title": "An accountant files a tax return",
+      "steps": {
+        "1": "Request.",
+        "2": "Receive."
+      }
+    },
+    "configuration": "tax-agent-local",
+    "events": 17
+  },
+  {
+    "file": "tax-agent--branch-1--baseline.json",
+    "scenario": {
+      "id": "tax-agent--branch-1",
+      "title": "An accountant files a tax return: The agent reads another client's account by mistake",
+      "steps": {
+        "1": "Request.",
+        "2": "Receive."
+      }
+    },
+    "configuration": "tax-agent-local",
+    "events": 23
   },
   {
     "file": "telecom-fault--baseline.json",

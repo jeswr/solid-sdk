@@ -3,15 +3,79 @@
   "schema": "agent-profile/0.1",
   "id": "consent-for-a-child",
   "parties": {
-    "party-1": "A child",
-    "party-2": "A parent",
-    "party-3": "A school"
+    "subject": "A child",
+    "holder": "A parent",
+    "receiver": "The school",
+    "register": "The local authority register",
+    "second-holder": "The second registered holder"
+  },
+  "sources": {
+    "authority-register": "urn:fictional:consent-for-a-child:register"
   },
   "claims": [],
-  "purposes": [],
+  "purposes": [
+    {
+      "id": "urn:purpose:consent-for-a-child",
+      "claims": []
+    }
+  ],
   "rules": [],
   "decisionsForPerson": [],
   "modelReadings": [],
-  "vocabulary": {},
-  "operations": []
+  "vocabulary": {
+    "input.subject": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "organise-care",
+        "file-return",
+        "trip-consent"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "identifiers": [
+    "urn:fictional:consent-for-a-child:subject",
+    "urn:fictional:consent-for-a-child:another-subject"
+  ],
+  "operations": [
+    {
+      "id": "urn:op:consent-for-a-child",
+      "version": "0.1",
+      "label": "A parent consents for a child",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:consent-for-a-child"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "authorityChains": {
+    "roots": [
+      {
+        "issuer": "urn:fictional:consent-for-a-child:register",
+        "entity": "urn:fictional:consent-for-a-child:subject",
+        "operations": [
+          "urn:op:consent-for-a-child"
+        ]
+      }
+    ],
+    "maxStatusAgeSeconds": 60,
+    "holders": "any",
+    "objectionRole": "school-safeguarding-lead"
+  },
+  "standIns": [
+    {
+      "what": "Public authority register and care/tax/school endpoints",
+      "replacedBy": "Declared fictional parties with independent introduced keys and local signed current-status documents; no live service or legal authority claim."
+    }
+  ]
 }

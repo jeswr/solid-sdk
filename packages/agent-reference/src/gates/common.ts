@@ -68,6 +68,10 @@ export interface RelianceRule {
   readonly claimType: string;
   readonly methods: readonly string[];
   readonly maxAgeDays: number;
+  readonly precedence?: {
+    readonly sources: readonly string[];
+    readonly freshness: "source-first" | "newer-first";
+  };
   /** Plain words for the rule, shown with the verdict. */
   readonly text: string;
   readonly corroboration?: { readonly sources: number; readonly independent: boolean };
@@ -95,6 +99,8 @@ export interface ItemTerms {
 
 /** A fact the inbound gate admitted, with its labels (shared with the outbound gate). */
 export interface AdmittedFact {
+  readonly supersededBy?: string;
+  readonly disputedWith?: readonly string[];
   readonly id: string;
   readonly label: string;
   readonly claimType: string;
@@ -157,6 +163,7 @@ export class GateMemory {
     readonly refusals: Record<string, string> = {},
     readonly relianceHolds: Record<string, RelianceHold> = {},
     readonly relianceBindings: Record<string, string> = {},
+    readonly precedenceHolds: Record<string, AdmittedFact> = {},
   ) {}
   rememberIdentifiers(scope: string, value: unknown): void {
     this.identifiers[scope] = [
@@ -217,7 +224,27 @@ export interface GateContext {
     readonly decider: "principal" | { readonly role: string };
   }[];
   readonly requester?: string;
+  readonly singleUse?: {
+    readonly actions: readonly {
+      action: string;
+      register: string;
+      item: string;
+      operation: "redeem" | "release";
+      maxAgeSeconds: number;
+      parameters?: import("../core/types.js").JsonObject;
+    }[];
+    readonly registers: Readonly<
+      Record<string, import("../mechanisms/single-use.js").SingleUseRegister>
+    >;
+    readonly evidence: readonly string[];
+    readonly acceptances: readonly string[];
+  };
+  readonly agreementDeadlineSeconds?: number;
   readonly referenceAction?: string;
+  readonly authorityChains?: {
+    readonly policy: import("../mechanisms/authority-chain.js").ChainPolicy;
+    readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;
+  };
   readonly organizations?: {
     readonly policy: import("../mechanisms/organizations.js").OrganizationPolicy;
     readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;

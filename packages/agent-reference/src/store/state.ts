@@ -141,6 +141,12 @@ export interface MandateRevocation {
 }
 
 export interface RuntimeState {
+  duties: import("../runtime/duties.js").DutyState;
+  recordMessages: Record<
+    string,
+    { direction: "in" | "out"; conversation: string; digest: string; jws: string }
+  >;
+  precedenceHolds: Record<string, import("../gates/common.js").AdmittedFact>;
   readonly version: 1;
   conversations: Record<Iri, ConversationState>;
   seen: Record<Iri, SeenEntry>;
@@ -219,6 +225,9 @@ export function domainValue(record: Json | undefined): Json | undefined {
 export function emptyState(): RuntimeState {
   return {
     version: 1,
+    duties: { transfers: [], incoming: [], work: {} },
+    precedenceHolds: {},
+    recordMessages: {},
     conversations: {},
     seen: {},
     outbox: {},

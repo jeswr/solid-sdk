@@ -64,7 +64,7 @@
     }
   ],
   "generated": {
-    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+    "commit": "572be274a15f6552e8fc1143e7a6770af3224b55",
     "core": "scripted"
   },
   "standIns": [],
@@ -1363,7 +1363,7 @@
       "agent": "blair-agent",
       "part": "record",
       "kind": "record",
-      "caption": "12 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "28 entries in this agent's hash-chained record; the chain verifies."
     },
     {
       "seq": 40,
@@ -1371,7 +1371,7 @@
       "agent": "alex-agent",
       "part": "record",
       "kind": "record",
-      "caption": "9 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "23 entries in this agent's hash-chained record; the chain verifies."
     }
   ]
 }

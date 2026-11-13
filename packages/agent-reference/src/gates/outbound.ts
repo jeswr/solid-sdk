@@ -67,6 +67,7 @@ export interface ProposalOrigin {
   readonly text: string;
 }
 export interface OutboundDeps {
+  readonly recordRelease?: (intent: ActionIntent) => boolean;
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
   readonly now: () => string;
   readonly mandate: () => OwnerMandate | undefined;
@@ -191,6 +192,20 @@ export class OutboundGate {
       ...(reason ? { reason } : {}),
       caption,
     });
+  }
+
+  rejectEffect(intent: ActionIntent, reason: string): readonly CheckVerdict[] {
+    const verdicts: CheckVerdict[] = [];
+    this.verdict(
+      verdicts,
+      digestOf(intent),
+      "evidence",
+      "fail",
+      `The effect is stopped before execution: ${reason}.`,
+      { reason },
+    );
+    this.decide("stop", "Required effect evidence is unavailable or withdrawn.", reason);
+    return verdicts;
   }
 
   private findRule(id: string | undefined): { rule: OdrlRule; withApproval: boolean } | undefined {
@@ -995,9 +1010,11 @@ export class OutboundGate {
     if (intent.action === "distribute" && Array.isArray(p.evidence)) {
       const offer =
         typeof p.termsDigest === "string" ? this.deps.offerTerms(p.termsDigest) : undefined;
-      const requested = Array.isArray(offer?.evidenceRequest)
-        ? offer.evidenceRequest.map((r) => String((r as JsonObject).claimType))
-        : undefined;
+      const requested = this.deps.recordRelease?.(intent)
+        ? this.deps.gate.purposes?.[intent.purpose ?? ""]
+        : Array.isArray(offer?.evidenceRequest)
+          ? offer.evidenceRequest.map((r) => String((r as JsonObject).claimType))
+          : undefined;
       const items = p.evidence.map((id) => this.deps.memory.facts.get(String(id)));
       if (!requested) {
         this.verdict(

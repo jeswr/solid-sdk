@@ -7,61 +7,566 @@
   "profile": "consent-for-a-child",
   "parties": [
     {
-      "id": "party-1",
-      "identity": "urn:fictional:consent-for-a-child:party-1",
+      "id": "subject",
+      "identity": "urn:fictional:consent-for-a-child:subject",
       "name": "A child",
-      "role": "principal",
+      "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "party-2",
-      "identity": "urn:fictional:consent-for-a-child:party-2",
+      "id": "holder",
+      "identity": "urn:fictional:consent-for-a-child:holder",
       "name": "A parent",
-      "role": "principal",
+      "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "party-3",
-      "identity": "urn:fictional:consent-for-a-child:party-3",
-      "name": "A school",
-      "role": "principal",
+      "id": "receiver",
+      "identity": "urn:fictional:consent-for-a-child:receiver",
+      "name": "The school",
+      "role": "source",
       "runs": "issuer-only"
+    },
+    {
+      "id": "register",
+      "identity": "urn:fictional:consent-for-a-child:register",
+      "name": "The local authority register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "second-holder",
+      "identity": "urn:fictional:consent-for-a-child:second-holder",
+      "name": "The second registered holder",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:consent-for-a-child:owner-agent",
+      "actor": "urn:fictional:consent-for-a-child:owner-agent:actor",
+      "name": "The representative\u2019s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "subject"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:consent-for-a-child:receiver-agent",
+      "actor": "urn:fictional:consent-for-a-child:receiver-agent:actor",
+      "name": "The receiving agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "receiver"
     }
   ],
   "trust": {
-    "introductions": [],
-    "ownLists": {},
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:consent-for-a-child:receiver",
+          "tasks": [
+            "urn:op:consent-for-a-child"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:consent-for-a-child:subject",
+          "tasks": [
+            "urn:op:consent-for-a-child"
+          ]
+        }
+      ]
+    },
     "sources": {}
   },
   "statements": [],
-  "mandates": [],
-  "script": [],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:consent-for-a-child"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "request",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:consent-for-a-child",
+      "contents": {
+        "subject": "urn:fictional:consent-for-a-child:subject",
+        "request": "trip-consent"
+      },
+      "purpose": "urn:purpose:consent-for-a-child",
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:consent-for-a-child",
+        "target": "urn:op:consent-for-a-child",
+        "recipient": "urn:fictional:consent-for-a-child:receiver",
+        "purpose": "urn:purpose:consent-for-a-child",
+        "parameters": {}
+      }
+    },
+    {
+      "id": "receive",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    }
+  ],
   "inject": [],
   "branches": [
     {
       "id": "branch-1",
       "what": "The second parent has objected",
-      "change": {},
+      "change": {
+        "documents": [
+          {
+            "id": "urn:fictional:consent-for-a-child:register-status",
+            "issuer": "register",
+            "typ": "awp-status-list+jws",
+            "value": {
+              "type": "StatusList",
+              "id": "urn:fictional:consent-for-a-child:register-status",
+              "issuer": "urn:fictional:consent-for-a-child:register",
+              "issuedAt": "2026-11-13T09:00:00.000Z",
+              "validUntil": "2026-12-01T00:00:00.000Z",
+              "entries": {
+                "power": "active"
+              }
+            }
+          },
+          {
+            "id": "urn:fictional:consent-for-a-child:holder-status",
+            "issuer": "holder",
+            "typ": "awp-status-list+jws",
+            "value": {
+              "type": "StatusList",
+              "id": "urn:fictional:consent-for-a-child:holder-status",
+              "issuer": "urn:fictional:consent-for-a-child:holder",
+              "issuedAt": "2026-11-13T09:00:00.000Z",
+              "validUntil": "2026-12-01T00:00:00.000Z",
+              "entries": {
+                "agent": "active"
+              }
+            }
+          },
+          {
+            "id": "urn:fictional:consent-for-a-child:holders",
+            "issuer": "register",
+            "typ": "awp-authority-holders+jws",
+            "value": {
+              "type": "AuthorityHolders",
+              "id": "urn:fictional:consent-for-a-child:holders",
+              "issuer": "urn:fictional:consent-for-a-child:register",
+              "entity": "urn:fictional:consent-for-a-child:subject",
+              "issuedAt": "2026-11-13T09:00:00.000Z",
+              "validUntil": "2026-12-01T00:00:00.000Z",
+              "holders": [
+                "urn:fictional:consent-for-a-child:holder",
+                "urn:fictional:consent-for-a-child:second-holder"
+              ],
+              "objections": [
+                "urn:fictional:consent-for-a-child:second-holder"
+              ]
+            }
+          }
+        ]
+      },
       "expect": {
         "outcome": "ask-principal",
         "reason": "approval-required",
-        "check": "limits-approval"
+        "check": "authority"
       },
-      "outline": []
+      "catalogueExpected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "fail",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        }
+      ]
     }
   ],
-  "expect": [],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
   "stress": [
     "authority",
     "data-terms",
     "terms"
   ],
-  "suites": {},
+  "suites": {
+    "authority": "mandate-credential"
+  },
   "assurance": null,
-  "blocked": [
+  "blocked": [],
+  "documents": [
     {
-      "path": "*",
-      "reason": "Needs child-to-parent authority, current objections and a policy for whose consent is sufficient; organization roles do not establish parental power or resolve conflicting parents."
+      "id": "urn:fictional:consent-for-a-child:register-status",
+      "issuer": "register",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:consent-for-a-child:register-status",
+        "issuer": "urn:fictional:consent-for-a-child:register",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "power": "active"
+        }
+      }
+    },
+    {
+      "id": "urn:fictional:consent-for-a-child:holder-status",
+      "issuer": "holder",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:consent-for-a-child:holder-status",
+        "issuer": "urn:fictional:consent-for-a-child:holder",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "agent": "active"
+        }
+      }
+    },
+    {
+      "id": "urn:fictional:consent-for-a-child:holders",
+      "issuer": "register",
+      "typ": "awp-authority-holders+jws",
+      "value": {
+        "type": "AuthorityHolders",
+        "id": "urn:fictional:consent-for-a-child:holders",
+        "issuer": "urn:fictional:consent-for-a-child:register",
+        "entity": "urn:fictional:consent-for-a-child:subject",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "holders": [
+          "urn:fictional:consent-for-a-child:holder",
+          "urn:fictional:consent-for-a-child:second-holder"
+        ],
+        "objections": []
+      }
     }
-  ]
+  ],
+  "authorityLinks": [
+    {
+      "id": "urn:fictional:consent-for-a-child:power",
+      "issuer": "register",
+      "subject": "holder",
+      "entity": "urn:fictional:consent-for-a-child:subject",
+      "actions": [
+        "invoke"
+      ],
+      "scope": {
+        "operations": [
+          "urn:op:consent-for-a-child"
+        ],
+        "subjects": [
+          "urn:fictional:consent-for-a-child:subject"
+        ],
+        "purposes": [
+          "urn:purpose:consent-for-a-child"
+        ]
+      },
+      "validFrom": "2026-11-01T00:00:00.000Z",
+      "validUntil": "2026-12-01T00:00:00.000Z",
+      "status": {
+        "ref": "urn:fictional:consent-for-a-child:register-status",
+        "id": "power"
+      },
+      "mayDelegate": {
+        "depth": 2
+      },
+      "holderSet": "urn:fictional:consent-for-a-child:holders"
+    },
+    {
+      "id": "urn:fictional:consent-for-a-child:agent-power",
+      "issuer": "holder",
+      "subject": "owner-agent",
+      "entity": "urn:fictional:consent-for-a-child:subject",
+      "parent": "urn:fictional:consent-for-a-child:power",
+      "actions": [
+        "invoke"
+      ],
+      "scope": {
+        "operations": [
+          "urn:op:consent-for-a-child"
+        ],
+        "subjects": [
+          "urn:fictional:consent-for-a-child:subject"
+        ],
+        "purposes": [
+          "urn:purpose:consent-for-a-child"
+        ]
+      },
+      "validFrom": "2026-11-01T00:00:00.000Z",
+      "validUntil": "2026-12-01T00:00:00.000Z",
+      "status": {
+        "ref": "urn:fictional:consent-for-a-child:holder-status",
+        "id": "agent"
+      }
+    }
+  ],
+  "authorityChains": {
+    "owner-agent": [
+      [
+        "urn:fictional:consent-for-a-child:power",
+        "urn:fictional:consent-for-a-child:agent-power"
+      ]
+    ]
+  },
+  "traceSteps": {
+    "1": "Request.",
+    "2": "Receive."
+  }
 }

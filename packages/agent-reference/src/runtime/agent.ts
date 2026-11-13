@@ -1,19 +1,5 @@
 // AUTHORED-BY Codex GPT-6
 
-/**
- * The pilot agent runtime: one deterministic engine shared by every scenario.
- *
- * Inbound pipeline (each step has an explicit outcome and a ledger record):
- *   bounds → integrity + pinned-key attribution → schema → sender/key binding →
- *   configuration/alg match → audience → time window → replay → profile/configuration
- *   acceptance → conversation state machine → operation + terms validation →
- *   representation assessment → domain handler (proposer) → owner-mandate authorisation
- *   (executor) → effects (write-ahead, idempotent, reconcilable) → signed outbound.
- *
- * Integrity success, representation acceptance, source authority and authorisation are
- * four different records; none implies another.
- */
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { AsyncLocalStorage } from "async_hooks";
 import type { JWK } from "jose";
 import { derivedUrn, digestBytes, digestContent, digestOf, newUrn } from "../core/canonical.js";
@@ -59,6 +45,7 @@ import {
 } from "../mechanisms/mandate.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
 import {
+  originalEnvelopeSchema,
   type ResourceReader,
   type ResourceReference,
   referencesIn,
@@ -69,6 +56,7 @@ import {
   unverifiedEvidenceClaim,
   verifySelectivePresentation,
 } from "../mechanisms/selective.js";
+import { singleUseStatusSchema } from "../mechanisms/single-use.js";
 import { TYP, verifyStatement } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import { CONFIGURATIONS, configurationById, POLICY_PROFILE } from "../profile/configurations.js";
@@ -108,6 +96,21 @@ import type {
 } from "../store/state.js";
 import { domainValue } from "../store/state.js";
 import { peekWire } from "../trace/packet.js";
+/**
+ * The pilot agent runtime: one deterministic engine shared by every scenario.
+ *
+ * Inbound pipeline (each step has an explicit outcome and a ledger record):
+ *   bounds → integrity + pinned-key attribution → schema → sender/key binding →
+ *   configuration/alg match → audience → time window → replay → profile/configuration
+ *   acceptance → conversation state machine → operation + terms validation →
+ *   representation assessment → domain handler (proposer) → owner-mandate authorisation
+ *   (executor) → effects (write-ahead, idempotent, reconcilable) → signed outbound.
+ *
+ * Integrity success, representation acceptance, source authority and authorisation are
+ * four different records; none implies another.
+ */
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { DutyExecutor, type DutyRule, deadlineMissed, dutyRuleSchema } from "./duties.js";
 import {
   type AgreementPlan,
   type DisclosureCheck,
@@ -160,6 +163,7 @@ export interface AgentRuntimeOptions {
   /** Owner-signed representation statement presented to peers (JWS). */
   readonly representationJws?: string;
   readonly organizationMandateJws?: string;
+  readonly authorityChainJws?: string;
   /** Accepted configuration ids, in preference order. */
   readonly accepted: readonly string[];
   readonly handlers: readonly OperationHandler[];
@@ -323,6 +327,7 @@ export class AgentRuntime {
   private closed = false;
   private readonly inbound: InboundGate;
   private readonly outbound: OutboundGate;
+  private recordReleaseDigest?: string;
   /** The admission of the inbound message being processed now (serial executor). */
   private admission: Admission | undefined;
   /** Set while an approved action resumes, so the core is not shown proposing it twice. */
@@ -355,6 +360,24 @@ export class AgentRuntime {
         readings: structuredClone(options.gates?.readings ?? []),
         actionClaims: structuredClone(options.gates?.actionClaims ?? []),
         notificationRecipients: structuredClone(options.gates?.notificationRecipients ?? {}),
+        ...(options.gates?.singleUse
+          ? {
+              singleUse: {
+                actions: structuredClone(options.gates.singleUse.actions),
+                registers: { ...options.gates.singleUse.registers },
+                evidence: [...options.gates.singleUse.evidence],
+                acceptances: [...options.gates.singleUse.acceptances],
+              },
+            }
+          : {}),
+        ...(options.gates?.authorityChains
+          ? {
+              authorityChains: {
+                policy: structuredClone(options.gates.authorityChains.policy),
+                resolver: options.gates.authorityChains.resolver,
+              },
+            }
+          : {}),
         ...(options.gates?.organizations
           ? {
               organizations: {
@@ -406,6 +429,41 @@ export class AgentRuntime {
     for (const e of options.effects ?? []) this.effectAdapters.set(e.id, e);
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
+    const originalSink = options.gates?.sink;
+    const recordChecks: Record<string, string[]> = {};
+    const auditSink = {
+      agent: originalSink?.agent ?? this.identity.actor,
+      emit: (event: import("../trace/types.js").TraceEventInput) => {
+        if (event.kind === "check") {
+          const record = {
+            type: "gate-check",
+            agent: this.identity.actor,
+            gate: event.part,
+            check: event.check,
+            verdict: event.verdict,
+            reason: event.reason,
+            at: this.now(),
+          };
+          this.record(record);
+          recordChecks[event.part] ??= [];
+          recordChecks[event.part]?.push(digestOf(record));
+        }
+        if (event.kind === "decision") {
+          this.record({
+            type: "gate-decision",
+            agent: this.identity.actor,
+            gate: event.part,
+            outcome: event.outcome,
+            reason: event.reason,
+            checks: recordChecks[event.part] ?? [],
+            at: this.now(),
+          });
+          recordChecks[event.part] = [];
+        }
+        originalSink?.emit(event);
+      },
+    };
+    this.options = { ...options, gates: { ...options.gates, sink: auditSink } };
     const gate: GateContext = {
       reliance: {
         id: "urn:awp:installed-domain-reliance",
@@ -413,6 +471,7 @@ export class AgentRuntime {
       },
       ...(options.gates ?? {}),
       carriage: () => this.carriage,
+      sink: auditSink,
     };
     if (
       gate.actionClaims?.some(
@@ -430,6 +489,7 @@ export class AgentRuntime {
       this.state.statementRefusals,
       this.state.relianceHolds,
       this.state.relianceBindings,
+      this.state.precedenceHolds,
     );
     this.gateMemory = memory;
     memory.rememberIdentifiers("*", {
@@ -484,6 +544,7 @@ export class AgentRuntime {
     this.outbound = new OutboundGate({
       identity: this.identity,
       now: () => this.now(),
+      recordRelease: (intent) => this.recordReleaseDigest === actionDigest(intent),
       mandate: () =>
         this.mandate && !this.isRevoked(this.mandate) ? this.mandate.mandate : undefined,
       policyEngine: options.policyEngine,
@@ -1241,20 +1302,7 @@ export class AgentRuntime {
         );
       // Erase payloads, including accepted factual support. Retain only digest-level provenance.
       const ids = new Set(inputs.map((i) => String(i.id)));
-      for (const [scope, items] of Object.entries(this.state.contextItems))
-        this.state.contextItems[scope] = items.map((item) => {
-          if (!ids.has(item.id)) return item;
-          const { statement: _payload, identifiers: _values, ...tombstone } = item;
-          return {
-            ...tombstone,
-            accepted: false,
-            kind: "memory" as const,
-            label: `Discarded input: ${item.label}`,
-          };
-        });
-      for (const id of ids) this.gateMemory.facts.delete(id);
-      for (const [scope, items] of Object.entries(this.state.contextItems))
-        this.gateMemory.contexts[scope] = items;
+      this.erasePayloads(ids);
       if (keep)
         this.gateMemory.enter(this.options.gates?.taskId ?? agreement.conversation, {
           id: this.registerIdentifier(
@@ -1356,6 +1404,78 @@ export class AgentRuntime {
       return fail("lookup-failed");
     }
     if (!result.ok) return fail(result.reason);
+    if (result.originals) {
+      const envelope = await verifyStatement(result.jws, {
+        trust: this.trust,
+        typ: "awp-original-statements+jws",
+        role: "issuer",
+        schema: originalEnvelopeSchema,
+        limits: this.limits,
+        at: this.now(),
+        verifier: this.identity.actor,
+      });
+      this.record(envelope.verification);
+      const payload = envelope.payload;
+      if (
+        !payload ||
+        envelope.signer?.subject !== grant.issuer ||
+        payload.issuer !== grant.issuer ||
+        payload.ref !== reference.ref ||
+        payload.item !== item ||
+        payload.grant !== reference.grant ||
+        payload.statements.length !== 1
+      )
+        return fail("evidence-invalid");
+      const original = payload.statements[0] as string;
+      const checked = await this.inbound.assessClaim(
+        { role: "credential", format: "jws-compact", value: original },
+        undefined,
+      );
+      if (
+        !checked.claim ||
+        checked.claim.id !== item ||
+        digestOf(checked.claim) !== payload.statementDigest ||
+        !grant.items.some((i) => i.id === item && i.claimType === checked.claim?.claimType)
+      )
+        return fail("evidence-invalid");
+      const admitted = await this.admitStatements([{ jws: original }], {
+        task: this.options.gates?.taskId ?? reference.ref,
+        purpose,
+      });
+      const fact = this.gateMemory.facts.get(item);
+      if (fact) {
+        const terms: import("../gates/common.js").ItemTerms = {
+          policy: {
+            id: grant.id,
+            permissions: [
+              {
+                type: "permission",
+                action: "use",
+                target: item,
+                constraints: [
+                  { leftOperand: "purpose", operator: "eq", rightOperand: purpose },
+                  { leftOperand: "dateTime", operator: "lt", rightOperand: grant.validUntil },
+                ],
+              },
+            ],
+          },
+          inherited: [{ target: item, terms: fact.terms ?? null }],
+        };
+        this.gateMemory.facts.set(item, { ...fact, terms });
+        for (const [scope, items] of Object.entries(this.state.contextItems))
+          this.state.contextItems[scope] = items.map((i) => (i.id === item ? { ...i, terms } : i));
+      }
+      this.record({
+        type: "original-reference-read",
+        holder: grant.issuer,
+        item,
+        originalIssuer: checked.claim.issuer,
+        digest: payload.statementDigest,
+        ...admitted,
+      });
+      this.persist();
+      return { ok: admitted.admitted === 1, ...admitted };
+    }
     const response = await this.inbound.assessClaim(
       { role: "credential", format: "jws-compact", value: result.jws },
       undefined,
@@ -1543,6 +1663,35 @@ export class AgentRuntime {
       });
       this.persist();
       return { statement, jws };
+    });
+  }
+
+  recordDisclosures() {
+    return [...this.gateMemory.facts.values()].map((f) => f.id);
+  }
+
+  exportRecord(conversation: string): Promise<{ jws: string }> {
+    return this.exclusive(async () => {
+      const key = this.keysByAlg.get("EdDSA");
+      if (!key || !this.identity.party) throw Error("record signing key unavailable");
+      const entries = structuredClone(this.ledger.entries());
+      const signed = await Promise.all(
+        entries.map(async (entry) => ({
+          entry,
+          proof: await signCompact(key, "awp-record-entry+jws", entry),
+        })),
+      );
+      const segment = {
+        type: "RecordSegment",
+        actor: this.identity.actor,
+        party: this.identity.party,
+        conversation,
+        entries: signed,
+        messages: Object.values(this.state.recordMessages)
+          .filter((m) => m.conversation === conversation)
+          .map(({ direction, digest, jws }) => ({ direction, digest, jws })),
+      };
+      return { jws: await signCompact(key, "awp-record-segment+jws", segment) };
     });
   }
 
@@ -2108,6 +2257,13 @@ export class AgentRuntime {
       at,
     });
 
+    if (wire && typeof wire === "object" && (wire as WireMessage).format === "awp-jws-compact/0.1")
+      this.state.recordMessages[msg.id] = {
+        direction: "in",
+        conversation: msg.conversation,
+        digest: msgDigest,
+        jws: (wire as { jws: string }).jws,
+      };
     const outbound = await this.dispatch(msg);
     const conv = this.state.conversations[msg.conversation];
     const recorded = this.state.seen[msg.id]?.responses ?? [];
@@ -2547,6 +2703,7 @@ export class AgentRuntime {
     };
     this.state.agreements[agreement.id] = agreement;
     this.record(agreement);
+    this.installAgreementDuties(agreement);
     if (!handler?.onAgreement) return { disposition: "accepted" as const, outbound: [] };
     const plan = await handler.onAgreement(
       this.context(this.mustConversation(conv.id), msg, rep),
@@ -2638,7 +2795,19 @@ export class AgentRuntime {
       const askMore = this.admission?.askedFor;
       if (askMore) return this.replyChallenge(conv, msg, askMore);
       if (rep && rep.outcome !== "accepted") {
-        if (rep.reason === "representation-out-of-scope") {
+        if (rep.reason === "approval-required" && rep.deciderRole) {
+          const detail = `The authority register records another holder's objection. Decision required from role ${rep.deciderRole} for ${handler.description.id}; message digest ${digestOf(msg)}.`;
+          this.inbound.verdictEvent("authority", "ask-principal", detail, {
+            reason: "approval-required",
+          });
+          this.inbound.decisionEvent("ask-principal", detail, "approval-required");
+          return {
+            disposition: "pending-approval" as const,
+            outbound: [],
+            reason: "approval-required",
+          };
+        }
+        if (rep.reason === "representation-out-of-scope" && !this.options.gates?.authorityChains) {
           const detail = `A current mandate credential must cover ${handler.description.id}; accepted roles: ${this.options.gates?.organizations?.policy.requiredRoles[handler.description.id]?.join(", ") ?? "a representative authorized for this operation"}.`;
           this.inbound.decisionEvent("ask-more", detail, rep.reason);
           return this.replyClaimChallenge(conv, msg, rep.reason, detail);
@@ -2652,8 +2821,47 @@ export class AgentRuntime {
         );
       }
     }
+    if (handler.description.id === "urn:op:erasure-request" && !this.erasureAuthorised(msg)) {
+      this.inbound.verdictEvent(
+        "authority",
+        "fail",
+        "The requester is neither the subject nor an agreed onward sender.",
+        { reason: "representation-out-of-scope" },
+      );
+      return this.replyClose(
+        conv,
+        msg,
+        "refuse",
+        "representation-out-of-scope",
+        "erasure subject mismatch",
+      );
+    }
     const refused = await this.admitToCore(conv, msg);
     if (refused) return refused;
+    if (handler.description.id === "urn:op:erasure-request") {
+      const output = this.eraseRequested(msg);
+      const result = await this.applyReply(conv, msg, { type: "deliver", output }, handler);
+      if ((output.parts as JsonObject[]).some((p) => p.outcome === "stop"))
+        for (const v of this.outbound.rejectEffect(
+          {
+            action: "use",
+            operation: handler.description.id,
+            conversation: conv.id,
+            target: handler.description.id,
+            parameters: {},
+          },
+          "no-agreement",
+        ))
+          this.record(v);
+      return result;
+    }
+    if (handler.description.id === "urn:op:general-notice")
+      return this.applyReply(
+        conv,
+        msg,
+        { type: "deliver", output: { acknowledgement: msg.body.input.duty ?? msg.id } },
+        handler,
+      );
     const reply = await handler.onInvoke(
       this.context(conv, msg, rep),
       msg.body,
@@ -2669,6 +2877,22 @@ export class AgentRuntime {
     const refused = await this.admitToCore(conv, msg);
     if (refused) return refused;
     if (!handler?.onDeliver) return { disposition: "accepted" as const, outbound: [] };
+    const duty = Object.values(this.state.duties.work).find(
+      (d) => d.conversation === conv.id && d.recipient?.party === msg.from.onBehalfOf,
+    );
+    if (duty?.kind === "notify" && msg.body.output.acknowledgement === duty.id)
+      this.dutyExecutor().acknowledge(conv.id, msg.from.onBehalfOf ?? "");
+    if (duty?.kind === "inform-onward" && msg.body.output.subject === duty.subject) {
+      const parts = msg.body.output.parts;
+      if (
+        Array.isArray(parts) &&
+        parts.some((p) => !!p && typeof p === "object" && !Array.isArray(p) && p.outcome === "stop")
+      ) {
+        duty.status = "blocked";
+        duty.reason = "no-agreement";
+        this.record({ type: "duty-undischargeable", ...duty });
+      } else this.dutyExecutor().acknowledge(conv.id, msg.from.onBehalfOf ?? "");
+    }
     const reply = await handler.onDeliver(
       this.context(conv, msg),
       msg.body,
@@ -2704,6 +2928,7 @@ export class AgentRuntime {
       return this.replyClose(conv, msg, "refuse", r.reason, r.detail);
     }
     if (!entersCore) return undefined;
+    this.recordItemTransfer(msg, conv, true);
     const task = this.options.gates?.taskId ?? conv.id;
     if (msg.kind === "invoke")
       this.setDomain(
@@ -2894,6 +3119,7 @@ export class AgentRuntime {
         };
         this.state.agreements[agreement.id] = agreement;
         this.record(agreement);
+        this.installAgreementDuties(agreement);
         const rest = handler.onAgreement
           ? await this.executeAgreementPlan(
               conv.id,
@@ -3203,6 +3429,320 @@ export class AgentRuntime {
     return { ok: false, reason: "source-unknown" };
   }
 
+  private dutyExecutor() {
+    return new DutyExecutor(
+      this.state.duties,
+      () => this.now(),
+      (r) => this.record(r),
+    );
+  }
+
+  private agreementDutyRules(agreement: Agreement | undefined): DutyRule[] {
+    const value = agreement?.terms.duties;
+    if (value === undefined) return [];
+    if (!Array.isArray(value))
+      throw new RejectError("unsupported-term", "agreement duties must be a closed list");
+    return value.map((d) => dutyRuleSchema.parse(d));
+  }
+
+  private installAgreementDuties(agreement: Agreement) {
+    for (const rule of this.agreementDutyRules(agreement))
+      if (rule.kind === "delete" && rule.by)
+        this.dutyExecutor().add({
+          kind: "delete",
+          source: agreement.id,
+          items: rule.items,
+          due: rule.by,
+        });
+  }
+
+  private recordItemTransfer(message: AnyMessage, conv: ConversationState, incoming: boolean) {
+    const peer = incoming
+      ? { actor: message.from.actor, party: message.from.onBehalfOf }
+      : { actor: message.to?.actor, party: message.to?.party };
+    if (!peer.actor || !peer.party) return;
+    const agreement = conv.agreement ? this.state.agreements[conv.agreement] : undefined;
+    const rules = this.agreementDutyRules(agreement);
+    for (const evidence of message.evidence ?? []) {
+      if (evidence.role !== "credential") continue;
+      let claim: JsonObject;
+      try {
+        claim = unverifiedEvidenceClaim(evidence);
+      } catch {
+        continue;
+      }
+      const fact = this.gateMemory.facts.get(String(claim.id));
+      if (!fact || fact.digest !== digestOf(claim) || !claim.subject) continue;
+      this.dutyExecutor().transfer(
+        {
+          item: String(claim.id),
+          digest: fact.digest,
+          subject: String(claim.subject),
+          to: { actor: peer.actor, party: peer.party },
+          ...(agreement ? { agreement: agreement.id } : {}),
+          duties: rules,
+          message: message.id,
+          at: this.now(),
+        },
+        incoming,
+      );
+    }
+  }
+
+  private erasureAuthorised(message: Message<"invoke">) {
+    const input = message.body.input;
+    if (
+      typeof input.subject !== "string" ||
+      !Array.isArray(input.items) ||
+      !input.items.length ||
+      !input.items.every((id) => typeof id === "string")
+    )
+      return false;
+    if (message.from.onBehalfOf === input.subject)
+      return input.items.every(
+        (id) =>
+          [...this.gateMemory.facts.values()].some(
+            (f) => f.id === id && f.subject === input.subject,
+          ) ||
+          Object.values(this.state.contextItems)
+            .flat()
+            .some((f) => f.id === id && f.subject === input.subject),
+      );
+    return (
+      input.onward === true &&
+      input.items.every((id) =>
+        this.state.duties.incoming.some(
+          (t) =>
+            t.item === id &&
+            t.subject === input.subject &&
+            t.to.party === message.from.onBehalfOf &&
+            t.agreement &&
+            t.duties.some((d) => d.kind === "inform-onward"),
+        ),
+      )
+    );
+  }
+
+  private erasePayloads(ids: ReadonlySet<string>) {
+    const contains = (value: unknown, depth = 0): boolean => {
+      if (depth > 32) return false;
+      if (typeof value === "string") {
+        if (ids.has(value)) return true;
+        const parts = value.split(".");
+        if (parts.length === 3)
+          try {
+            return contains(
+              JSON.parse(Buffer.from(parts[1] ?? "", "base64url").toString("utf8")),
+              depth + 1,
+            );
+          } catch {}
+        return false;
+      }
+      return (
+        !!value &&
+        typeof value === "object" &&
+        Object.values(value).some((v) => contains(v, depth + 1))
+      );
+    };
+    for (const [scope, items] of Object.entries(this.state.contextItems)) {
+      this.state.contextItems[scope] = items.map((item) => {
+        if (!ids.has(item.id) && !contains(item.statement)) return item;
+        const { statement: _payload, identifiers: _values, ...tombstone } = item;
+        return {
+          ...tombstone,
+          accepted: false,
+          kind: "memory" as const,
+          label: `Discarded input: ${item.label}`,
+        };
+      });
+      this.gateMemory.contexts[scope] = this.state.contextItems[scope] ?? [];
+    }
+    for (const id of ids) {
+      this.gateMemory.facts.delete(id);
+      delete this.state.precedenceHolds[id];
+    }
+    for (const [key, value] of Object.entries(this.state.domain))
+      if (contains(value)) delete this.state.domain[key];
+    for (const [key, value] of Object.entries(this.state.outbox))
+      if (contains(value.wire)) delete this.state.outbox[key];
+    for (const [key, value] of Object.entries(this.state.pending))
+      if (contains(value.continuation)) delete this.state.pending[key];
+    for (const [key, value] of Object.entries(this.state.recordMessages))
+      if (contains(value.jws)) delete this.state.recordMessages[key];
+    this.record({ type: "items-deleted", items: [...ids], at: this.now() });
+    this.options.gates?.sink?.emit({
+      part: "record",
+      kind: "record",
+      caption: `Payloads deleted; digest tombstones retained for ${[...ids].join(", ")}.`,
+    });
+  }
+
+  private eraseRequested(message: Message<"invoke">): JsonObject {
+    const subject = String(message.body.input.subject);
+    const items = message.body.input.items as string[];
+    const parts: JsonObject[] = items.map((item) => ({ item, outcome: "done" }));
+    parts.push(...this.dutyExecutor().inform(subject, items, message.id));
+    this.erasePayloads(new Set(items));
+    this.persist();
+    return { subject, parts };
+  }
+
+  triggerDuties(event: string) {
+    const sources = [
+      ...Object.values(this.state.agreements).flatMap((a) =>
+        this.agreementDutyRules(a).map((rule) => ({ source: a.id, rule })),
+      ),
+      ...(this.mandate?.mandate.duties ?? []).map((rule) => ({
+        source: this.mandate?.mandate.id ?? "",
+        rule,
+      })),
+    ];
+    for (const { source, rule } of sources) {
+      if (rule.kind === "delete" && rule.on === event)
+        this.dutyExecutor().add({ kind: "delete", source, items: rule.items, due: this.now() });
+      if (rule.kind === "notify" && rule.event === event)
+        for (const party of rule.parties) {
+          const actor = this.trust.data.keys.find(
+            (k) => k.role === "actor" && k.party === party,
+          )?.subject;
+          if (!actor) {
+            this.record({ type: "duty-unroutable", source, party, event, reason: "lookup-failed" });
+            continue;
+          }
+          this.dutyExecutor().add({
+            kind: "notify",
+            source,
+            items: [],
+            event,
+            recipient: { actor, party },
+            due: new Date(Date.parse(this.now()) + rule.withinSeconds * 1000).toISOString(),
+          });
+        }
+    }
+    this.persist();
+    return this.auditDuties();
+  }
+
+  auditDuties() {
+    const deadline = this.options.gates?.agreementDeadlineSeconds;
+    if (deadline)
+      for (const conversation of Object.values(this.state.conversations)) {
+        const start = this.getDomain(`_start:${conversation.id}`) as unknown as
+          | StartPlan
+          | undefined;
+        if (
+          conversation.role === "initiator" &&
+          !conversation.agreement &&
+          !isTerminal(conversation.phase) &&
+          start?.type === "propose" &&
+          Date.parse(this.now()) - Date.parse(conversation.openedAt) > deadline * 1000
+        ) {
+          const intent: ActionIntent = {
+            action: "use",
+            operation: conversation.operation?.id ?? "urn:op:agreement",
+            target: conversation.operation?.id ?? "urn:op:agreement",
+            conversation: conversation.id,
+            parameters: {},
+          };
+          for (const verdict of this.outbound.rejectEffect(intent, "no-agreement"))
+            this.record(verdict);
+          this.closeLocally(conversation, "refused", "no-agreement");
+        }
+      }
+    for (const rule of this.mandate?.mandate.duties ?? [])
+      if (rule.kind === "delete" && rule.by)
+        this.dutyExecutor().add({
+          kind: "delete",
+          source: this.mandate?.mandate.id ?? "",
+          items: rule.items,
+          due: rule.by,
+        });
+    const work = this.dutyExecutor().audit();
+    for (const duty of work)
+      if (
+        duty.kind === "delete" &&
+        duty.status === "pending" &&
+        Date.parse(duty.due) <= Date.parse(this.now())
+      ) {
+        this.erasePayloads(new Set(duty.items));
+        const stored = this.state.duties.work[duty.id];
+        if (stored) stored.status = "discharged";
+        this.record({ type: "duty-discharged", ...duty, status: "discharged", at: this.now() });
+      }
+    if (work.some((d) => d.missedAt)) {
+      this.options.gates?.sink?.emit({
+        part: "outbound-gate",
+        kind: "check",
+        check: "evidence",
+        verdict: "ask-more",
+        reason: "result-uncertain",
+        caption: "A required signed acknowledgement missed its deadline.",
+      });
+      this.options.gates?.sink?.emit({
+        part: "outbound-gate",
+        kind: "decision",
+        outcome: "ask-more",
+        reason: "result-uncertain",
+        caption: "The notice audit retains the missed acknowledgement.",
+      });
+    }
+    this.options.gates?.sink?.emit({
+      part: "record",
+      kind: "record",
+      caption: `Duty audit: ${JSON.stringify(Object.values(this.state.duties.work))}`,
+    });
+    this.persist();
+    return structuredClone(Object.values(this.state.duties.work));
+  }
+
+  dischargeDuties(): Promise<StepResult> {
+    return this.exclusive(async () => {
+      this.auditDuties();
+      const outbound: OutboundMessage[] = [];
+      for (const duty of Object.values(this.state.duties.work)) {
+        if (duty.kind === "delete" || duty.message || !duty.recipient) continue;
+        const operation =
+          duty.kind === "inform-onward" ? "urn:op:erasure-request" : "urn:op:general-notice";
+        this.registerIdentifier(duty.id);
+        const conversation = derivedUrn("general-duty", duty.id);
+        const previous = Object.values(this.state.outbox).find(
+          (entry) => entry.conversation === conversation && entry.kind === "invoke",
+        );
+        if (previous) {
+          const message = peekWire(previous.wire);
+          if (message) {
+            this.dutyExecutor().sent(duty.id, previous.id, conversation);
+            outbound.push(this.outboundFromEntry(previous, message));
+            continue;
+          }
+        }
+        const input: JsonObject =
+          duty.kind === "inform-onward"
+            ? { subject: duty.subject ?? "", items: duty.items, onward: true }
+            : { duty: duty.id, event: duty.event ?? "" };
+        const result = await this.start({
+          conversation,
+          peer: duty.recipient,
+          configuration: this.options.accepted[0],
+          discover: false,
+          plan: {
+            type: "invoke",
+            operation: { id: operation, version: "0.1" },
+            models: [],
+            input,
+            basis: { kind: "represented" },
+            purpose: "urn:purpose:duties",
+          },
+        });
+        outbound.push(...result.outbound);
+        const sent = result.outbound[0];
+        if (sent) this.dutyExecutor().sent(duty.id, sent.id, sent.message.conversation);
+      }
+      this.persist();
+      return this.result("local", { outbound });
+    });
+  }
+
   private notificationFor(duty: RuntimeState["notificationDuties"][string]) {
     const recipient = this.options.gates?.notificationRecipients?.[duty.recipient];
     if (!recipient || (duty.recipient === "principal" && recipient.party !== this.identity.party))
@@ -3239,7 +3779,7 @@ export class AgentRuntime {
           });
         }
       }
-      if (duty.status === "pending" && Date.parse(duty.due) < Date.parse(this.now())) {
+      if (duty.status === "pending" && deadlineMissed(duty.due, this.now())) {
         changed = true;
         duty.status = "failed";
         this.record({ type: "duty-failed", ...duty, at: this.now() });
@@ -3362,13 +3902,112 @@ export class AgentRuntime {
     }
   }
 
+  private async redeemForEffect(plan: EffectPlan): Promise<boolean> {
+    const policy = this.options.gates?.singleUse;
+    const rules = policy?.actions.filter((r) => r.action === plan.intent.action) ?? [];
+    if (!rules.length) return true;
+    const fail = (reason: string) => {
+      for (const verdict of this.outbound.rejectEffect(plan.intent, reason)) this.record(verdict);
+      this.record({ type: "single-use-effect-refusal", effect: plan.key, reason, at: this.now() });
+      return false;
+    };
+    const key = this.keysByAlg.get("EdDSA");
+    if (!key || !this.identity.party || !policy) return fail("not-authorised");
+    for (const rule of rules) {
+      if (plan.intent.parameters.item !== rule.item) return fail("evidence-invalid");
+      if (rule.parameters && digestOf(plan.intent.parameters) !== digestOf(rule.parameters))
+        return fail("terms-digest-mismatch");
+      const service = policy.registers[rule.register];
+      if (!service || service.identity !== rule.register) return fail("lookup-failed");
+      for (const operation of ["status", rule.operation] as const) {
+        const request = {
+          type: "SingleUseRequest",
+          id: this.newId(),
+          actor: this.identity.actor,
+          party: this.identity.party,
+          item: rule.item,
+          operation,
+          at: this.now(),
+          purpose: plan.intent.purpose,
+          for: actionDigest(plan.intent),
+          evidence: [...policy.evidence],
+          acceptances: [...policy.acceptances],
+        };
+        let answer: import("../mechanisms/single-use.js").RegisterResult;
+        try {
+          answer = await service.request(
+            await signCompact(key, "awp-single-use-request+jws", request),
+          );
+        } catch {
+          return fail("lookup-failed");
+        }
+        if (!answer.ok) return fail(answer.reason);
+        const checked = await verifyStatement(answer.jws, {
+          trust: this.trust,
+          typ: TYP.statement,
+          role: "issuer",
+          schema: singleUseStatusSchema,
+          limits: this.limits,
+          at: this.now(),
+          verifier: this.identity.actor,
+        });
+        this.record(checked.verification);
+        const status = checked.payload;
+        if (
+          !status ||
+          checked.signer?.subject !== rule.register ||
+          status.issuer !== rule.register ||
+          status.subject !== rule.item
+        )
+          return fail("evidence-invalid");
+        const age = Date.parse(this.now()) - Date.parse(status.asOf);
+        if (age < 0 || age > rule.maxAgeSeconds * 1000) return fail("lookup-failed");
+        if (operation === "status" && ["redeemed", "withdrawn"].includes(status.status))
+          return fail("status-withdrawn");
+        if (
+          operation !== "status" &&
+          (status.status !== "redeemed" ||
+            status.redeemedBy !== this.identity.party ||
+            status.for !== actionDigest(plan.intent))
+        )
+          return fail("evidence-invalid");
+        this.record({
+          type: "single-use-answer",
+          effect: plan.key,
+          statement: status,
+          jws: answer.jws,
+          at: this.now(),
+        });
+        this.persist();
+      }
+    }
+    return true;
+  }
+
   private async runEffect(ownerId: Iri, plan: EffectPlan, basis: Iri): Promise<OutboundMessage[]> {
+    if (this.effectAdapters.get(plan.adapter)?.releasesRecord) {
+      if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
+        for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
+          this.record(verdict);
+        return [];
+      }
+      const evidence = this.recordDisclosures();
+      plan = {
+        ...plan,
+        params: { ...plan.params, evidence },
+        intent: { ...plan.intent, parameters: { ...plan.intent.parameters, evidence } },
+      };
+    }
     if (!this.outbound.checkEffect(plan.intent, plan.params)) return [];
     const existing = this.state.effects[plan.key];
     if (existing?.status === "concluded") return []; // idempotent: already done
     if (existing?.status === "attempting") return this.reconcileOne(existing);
     const planned = this.planEffect(ownerId, plan, basis);
+    this.recordReleaseDigest = this.effectAdapters.get(plan.adapter)?.releasesRecord
+      ? actionDigest(plan.intent)
+      : undefined;
     const decision = this.authorise(plan.intent);
+    this.recordReleaseDigest = undefined;
     if (decision.outcome === "ask-more") return [];
     if (decision.outcome === "approval-required") {
       this.park(ownerId, plan.intent, { type: "effect", plan, basis });
@@ -3397,6 +4036,12 @@ export class AgentRuntime {
         "direct-response",
       );
     }
+    if (!(await this.redeemForEffect(plan)))
+      return this.conclude(
+        planned,
+        { conclusion: "not-executed", reason: "single-use check refused" },
+        "direct-response",
+      );
     this.outbound.sealEffect(plan.intent, plan.key);
     const attempting: EffectState = {
       ...planned,
@@ -4487,6 +5132,14 @@ export class AgentRuntime {
   // ---------------------------------------------------------------- emit
 
   private ownEvidence(): EvidenceItem[] {
+    if (this.options.authorityChainJws)
+      return [
+        {
+          role: "representation",
+          format: "mandate-chain+jws",
+          value: this.options.authorityChainJws,
+        },
+      ];
     if (this.options.gates?.organizations)
       return this.options.organizationMandateJws
         ? [
@@ -4521,6 +5174,29 @@ export class AgentRuntime {
       approved?: boolean;
     },
   ): Promise<OutboundMessage> {
+    const proposedTerms =
+      kind === "propose" ? ((body as JsonObject).terms as JsonObject | undefined) : undefined;
+    if (
+      proposedTerms?.duties !== undefined &&
+      !dutyRuleSchema.array().safeParse(proposedTerms.duties).success
+    ) {
+      const intent = opts.intent ?? {
+        action: "use",
+        operation: "urn:op:agreement",
+        conversation: conversationId,
+        target: "urn:op:agreement",
+        parameters: {},
+      };
+      for (const verdict of this.outbound.rejectEffect(intent, "unsupported-term"))
+        this.record(verdict);
+      throw new MessageReleaseError(
+        this.result("rejected", {
+          conversation: conversationId,
+          reason: "unsupported-term",
+          outbound: [],
+        }),
+      );
+    }
     const conv = this.mustConversation(conversationId);
     const configuration = opts.configuration ?? conv.configuration;
     if (!configuration) throw new Error("no configuration selected");
@@ -4886,6 +5562,14 @@ export class AgentRuntime {
             }
           }
     }
+    if (wire.format === "awp-jws-compact/0.1")
+      this.state.recordMessages[message.id] = {
+        direction: "out",
+        conversation: message.conversation,
+        digest: digestOf(message),
+        jws: wire.jws,
+      };
+    this.recordItemTransfer(message, conv, false);
     this.state.outbox[message.id] = entry;
     // Associate the response with the inbound message being processed NOW, so any
     // mid-dispatch snapshot already links them (a replay then returns this response).
@@ -5175,7 +5859,7 @@ export class AgentRuntime {
       },
       setState: (key: string, value: Json, owner?: Iri | null) =>
         this.setDomain(`${opKey}:${key}`, value, owner === null ? undefined : (owner ?? conv.id)),
-      record: (r) => this.record(r),
+      record: (r) => this.record({ ...r, producer: "core" }),
       verify: async (jws, o) => {
         const check = await verifyStatement(jws, {
           trust: this.trust,

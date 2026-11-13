@@ -78,7 +78,7 @@
     }
   ],
   "generated": {
-    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+    "commit": "572be274a15f6552e8fc1143e7a6770af3224b55",
     "core": "scripted"
   },
   "standIns": [
@@ -705,7 +705,7 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:909c6400bc4…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:c4b5e289323…; never trusted."
         },
         "layers": {
           "header": {
@@ -735,7 +735,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:be08e5aec7ae11a339382286ae4dcd8bdb16aef50ad712df2a4ee67d72b597bf"
+            "digest": "sha-256:e7e8698c69ac8d1c9577c96434e0e76d06e80dc2134aea354e20b4502de11228"
           },
           "authority": {
             "present": false,
@@ -808,6 +808,7 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
                     "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
                     "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
                     "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
@@ -872,7 +873,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:07de7acc7568e415f9e1e68f39f1f4d9d911f6c37750f0bf5684853047acb69d"
+            "digest": "sha-256:e8ef5098d2c3aa203ff1e7167b82b1d3f07a2df5818610177ce515526470dfcc"
           },
           "evidence": {
             "present": false,
@@ -921,7 +922,7 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:909c6400bc4…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:c4b5e289323…; never trusted."
         },
         "layers": {
           "header": {
@@ -951,7 +952,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:be08e5aec7ae11a339382286ae4dcd8bdb16aef50ad712df2a4ee67d72b597bf"
+            "digest": "sha-256:e7e8698c69ac8d1c9577c96434e0e76d06e80dc2134aea354e20b4502de11228"
           },
           "authority": {
             "present": false,
@@ -959,7 +960,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
+            "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/local-record-forum/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
             "raw": {
               "description": {
                 "type": "ImplementationDescription",
@@ -1024,6 +1025,7 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
                     "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
                     "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
                     "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
@@ -1088,7 +1090,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:07de7acc7568e415f9e1e68f39f1f4d9d911f6c37750f0bf5684853047acb69d",
+            "digest": "sha-256:e8ef5098d2c3aa203ff1e7167b82b1d3f07a2df5818610177ce515526470dfcc",
             "untrusted": [
               {
                 "path": "description.type",
@@ -1212,38 +1214,42 @@
               },
               {
                 "path": "description.configurations.implemented.0",
-                "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
               },
               {
                 "path": "description.configurations.implemented.1",
-                "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
               },
               {
                 "path": "description.configurations.implemented.2",
-                "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
               },
               {
                 "path": "description.configurations.implemented.3",
-                "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
               },
               {
                 "path": "description.configurations.implemented.4",
-                "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
               },
               {
                 "path": "description.configurations.implemented.5",
-                "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
               },
               {
                 "path": "description.configurations.implemented.6",
-                "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
               },
               {
                 "path": "description.configurations.implemented.7",
-                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
               },
               {
                 "path": "description.configurations.implemented.8",
+                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.9",
                 "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
               },
               {
@@ -7773,7 +7779,7 @@
       "agent": "sams-agent",
       "part": "record",
       "kind": "record",
-      "caption": "41 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "139 entries in this agent's hash-chained record; the chain verifies."
     },
     {
       "seq": 201,
@@ -7781,7 +7787,7 @@
       "agent": "lender",
       "part": "record",
       "kind": "record",
-      "caption": "36 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "108 entries in this agent's hash-chained record; the chain verifies."
     }
   ]
 }

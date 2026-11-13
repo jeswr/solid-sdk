@@ -3,33 +3,36 @@
   "schema": "agent-profile/0.1",
   "id": "agent-handoff",
   "parties": {
-    "owner": "The retailer",
-    "receiver": "The delivery partner",
-    "customer": "The customer",
-    "owner-agent": "The retailer’s agent",
-    "receiver-agent": "The delivery partner’s agent"
+    "subject": "A taxpayer",
+    "holder": "An accountant",
+    "receiver": "The tax authority",
+    "register": "The local authority register",
+    "second-holder": "The second registered holder"
+  },
+  "sources": {
+    "customer-grant": "urn:fictional:agent-handoff:subject"
   },
   "claims": [
     {
       "kind": "delivery.address",
       "sources": [
-        "urn:fictional:agent-handoff:customer"
+        "urn:fictional:agent-handoff:subject"
       ],
       "methods": [
         "recorded-by-authority"
       ],
-      "maxAgeDays": 30
+      "maxAgeDays": 1
     }
   ],
   "purposes": [
     {
-      "id": "urn:purpose:agent-handoff",
+      "id": "urn:purpose:delivery",
       "claims": [
         "delivery.address"
       ]
     },
     {
-      "id": "urn:purpose:delivery",
+      "id": "urn:purpose:marketing",
       "claims": [
         "delivery.address"
       ]
@@ -39,13 +42,14 @@
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {
-    "input.items.*": {
+    "input.subject": {
       "type": "identifier"
     },
     "input.request": {
       "type": "code",
       "values": [
-        "delivery.address"
+        "file-return",
+        "deliver"
       ]
     },
     "output.status": {
@@ -53,8 +57,15 @@
       "values": [
         "received"
       ]
+    },
+    "input.items.*": {
+      "type": "identifier"
     }
   },
+  "identifiers": [
+    "urn:fictional:agent-handoff:subject",
+    "urn:fictional:agent-handoff:another-subject"
+  ],
   "operations": [
     {
       "id": "urn:op:agent-handoff",
@@ -62,7 +73,6 @@
       "label": "A service agent hands a customer to a partner's agent",
       "pattern": "invoke",
       "access": "represented",
-      "models": [],
       "purposes": [
         "urn:purpose:agent-handoff"
       ],
@@ -79,6 +89,29 @@
         "urn:purpose:agent-handoff"
       ],
       "requiresRepresentation": true
+    }
+  ],
+  "authorityChains": {
+    "roots": [
+      {
+        "issuer": "urn:fictional:agent-handoff:subject",
+        "entity": "urn:fictional:agent-handoff:subject",
+        "operations": [
+          "urn:op:agent-handoff"
+        ]
+      }
+    ],
+    "maxStatusAgeSeconds": 60,
+    "holders": "any",
+    "objectionRole": "school-safeguarding-lead",
+    "operations": [
+      "urn:op:agent-handoff"
+    ]
+  },
+  "standIns": [
+    {
+      "what": "Retailer delegation and delivery service",
+      "replacedBy": "Separately keyed local parties using direct signed messages. This is a local authority-chain run, not an A2A transport implementation."
     }
   ]
 }

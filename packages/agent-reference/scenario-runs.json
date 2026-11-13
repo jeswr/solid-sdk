@@ -31,8 +31,9 @@
       "scenario": "agent-handoff",
       "useCase": "agent-handoff",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs an A2A handoff binding and attenuating retailer-to-partner delegated authority; the data runner’s local binding does not implement this delegation chain."
+      "status": "runs",
+      "consequences": [],
+      "trace": "agent-handoff--baseline.json"
     },
     {
       "scenario": "agent-handoff",
@@ -57,8 +58,24 @@
       "useCase": "agent-handoff",
       "path": "branch-2",
       "what": "The handoff passes on more than the retailer holds",
-      "status": "blocked",
-      "reason": "Needs verification of the complete retailer-to-partner authority chain and its attenuation; a one-link representation cannot test authority greater than the delegator holds."
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "representation-out-of-scope",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "representation-out-of-scope"
+      },
+      "consequences": [
+        {
+          "seq": 31,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "agent-handoff--branch-2--baseline.json"
     },
     {
       "scenario": "benefit-claim",
@@ -158,24 +175,57 @@
       "scenario": "carer-acts-for-parent",
       "useCase": "carer-acts-for-parent",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs attenuating multi-hop personal delegation with current power-of-attorney register status; the organization credential checks only one entity-to-agent link."
+      "status": "runs",
+      "consequences": [],
+      "trace": "carer-acts-for-parent--baseline.json"
     },
     {
       "scenario": "carer-acts-for-parent",
       "useCase": "carer-acts-for-parent",
       "path": "branch-1",
       "what": "The agent tries to change where the father lives, outside the power",
-      "status": "blocked",
-      "reason": "Needs attenuating multi-hop personal delegation with current power-of-attorney register status; the organization credential checks only one entity-to-agent link."
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "representation-out-of-scope",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "representation-out-of-scope"
+      },
+      "consequences": [
+        {
+          "seq": 22,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "carer-acts-for-parent--branch-1--baseline.json"
     },
     {
       "scenario": "carer-acts-for-parent",
       "useCase": "carer-acts-for-parent",
       "path": "branch-2",
       "what": "The power is revoked",
-      "status": "blocked",
-      "reason": "Needs attenuating multi-hop personal delegation with current power-of-attorney register status; the organization credential checks only one entity-to-agent link."
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "mandate-withdrawn",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "mandate-withdrawn"
+      },
+      "consequences": [
+        {
+          "seq": 22,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "carer-acts-for-parent--branch-2--baseline.json"
     },
     {
       "scenario": "change-of-address",
@@ -235,16 +285,27 @@
       "scenario": "consent-for-a-child",
       "useCase": "consent-for-a-child",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs child-to-parent authority, current objections and a policy for whose consent is sufficient; organization roles do not establish parental power or resolve conflicting parents."
+      "status": "runs",
+      "consequences": [],
+      "trace": "consent-for-a-child--baseline.json"
     },
     {
       "scenario": "consent-for-a-child",
       "useCase": "consent-for-a-child",
       "path": "branch-1",
       "what": "The second parent has objected",
-      "status": "blocked",
-      "reason": "Needs child-to-parent authority, current objections and a policy for whose consent is sufficient; organization roles do not establish parental power or resolve conflicting parents."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "trace": "consent-for-a-child--branch-1--baseline.json"
     },
     {
       "scenario": "content-licence",
@@ -309,47 +370,42 @@
       "status": "disagrees",
       "actual": {
         "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "reason": "approval-required",
+        "check": "limits-approval"
       },
       "expected": {
         "outcome": "ask-principal",
         "reason": "approval-required"
       },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 74,
-          "agent": "receiver-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        }
-      ],
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
       "trace": "contract-wording--branch-1--baseline.json"
     },
     {
       "scenario": "credit-file-dispute",
       "useCase": "credit-file-dispute",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs source-precedence conflict resolution, a deadline-bound correction agreement and regulator-claim evidence exchange; signatures and a local ledger do not implement that dispute workflow."
+      "status": "runs",
+      "consequences": [],
+      "trace": "credit-file-dispute--baseline.json"
     },
     {
       "scenario": "credit-file-dispute",
       "useCase": "credit-file-dispute",
       "path": "branch-1",
       "what": "The agency does not answer by its deadline",
-      "status": "blocked",
-      "reason": "Needs source-precedence conflict resolution, a deadline-bound correction agreement and regulator-claim evidence exchange; signatures and a local ledger do not implement that dispute workflow."
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "no-agreement",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "no-agreement"
+      },
+      "consequences": [],
+      "trace": "credit-file-dispute--branch-1--baseline.json"
     },
     {
       "scenario": "cross-department-request",
@@ -514,7 +570,7 @@
       "useCase": "emergency-access",
       "path": "branch-1",
       "what": "The request comes from a registered clinician with an emergency flag",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "go",
         "reason": "source-accepted",
@@ -525,6 +581,7 @@
         "reason": "source-accepted"
       },
       "consequences": [],
+      "note": "branch does not diverge from the main path",
       "trace": "emergency-access--branch-1--baseline.json"
     },
     {
@@ -583,31 +640,15 @@
       "status": "disagrees",
       "actual": {
         "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "reason": "approval-required",
+        "check": "limits-approval"
       },
       "expected": {
         "outcome": "ask-principal",
         "reason": "approval-required"
       },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 74,
-          "agent": "receiver-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        }
-      ],
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
       "trace": "employment-reference--branch-1--baseline.json"
     },
     {
@@ -639,16 +680,33 @@
       "scenario": "erasure-request",
       "useCase": "erasure-request",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs a general erasure/onward-notification duty executor and agreement-chain discovery. The engine only has assessment-specific local erasure and emergency notification duties."
+      "status": "runs",
+      "consequences": [],
+      "trace": "erasure-request--baseline.json"
     },
     {
       "scenario": "erasure-request",
       "useCase": "erasure-request",
       "path": "branch-1",
       "what": "The company passed the data on with no duty to inform",
-      "status": "blocked",
-      "reason": "Needs a general erasure/onward-notification duty executor and agreement-chain discovery. The engine only has assessment-specific local erasure and emergency notification duties."
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "no-agreement",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "no-agreement"
+      },
+      "consequences": [
+        {
+          "seq": 201,
+          "agent": "subject-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "erasure-request--branch-1--baseline.json"
     },
     {
       "scenario": "expenses",
@@ -706,7 +764,7 @@
       "useCase": "false-but-signed",
       "path": "branch-1",
       "what": "Nothing fails",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "go",
         "reason": "source-accepted",
@@ -717,22 +775,73 @@
         "reason": "source-accepted"
       },
       "consequences": [],
+      "note": "branch does not diverge from the main path",
       "trace": "false-but-signed--branch-1--baseline.json"
     },
     {
       "scenario": "fee-dispute",
       "useCase": "fee-dispute",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs regulator-claim exchange of both parties’ signed record segments, continuity/gap verification and a forum decision gate. checkRecord only validates the local ledger and is not that evidential workflow."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 64,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 76,
+          "agent": "lender-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 84,
+          "agent": "lender-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 90,
+          "agent": "forum",
+          "outcome": "admit",
+          "reason": "not-authorised"
+        },
+        {
+          "seq": 96,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "fee-dispute--baseline.json"
     },
     {
       "scenario": "fee-dispute",
       "useCase": "fee-dispute",
       "path": "branch-1",
       "what": "The lender's record has a gap",
-      "status": "blocked",
-      "reason": "Needs regulator-claim exchange of both parties’ signed record segments, continuity/gap verification and a forum decision gate. checkRecord only validates the local ledger and is not that evidential workflow."
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "record-unavailable",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "record-unavailable"
+      },
+      "consequences": [
+        {
+          "seq": 96,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "fee-dispute--branch-1--baseline.json"
     },
     {
       "scenario": "find-a-time",
@@ -824,7 +933,7 @@
       "useCase": "flat-share",
       "path": "branch-1",
       "what": "One side's identity cannot be tied to any source the other accepts",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "ask-principal",
         "reason": "source-unknown",
@@ -835,6 +944,7 @@
         "reason": "source-unknown"
       },
       "consequences": [],
+      "note": "branch does not diverge from the main path",
       "trace": "flat-share--branch-1--baseline.json"
     },
     {
@@ -878,7 +988,7 @@
       "useCase": "hardship-request",
       "path": "branch-1",
       "what": "The agent would send a diagnosis to explain the request",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "ask-principal",
         "reason": "approval-required",
@@ -889,6 +999,7 @@
         "reason": "approval-required"
       },
       "consequences": [],
+      "note": "branch does not diverge from the main path",
       "trace": "hardship-request--branch-1--baseline.json"
     },
     {
@@ -925,7 +1036,7 @@
       "useCase": "health-referral",
       "path": "branch-1",
       "what": "The clinic asks for the full record",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "ask-principal",
         "reason": "approval-required",
@@ -936,6 +1047,7 @@
         "reason": "approval-required"
       },
       "consequences": [],
+      "note": "branch does not diverge from the main path",
       "trace": "health-referral--branch-1--baseline.json"
     },
     {
@@ -1024,16 +1136,27 @@
       "scenario": "incident-notice",
       "useCase": "incident-notice",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs general agreement-bound fan-out notification duties, acknowledgement tracking and deadline/timeout audit. Emergency-only notification records do not implement customer incident notices or result-uncertain acknowledgement recovery."
+      "status": "runs",
+      "consequences": [],
+      "trace": "incident-notice--baseline.json"
     },
     {
       "scenario": "incident-notice",
       "useCase": "incident-notice",
       "path": "branch-1",
       "what": "A customer's agent does not acknowledge receipt",
-      "status": "blocked",
-      "reason": "Needs general agreement-bound fan-out notification duties, acknowledgement tracking and deadline/timeout audit. Emergency-only notification records do not implement customer incident notices or result-uncertain acknowledgement recovery."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "result-uncertain",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "result-uncertain"
+      },
+      "consequences": [],
+      "trace": "incident-notice--branch-1--baseline.json"
     },
     {
       "scenario": "insurance-claim-photos",
@@ -1070,34 +1193,17 @@
       "useCase": "insurance-claim-photos",
       "path": "branch-1",
       "what": "The insurer's model reads the photo as minor damage; the garage says otherwise",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "outcome": "ask-more",
+        "reason": "structured-form-required",
+        "check": "fitness"
       },
       "expected": {
         "outcome": "ask-more",
         "reason": "structured-form-required"
       },
-      "consequences": [
-        {
-          "seq": 71,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 82,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 92,
-          "agent": "receiver-agent",
-          "outcome": "ask-more",
-          "reason": "structured-form-required"
-        }
-      ],
+      "consequences": [],
       "trace": "insurance-claim-photos--branch-1--baseline.json"
     },
     {
@@ -1105,28 +1211,17 @@
       "useCase": "insurance-claim-photos",
       "path": "branch-2",
       "what": "The estimate is from a garage the insurer does not accept",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "outcome": "ask-more",
+        "reason": "source-not-authoritative",
+        "check": "source"
       },
       "expected": {
         "outcome": "ask-more",
         "reason": "source-not-authoritative"
       },
       "consequences": [
-        {
-          "seq": 86,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 98,
-          "agent": "receiver-agent",
-          "outcome": "ask-more",
-          "reason": "source-not-authoritative"
-        },
         {
           "seq": 105,
           "agent": "receiver-agent",
@@ -1213,16 +1308,27 @@
       "scenario": "invoice-finance",
       "useCase": "invoice-finance",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs a shared authoritative invoice-financing register with atomic reservation/redemption and current cross-financier status. An issuer-signed static active/withdrawn flag is not single financing."
+      "status": "runs",
+      "consequences": [],
+      "trace": "invoice-finance--baseline.json"
     },
     {
       "scenario": "invoice-finance",
       "useCase": "invoice-finance",
       "path": "branch-1",
       "what": "The same invoice is offered to a second financier",
-      "status": "blocked",
-      "reason": "Needs a shared authoritative invoice-financing register with atomic reservation/redemption and current cross-financier status. An issuer-signed static active/withdrawn flag is not single financing."
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "status-withdrawn",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "status-withdrawn"
+      },
+      "consequences": [],
+      "trace": "invoice-finance--branch-1--baseline.json"
     },
     {
       "scenario": "joint-mortgage",
@@ -1322,24 +1428,17 @@
       "useCase": "master-data-change",
       "path": "branch-1",
       "what": "The same role requests and approves",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
+        "outcome": "stop",
+        "reason": "not-authorised",
         "check": "limits-approval"
       },
       "expected": {
         "outcome": "stop",
         "reason": "not-authorised"
       },
-      "consequences": [
-        {
-          "seq": 43,
-          "agent": "finance-agent",
-          "outcome": "stop",
-          "reason": "not-authorised"
-        }
-      ],
+      "consequences": [],
       "trace": "master-data-change--branch-1--baseline.json"
     },
     {
@@ -1421,39 +1520,17 @@
       "useCase": "meeting-notes",
       "path": "branch-1",
       "what": "The assistant commits to a date because its notes say the team agreed it",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "reason": "approval-required",
+        "check": "limits-approval"
       },
       "expected": {
         "outcome": "ask-principal",
         "reason": "approval-required"
       },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 73,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 81,
-          "agent": "receiver-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        }
-      ],
+      "consequences": [],
       "trace": "meeting-notes--branch-1--baseline.json"
     },
     {
@@ -1880,8 +1957,42 @@
       "scenario": "onward-leak",
       "useCase": "onward-leak",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs observation of a receiver’s system copying outside its own gate and a regulator claim over its signed acceptance; the honest runtime cannot emit that bypass as a gated success."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 76,
+          "agent": "person-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 89,
+          "agent": "owner-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 98,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 104,
+          "agent": "forum",
+          "outcome": "admit",
+          "reason": "prohibited"
+        },
+        {
+          "seq": 110,
+          "agent": "person-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "onward-leak--baseline.json"
     },
     {
       "scenario": "onward-leak",
@@ -1992,34 +2103,17 @@
       "useCase": "permit-application",
       "path": "branch-1",
       "what": "The agent declares the extension height from a model's reading of the drawing",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "outcome": "stop",
+        "reason": "method-not-accepted",
+        "check": "fitness"
       },
       "expected": {
         "outcome": "stop",
         "reason": "method-not-accepted"
       },
-      "consequences": [
-        {
-          "seq": 71,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 82,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 90,
-          "agent": "receiver-agent",
-          "outcome": "stop",
-          "reason": "method-not-accepted"
-        }
-      ],
+      "consequences": [],
       "trace": "permit-application--branch-1--baseline.json"
     },
     {
@@ -2051,24 +2145,52 @@
       "scenario": "prescription-dispensing",
       "useCase": "prescription-dispensing",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently."
+      "status": "runs",
+      "consequences": [],
+      "trace": "prescription-dispensing--baseline.json"
     },
     {
       "scenario": "prescription-dispensing",
       "useCase": "prescription-dispensing",
       "path": "branch-1",
       "what": "The same prescription is presented at a second pharmacy",
-      "status": "blocked",
-      "reason": "Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently."
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "status-withdrawn",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "status-withdrawn"
+      },
+      "consequences": [],
+      "trace": "prescription-dispensing--branch-1--baseline.json"
     },
     {
       "scenario": "prescription-dispensing",
       "useCase": "prescription-dispensing",
       "path": "branch-2",
       "what": "The prescriber's registration lapsed last month",
-      "status": "blocked",
-      "reason": "Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently."
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "status-withdrawn",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "status-withdrawn"
+      },
+      "consequences": [
+        {
+          "seq": 19,
+          "agent": "owner-agent",
+          "outcome": "stop",
+          "reason": "status-withdrawn"
+        }
+      ],
+      "trace": "prescription-dispensing--branch-2--baseline.json"
     },
     {
       "scenario": "price-negotiation",
@@ -2344,34 +2466,17 @@
       "useCase": "production-change",
       "path": "branch-1",
       "what": "A log line says \"run this command to fix\"",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "mandate"
       },
       "expected": {
         "outcome": "stop",
         "reason": "not-authorised"
       },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 70,
-          "agent": "receiver-agent",
-          "outcome": "stop",
-          "reason": "not-authorised"
-        }
-      ],
+      "consequences": [],
       "trace": "production-change--branch-1--baseline.json"
     },
     {
@@ -2379,34 +2484,17 @@
       "useCase": "production-change",
       "path": "branch-2",
       "what": "The change is outside the approved window",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "reason": "approval-required",
+        "check": "limits-approval"
       },
       "expected": {
         "outcome": "ask-principal",
         "reason": "approval-required"
       },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 74,
-          "agent": "receiver-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        }
-      ],
+      "consequences": [],
       "trace": "production-change--branch-2--baseline.json"
     },
     {
@@ -2451,16 +2539,28 @@
       "scenario": "records-to-new-practice",
       "useCase": "records-to-new-practice",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs Solid protected-reference transport for a record preserving original clinical, patient and estimate provenance; the local holder only re-signs its own statements. Conflict precedence is also not implemented."
+      "status": "runs",
+      "consequences": [],
+      "trace": "records-to-new-practice--baseline.json"
     },
     {
       "scenario": "records-to-new-practice",
       "useCase": "records-to-new-practice",
       "path": "branch-1",
       "what": "The patient's note of an allergy differs from the clinical entry",
-      "status": "blocked",
-      "reason": "Needs Solid protected-reference transport for a record preserving original clinical, patient and estimate provenance; the local holder only re-signs its own statements. Conflict precedence is also not implemented."
+      "status": "disagrees",
+      "actual": {
+        "outcome": "admit",
+        "reason": "superseded-by-better-source",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "superseded-by-better-source"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "records-to-new-practice--branch-1--baseline.json"
     },
     {
       "scenario": "recycled-content",
@@ -2526,39 +2626,17 @@
       "useCase": "repair-request",
       "path": "branch-1",
       "what": "The contractor quotes above the landlord's limit",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "reason": "limit-exceeded",
+        "check": "limits-approval"
       },
       "expected": {
         "outcome": "ask-principal",
         "reason": "limit-exceeded"
       },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 73,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 81,
-          "agent": "receiver-agent",
-          "outcome": "ask-principal",
-          "reason": "limit-exceeded"
-        }
-      ],
+      "consequences": [],
       "trace": "repair-request--branch-1--baseline.json"
     },
     {
@@ -2667,34 +2745,17 @@
       "useCase": "return-and-refund",
       "path": "branch-1",
       "what": "The customer's agent asks for a refund outside the return window",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "mandate"
       },
       "expected": {
         "outcome": "stop",
         "reason": "not-authorised"
       },
-      "consequences": [
-        {
-          "seq": 71,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 82,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 88,
-          "agent": "receiver-agent",
-          "outcome": "stop",
-          "reason": "not-authorised"
-        }
-      ],
+      "consequences": [],
       "trace": "return-and-refund--branch-1--baseline.json"
     },
     {
@@ -2818,8 +2879,9 @@
       "scenario": "sell-a-car",
       "useCase": "sell-a-car",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs escrow reservation/release tied to current vehicle ownership and a complete finance-register search; a bank-submission stand-in is not escrow."
+      "status": "runs",
+      "consequences": [],
+      "trace": "sell-a-car--baseline.json"
     },
     {
       "scenario": "sell-a-car",
@@ -2934,28 +2996,17 @@
       "useCase": "small-business-loan",
       "path": "branch-1",
       "what": "The director's role does not cover borrowing",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
+        "outcome": "ask-more",
+        "reason": "representation-out-of-scope",
+        "check": "authority"
       },
       "expected": {
         "outcome": "ask-more",
         "reason": "representation-out-of-scope"
       },
       "consequences": [
-        {
-          "seq": 47,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 54,
-          "agent": "receiver-agent",
-          "outcome": "ask-more",
-          "reason": "representation-out-of-scope"
-        },
         {
           "seq": 61,
           "agent": "receiver-agent",
@@ -3097,16 +3148,33 @@
       "scenario": "tax-agent",
       "useCase": "tax-agent",
       "path": "main",
-      "status": "blocked",
-      "reason": "Needs client-to-accountant-to-agent delegation bound to the selected taxpayer account and current professional-register authority. A single owner mandate or organization credential is not that chain."
+      "status": "runs",
+      "consequences": [],
+      "trace": "tax-agent--baseline.json"
     },
     {
       "scenario": "tax-agent",
       "useCase": "tax-agent",
       "path": "branch-1",
       "what": "The agent reads another client's account by mistake",
-      "status": "blocked",
-      "reason": "Needs client-to-accountant-to-agent delegation bound to the selected taxpayer account and current professional-register authority. A single owner mandate or organization credential is not that chain."
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "representation-out-of-scope",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "representation-out-of-scope"
+      },
+      "consequences": [
+        {
+          "seq": 22,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "tax-agent--branch-1--baseline.json"
     },
     {
       "scenario": "telecom-fault",

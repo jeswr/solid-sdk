@@ -27,6 +27,7 @@ import type {
   VerificationResult,
 } from "../core/types.js";
 import { verifyDerivation } from "../derive/rules.js";
+import { AuthorityChainChecks } from "../mechanisms/authority-chain.js";
 import { type KeyAlg, verifyCompact } from "../mechanisms/jws.js";
 import { OrganizationChecks } from "../mechanisms/organizations.js";
 import {
@@ -38,6 +39,7 @@ import {
 import type { TrustStore } from "../mechanisms/trust.js";
 import { configurationById } from "../profile/configurations.js";
 import { identifiersIn } from "../profile/content.js";
+import { dutyRuleSchema } from "../runtime/duties.js";
 import type { OperationHandler } from "../runtime/operations.js";
 import { packetView } from "../trace/packet.js";
 import type { InboundCheck, InboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
@@ -91,7 +93,7 @@ export type IntegrityResult =
     };
 
 /** The minimum a relayed claim must say for the gate to ask who stands behind it. */
-const claimSchema = z
+export const claimSchema = z
   .object({
     id: z.string().max(512).optional(),
     issuer: z.string().max(512),
@@ -467,6 +469,45 @@ export class InboundGate {
     };
     if (!msg.from.actor || !msg.from.onBehalfOf)
       return done({ ...base, outcome: "not-accepted", reason: "representation-missing" });
+    if (
+      this.deps.gate.authorityChains &&
+      (!this.deps.gate.authorityChains.policy.operations ||
+        this.deps.gate.authorityChains.policy.operations.includes(handler.description.id))
+    ) {
+      const credential = (msg.evidence ?? []).find(
+        (e) => e.role === "representation" && e.format === "mandate-chain+jws",
+      );
+      const body = msg.body as unknown as JsonObject;
+      const input = body.input as JsonObject | undefined;
+      const chain = new AuthorityChainChecks({
+        ...this.deps.gate.authorityChains,
+        trust: this.deps.trust,
+        now: this.deps.now,
+        verifier: this.deps.identity.actor,
+        record: (v) => this.deps.record(v),
+      });
+      const result = await chain.check(credential?.value, {
+        actor: msg.from.actor,
+        kid: kid ?? "",
+        entity: msg.from.onBehalfOf,
+        action: this.deps.gate.authorityChains.policy.actionField
+          ? String(input?.request ?? "")
+          : msg.kind,
+        operation: handler.description.id,
+        subject: typeof input?.subject === "string" ? input.subject : msg.from.onBehalfOf,
+        purpose: typeof body.purpose === "string" ? body.purpose : "",
+      });
+      return done({
+        ...base,
+        outcome: result.ok ? "accepted" : "not-accepted",
+        ...(result.ok
+          ? { statement: result.statement }
+          : {
+              reason: result.reason,
+              ...(result.deciderRole ? { deciderRole: result.deciderRole } : {}),
+            }),
+      });
+    }
     if (this.deps.gate.organizations) {
       const credential = (msg.evidence ?? []).find(
         (e) => e.role === "representation" && e.format === "organization-mandate+jws",
@@ -511,6 +552,112 @@ export class InboundGate {
       if (last.outcome === "accepted") return last;
     }
     return last ?? done({ ...base, outcome: "not-accepted", reason: "representation-invalid" });
+  }
+
+  resolvePrecedence(purpose: string | undefined): string | undefined {
+    for (const rule of this.deps.gate.reliance?.rules ?? []) {
+      if (!rule.precedence) continue;
+      const facts = [...this.deps.memory.facts.values()].filter(
+        (f) =>
+          f.claimType === rule.claimType &&
+          f.admittedPurpose === purpose &&
+          f.statement &&
+          fitnessOf(f.statement as Claim, this.deps.gate.reliance, this.deps.now()).verdict ===
+            "pass",
+      );
+      const groups = new Map<string, AdmittedFact[]>();
+      for (const fact of facts) {
+        const key = digestOf({ subject: fact.subject, period: fact.statement?.period ?? null });
+        const group = groups.get(key) ?? [];
+        group.push(fact);
+        groups.set(key, group);
+      }
+      const value = (f: AdmittedFact) =>
+        Object.fromEntries(
+          Object.entries(f.statement ?? {}).filter(
+            ([k]) =>
+              ![
+                "id",
+                "issuer",
+                "method",
+                "asOf",
+                "issuedAt",
+                "terms",
+                "validUntil",
+                "status",
+                "rank",
+                "yieldTo",
+                "resourceGrant",
+              ].includes(k),
+          ),
+        );
+      for (const group of groups.values()) {
+        if (new Set(group.map((f) => digestOf(value(f)))).size < 2) continue;
+        const policy = rule.precedence;
+        const compare = (a: AdmittedFact, b: AdmittedFact) => {
+          const ar = policy.sources.indexOf(a.source),
+            br = policy.sources.indexOf(b.source);
+          if (ar < 0 || br < 0) return 0;
+          const rank = br - ar;
+          const age = Date.parse(a.asOf ?? "") - Date.parse(b.asOf ?? "");
+          return policy.freshness === "newer-first"
+            ? Number.isFinite(age) && age !== 0
+              ? age
+              : rank
+            : rank || (Number.isFinite(age) ? age : 0);
+        };
+        const winner = group.find((a) =>
+          group.every(
+            (b) => a === b || digestOf(value(a)) === digestOf(value(b)) || compare(a, b) > 0,
+          ),
+        );
+        if (!winner) {
+          const ids = group.map((f) => f.id);
+          for (const fact of group) {
+            this.deps.memory.facts.delete(fact.id);
+            this.deps.memory.precedenceHolds[fact.id] = { ...fact, disputedWith: ids };
+            this.deps.memory.refusals[`statement:${fact.id}`] = "completeness-not-established";
+            for (const [scope, items] of Object.entries(this.deps.memory.contexts))
+              this.deps.memory.contexts[scope] = items.map((i) =>
+                i.id === fact.id ? { ...i, accepted: false, disputedWith: ids } : i,
+              );
+          }
+          const detail = `Conflicting statements require an order: ${group.map((f) => `${f.id} from ${f.source}`).join("; ")}.`;
+          const record = { type: "precedence-unresolved", statements: ids, purpose };
+          this.deps.record(record);
+          this.verdictEvent("fitness", "ask-more", detail, {
+            reason: "completeness-not-established",
+          });
+          return detail;
+        }
+        for (const fact of group) {
+          if (fact.id === winner.id || digestOf(value(fact)) === digestOf(value(winner))) continue;
+          this.deps.memory.facts.delete(fact.id);
+          this.deps.memory.precedenceHolds[fact.id] = { ...fact, supersededBy: winner.id };
+          this.deps.memory.refusals[`statement:${fact.id}`] = "superseded-by-better-source";
+          for (const [scope, items] of Object.entries(this.deps.memory.contexts))
+            this.deps.memory.contexts[scope] = items.map((i) =>
+              i.id === fact.id ? { ...i, accepted: false, supersededBy: winner.id } : i,
+            );
+          const record = {
+            type: "statement-superseded",
+            statement: fact.id,
+            digest: fact.digest,
+            by: winner.id,
+            purpose,
+            reason: "superseded-by-better-source",
+          };
+          this.deps.record(record);
+          this.verdictEvent(
+            "fitness",
+            "pass",
+            `${fact.id} is retained but superseded by ${winner.id} for this purpose.`,
+            { reason: "superseded-by-better-source" },
+          );
+        }
+      }
+    }
+    return undefined;
   }
 
   /** Plain name for a claim. */
@@ -1131,6 +1278,8 @@ export class InboundGate {
         });
       admitted++;
     }
+    const conflict = this.resolvePrecedence(opts.purpose);
+    if (conflict) this.decisionEvent("ask-more", conflict, "completeness-not-established");
     return { admitted, refused };
   }
 }
@@ -1307,7 +1456,7 @@ export class Admission {
       return rep;
     }
     const ok = rep.outcome === "accepted";
-    if (!ok && rep.reason === "representation-out-of-scope") {
+    if (!ok && rep.reason === "representation-out-of-scope" && !this.deps.gate.authorityChains) {
       this.gate.verdictEvent(
         "authority",
         "ask-more",
@@ -1510,6 +1659,15 @@ export class Admission {
         return { ok: false, reason: reason as ReasonCode, detail, askMore: true };
       }
     }
+    const conflict = this.gate.resolvePrecedence(need.purpose);
+    if (conflict) {
+      this.outcome = "ask-more";
+      this.gate.decisionEvent("ask-more", conflict, "completeness-not-established");
+      return { ok: false, reason: "completeness-not-established", detail: conflict, askMore: true };
+    }
+    this.admittedClaims = this.admittedClaims.filter((c) =>
+      this.deps.memory.facts.has(c.id ?? digestOf(c)),
+    );
     this.outcome = "admit";
     this.gate.decisionEvent(
       "admit",
@@ -1538,6 +1696,19 @@ export class Admission {
         reason: "no-agreement",
       });
       return { verdict: "fail", reason: "no-agreement" };
+    }
+    if (
+      msg.kind === "propose" &&
+      msg.body.terms.duties !== undefined &&
+      !dutyRuleSchema.array().safeParse(msg.body.terms.duties).success
+    ) {
+      this.gate.verdictEvent(
+        "terms",
+        "indeterminate",
+        "The proposed agreement contains unsupported duties.",
+        { reason: "unsupported-term" },
+      );
+      return { verdict: "fail", reason: "unsupported-term" };
     }
     const offered = msg.kind === "invoke" ? msg.body.input.terms : undefined;
     if (offered !== undefined) {

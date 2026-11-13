@@ -7,8 +7,15 @@
   "profile": "agent-handoff",
   "parties": [
     {
-      "id": "owner",
-      "identity": "urn:fictional:agent-handoff:owner",
+      "id": "subject",
+      "identity": "urn:fictional:agent-handoff:subject",
+      "name": "The customer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "holder",
+      "identity": "urn:fictional:agent-handoff:holder",
       "name": "The retailer",
       "role": "source",
       "runs": "issuer-only"
@@ -16,33 +23,40 @@
     {
       "id": "receiver",
       "identity": "urn:fictional:agent-handoff:receiver",
-      "name": "The delivery partner",
+      "name": "The delivery service",
       "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "customer",
-      "identity": "urn:fictional:agent-handoff:customer",
-      "name": "The customer",
+      "id": "register",
+      "identity": "urn:fictional:agent-handoff:register",
+      "name": "The customer\u2019s signed grant",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "second-holder",
+      "identity": "urn:fictional:agent-handoff:second-holder",
+      "name": "The second registered holder",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "owner-agent",
       "identity": "urn:fictional:agent-handoff:owner-agent",
-      "name": "The retailer’s agent",
+      "actor": "urn:fictional:agent-handoff:owner-agent:actor",
+      "name": "The delivery partner\u2019s agent",
       "role": "agent",
       "runs": "agent",
-      "actor": "urn:fictional:agent-handoff:owner-agent:actor",
-      "actsFor": "owner"
+      "actsFor": "subject"
     },
     {
       "id": "receiver-agent",
       "identity": "urn:fictional:agent-handoff:receiver-agent",
-      "name": "The delivery partner’s agent",
+      "actor": "urn:fictional:agent-handoff:receiver-agent:actor",
+      "name": "The receiving agent",
       "role": "agent",
       "runs": "agent",
-      "actor": "urn:fictional:agent-handoff:receiver-agent:actor",
       "actsFor": "receiver"
     }
   ],
@@ -58,17 +72,15 @@
         {
           "party": "urn:fictional:agent-handoff:receiver",
           "tasks": [
-            "urn:op:agent-handoff",
-            "urn:op:agent-handoff:request"
+            "urn:op:agent-handoff"
           ]
         }
       ],
       "receiver-agent": [
         {
-          "party": "urn:fictional:agent-handoff:owner",
+          "party": "urn:fictional:agent-handoff:subject",
           "tasks": [
-            "urn:op:agent-handoff",
-            "urn:op:agent-handoff:request"
+            "urn:op:agent-handoff"
           ]
         }
       ]
@@ -76,27 +88,27 @@
     "sources": {
       "owner-agent": [
         {
-          "id": "urn:source:agent-handoff:delivery.address",
+          "id": "urn:source:customer-address",
           "version": "1",
-          "source": "urn:fictional:agent-handoff:customer",
+          "source": "urn:fictional:agent-handoff:subject",
           "claimTypes": [
             "delivery.address"
           ],
           "subjects": [
-            "urn:fictional:agent-handoff:customer"
+            "urn:fictional:agent-handoff:subject"
           ]
         }
       ],
       "receiver-agent": [
         {
-          "id": "urn:source:agent-handoff:delivery.address",
+          "id": "urn:source:customer-address",
           "version": "1",
-          "source": "urn:fictional:agent-handoff:customer",
+          "source": "urn:fictional:agent-handoff:subject",
           "claimTypes": [
             "delivery.address"
           ],
           "subjects": [
-            "urn:fictional:agent-handoff:customer"
+            "urn:fictional:agent-handoff:subject"
           ]
         }
       ]
@@ -105,8 +117,8 @@
   "statements": [
     {
       "id": "address",
-      "issuer": "customer",
-      "subject": "urn:fictional:agent-handoff:customer",
+      "issuer": "subject",
+      "subject": "urn:fictional:agent-handoff:subject",
       "kind": "delivery.address",
       "value": {
         "address": "urn:fictional:delivery-address"
@@ -128,13 +140,32 @@
                   "rightOperand": "urn:purpose:delivery"
                 }
               ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:agent-handoff:address",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:delivery"
+                }
+              ]
             }
           ],
           "prohibitions": [
             {
               "type": "prohibition",
               "action": "distribute",
-              "target": "urn:scenario:agent-handoff:address"
+              "target": "urn:scenario:agent-handoff:address",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:marketing"
+                }
+              ]
             }
           ]
         }
@@ -155,26 +186,223 @@
     },
     {
       "agent": "receiver-agent",
-      "autonomous": [
-        {
-          "type": "permission",
-          "action": "use",
-          "target": "urn:op:agent-handoff:request"
-        }
-      ],
+      "autonomous": [],
       "withApproval": []
     }
   ],
-  "script": [],
+  "script": [
+    {
+      "id": "admit-address",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "address"
+      ],
+      "purpose": "urn:purpose:delivery"
+    },
+    {
+      "id": "request",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:agent-handoff",
+      "contents": {
+        "subject": "urn:fictional:agent-handoff:subject",
+        "request": "deliver"
+      },
+      "purpose": "urn:purpose:delivery",
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:agent-handoff",
+        "target": "urn:op:agent-handoff",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "parameters": {},
+        "evidence": [
+          {
+            "itemId": "urn:scenario:agent-handoff:address",
+            "claimType": "delivery.address"
+          }
+        ]
+      },
+      "evidence": [
+        "address"
+      ]
+    },
+    {
+      "id": "receive",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    }
+  ],
   "inject": [],
   "branches": [
     {
       "id": "branch-1",
       "what": "The partner's agent uses the address for marketing",
       "change": {
-        "suites": {
-          "transport": "direct-http"
+        "parties": [
+          {
+            "id": "owner",
+            "identity": "urn:fictional:agent-handoff:owner",
+            "name": "The retailer",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          {
+            "id": "receiver",
+            "identity": "urn:fictional:agent-handoff:receiver",
+            "name": "The delivery partner",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          {
+            "id": "customer",
+            "identity": "urn:fictional:agent-handoff:customer",
+            "name": "The customer",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          {
+            "id": "owner-agent",
+            "identity": "urn:fictional:agent-handoff:owner-agent",
+            "name": "The retailer\u2019s agent",
+            "role": "agent",
+            "runs": "agent",
+            "actor": "urn:fictional:agent-handoff:owner-agent:actor",
+            "actsFor": "owner"
+          },
+          {
+            "id": "receiver-agent",
+            "identity": "urn:fictional:agent-handoff:receiver-agent",
+            "name": "The delivery partner\u2019s agent",
+            "role": "agent",
+            "runs": "agent",
+            "actor": "urn:fictional:agent-handoff:receiver-agent:actor",
+            "actsFor": "receiver"
+          }
+        ],
+        "trust": {
+          "introductions": [
+            [
+              "owner-agent",
+              "receiver-agent"
+            ]
+          ],
+          "ownLists": {
+            "owner-agent": [
+              {
+                "party": "urn:fictional:agent-handoff:receiver",
+                "tasks": [
+                  "urn:op:agent-handoff",
+                  "urn:op:agent-handoff:request"
+                ]
+              }
+            ],
+            "receiver-agent": [
+              {
+                "party": "urn:fictional:agent-handoff:owner",
+                "tasks": [
+                  "urn:op:agent-handoff",
+                  "urn:op:agent-handoff:request"
+                ]
+              }
+            ]
+          },
+          "sources": {
+            "owner-agent": [
+              {
+                "id": "urn:source:agent-handoff:delivery.address",
+                "version": "1",
+                "source": "urn:fictional:agent-handoff:customer",
+                "claimTypes": [
+                  "delivery.address"
+                ],
+                "subjects": [
+                  "urn:fictional:agent-handoff:customer"
+                ]
+              }
+            ],
+            "receiver-agent": [
+              {
+                "id": "urn:source:agent-handoff:delivery.address",
+                "version": "1",
+                "source": "urn:fictional:agent-handoff:customer",
+                "claimTypes": [
+                  "delivery.address"
+                ],
+                "subjects": [
+                  "urn:fictional:agent-handoff:customer"
+                ]
+              }
+            ]
+          }
         },
+        "statements": [
+          {
+            "id": "address",
+            "issuer": "customer",
+            "subject": "urn:fictional:agent-handoff:customer",
+            "kind": "delivery.address",
+            "value": {
+              "address": "urn:fictional:delivery-address"
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:agent-handoff:address",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:agent-handoff:address",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:delivery"
+                      }
+                    ]
+                  }
+                ],
+                "prohibitions": [
+                  {
+                    "type": "prohibition",
+                    "action": "distribute",
+                    "target": "urn:scenario:agent-handoff:address"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "mandates": [
+          {
+            "agent": "owner-agent",
+            "autonomous": [
+              {
+                "type": "permission",
+                "action": "distribute",
+                "target": "urn:op:agent-handoff"
+              }
+            ],
+            "withApproval": []
+          },
+          {
+            "agent": "receiver-agent",
+            "autonomous": [
+              {
+                "type": "permission",
+                "action": "use",
+                "target": "urn:op:agent-handoff:request"
+              }
+            ],
+            "withApproval": []
+          }
+        ],
         "script": [
           {
             "id": "admit-source",
@@ -244,10 +472,19 @@
           }
         ],
         "traceSteps": {
-          "1": "The retailer’s agent checks the signed statements.",
-          "2": "The delivery partner’s agent sends the signed request.",
-          "3": "The retailer’s agent checks the message and prepares a response.",
-          "4": "The retailer’s agent sends the signed request."
+          "1": "The retailer\u2019s agent checks the signed statements.",
+          "2": "The delivery partner\u2019s agent sends the signed request.",
+          "3": "The retailer\u2019s agent checks the message and prepares a response.",
+          "4": "The retailer\u2019s agent sends the signed request."
+        },
+        "suites": {
+          "authority": "mandate-signed",
+          "transport": "direct-http"
+        },
+        "documents": [],
+        "authorityLinks": [],
+        "authorityChains": {
+          "owner-agent": []
         }
       },
       "expect": {
@@ -483,48 +720,673 @@
           "verdict": "fail",
           "reason": "prohibited"
         }
-      ]
+      ],
+      "profileChange": {
+        "claims": [
+          {
+            "kind": "delivery.address",
+            "sources": [
+              "urn:fictional:agent-handoff:customer"
+            ],
+            "methods": [
+              "recorded-by-authority"
+            ],
+            "maxAgeDays": 30
+          }
+        ],
+        "purposes": [
+          {
+            "id": "urn:purpose:agent-handoff",
+            "claims": [
+              "delivery.address"
+            ]
+          },
+          {
+            "id": "urn:purpose:delivery",
+            "claims": [
+              "delivery.address"
+            ]
+          }
+        ],
+        "vocabulary": {
+          "input.items.*": {
+            "type": "identifier"
+          },
+          "input.request": {
+            "type": "code",
+            "values": [
+              "delivery.address"
+            ]
+          },
+          "output.status": {
+            "type": "code",
+            "values": [
+              "received"
+            ]
+          }
+        },
+        "operations": [
+          {
+            "id": "urn:op:agent-handoff",
+            "version": "0.1",
+            "label": "A service agent hands a customer to a partner's agent",
+            "pattern": "invoke",
+            "access": "represented",
+            "models": [],
+            "purposes": [
+              "urn:purpose:agent-handoff"
+            ],
+            "requiresRepresentation": true
+          },
+          {
+            "id": "urn:op:agent-handoff:request",
+            "version": "0.1",
+            "label": "Request the needed information",
+            "pattern": "invoke",
+            "access": "represented",
+            "models": [],
+            "purposes": [
+              "urn:purpose:agent-handoff"
+            ],
+            "requiresRepresentation": true
+          }
+        ]
+      }
     },
     {
       "id": "branch-2",
       "what": "The handoff passes on more than the retailer holds",
-      "change": {},
+      "change": {
+        "authorityLinks": [
+          {
+            "id": "urn:fictional:agent-handoff:power",
+            "issuer": "subject",
+            "subject": "holder",
+            "entity": "urn:fictional:agent-handoff:subject",
+            "actions": [
+              "invoke"
+            ],
+            "scope": {
+              "operations": [
+                "urn:op:agent-handoff"
+              ],
+              "subjects": [
+                "urn:fictional:agent-handoff:subject"
+              ],
+              "purposes": [
+                "urn:purpose:delivery"
+              ]
+            },
+            "validFrom": "2026-11-01T00:00:00.000Z",
+            "validUntil": "2026-12-01T00:00:00.000Z",
+            "status": {
+              "ref": "urn:fictional:agent-handoff:register-status",
+              "id": "power"
+            },
+            "mayDelegate": {
+              "depth": 2
+            }
+          },
+          {
+            "id": "urn:fictional:agent-handoff:agent-power",
+            "issuer": "holder",
+            "subject": "owner-agent",
+            "entity": "urn:fictional:agent-handoff:subject",
+            "parent": "urn:fictional:agent-handoff:power",
+            "actions": [
+              "invoke"
+            ],
+            "scope": {
+              "operations": [
+                "urn:op:agent-handoff"
+              ],
+              "subjects": [
+                "urn:fictional:agent-handoff:subject",
+                "urn:fictional:other-customer"
+              ],
+              "purposes": [
+                "urn:purpose:delivery"
+              ]
+            },
+            "validFrom": "2026-11-01T00:00:00.000Z",
+            "validUntil": "2026-12-01T00:00:00.000Z",
+            "status": {
+              "ref": "urn:fictional:agent-handoff:holder-status",
+              "id": "agent"
+            }
+          }
+        ]
+      },
       "expect": {
-        "outcome": "stop",
+        "outcome": "refuse",
         "reason": "representation-out-of-scope",
         "check": "authority"
       },
-      "outline": []
+      "catalogueExpected": {
+        "outcome": "stop",
+        "reason": "representation-out-of-scope"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "fail",
+          "reason": "representation-out-of-scope"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "representation-out-of-scope"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        }
+      ]
     }
   ],
-  "expect": [],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
   "stress": [
+    "authority",
     "data-terms",
     "recipient"
   ],
   "suites": {
-    "transport": "a2a"
+    "authority": "mandate-credential"
   },
   "assurance": null,
-  "blocked": [
+  "blocked": [],
+  "documents": [
     {
-      "path": "main",
-      "reason": "Needs an A2A handoff binding and attenuating retailer-to-partner delegated authority; the data runner’s local binding does not implement this delegation chain."
+      "id": "urn:fictional:agent-handoff:register-status",
+      "issuer": "subject",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:agent-handoff:register-status",
+        "issuer": "urn:fictional:agent-handoff:subject",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "power": "active"
+        }
+      }
     },
     {
-      "path": "branch-2",
-      "reason": "Needs verification of the complete retailer-to-partner authority chain and its attenuation; a one-link representation cannot test authority greater than the delegator holds."
+      "id": "urn:fictional:agent-handoff:holder-status",
+      "issuer": "holder",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:agent-handoff:holder-status",
+        "issuer": "urn:fictional:agent-handoff:holder",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "agent": "active"
+        }
+      }
     }
   ],
-  "standIns": [
+  "authorityLinks": [
     {
-      "what": "Outside organizations and data sources",
-      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+      "id": "urn:fictional:agent-handoff:power",
+      "issuer": "subject",
+      "subject": "holder",
+      "entity": "urn:fictional:agent-handoff:subject",
+      "actions": [
+        "invoke"
+      ],
+      "scope": {
+        "operations": [
+          "urn:op:agent-handoff"
+        ],
+        "subjects": [
+          "urn:fictional:agent-handoff:subject"
+        ],
+        "purposes": [
+          "urn:purpose:delivery"
+        ]
+      },
+      "validFrom": "2026-11-01T00:00:00.000Z",
+      "validUntil": "2026-12-01T00:00:00.000Z",
+      "status": {
+        "ref": "urn:fictional:agent-handoff:register-status",
+        "id": "power"
+      },
+      "mayDelegate": {
+        "depth": 2
+      }
     },
     {
-      "what": "Handoff-free marketing refusal",
-      "replacedBy": "The original customer-signed address restrictions are checked under the local signed binding before any A2A delegation or partner marketing transfer"
+      "id": "urn:fictional:agent-handoff:agent-power",
+      "issuer": "holder",
+      "subject": "owner-agent",
+      "entity": "urn:fictional:agent-handoff:subject",
+      "parent": "urn:fictional:agent-handoff:power",
+      "actions": [
+        "invoke"
+      ],
+      "scope": {
+        "operations": [
+          "urn:op:agent-handoff"
+        ],
+        "subjects": [
+          "urn:fictional:agent-handoff:subject"
+        ],
+        "purposes": [
+          "urn:purpose:delivery"
+        ]
+      },
+      "validFrom": "2026-11-01T00:00:00.000Z",
+      "validUntil": "2026-12-01T00:00:00.000Z",
+      "status": {
+        "ref": "urn:fictional:agent-handoff:holder-status",
+        "id": "agent"
+      }
     }
   ],
-  "traceSteps": {}
+  "authorityChains": {
+    "owner-agent": [
+      [
+        "urn:fictional:agent-handoff:power",
+        "urn:fictional:agent-handoff:agent-power"
+      ]
+    ]
+  },
+  "traceSteps": {
+    "1": "Admit address.",
+    "2": "Request.",
+    "3": "Receive."
+  }
 }

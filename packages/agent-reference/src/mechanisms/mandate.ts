@@ -125,6 +125,8 @@ export const standingRuleSchema = z.strictObject({
 });
 export type StandingRule = z.infer<typeof standingRuleSchema>;
 
+import { dutyRuleSchema } from "../runtime/duties.js";
+
 export const mandateSchema = z
   .object({
     type: z.literal("OwnerMandate"),
@@ -136,6 +138,7 @@ export const mandateSchema = z
     validFrom: instant,
     validUntil: instant,
     standing: z.array(standingRuleSchema).max(16).optional(),
+    duties: z.array(dutyRuleSchema).max(64).optional(),
     autonomous: policy,
     withApproval: policy,
     note: z.string().max(1024).optional(),

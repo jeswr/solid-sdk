@@ -83,12 +83,21 @@ export async function verifyResourceGrant(
         : undefined,
   };
 }
+export const originalEnvelopeSchema = z.strictObject({
+  type: z.literal("OriginalStatements"),
+  issuer: id,
+  ref: id,
+  item: id,
+  grant: z.string(),
+  statementDigest: z.string(),
+  statements: z.array(z.string()).min(1).max(64),
+});
 export interface ResourceReader {
   read(
     reference: ResourceReference,
     requestJws: string,
   ): Promise<
-    | { ok: true; jws: string; grant: ResourceGrant }
+    | { ok: true; jws: string; grant: ResourceGrant; originals?: true }
     | {
         ok: false;
         reason:
@@ -108,6 +117,7 @@ export class LocalResourceHolder implements ResourceReader {
       key: SigningKey;
       trust: TrustStore;
       resources: Readonly<Record<string, readonly JsonObject[]>>;
+      originals?: Readonly<Record<string, string>>;
       ledger: EvidenceLedger;
       now: () => string;
     },
@@ -194,10 +204,28 @@ export class LocalResourceHolder implements ResourceReader {
     const original = resource.find((s) => s.id === request.item);
     if (
       !original ||
-      original.issuer !== this.options.identity ||
+      (original.issuer !== this.options.identity && !this.options.originals?.[request.item]) ||
       !grant.items.some((i) => i.id === original.id && i.claimType === original.claimType)
     )
       return refuse("lookup-failed");
+    const originalJws = this.options.originals?.[request.item];
+    if (originalJws) {
+      record("fit-for-use");
+      return {
+        ok: true,
+        originals: true,
+        grant,
+        jws: await signStatement(this.options.key, "awp-original-statements+jws", {
+          type: "OriginalStatements",
+          issuer: this.options.identity,
+          ref: grant.ref,
+          item: request.item,
+          grant: reference.grant,
+          statementDigest: digestOf(original),
+          statements: [originalJws],
+        }),
+      };
+    }
     const statement: JsonObject = {
       ...original,
       resourceGrant: reference.grant,

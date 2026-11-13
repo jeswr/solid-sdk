@@ -60,6 +60,30 @@
             "type": "number",
             "minimum": 0
           },
+          "precedence": {
+            "type": "object",
+            "properties": {
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                }
+              },
+              "freshness": {
+                "type": "string",
+                "enum": [
+                  "source-first",
+                  "newer-first"
+                ]
+              }
+            },
+            "required": [
+              "sources",
+              "freshness"
+            ],
+            "additionalProperties": false
+          },
           "completeness": {
             "type": "string"
           },
@@ -745,6 +769,164 @@
     "referenceAction": {
       "type": "string"
     },
+    "authorityChains": {
+      "type": "object",
+      "properties": {
+        "actionField": {
+          "type": "string",
+          "const": "request"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 512,
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          }
+        },
+        "roots": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "issuer": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 512,
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "entity": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 512,
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "operations": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 512,
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                }
+              }
+            },
+            "required": [
+              "issuer",
+              "entity",
+              "operations"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "maxStatusAgeSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "holders": {
+          "default": "any",
+          "type": "string",
+          "enum": [
+            "any",
+            "all"
+          ]
+        },
+        "objectionRole": {
+          "default": "responsible-person",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "roots",
+        "maxStatusAgeSeconds",
+        "holders",
+        "objectionRole"
+      ],
+      "additionalProperties": false
+    },
+    "forum": {
+      "type": "object",
+      "properties": {
+        "party": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "responseSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "observers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          }
+        }
+      },
+      "required": [
+        "party",
+        "responseSeconds",
+        "observers"
+      ],
+      "additionalProperties": false
+    },
+    "agreementDeadlineSeconds": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "singleUse": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "register": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "item": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "operation": {
+            "default": "redeem",
+            "type": "string",
+            "enum": [
+              "redeem",
+              "release"
+            ]
+          },
+          "maxAgeSeconds": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "parameters": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          }
+        },
+        "required": [
+          "action",
+          "register",
+          "item",
+          "operation",
+          "maxAgeSeconds"
+        ],
+        "additionalProperties": false
+      }
+    },
     "organizations": {
       "type": "object",
       "properties": {
@@ -1085,6 +1267,7 @@
     "personDecisions",
     "decisionsForPerson",
     "modelReadings",
+    "singleUse",
     "notificationRecipients",
     "readings",
     "personMayRelyOn",
@@ -1095,6 +1278,39 @@
     "operations"
   ],
   "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema0"
+          }
+        }
+      ]
+    }
+  },
   "x-authored-by": "Codex GPT-6",
   "$id": "urn:agent-reference:schema:domain-profile:0.1"
 }

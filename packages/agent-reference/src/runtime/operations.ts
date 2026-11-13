@@ -255,6 +255,8 @@ export type EffectResult =
  * state authoritatively that nothing was done.
  */
 export interface EffectAdapter {
+  /** A record release binds all actual parameters and includes runtime-owned disclosure labels. */
+  readonly releasesRecord?: boolean;
   readonly id: string;
   execute(key: string, params: JsonObject): Promise<EffectResult>;
   /**

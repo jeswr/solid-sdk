@@ -3,15 +3,157 @@
   "schema": "agent-profile/0.1",
   "id": "erasure-request",
   "parties": {
-    "party-1": "A person",
-    "party-2": "A company",
-    "party-3": "Parties the company passed the data to"
+    "subject": "The data subject",
+    "company": "The company",
+    "partner": "The onward recipient",
+    "downstream": "The second onward recipient"
   },
-  "claims": [],
-  "purposes": [],
+  "claims": [
+    {
+      "kind": "contact.data",
+      "sources": [
+        "urn:fictional:erasure-request:subject"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:erasure-request",
+      "claims": [
+        "contact.data"
+      ]
+    },
+    {
+      "id": "urn:purpose:duties",
+      "claims": [
+        "contact.data"
+      ]
+    }
+  ],
   "rules": [],
   "decisionsForPerson": [],
   "modelReadings": [],
-  "vocabulary": {},
-  "operations": []
+  "vocabulary": {
+    "terms.purpose": {
+      "type": "identifier"
+    },
+    "terms.duties.*.kind": {
+      "type": "code",
+      "values": [
+        "inform-onward",
+        "notify",
+        "delete"
+      ]
+    },
+    "terms.duties.*.parties.*": {
+      "type": "identifier"
+    },
+    "terms.duties.*.items.*": {
+      "type": "identifier"
+    },
+    "terms.duties.*.withinSeconds": {
+      "type": "number"
+    },
+    "terms.duties.*.event": {
+      "type": "code",
+      "values": [
+        "security-incident"
+      ]
+    },
+    "input.subject": {
+      "type": "identifier"
+    },
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.onward": {
+      "type": "code",
+      "values": [
+        true
+      ]
+    },
+    "input.duty": {
+      "type": "identifier"
+    },
+    "input.event": {
+      "type": "code",
+      "values": [
+        "security-incident"
+      ]
+    },
+    "output.acknowledgement": {
+      "type": "identifier"
+    },
+    "output.subject": {
+      "type": "identifier"
+    },
+    "output.parts.*.item": {
+      "type": "identifier"
+    },
+    "output.parts.*.recipient": {
+      "type": "identifier"
+    },
+    "output.parts.*.outcome": {
+      "type": "code",
+      "values": [
+        "done",
+        "pending",
+        "stop"
+      ]
+    },
+    "output.parts.*.reason": {
+      "type": "code",
+      "values": [
+        "no-agreement"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:erasure-request:agreement",
+      "version": "0.1",
+      "label": "Form the data-use agreement",
+      "pattern": "negotiate",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:erasure-request",
+        "urn:purpose:duties"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:erasure-request",
+      "version": "0.1",
+      "label": "Erase subject data",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:erasure-request",
+        "urn:purpose:duties"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:general-notice",
+      "version": "0.1",
+      "label": "Acknowledge an incident notice",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:erasure-request",
+        "urn:purpose:duties"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Companies, onward recipients, customers and regulator",
+      "replacedBy": "Independently keyed fictional runtimes exchanging locally gated signed messages; no claim of remote deletion or human readership."
+    }
+  ]
 }

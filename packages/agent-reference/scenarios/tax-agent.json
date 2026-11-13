@@ -7,64 +7,465 @@
   "profile": "tax-agent",
   "parties": [
     {
-      "id": "party-1",
-      "identity": "urn:fictional:tax-agent:party-1",
+      "id": "subject",
+      "identity": "urn:fictional:tax-agent:subject",
       "name": "A taxpayer",
-      "role": "principal",
+      "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "party-2",
-      "identity": "urn:fictional:tax-agent:party-2",
+      "id": "holder",
+      "identity": "urn:fictional:tax-agent:holder",
       "name": "An accountant",
-      "role": "principal",
+      "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "party-3",
-      "identity": "urn:fictional:tax-agent:party-3",
-      "name": "The accountant's agent",
-      "role": "principal",
-      "runs": "issuer-only"
-    },
-    {
-      "id": "party-4",
-      "identity": "urn:fictional:tax-agent:party-4",
+      "id": "receiver",
+      "identity": "urn:fictional:tax-agent:receiver",
       "name": "The tax authority",
-      "role": "principal",
+      "role": "source",
       "runs": "issuer-only"
     },
     {
-      "id": "party-5",
-      "identity": "urn:fictional:tax-agent:party-5",
-      "name": "A register of tax agents",
-      "role": "principal",
+      "id": "register",
+      "identity": "urn:fictional:tax-agent:register",
+      "name": "The local register of client engagements",
+      "role": "source",
       "runs": "issuer-only"
+    },
+    {
+      "id": "second-holder",
+      "identity": "urn:fictional:tax-agent:second-holder",
+      "name": "The accountant\u2019s firm",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:tax-agent:owner-agent",
+      "actor": "urn:fictional:tax-agent:owner-agent:actor",
+      "name": "The representative\u2019s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "subject"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:tax-agent:receiver-agent",
+      "actor": "urn:fictional:tax-agent:receiver-agent:actor",
+      "name": "The receiving agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "receiver"
     }
   ],
   "trust": {
-    "introductions": [],
-    "ownLists": {},
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:tax-agent:receiver",
+          "tasks": [
+            "urn:op:tax-agent"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:tax-agent:subject",
+          "tasks": [
+            "urn:op:tax-agent"
+          ]
+        }
+      ]
+    },
     "sources": {}
   },
   "statements": [],
-  "mandates": [],
-  "script": [],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:tax-agent"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "request",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:tax-agent",
+      "contents": {
+        "subject": "urn:fictional:tax-agent:subject",
+        "request": "file-return"
+      },
+      "purpose": "urn:purpose:tax-agent",
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:tax-agent",
+        "target": "urn:op:tax-agent",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "parameters": {}
+      }
+    },
+    {
+      "id": "receive",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    }
+  ],
   "inject": [],
   "branches": [
     {
       "id": "branch-1",
       "what": "The agent reads another client's account by mistake",
-      "change": {},
+      "change": {
+        "script": [
+          {
+            "id": "request",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "receiver-agent",
+            "kind": "invoke",
+            "operation": "urn:op:tax-agent",
+            "contents": {
+              "subject": "urn:fictional:tax-agent:another-subject",
+              "request": "file-return"
+            },
+            "purpose": "urn:purpose:tax-agent",
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:tax-agent",
+              "target": "urn:op:tax-agent",
+              "recipient": "urn:fictional:tax-agent:receiver",
+              "purpose": "urn:purpose:tax-agent",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "receive",
+            "agent": "receiver-agent",
+            "type": "receive",
+            "from": "owner-agent"
+          }
+        ]
+      },
       "expect": {
-        "outcome": "stop",
+        "outcome": "refuse",
         "reason": "representation-out-of-scope",
         "check": "authority"
       },
-      "outline": []
+      "catalogueExpected": {
+        "outcome": "stop",
+        "reason": "representation-out-of-scope"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "fail",
+          "reason": "representation-out-of-scope"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "representation-out-of-scope"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        }
+      ]
     }
   ],
-  "expect": [],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
   "stress": [
     "authority",
     "mandate"
@@ -73,10 +474,153 @@
     "authority": "mandate-credential"
   },
   "assurance": null,
-  "blocked": [
+  "blocked": [],
+  "documents": [
     {
-      "path": "*",
-      "reason": "Needs client-to-accountant-to-agent delegation bound to the selected taxpayer account and current professional-register authority. A single owner mandate or organization credential is not that chain."
+      "id": "urn:fictional:tax-agent:register-status",
+      "issuer": "register",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:tax-agent:register-status",
+        "issuer": "urn:fictional:tax-agent:register",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "power": "active"
+        }
+      }
+    },
+    {
+      "id": "urn:fictional:tax-agent:holder-status",
+      "issuer": "holder",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:tax-agent:holder-status",
+        "issuer": "urn:fictional:tax-agent:holder",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "firm": "active"
+        }
+      }
+    },
+    {
+      "id": "urn:fictional:tax-agent:firm-status",
+      "issuer": "second-holder",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:tax-agent:firm-status",
+        "issuer": "urn:fictional:tax-agent:second-holder",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "agent": "active"
+        }
+      }
     }
-  ]
+  ],
+  "authorityLinks": [
+    {
+      "id": "urn:fictional:tax-agent:power",
+      "issuer": "register",
+      "subject": "holder",
+      "entity": "urn:fictional:tax-agent:subject",
+      "actions": [
+        "invoke"
+      ],
+      "scope": {
+        "operations": [
+          "urn:op:tax-agent"
+        ],
+        "subjects": [
+          "urn:fictional:tax-agent:subject"
+        ],
+        "purposes": [
+          "urn:purpose:tax-agent"
+        ]
+      },
+      "validFrom": "2026-11-01T00:00:00.000Z",
+      "validUntil": "2026-12-01T00:00:00.000Z",
+      "status": {
+        "ref": "urn:fictional:tax-agent:register-status",
+        "id": "power"
+      },
+      "mayDelegate": {
+        "depth": 2
+      }
+    },
+    {
+      "id": "urn:fictional:tax-agent:firm-power",
+      "issuer": "holder",
+      "subject": "second-holder",
+      "entity": "urn:fictional:tax-agent:subject",
+      "parent": "urn:fictional:tax-agent:power",
+      "actions": [
+        "invoke"
+      ],
+      "scope": {
+        "operations": [
+          "urn:op:tax-agent"
+        ],
+        "subjects": [
+          "urn:fictional:tax-agent:subject"
+        ],
+        "purposes": [
+          "urn:purpose:tax-agent"
+        ]
+      },
+      "validFrom": "2026-11-01T00:00:00.000Z",
+      "validUntil": "2026-12-01T00:00:00.000Z",
+      "status": {
+        "ref": "urn:fictional:tax-agent:holder-status",
+        "id": "firm"
+      },
+      "mayDelegate": {
+        "depth": 1
+      }
+    },
+    {
+      "id": "urn:fictional:tax-agent:agent-power",
+      "issuer": "second-holder",
+      "subject": "owner-agent",
+      "entity": "urn:fictional:tax-agent:subject",
+      "parent": "urn:fictional:tax-agent:firm-power",
+      "actions": [
+        "invoke"
+      ],
+      "scope": {
+        "operations": [
+          "urn:op:tax-agent"
+        ],
+        "subjects": [
+          "urn:fictional:tax-agent:subject"
+        ],
+        "purposes": [
+          "urn:purpose:tax-agent"
+        ]
+      },
+      "validFrom": "2026-11-01T00:00:00.000Z",
+      "validUntil": "2026-12-01T00:00:00.000Z",
+      "status": {
+        "ref": "urn:fictional:tax-agent:firm-status",
+        "id": "agent"
+      }
+    }
+  ],
+  "authorityChains": {
+    "owner-agent": [
+      [
+        "urn:fictional:tax-agent:power",
+        "urn:fictional:tax-agent:firm-power",
+        "urn:fictional:tax-agent:agent-power"
+      ]
+    ]
+  },
+  "traceSteps": {
+    "1": "Request.",
+    "2": "Receive."
+  }
 }

@@ -415,6 +415,7 @@ export type AssessmentOutcome = "accepted" | "not-accepted" | "unresolved";
 
 /** Does the evaluator accept that `actor` speaks for `party` for this operation (A1/A3)? */
 export interface RepresentationAssessment {
+  readonly deciderRole?: string;
   readonly type: "representation-assessment";
   readonly evaluator: Iri;
   readonly actor: Iri;

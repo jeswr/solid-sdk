@@ -3,6 +3,8 @@
 import { z } from "zod";
 import { CORE_REASON_CODES } from "../core/types.js";
 import { ruleSchema } from "../derive/rules.js";
+import { chainPolicySchema } from "../mechanisms/authority-chain.js";
+import { dutyRuleSchema } from "../runtime/duties.js";
 import { INBOUND_CHECKS, OUTBOUND_CHECKS } from "../trace/types.js";
 
 const iri = z.string().regex(/^[a-z][a-z0-9+.-]*:[^\s<>"{}|\\^`]+$/i);
@@ -49,6 +51,9 @@ const baseDomainProfileSchema = z.strictObject({
       sources: z.array(iri),
       methods: strings,
       maxAgeDays: z.number().nonnegative(),
+      precedence: z
+        .strictObject({ sources: z.array(iri), freshness: z.enum(["source-first", "newer-first"]) })
+        .optional(),
       completeness: z.string().optional(),
       corroboration: z
         .strictObject({ sources: z.number().int().min(2), independent: z.boolean() })
@@ -108,6 +113,23 @@ const baseDomainProfileSchema = z.strictObject({
   decisionsForPerson: strings,
   modelReadings: strings,
   referenceAction: z.string().optional(),
+  authorityChains: chainPolicySchema.optional(),
+  forum: z
+    .strictObject({ party: slug, responseSeconds: z.number().positive(), observers: z.array(iri) })
+    .optional(),
+  agreementDeadlineSeconds: z.number().positive().optional(),
+  singleUse: z
+    .array(
+      z.strictObject({
+        action: z.string(),
+        register: iri,
+        item: iri,
+        operation: z.enum(["redeem", "release"]).default("redeem"),
+        maxAgeSeconds: z.number().positive(),
+        parameters: object.optional(),
+      }),
+    )
+    .default([]),
   organizations: z
     .strictObject({
       registrar: iri,
@@ -223,6 +245,38 @@ const root = z.strictObject({
 });
 const base = { id: slug, agent: slug, atStep: z.number().int().positive().optional() };
 const step = z.discriminatedUnion("type", [
+  z.strictObject({
+    ...base,
+    type: z.literal("record-segment"),
+    conversation: json,
+    attack: z.enum(["gap", "tamper"]).optional(),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("forum-claim"),
+    case: iri,
+    conversation: json,
+    respondent: slug,
+    segment: json,
+    allegation: z.enum(["fee-not-agreed", "onward-leak", "records-differ"]),
+    observation: json.optional(),
+  }),
+  z.strictObject({ ...base, type: z.literal("forum-answer"), case: iri, segment: json }),
+  z.strictObject({ ...base, type: z.literal("forum-audit") }),
+  z.strictObject({ ...base, type: z.literal("forum-decision"), case: iri }),
+  z.strictObject({
+    ...base,
+    type: z.literal("offgate-copy"),
+    statement: slug,
+    observer: slug,
+    recipient: iri,
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("general-duties"),
+    event: z.string().optional(),
+    discharge: z.boolean().default(false),
+  }),
   z.strictObject({ ...base, type: z.literal("instruct"), text: z.string() }),
   z.strictObject({
     ...base,
@@ -337,6 +391,7 @@ const step = z.discriminatedUnion("type", [
   z.strictObject({
     ...base,
     type: z.literal("read-reference"),
+    alterOriginal: z.boolean().optional(),
     reference: json,
     item: iri,
     purpose: iri,
@@ -438,7 +493,11 @@ export const scenarioSchema = z.strictObject({
       z.strictObject({
         id: iri,
         issuer: slug,
-        typ: z.enum(["awp-organization-identifier+jws", "awp-status-list+jws"]),
+        typ: z.enum([
+          "awp-organization-identifier+jws",
+          "awp-status-list+jws",
+          "awp-authority-holders+jws",
+        ]),
         value: object,
       }),
     )
@@ -457,7 +516,77 @@ export const scenarioSchema = z.strictObject({
       }),
     )
     .default([]),
-  resources: z.array(z.strictObject({ ref: iri, holder: slug, statements: strings })).default([]),
+  singleUseRegisters: z
+    .array(
+      z.strictObject({
+        party: slug,
+        maxAgeSeconds: z.number().positive(),
+        items: z.array(
+          z.strictObject({
+            id: iri,
+            issuer: slug,
+            state: z.enum(["active", "withdrawn"]),
+            redeemers: z.array(iri),
+            purposes: z.array(iri),
+            roleStatement: slug.optional(),
+            roleSource: iri.optional(),
+            roleClaim: z.string().optional(),
+            escrow: z
+              .strictObject({
+                parties: z.array(iri),
+                termsDigest: z.string(),
+                conditions: z.array(
+                  z.strictObject({
+                    kind: z.string(),
+                    issuer: iri,
+                    subject: iri,
+                    completeFor: z.string().optional(),
+                    equals: object.optional(),
+                  }),
+                ),
+              })
+              .optional(),
+          }),
+        ),
+        acceptances: z
+          .array(z.strictObject({ party: slug, item: iri, termsDigest: z.string() }))
+          .default([]),
+      }),
+    )
+    .default([]),
+  authorityLinks: z
+    .array(
+      z.strictObject({
+        id: iri,
+        issuer: slug,
+        subject: slug,
+        entity: iri,
+        parent: iri.optional(),
+        actions: strings,
+        scope: z.strictObject({
+          operations: z.array(iri),
+          subjects: z.array(iri),
+          purposes: z.array(iri),
+        }),
+        validFrom: z.iso.datetime(),
+        validUntil: z.iso.datetime(),
+        status: z.strictObject({ ref: iri, id: z.string() }),
+        mayDelegate: z.strictObject({ depth: z.number().int().positive() }).optional(),
+        holderSet: iri.optional(),
+      }),
+    )
+    .default([]),
+  authorityChains: z.record(slug, z.array(z.array(iri))).default({}),
+  resources: z
+    .array(
+      z.strictObject({
+        ref: iri,
+        holder: slug,
+        statements: strings,
+        originals: z.boolean().optional(),
+      }),
+    )
+    .default([]),
   grants: z
     .array(
       z.strictObject({
@@ -529,6 +658,7 @@ export const scenarioSchema = z.strictObject({
         })
         .optional(),
       standingRules: z.array(object).default([]),
+      duties: z.array(dutyRuleSchema).optional(),
     }),
   ),
   script: z.array(step),
