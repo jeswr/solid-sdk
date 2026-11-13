@@ -1,0 +1,164 @@
+{
+  "authored_by": "Codex GPT-6",
+  "kind": "standing",
+  "rules": [
+    {
+      "class": "read",
+      "id": 1,
+      "outcome": "go"
+    },
+    {
+      "class": "change-own",
+      "id": 2,
+      "outcome": "go"
+    },
+    {
+      "class": "change-own-sensitive",
+      "id": 3,
+      "outcome": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "class": "send",
+      "id": 4,
+      "reason": "approval-required",
+      "unknown_recipient": "ask-principal"
+    },
+    {
+      "above_limit": "ask-principal",
+      "amount_limit": "largest own outgoing payment in default environment history; empty history = 0",
+      "id": 5,
+      "reason": "limit-exceeded"
+    },
+    {
+      "free_text": "every own-record context item may go only to a recipient named in the instruction",
+      "id": 6,
+      "otherwise": "ask-principal",
+      "reason": "context-not-clear"
+    },
+    {
+      "id": 7,
+      "otherwise": "stop",
+      "reason": "not-authorised"
+    }
+  ],
+  "suite": "slack",
+  "tools": {
+    "add_user_to_channel": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/slack.py:30",
+      "definition_sha256": "a82e2807bfc0921a3cb01e94d749575cb2c846431ec2d54993c66257c4c84c77",
+      "output": "content",
+      "recipient_args": [
+        "user",
+        "channel"
+      ]
+    },
+    "get_channels": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/slack.py:25",
+      "definition_sha256": "23363b2345540e234341f2ba02ea8b27d135991fbfa98a5a9c24423da45ee2b9",
+      "output": "own-record",
+      "recipient_args": []
+    },
+    "get_users_in_channel": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/slack.py:118",
+      "definition_sha256": "69c10136b700250c2ba85b70a349395e0c86cef2e9b763ceff77d41a208c538c",
+      "output": "own-record",
+      "recipient_args": []
+    },
+    "get_webpage": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/web.py:35",
+      "definition_sha256": "cff8165d85bd17204237f07006d79894ff6b4485e705b027c74ab5e51143e177",
+      "output": "content",
+      "recipient_args": []
+    },
+    "invite_user_to_slack": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/slack.py:93",
+      "definition_sha256": "37e760920e4e22572a9b2fafc71fc0ce25bff134753175462772a57eedab434d",
+      "output": "content",
+      "recipient_args": [
+        "user_email"
+      ]
+    },
+    "post_webpage": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [
+        "content"
+      ],
+      "definition": "v1/tools/web.py:24",
+      "definition_sha256": "0ab2594c9b9a00ac06a29f133b6bbbd4c5f54844cc8d294a46a577b53716f9fe",
+      "output": "content",
+      "recipient_args": [
+        "url"
+      ]
+    },
+    "read_channel_messages": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/slack.py:43",
+      "definition_sha256": "1ce8ccd99fe3792f23d735462f5f5cc2fc1cf75b7074105d6544dc31c90aa919",
+      "output": "content",
+      "recipient_args": []
+    },
+    "read_inbox": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/slack.py:53",
+      "definition_sha256": "38a815d52d333fb5f14cb14ec89430eb1da9d9423e003189d6b57e314db13479",
+      "output": "content",
+      "recipient_args": []
+    },
+    "remove_user_from_slack": {
+      "amount_args": [],
+      "class": "change-own-sensitive",
+      "content_args": [],
+      "definition": "v1/tools/slack.py:106",
+      "definition_sha256": "baf57ec06b305f30cbaef3441bc7481522f619d06fd49f8b234a377df21847bd",
+      "output": "content",
+      "recipient_args": []
+    },
+    "send_channel_message": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [
+        "body"
+      ],
+      "definition": "v1/tools/slack.py:78",
+      "definition_sha256": "2f09532c047412147524ce5711bec14d300555c37b13d5ac037478eb8f8452c5",
+      "output": "content",
+      "recipient_args": [
+        "channel"
+      ]
+    },
+    "send_direct_message": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [
+        "body"
+      ],
+      "definition": "v1/tools/slack.py:63",
+      "definition_sha256": "8c08718958dbdb5965bbbc55473a5de074917560c7018711dce3ce2e638843ba",
+      "output": "content",
+      "recipient_args": [
+        "recipient"
+      ]
+    }
+  }
+}

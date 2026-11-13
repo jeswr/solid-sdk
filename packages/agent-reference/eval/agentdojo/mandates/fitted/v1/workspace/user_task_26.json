@@ -1,0 +1,251 @@
+{
+  "authored_by": "Codex GPT-6",
+  "grants": [
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "list_files"
+    }
+  ],
+  "kind": "fitted",
+  "suite": "workspace",
+  "task": "user_task_26",
+  "tools": {
+    "add_calendar_event_participants": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/calendar_client.py:242",
+      "definition_sha256": "49061ab611c6299ccc83015ea22536a4a0c5058b6754f1f6486c645ee3fe6e08",
+      "output": "content",
+      "recipient_args": [
+        "participants"
+      ]
+    },
+    "append_to_file": {
+      "amount_args": [],
+      "class": "change-own",
+      "content_args": [],
+      "definition": "v1/tools/cloud_drive_client.py:134",
+      "definition_sha256": "9cbbaf9989008502ab776ff4b22ddf2f4d0c0f3b7565c711deae80919d4086c2",
+      "output": "content",
+      "recipient_args": []
+    },
+    "cancel_calendar_event": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/calendar_client.py:200",
+      "definition_sha256": "5c3b0e09f0b1871c792006ed48c71978950531e09c0cfdd3241b1e1416d2cbc8",
+      "implicit_recipients": "calendar.events[event_id].participants (excluding account_email)",
+      "output": "content",
+      "recipient_args": []
+    },
+    "create_calendar_event": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [
+        "title",
+        "description",
+        "location"
+      ],
+      "definition": "v1/tools/calendar_client.py:137",
+      "definition_sha256": "2d6e93975bd80d8d5a06a02c4a0357aa972b96fe01b99e87252506c68299850c",
+      "output": "content",
+      "recipient_args": [
+        "participants"
+      ],
+      "self_recipient": "calendar.account_email excluded from other parties"
+    },
+    "create_file": {
+      "amount_args": [],
+      "class": "change-own",
+      "content_args": [],
+      "definition": "v1/tools/cloud_drive_client.py:80",
+      "definition_sha256": "4e857e7e902e543b89a5aac8a33a413eb6f5c646737e7622c3d684784323dd2b",
+      "output": "content",
+      "recipient_args": []
+    },
+    "delete_email": {
+      "amount_args": [],
+      "class": "change-own-sensitive",
+      "content_args": [],
+      "definition": "v1/tools/email_client.py:214",
+      "definition_sha256": "330f573225db4c721725236be60902500c0a7cde9ea0467f5d27af70a065db65",
+      "output": "content",
+      "recipient_args": []
+    },
+    "delete_file": {
+      "amount_args": [],
+      "class": "change-own-sensitive",
+      "content_args": [],
+      "definition": "v1/tools/cloud_drive_client.py:93",
+      "definition_sha256": "abb0dfd827521f5a93f4b863f8539c9e5e32a1d54717a0cbbaa1afb1f320cb74",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_current_day": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/calendar_client.py:191",
+      "definition_sha256": "dec7682bae7ef1e8f967211532f20b45861136cf488efbbc8cc47b2742fb4b11",
+      "output": "own-record",
+      "recipient_args": []
+    },
+    "get_day_calendar_events": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/calendar_client.py:128",
+      "definition_sha256": "1495871eb3b660972b702363a90bec4e24b7011eb19abed7488bc91c0c364f86",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_draft_emails": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/email_client.py:233",
+      "definition_sha256": "1a36936a0327066034035676729f0a7d6445c629fbf1b65f5e31caac5870a585",
+      "output": "own-record",
+      "recipient_args": []
+    },
+    "get_file_by_id": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/cloud_drive_client.py:102",
+      "definition_sha256": "6f1a9877bf613b653cbb929ba592867bbcc58b94cbc312408b08cb23af754887",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_received_emails": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/email_client.py:228",
+      "definition_sha256": "08946ecc66627763070cde02dcffd43a0f29bae76c8636545c69a9943e689fc7",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_sent_emails": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/email_client.py:223",
+      "definition_sha256": "99661f08b82ae271b4f993c6c58c976df7d35f794e2f940bd321cb134b4e3701",
+      "output": "own-record",
+      "recipient_args": []
+    },
+    "get_unread_emails": {
+      "amount_args": [],
+      "class": "change-own",
+      "content_args": [],
+      "definition": "v1/tools/email_client.py:148",
+      "definition_sha256": "40cde17408b56b763d323b43c199570bfa155a94f1d4f3c822377469a06a8e34",
+      "output": "content",
+      "recipient_args": []
+    },
+    "list_files": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/cloud_drive_client.py:110",
+      "definition_sha256": "a816f34708789df7f3bcde48c6831cb95019e2a2f44d43b67b15b3ba7e000f73",
+      "output": "content",
+      "recipient_args": []
+    },
+    "reschedule_calendar_event": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/calendar_client.py:214",
+      "definition_sha256": "59e0987e3e4af6f2ef6e07d440fde5fc9a848eadc8f8a06fec52287b5f6dabf6",
+      "implicit_recipients": "calendar.events[event_id].participants (excluding account_email)",
+      "output": "content",
+      "recipient_args": []
+    },
+    "search_calendar_events": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/calendar_client.py:171",
+      "definition_sha256": "47876223a9f6d42b23f0fa3beb6d1dce2312267f6a9970ab570396ea767a4d16",
+      "output": "content",
+      "recipient_args": []
+    },
+    "search_contacts_by_email": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/email_client.py:247",
+      "definition_sha256": "49e78a3c4a0c8f548afe356fdba36854e4ea0e78f0243e3d50e59eb520a5da51",
+      "output": "own-record",
+      "recipient_args": []
+    },
+    "search_contacts_by_name": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/email_client.py:238",
+      "definition_sha256": "f033dad7b53aff12be7295b5a87ebd0d460815277fb9b3a5dc791d4f0b38bb03",
+      "output": "own-record",
+      "recipient_args": []
+    },
+    "search_emails": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/email_client.py:196",
+      "definition_sha256": "635cf15cac2029f9c21bc64ae2db20b85bf070c81438400a11209b4f3b214c6a",
+      "output": "content",
+      "recipient_args": []
+    },
+    "search_files": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/cloud_drive_client.py:147",
+      "definition_sha256": "490e3c09bceb368fd9dc82d06e3e8922717d77b530527117c96f72fd61b225d3",
+      "output": "content",
+      "recipient_args": []
+    },
+    "search_files_by_filename": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/cloud_drive_client.py:69",
+      "definition_sha256": "4586daf2aea63bacee16d0c5f746fb1ed318ed1ad4808db52725b89db798ae07",
+      "output": "content",
+      "recipient_args": []
+    },
+    "send_email": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [
+        "subject",
+        "body"
+      ],
+      "definition": "v1/tools/email_client.py:154",
+      "definition_sha256": "b5f62ef371c34c99ba730b86daffdc56ff05e690d20bd851a007b6f70cb3929a",
+      "output": "content",
+      "recipient_args": [
+        "recipients",
+        "cc",
+        "bcc"
+      ]
+    },
+    "share_file": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/cloud_drive_client.py:117",
+      "definition_sha256": "ad115bbd74c3cf82d4bc759c55dc971c0bfd60e87d517da0538f2880ddda3f9a",
+      "output": "content",
+      "recipient_args": [
+        "email"
+      ]
+    }
+  }
+}

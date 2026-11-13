@@ -1,0 +1,11 @@
+{
+  "authored_by": "Codex GPT-6",
+  "phase": "before injection tasks were read or imported",
+  "sha256": {
+    "mandates/standing/banking.json": "988b70dd911cf7811808d481713b8b5cf54ac26ae0f4df2461295a6299bf0e0e",
+    "mandates/standing/slack.json": "38f2947139e28037068f179d828956471590ade48f5e6cdfce89aa5c93d145db",
+    "mandates/standing/travel.json": "06ee25f34291061e0d0cdbc1e2d8a3a0a4af2d12e1e53885bc5fb54176908c3e",
+    "mandates/standing/workspace.json": "3b1fea3729ce527a8ff2e32686009f8f7f25f2b66bf949e90e7ba0988b0660c5",
+    "tool-classification.json": "fb3ba66c055468ee1fab5443c002a156c93963f0dabf150293094deb860bb13c"
+  }
+}

@@ -1,0 +1,328 @@
+{
+  "authored_by": "Codex GPT-6",
+  "grants": [
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "get_all_hotels_in_city"
+    },
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "get_hotels_prices"
+    },
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "get_rating_reviews_for_hotels"
+    },
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "get_all_restaurants_in_city"
+    },
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "get_cuisine_type_for_restaurants"
+    },
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "check_restaurant_opening_hours"
+    },
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "get_rating_reviews_for_restaurants"
+    },
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "get_restaurants_address"
+    },
+    {
+      "amounts": [],
+      "recipients": [],
+      "tool": "get_price_for_restaurants"
+    }
+  ],
+  "kind": "fitted",
+  "suite": "travel",
+  "task": "user_task_11",
+  "tools": {
+    "cancel_calendar_event": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/calendar_client.py:200",
+      "definition_sha256": "5c3b0e09f0b1871c792006ed48c71978950531e09c0cfdd3241b1e1416d2cbc8",
+      "implicit_recipients": "calendar.events[event_id].participants (excluding account_email)",
+      "output": "content",
+      "recipient_args": []
+    },
+    "check_restaurant_opening_hours": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:262",
+      "definition_sha256": "8855a807d3b455a48722e8b2158cb129a5c6a4cc296cb1ad9441f40c5624071e",
+      "output": "content",
+      "recipient_args": []
+    },
+    "create_calendar_event": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [
+        "title",
+        "description",
+        "location"
+      ],
+      "definition": "v1/tools/calendar_client.py:137",
+      "definition_sha256": "2d6e93975bd80d8d5a06a02c4a0357aa972b96fe01b99e87252506c68299850c",
+      "output": "content",
+      "recipient_args": [
+        "participants"
+      ],
+      "self_recipient": "calendar.account_email excluded from other parties"
+    },
+    "get_all_car_rental_companies_in_city": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:279",
+      "definition_sha256": "8aa0e0639bbdbb01788b4cea841aa5c1de5da63ea2594d80fea1b7cda212bc29",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_all_hotels_in_city": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:122",
+      "definition_sha256": "5377a4a4670d117dc9a65910bf0c18ee693f470fff21b71880564181a45de67c",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_all_restaurants_in_city": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:166",
+      "definition_sha256": "d764bdd29266a17162d47b8dbfe802db9760f4fdc12431b03b73350ba6baac2b",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_car_fuel_options": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:321",
+      "definition_sha256": "92be25297ee698e7066ad4014abb51dcf83fbd62d693d9f5b3523766787f8b8f",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_car_price_per_day": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:330",
+      "definition_sha256": "4fd14b87e959c980ed648837643f1b16011b0c0f599ff6e7c816fb6bf34fa63d",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_car_rental_address": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:312",
+      "definition_sha256": "fb934c34f7795f49bd7e6e4275542b9fc5ff777108852a3a5918bc2e26f31932",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_car_types_available": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:288",
+      "definition_sha256": "8863382b35f4c0f49046592e0adf45961846cde4d887de2922ecba5fa1e2ff9f",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_contact_information_for_restaurants": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:234",
+      "definition_sha256": "2ab8bd5543bcec872621ceea2017586520425f0c68c29c6b7b73ccfae0563abf",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_cuisine_type_for_restaurants": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:205",
+      "definition_sha256": "d7ee98c8f79bcaca42180a274140c3625eb01d2f96f2043b54010b7ac7fb33b5",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_day_calendar_events": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/calendar_client.py:128",
+      "definition_sha256": "1495871eb3b660972b702363a90bec4e24b7011eb19abed7488bc91c0c364f86",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_dietary_restrictions_for_all_restaurants": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:219",
+      "definition_sha256": "5533c3f8005276b9d9a2304e3947ba3689b148e74d41546bc445f5ce9fe0297f",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_flight_information": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:403",
+      "definition_sha256": "afba3ef3cfb04112bc63d3f8ffd8bfa00cd4e472d2271c7faabc700ed01c33c1",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_hotels_address": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:142",
+      "definition_sha256": "a37ee0d807baa0b8a0db2b5f503b5dc965817e29e3eecf8120a1425dddceb077",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_hotels_prices": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:131",
+      "definition_sha256": "2ec9a05247769f43b179a161d54b2681a3a01281bc85f3e8c3d49e0bff0914b4",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_price_for_restaurants": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:248",
+      "definition_sha256": "2d8b60a573d2e56c824e94c00424dbcc066869d0c7c94a521c0153ba5a5b837a",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_rating_reviews_for_car_rental": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:299",
+      "definition_sha256": "3959fd333ffceb656d73380e7f6b6e0bbaa4fcbb8f85187a07198c8c2015ff27",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_rating_reviews_for_hotels": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:149",
+      "definition_sha256": "3a2c8cf2ef8b7a094c59ece6a1fb98d6d504a71cf0a51a553ed460e981b3326a",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_rating_reviews_for_restaurants": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:191",
+      "definition_sha256": "e50ffa925aeb44874bdd96876c82fe36596a7db7ec4ef6e5e87dd5e8dfd5ccf5",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_restaurants_address": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:175",
+      "definition_sha256": "a251b175a306884ab0c7aa27ba6efea466ce52e2a494e57ee4f452d1198fb04d",
+      "output": "content",
+      "recipient_args": []
+    },
+    "get_user_information": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:104",
+      "definition_sha256": "877d09fd8a003d0c72254b19fb7c33d57d993daf2f4c36d5b7270c0f22b697d4",
+      "output": "own-record",
+      "recipient_args": []
+    },
+    "reserve_car_rental": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:382",
+      "definition_sha256": "2724b5be62f97f053d4e66800439e330538cca0b3d604374f1c254047d65f252",
+      "output": "content",
+      "recipient_args": [
+        "company"
+      ]
+    },
+    "reserve_hotel": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:339",
+      "definition_sha256": "697e7948acb4c42d38319d3ae557b2cc3fae4f21839a5ec8436934f79ab58f5f",
+      "output": "content",
+      "recipient_args": [
+        "hotel"
+      ]
+    },
+    "reserve_restaurant": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [],
+      "definition": "v1/tools/travel_booking_client.py:359",
+      "definition_sha256": "d4cacbeee46adf2b5802646ecc9306d033c97cc167ab1dad52bf243f2db6ca57",
+      "output": "content",
+      "recipient_args": [
+        "restaurant"
+      ]
+    },
+    "search_calendar_events": {
+      "amount_args": [],
+      "class": "read",
+      "content_args": [],
+      "definition": "v1/tools/calendar_client.py:171",
+      "definition_sha256": "47876223a9f6d42b23f0fa3beb6d1dce2312267f6a9970ab570396ea767a4d16",
+      "output": "content",
+      "recipient_args": []
+    },
+    "send_email": {
+      "amount_args": [],
+      "class": "send",
+      "content_args": [
+        "subject",
+        "body"
+      ],
+      "definition": "v1/tools/email_client.py:154",
+      "definition_sha256": "b5f62ef371c34c99ba730b86daffdc56ff05e690d20bd851a007b6f70cb3929a",
+      "output": "content",
+      "recipient_args": [
+        "recipients",
+        "cc",
+        "bcc"
+      ]
+    }
+  }
+}
