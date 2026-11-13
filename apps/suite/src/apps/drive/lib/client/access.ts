@@ -160,6 +160,38 @@ export function accessLabel(state: AccessState, resource: string, webId: string)
   }
 }
 
+/** Access discovery captured with a resource, kept as JSON (sst-8xm.74.1 replay). */
+export interface EndpointCapture {
+  readonly endpoint: string | null;
+  readonly wacHeaders: readonly string[];
+  readonly mode: string;
+}
+
+/** Validate a capture read back from storage the app does not control. */
+export function isEndpointCapture(value: unknown): value is EndpointCapture {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const capture = value as Record<string, unknown>;
+  return (
+    Object.keys(capture).length === 3 &&
+    (capture.endpoint === null || typeof capture.endpoint === "string") &&
+    Array.isArray(capture.wacHeaders) &&
+    capture.wacHeaders.every((name) => typeof name === "string" && /^wac(-|$)/i.test(name)) &&
+    typeof capture.mode === "string"
+  );
+}
+
+function accessMode(headers: Headers, wacHeaders: ReadonlySet<string>): string {
+  return JSON.stringify(
+    [...headers].filter(
+      ([name, value]) =>
+        name === "x-solid-demo-access-control" ||
+        /^(acp|acr)(-|$)/i.test(name) ||
+        wacHeaders.has(name) ||
+        value.includes(ACP_NS),
+    ),
+  );
+}
+
 export function accessControl(http: typeof globalThis.fetch, storageUrl: string) {
   const auxiliaryResources = new Set<string>();
   /** Ordinary content must never create, replace or remove an access-control document,
@@ -217,27 +249,33 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     return acl;
   }
   /** Capture endpoint, access model and mode discovery as one immutable assertion. */
+  /** The discovery a later write must still see, as plain JSON an offline queue can keep. */
+  function endpointCapture(resource: string, captured: Headers): EndpointCapture {
+    const wacHeaders = [...captured.keys()].filter((name) => /^wac(-|$)/i.test(name));
+    return {
+      endpoint: discover(resource, captured, true) ?? null,
+      wacHeaders,
+      mode: accessMode(captured, new Set(wacHeaders)),
+    };
+  }
+  function verifyCapture(
+    resource: string,
+    capture: EndpointCapture,
+  ): NonNullable<CommitChecks["verifyHeaders"]> {
+    const wacHeaders = new Set(capture.wacHeaders);
+    return (headers) => {
+      if (
+        (discover(resource, headers, true) ?? null) !== capture.endpoint ||
+        accessMode(headers, wacHeaders) !== capture.mode
+      )
+        throw new DriveAccessChangedError(["The item's ACL endpoint or access discovery changed"]);
+    };
+  }
   function captureEndpoint(
     resource: string,
     captured: Headers,
   ): NonNullable<CommitChecks["verifyHeaders"]> {
-    const endpoint = discover(resource, captured, true);
-    const wacHeaders = new Set([...captured.keys()].filter((name) => /^wac(-|$)/i.test(name)));
-    const mode = (headers: Headers) =>
-      JSON.stringify(
-        [...headers].filter(
-          ([name, value]) =>
-            name === "x-solid-demo-access-control" ||
-            /^(acp|acr)(-|$)/i.test(name) ||
-            wacHeaders.has(name) ||
-            value.includes(ACP_NS),
-        ),
-      );
-    const capturedMode = mode(captured);
-    return (headers) => {
-      if (discover(resource, headers, true) !== endpoint || mode(headers) !== capturedMode)
-        throw new DriveAccessChangedError(["The item's ACL endpoint or access discovery changed"]);
-    };
+    return verifyCapture(resource, endpointCapture(resource, captured));
   }
   /** A representation validator cannot identify its associated ACL endpoint. */
   function verifyEndpoint(
@@ -459,6 +497,8 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
      * installing a policy or adopting a later endpoint.
      */
     captureEndpoint,
+    endpointCapture,
+    verifyCapture,
     async checkOwn(
       own: { readonly url: string; readonly policy: OwnAccess | null } | undefined,
     ): Promise<void> {
