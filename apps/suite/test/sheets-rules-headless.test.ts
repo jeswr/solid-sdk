@@ -81,6 +81,11 @@ vi.mock("@univerjs/preset-sheets-find-replace", () => ({
   UniverSheetsFindReplacePreset: () => ({}),
   OpenReplaceDialogOperation: { id: "ui.operation.open-replace-dialog" },
 }));
+vi.mock("@univerjs/preset-sheets-hyper-link", () => ({
+  UniverSheetsHyperLinkPreset: () => ({}),
+  InsertHyperLinkOperation: { id: "sheet.operation.insert-hyper-link" },
+  OpenHyperLinkEditPanelOperation: { id: "sheet.operation.open-hyper-link-edit-panel" },
+}));
 vi.mock("@univerjs/preset-sheets-sort/locales/en-US", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-filter/locales/en-US", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-find-replace/locales/en-US", () => ({ default: {} }));

@@ -193,6 +193,8 @@ export type CsvImportResult =
 export type SortResult = { status: "sorted" } | { status: "blocked"; reason: string };
 
 export interface SheetEngine {
+  /** Open the native cell link editor (also edits/removes an existing link). */
+  editLink?(): Promise<void>;
   sortRange?(options: {
     scope: "range" | "sheet";
     column: number;

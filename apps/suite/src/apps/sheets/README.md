@@ -22,6 +22,22 @@ and discarded when Write is restored. That transition also clears local undo his
 The initial comments-loading lock blocks sort and replacement; find and filter remain
 available.
 
+Edit → Insert or edit link and Ctrl/Cmd+K in the grid open the cell link editor.
+The ribbon and a linked cell's popup also offer link editing and removal. Links display
+their label inside the cell and remain clickable in view-only workbooks. Editing and
+removal are blocked while comments load or Write access is unavailable, including native
+commands issued from an already-open popup.
+
+Sheets reuses Docs' `validLink` policy: only absolute HTTP, HTTPS and mailto URLs without
+credentials or embedded controls are allowed. Links open in a new tab with
+`noopener,noreferrer`, including links to other suite documents. Unsafe link targets on
+insert/update are refused; pasted rich text and stored snapshots with unsafe links become
+plain cell text before rendering. A cell containing any unsafe rich-text link is flattened
+as a unit, keeping its visible label. Workbook snapshots retain safe links through normal
+save, reload and copy. CSV exports use link URL text instead of its label; CSV imports keep
+all fields as text, including formula-looking fields. XLSX import/export keeps visible
+labels but omits hyperlink relationships, as documented in `lib/xlsx/README.md`.
+
 The editor and list menu open the shell's sharing dialog for the workbook container.
 WAC grants update both `acl:accessTo` and `acl:default`, covering metadata, the engine
 snapshot, sheet projections and versions that inherit this policy. Existing member ACLs
