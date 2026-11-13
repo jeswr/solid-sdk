@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6
+
+import { monthKey, putTransaction } from "@jeswr/solid-money";
 import {
   type CategoryRule,
   type CsvOptions,
@@ -11,13 +13,7 @@ import {
   sniffDateFormat,
   sniffDelimiter,
 } from "../import";
-import {
-  conditionalHeaders,
-  importStatement,
-  MoneyIoError,
-  monthKey,
-  putTransaction,
-} from "../model";
+import { conditionalHeaders, importStatement, MoneyIoError } from "../model";
 import { parseMoney } from "../reports";
 import { type MoneyClient, storeOf } from "./container";
 import { allTransactions, categorised, transactionKey } from "./ledger";

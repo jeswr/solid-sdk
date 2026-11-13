@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import type { Category, Range, Transaction } from "@jeswr/solid-money";
 import { toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -19,7 +20,6 @@ import { loadCategories } from "../lib/data/categories";
 import { moneyRoot } from "../lib/data/container";
 import { allTransactions, type LedgerFilters, ledgerRows } from "../lib/data/ledger";
 import { loadRules, RulesFileError, type SavedRule } from "../lib/data/rules";
-import type { Category, Range, Transaction } from "../lib/model";
 export interface Snapshot {
   accounts: AccountSummary[];
   transactions: Transaction[];

@@ -1,4 +1,5 @@
 /* AUTHORED-BY Codex GPT-6 */
+/* AUTHORED-BY Claude Opus 5.5 */
 .hm-connect {
   color: var(--foreground);
 }
@@ -221,6 +222,31 @@
   height: 20px;
   accent-color: var(--primary);
 }
+.hm-connect-bank {
+  display: grid;
+  gap: var(--space-2);
+  border: 0;
+  margin: 0;
+  padding: 0;
+  max-width: 32rem;
+}
+.hm-connect-bank legend {
+  margin-bottom: var(--space-2);
+}
+.hm-connect-bank select,
+.hm-connect-bank input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+}
+.hm-connect-bank-hint {
+  color: var(--foreground-muted);
+}
 .hm-connect-actions {
   display: flex;
   flex-wrap: wrap;
@@ -251,6 +277,11 @@
   border: 2px dashed var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
+}
+/* The bank choice is incomplete: a dropped file is ignored, like the disabled picker. */
+.hm-connect-drop[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .hm-connect-drop:focus-within {
   outline: 2px solid var(--ring);

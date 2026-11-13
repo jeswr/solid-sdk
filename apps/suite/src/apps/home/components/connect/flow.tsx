@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   createSourceAuth,
@@ -29,6 +30,14 @@ import {
 import type { DataCategory } from "../../lib/model/domains";
 import { useConnectors } from "../../state/connectors";
 import { useHomeSession } from "../home-app";
+import {
+  BANK_PROBLEM_ID,
+  BANK_STATEMENTS_ID,
+  BankImportOptions,
+  bankChoiceProblem,
+  bankStatementsAdapter,
+  DEFAULT_BANK_CHOICE,
+} from "./bank-options";
 import { domainForWrittenDocument } from "./completion";
 import { entries, registry, spotifyAdapterFor } from "./config";
 import {
@@ -72,6 +81,10 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   );
   const adapter = spotify ? spotifyAdapterFor(personalClientId) : registry.adapterById(entry.id);
   const fileAdapter = fileAdapterById(entry.id);
+  const bank = entry.id === BANK_STATEMENTS_ID && !!fileAdapter;
+  // The bank format and account label the user chose for the next file import.
+  const [bankChoice, setBankChoice] = useState(DEFAULT_BANK_CHOICE);
+  const bankProblem = bank ? bankChoiceProblem(bankChoice) : undefined;
   const metadata = fileMode ? fileAdapter?.metadata : adapter?.metadata;
   const scopes = fileMode ? [] : (metadata?.scopes ?? []);
   const [selected, setSelected] = useState<readonly string[]>(
@@ -136,7 +149,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   }, [step, phase]);
 
   async function start(file?: File) {
-    if (running.current || !navigator.onLine) return;
+    if (running.current || !navigator.onLine || bankProblem) return;
+    // Bank statements take the chosen format and label; Auto-detect is the default adapter.
+    const importAdapter = bank && file ? bankStatementsAdapter(bankChoice) : fileAdapter;
     running.current = true;
     const abort = new AbortController();
     controller.current = abort;
@@ -192,9 +207,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             abort.signal.throwIfAborted();
             setProgress(value);
           };
-          return mode === "file" && fileAdapter && file
+          return mode === "file" && importAdapter && file
             ? await runFileImport({
-                adapter: fileAdapter,
+                adapter: importAdapter,
                 file: fileWithSignal(file, abort.signal),
                 podWriter: writer,
                 onProgress,
@@ -401,6 +416,16 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   {report.unsupported?.length ? (
                     <p>Some parts of this export aren't supported yet.</p>
                   ) : null}
+                  {/* Only when Auto-detect wrote nothing: other warnings come with written data. */}
+                  {bank &&
+                  bankChoice.format === "auto" &&
+                  report.unsupported?.length &&
+                  !(report.state?.counts.items ?? report.written.length) ? (
+                    <p>
+                      If this is an HSBC UK statement, choose HSBC UK as the bank format, add an
+                      account label and sync again.
+                    </p>
+                  ) : null}
                   <div className="hm-connect-actions">
                     {importedDomains.map((domain) => (
                       <Link
@@ -563,14 +588,16 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                       Use {entry.name} connection
                     </button>
                   )}
+                  {bank && <BankImportOptions value={bankChoice} onChange={setBankChoice} />}
                   <label
                     className="hm-connect-drop"
                     htmlFor="connector-file"
+                    aria-disabled={bankProblem ? true : undefined}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => {
                       event.preventDefault();
                       const file = event.dataTransfer.files[0];
-                      if (file) void start(file);
+                      if (file && !bankProblem) void start(file);
                     }}
                   >
                     Export file — drop it here or choose a file
@@ -580,6 +607,8 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                       id="connector-file"
                       type="file"
                       accept={fileAdapter.accept}
+                      disabled={!!bankProblem}
+                      aria-describedby={bankProblem ? BANK_PROBLEM_ID : undefined}
                       onChange={(event) => {
                         const file = event.target.files?.[0];
                         if (file) void start(file);
@@ -590,6 +619,8 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   <button
                     type="button"
                     className="hm-connect-button"
+                    disabled={!!bankProblem}
+                    aria-describedby={bankProblem ? BANK_PROBLEM_ID : undefined}
                     onClick={() => fileInput.current?.click()}
                   >
                     Choose file

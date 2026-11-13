@@ -182,6 +182,56 @@ lower that limit (minimum 1). Stop retaining origins once full while preserving 
 `prov:wasDerivedFrom` on each written document and item. Cover distinct item source URLs
 across entries after reconciliation manifests are released, plus the persisted run summary.
 
+Bank statements use `src/bank-statements/csv.ts` for both synchronous `parseBankCsv`
+and streamed imports. Detect known normalized Revolut and Starling headers exactly, and
+Monzo by column name (required Transaction ID/Date/Time/Type/Name/Amount/Currency, only
+known optional columns, Local amount/currency and Money Out/In in pairs, no duplicates);
+unmatched headers retain the original generic aliases, values, dates, IDs and snapshot
+behavior in `generic-csv.ts`. Explicit csvFormat constrains detection and disables fallback.
+Headerless HSBC UK requires explicit `csvFormat: 'hsbc-uk'`
+and a stable user `accountLabel` via `createBankStatementsFileAdapter`; hosts (the CLI's
+`--format`/`--account-label`, Suite's connect flow) validate input with the exported
+`BANK_CSV_FORMATS` and `validateBankOptions`, never a copy of the rules. Labels are normalised
+once in `csv.ts` (`normaliseAccountLabel`: reject bidi controls, prepended marks, noncharacters; strip Cc/Cf except joiners/tags doing visible work; NFC; collapse whitespace; trim; 256 code points) and that
+string is both hashed and stored, so never hash or store a raw label. Only the four bank CSV
+layouts use a label; OFX/QFX and generic CSV report it unused. Keep all skipped
+bank-specific rows inside the source-row budget. Use exact decimal strings/BigInt for bank-specific values,
+including signed Revolut Amount minus Fee; append a nonzero fee to the description as
+` (fee <fee> <currency>)`, omit zero fees. Descriptions need visible text after control
+stripping (solid-money rejects others): fall back to the bank's own description/type
+columns (Starling joins only the visible Counter Party/Reference parts), else skip and
+count the row. Validate the optional IANA timeZone; default
+to Europe/London for zone-free Revolut timestamps and use compatible gap/repeat handling.
+Known-bank CSV dates reject invalid calendars; OFX retains its lenient date parser and xsd:dateTime at UTC midnight.
+Bank-specific SHA-256 IDs exclude filenames; HSBC uses a per-file identical-row occurrence
+index (overlapping exports rely on row order). Preserve balances in fallback identity.
+`money-documents.ts` writes known banks only through `@jeswr/solid-money`'s generated model
+(MoneyDocument/putAccount/putTransaction; never hand-written accessors or triples) to
+`finance/bank/<bank>-<account-slug>/account.ttl` and `<YYYY-MM>.ttl` (+ `-part-<n>.ttl`),
+months from solid-money's `monthKey`. Read each document, upsert by `#txn-<sha256>` and
+replace under its precondition; compact stored blank labels on read; pass the account
+document as `sourceUrl` (Suite Money rejects a non-http `prov:wasDerivedFrom`). Plan and
+measure every document before the first write: `BANK_DOCUMENT_BUDGET` (2,000 transactions,
+4 MiB N-Triples + provenance allowance, 1,000 parts) splits into parts, and otherwise
+throws `BankDocumentBudgetError` with nothing written; never truncate. Per import, at most
+50 accounts and 600 documents: `BankMoneyPlan.add` fails while parsing (before any read),
+and every planning read counts (reuse the absent probed part; never read it twice). Skip
+and count known-bank rows posted before 1970-01-01 or over a year ahead. Writes are
+sequential; a failed write leaves earlier documents and a re-run converges. Account/month read
+errors fail the import; only the legacy comparison read is advisory. No migration or
+legacy-subject cleanup.
+Generic CSV and OFX retain the origin/main IDs, numeric/date policies, datatypes and
+replacement semantics in `finance/bank-transactions.ttl`; the two layouts never touch each other.
+Reject near-miss bank headers sharing three or more normalized names instead of generic
+fallback. All generic source rows, including skipped/malformed rows, consume the row budget. Bank-specific CSV fields
+are capped at 16 KiB characters, amounts at 64 digits, and the shared file/record/header/column
+caps still apply. Explicit format mismatches return bounded `unsupported` diagnostics;
+abort closes the reader before any new Pod I/O.
+Generic CSV and OFX retain their original Invoice-only mapping. Known banks share Suite
+Money's wire format but Money reads the storage-root `money/` tree: do not claim this
+connector is visible in Money or escape the connector writer boundary. The README records
+this integration gap, the layouts, the budget and every omitted bank field.
+
 CON-14 adds the optional `PodWriter.writeBinary`/`remove` ports and `ctx.writeBinary`/`ctx.remove`
 for non-RDF resources and source deletions. Keep binaries inside the connector container, never send RDF through it, default
 to create-only, and replace only under a strong ETag.

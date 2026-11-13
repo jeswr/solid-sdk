@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { Transaction } from "@jeswr/solid-money";
 import {
   Button,
   Dialog,
@@ -21,7 +22,6 @@ import { z } from "zod";
 import { type AccountSummary, accountTypes, createAccount } from "../lib/data/accounts";
 import { resolveCategory } from "../lib/data/categories";
 import { addTransaction, categorised, createTransfer, updateTransaction } from "../lib/data/ledger";
-import type { Transaction } from "../lib/model";
 import { parseMoney } from "../lib/reports";
 import { useMoney } from "../state/money-context";
 export function MoneySelect({

@@ -362,6 +362,8 @@
     "@jeswr/solid-health": "workspace:*",
     "@jeswr/solid-listening": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
+    "@jeswr/solid-dpop": "workspace:*",
+    "@jeswr/solid-money": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",

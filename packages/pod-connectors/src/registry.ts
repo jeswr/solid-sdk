@@ -205,8 +205,8 @@ export const TIER_C: readonly CatalogEntry[] = [
     "bank-statements",
     "Bank statements",
     ["finance"],
-    "Transactions into Finance.",
-    "CSV / OFX statements",
+    "Revolut, HSBC UK, Monzo and Starling CSV or OFX/QFX transactions into Finance; HSBC requires explicit format selection and an account label.",
+    "Bank CSV / OFX statements",
   ),
   C(
     "google-takeout",

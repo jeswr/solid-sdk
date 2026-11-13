@@ -1,0 +1,31 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Minimal admission ontology over the existing Suite Money IRIs.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#> .
+@prefix pm: <https://jeswr.org/ns/pod-money#> .
+@prefix schema: <https://schema.org/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+fin:FinancialAccount a owl:Class ; rdfs:label "Account"@en ; skos:definition "Account in the Suite Money finance projection."@en .
+fin:BudgetCategory a owl:Class ; rdfs:label "Category"@en ; skos:definition "Category in the Suite Money finance projection."@en .
+fin:Balance a owl:Class ; rdfs:label "Balance"@en ; skos:definition "Balance in the Suite Money finance projection."@en .
+fin:MonetaryAmount a owl:Class ; rdfs:label "MonetaryAmount"@en ; skos:definition "MonetaryAmount in the Suite Money finance projection."@en .
+fin:Transaction a owl:Class ; rdfs:label "Transaction"@en ; skos:definition "Transaction in the Suite Money finance projection."@en .
+fin:Transfer a owl:Class ; rdfs:label "Transfer"@en ; skos:definition "Transfer in the Suite Money finance projection."@en .
+fin:Payment a owl:Class ; rdfs:label "Payment"@en ; skos:definition "Payment in the Suite Money finance projection."@en .
+fin:CardPayment a owl:Class ; rdfs:label "CardPayment"@en ; skos:definition "CardPayment in the Suite Money finance projection."@en .
+skos:prefLabel a owl:DatatypeProperty ; rdfs:label "label"@en ; skos:definition "The label of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+skos:broader a owl:ObjectProperty ; rdfs:label "parent"@en ; skos:definition "The parent of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+pm:ofAccount a owl:ObjectProperty ; rdfs:label "balanceAccount"@en ; skos:definition "The balanceAccount of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:currency a owl:DatatypeProperty ; rdfs:label "currency"@en ; skos:definition "The currency of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+pm:account a owl:ObjectProperty ; rdfs:label "account"@en ; skos:definition "The account of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:description a owl:DatatypeProperty ; rdfs:label "description"@en ; skos:definition "The description of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+pm:category a owl:ObjectProperty ; rdfs:label "category"@en ; skos:definition "The category of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+fin:hasCounterparty a owl:ObjectProperty ; rdfs:label "payee"@en ; skos:definition "The payee of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+prov:wasDerivedFrom a owl:ObjectProperty ; rdfs:label "derivedFrom"@en ; skos:definition "The derivedFrom of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+fin:debitAccount a owl:ObjectProperty ; rdfs:label "debitAccount"@en ; skos:definition "The debitAccount of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+fin:creditAccount a owl:ObjectProperty ; rdfs:label "creditAccount"@en ; skos:definition "The creditAccount of a Money record."@en ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
