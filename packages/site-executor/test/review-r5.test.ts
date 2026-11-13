@@ -226,7 +226,7 @@ describe("r5 payment wire binding", () => {
     "multipart",
     "path",
     "header",
-  ])("#1 allows whole payment values and unrelated static submit literals (%s)", async (surface) => {
+  ])("#1 Rule W refuses differently named options and payment-only submit literals (%s)", async (surface) => {
     const f = fixture();
     f.read.inputs = [
       param("delivery", ["deliveryMethod"], { location: "query", default: "standard" }),
@@ -246,15 +246,10 @@ describe("r5 payment wire binding", () => {
         surface === "form" ? "application/x-www-form-urlencoded" : "multipart/form-data";
       f.pay.request.bodyTemplate = "shipping={shipping}&submit=Pay";
     }
-    const executor = f.executor();
-    const approval = await f.start(executor);
-    expect(approval.status, approval.error).toBe("needs-approval");
-    expect(approval.approval?.amount).toBe("20");
-    f.gate.approve(approval.approval?.id ?? "");
-    expect((await executor.execute(f.request, { approvalId: approval.approval?.id })).status).toBe(
-      "done",
-    );
-    expect(f.transport.mock.calls.filter(([url]) => String(url).includes("/pay"))).toHaveLength(1);
+    const result = await f.start();
+    expect(result.status).toBe("refused");
+    expect(result.error).toContain("payment sends");
+    expect(f.transport.mock.calls.some(([url]) => String(url).includes("/pay"))).toBe(false);
   });
 
   it("#1 counts payment uses across locations and rejects direct-buy quantity shadows", async () => {
@@ -291,7 +286,7 @@ describe("r5 payment wire binding", () => {
         : [param("shipping", ["deliveryMethod"], { default: "standard" })];
     f.pay.csrf = [
       {
-        source: { kind: "cookie", name: "token" },
+        source: { kind: "json", urlTemplate: `${O}/token`, pointer: "/token" },
         target: {
           kind: "form",
           name: mode === "identity" ? "order" : mode === "quote name" ? "delivery" : "shipping",
@@ -299,6 +294,13 @@ describe("r5 payment wire binding", () => {
       },
     ];
     f.pay.request.bodyTemplate = mode === "quote name" ? '{"shipping":"{shipping}"}' : "{}";
+    f.transport.mockImplementation(async (url, init) =>
+      String(url).endsWith("/token")
+        ? Response.json({ token: "secret" })
+        : init?.method === "GET"
+          ? Response.json({ items: [order] })
+          : Response.json({}),
+    );
     const result = await f.start();
     expect(result.status).toBe("refused");
     expect(f.transport.mock.calls.some(([url]) => String(url).includes("/pay"))).toBe(false);
@@ -320,19 +322,13 @@ describe("r5 payment wire binding", () => {
     expect(f.transport.mock.calls.some(([url]) => String(url).includes("/pay"))).toBe(false);
   });
 
-  it("#1 allows exact direct-buy quantity with an unrelated submit literal", async () => {
+  it("#1 Rule W refuses an unrelated direct-buy submit literal", async () => {
     const f = fixture(true);
     f.pay.inputs.push(param("qty", ["orderQuantity"], { range: `${X}integer`, default: "3" }));
     f.pay.request.bodyTemplate = '{"item":"{item}","qty":{qty},"submit":"Pay"}';
-    const executor = f.executor();
-    const approval = await f.start(executor);
-    expect(approval.status).toBe("needs-approval");
-    expect(approval.approval?.amount).toBe("60");
-    f.gate.approve(approval.approval?.id ?? "");
-    expect((await executor.execute(f.request, { approvalId: approval.approval?.id })).status).toBe(
-      "done",
-    );
-    expect(f.transport.mock.calls.at(-1)?.[1]?.body).toBe('{"item":"104","qty":3,"submit":"Pay"}');
+    const result = await f.start();
+    expect(result.status).toBe("refused");
+    expect(result.error).toContain("payment sends /submit");
   });
 });
 
@@ -433,9 +429,10 @@ describe("r5 complete order identity evidence", () => {
       param("delivery", ["deliveryMethod"], { location: "query", default: "standard" }),
     ];
     f.pay.inputs = [
-      param("shipping", ["deliveryMethod"], { default: "standard" }),
+      param("delivery", ["deliveryMethod"], { default: "standard", location: "form" }),
       param("order", ["object", "orderNumber"], { default: "104" }),
     ];
+    f.pay.request.contentType = "application/x-www-form-urlencoded";
     const other = {
       ...f.read,
       id: "urn:identity",

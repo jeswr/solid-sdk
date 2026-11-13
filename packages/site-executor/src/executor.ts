@@ -72,6 +72,7 @@ import { outcomeTurtle } from "./outcome.js";
 import { secretRedactor } from "./secrets.js";
 import { UriTemplateError } from "./uri-template.js";
 import { BindingError, expandIri, idFromIri, isClassRange } from "./values.js";
+import { csrfFieldName, effectiveWireFields } from "./wire.js";
 
 export type ExecutionStatus =
   | "done"
@@ -230,6 +231,7 @@ interface Response0 {
   url: URL;
   body: string;
   createdLocation?: string;
+  requestBody?: CompiledRequest["body"];
 }
 
 function describeRule(rule: NonNullable<Operation["csrf"]>[number]): string {
@@ -297,6 +299,7 @@ interface ObservationRecord {
   output?: ExtractOutput;
   createdLocation?: string;
   inputs?: Record<string, string>;
+  compiled?: CompiledRequest;
 }
 interface Progress {
   index: number;
@@ -496,6 +499,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         status: res.status,
         url,
         body: await readBody(ctx, res),
+        requestBody: currentBody,
         ...(createdLocation ? { createdLocation } : {}),
       };
     }
@@ -549,13 +553,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
     return token;
   }
 
-  async function runOperation(
+  async function prepareCsrf(
     ctx: RunContext,
-    operation: Operation,
-    values: Record<string, string>,
     compiled: CompiledRequest,
-    committed?: () => void,
-  ): Promise<{ observation: ObservationRecord; items: ExtractedItem[] }> {
+    values: Record<string, string>,
+    payment = false,
+  ): Promise<void> {
     for (const rule of compiled.csrf) {
       // A token must never replace an already approved effectful value.
       const name = rule.target.name;
@@ -569,9 +572,26 @@ export function createExecutor(options: ExecutorOptions): Executor {
                 typeof compiled.body.value === "object" &&
                 Object.hasOwn(compiled.body.value, name)
               : compiled.body?.fields.some(([key]) => key === name);
-      if (collision) throw new BindingError("CSRF target would overwrite an approved input");
+      const duplicate =
+        payment &&
+        effectiveWireFields(compiled).some((field) => field.name === csrfFieldName(compiled, rule));
+      if (collision || duplicate) {
+        if (payment) throw new MoneyRefusal("CSRF target would overwrite an approved input");
+        throw new BindingError("CSRF target would overwrite an approved input");
+      }
       applyCsrfToken(compiled, rule, await csrfToken(ctx, compiled, rule, values));
     }
+  }
+
+  async function runOperation(
+    ctx: RunContext,
+    operation: Operation,
+    values: Record<string, string>,
+    compiled: CompiledRequest,
+    committed?: () => void,
+    csrfPrepared = false,
+  ): Promise<{ observation: ObservationRecord; items: ExtractedItem[] }> {
+    if (!csrfPrepared) await prepareCsrf(ctx, compiled, values);
     const accept =
       operation.extraction?.format === "json"
         ? "application/json"
@@ -613,6 +633,13 @@ export function createExecutor(options: ExecutorOptions): Executor {
         ...(res.createdLocation ? { createdLocation: res.createdLocation } : {}),
         output: out,
         inputs: { ...values },
+        compiled: {
+          ...compiled,
+          url: new URL(res.url.href),
+          body: res.requestBody,
+          // A redirected path has no template variables from the original route.
+          pathFields: res.url.pathname === compiled.url.pathname ? compiled.pathFields : [],
+        },
       },
       items: out.items,
     };
@@ -1041,6 +1068,46 @@ export function createExecutor(options: ExecutorOptions): Executor {
             });
           let evidence: MoneyEvidence | undefined;
           const payment = effect === "payment";
+          // Rule W checks the final request, including tokens. Fingerprints retain
+          // their established pre-decoration semantics for repeat protection.
+          if (payment) {
+            if (compiled.csrf.some((rule) => rule.source.kind !== "cookie")) {
+              // These preparatory reads now precede payment consent, so authorize
+              // them as reads before acquiring any token from the site.
+              const tokenRead: GateRequest = {
+                site: origin,
+                target,
+                effect: "read",
+                inputs: {},
+                summary: `Read payment token on ${new URL(origin).host}`,
+                digest: approvalDigest({
+                  site: origin,
+                  modelVersion: model.version,
+                  target,
+                  effect: "read",
+                  inputs: resolved,
+                  binding: { csrf: compiled.csrf, index: i },
+                }),
+              };
+              let decision: Awaited<ReturnType<Gate["authorize"]>>;
+              try {
+                decision = await budget(ctx, gate.authorize(structuredClone(tokenRead)));
+              } catch (error) {
+                if (error instanceof LimitError) throw error;
+                return await finish({
+                  status: "error",
+                  error: "the approval gate failed",
+                  errorKind: "gate",
+                });
+              }
+              if (decision.kind !== "allow")
+                return await finish({
+                  status: "denied",
+                  error: "payment token read was not authorized",
+                });
+            }
+            await prepareCsrf(ctx, compiled, resolved, true);
+          }
           if (flow && normaliseEffect(op.effect) !== "read") {
             const lastWrite = steps
               .slice(0, i)
@@ -1075,6 +1142,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
                           values: record.inputs,
                           sources: stepSources(flow, n),
                           truncation: record.output?.truncation,
+                          compiled: record.compiled,
                         },
                       ]
                     : [];
@@ -1227,6 +1295,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
                   });
                 }
               : undefined,
+            payment,
           );
           checkDeadline(ctx);
           progress.observations.push(out.observation);

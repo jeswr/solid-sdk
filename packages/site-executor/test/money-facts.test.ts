@@ -285,6 +285,7 @@ describe("money from trusted reads in the same flow", () => {
         ],
       },
     };
+    pay.request.contentType = "application/x-www-form-urlencoded";
     model.operations.push(add, total);
     const additions = [
       { operation: add.id, bind: { ...payStep.bind } },
@@ -362,7 +363,7 @@ describe("money from trusted reads in the same flow", () => {
       sessions: new InMemorySessions(),
     }).execute(request(""));
     expect(result.status).toBe("refused");
-    expect(result.error).toContain("GBP 20");
+    expect(result.error).toContain("payment sends /amount");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -426,6 +427,7 @@ describe("money from trusted reads in the same flow", () => {
         ],
       },
     };
+    pay.request.contentType = "application/x-www-form-urlencoded";
     model.operations.push(add, total);
     flow.steps.splice(
       1,

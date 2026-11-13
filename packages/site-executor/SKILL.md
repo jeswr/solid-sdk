@@ -45,22 +45,29 @@ Security review hardening:
   is normative: client checks cannot prevent a site displaying one amount and charging another;
   the payment instrument's own limit is the backstop.
 - Aggregate every amount OR currency claim before consistency checks, including partial records;
-  bind and revalidate each contributing source. Truncated money-capable reads make evidence
+  bind and revalidate each contributing source. Truncated money- or identity-capable reads make evidence
   incomplete even when retained records do not match. Expose item/value truncation and detect
   item overflow before materializing fields (HTML needs at most one extra match).
-- Bind each payment input to checked order/basket identity, CSRF/session decoration, or the same
-  canonical value taken by every contributing total read (same name or nonempty semantic path).
-  Otherwise refuse "needs a fresh basket total for these options". Direct buys account for mapped
-  quantity in price multiplication and cross-check money mappings; refuse any other option.
-  Bind the total reads' concrete inputs and paths in the evidence digest.
-  Require the matching total input to reach its request exactly once as a whole value;
-  a declared but unused, embedded or partially sent input cannot cover a payment option.
-  Apply the same machinery to each payment option and checked identity, counting all URL,
-  header and body uses. Reject unused, embedded, duplicate and transformed values, including
-  URI prefix modifiers. Static JSON/query/form fields named for a quote parameter or checked
-  payment input shadow it and refuse; unrelated static literals such as submit values are allowed.
-  CSRF decoration cannot exempt checked inputs or target a quoted option/identity name.
-  Direct-buy quantities and options keep these same whole-value and shadow checks.
+- A site model is trusted input like code, supplied by the person's own profiler or a signed
+  model (the host verifies signatures). Validate its structure and apply README Rule W.
+- Replace parameter configuration matching with closed-world coverage of concrete requests after
+  expansion and CSRF insertion. Inventory every query/form/multipart field, every JSON member by
+  RFC 6901 pointer, each path variable by template name, and all model static/parameter/CSRF
+  headers. Exclude only session/vault and Content-Type, Content-Length, Accept, Cookie, Origin,
+  Referer headers. Compare names case-insensitively and canonical values exactly. Refuse duplicate
+  names across any locations within either request.
+- Every payment field must be covered by the total request's same name/value, a whole checked
+  order/basket identity equal to the total, or the CSRF target. CSRF names cannot alias anything
+  else in payment or any total field. Every non-identity total field must be covered in payment
+  too. Otherwise refuse "payment sends <name>, which the basket total did not cover" (or the
+  reverse-coverage diagnostic). Semantic paths and declared defaults cannot establish coverage.
+- Direct buys send only whole bound product identity, whole bound quantity multiplied into money,
+  and unique CSRF decoration. Refuse payment-only static literals and wire amount/currency inputs.
+  Retain whole-value checks for bound inputs; refuse unused, embedded, duplicate and transformed
+  uses, including URI prefixes. Bind actual total wire inventories in the approval digest and
+  repeat their reads on retry. Prepare payment CSRF before checking money and approval.
+- Refuse item/value truncation in any money- or identity-capable evidence read, including a
+  separate identity-only source even when retained records appear consistent.
 - Aggregate orderNumber, identifier and normalized own IRI claims across every record of the
   selected order before skipping money-empty records. Follow shared typed identities even on
   records without total types; contradictions refuse. Bind and revalidate identity-only sources
