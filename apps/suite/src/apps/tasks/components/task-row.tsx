@@ -134,7 +134,7 @@ export function TaskRow({
   /** A long-press selects; the click its release may fire must not open the task. */
   const longPressed = useRef(0);
   const drag = useTaskDrag(task, container, {
-    disabled: pending || completing || editing,
+    disabled: pending || completing || editing || moves.grouped,
     // A sorted list has no manual order: its rows accept only section moves, never nesting.
     allowChild: container?.kind === "section" && moves.manual,
     onLongPress: focus

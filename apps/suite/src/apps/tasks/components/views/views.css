@@ -165,3 +165,26 @@
   border-radius: var(--radius-md);
   padding: 12px;
 }
+
+.tsk-date-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--space-3);
+  margin-block: var(--space-3);
+}
+.tsk-date-range label {
+  display: grid;
+  gap: var(--space-1);
+}
+.tsk-date-range select {
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+.tsk-date-range select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
