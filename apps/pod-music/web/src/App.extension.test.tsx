@@ -6,40 +6,41 @@
 //   - extension PRESENT → the duplicated profile display is dropped, BUT a Sign-out control is
 //     kept so a logged-in user (the app still owns its OWN session until it consumes the
 //     extension's identity) is NEVER stranded without a logout affordance.
+import type { SignedInSession } from "@jeswr/app-session/react";
 import { ThemeProvider } from "@jeswr/app-shell";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mutable mock state, defined via vi.hoisted so it is safely available inside the
 // hoisted vi.mock factories (avoids the top-level-closure hoisting footgun). The
-// toggle is flipped per test; logout is asserted on.
-const mocks = vi.hoisted(() => ({ extensionPresent: false, logout: vi.fn() }));
+// logout is asserted on; extension presence uses the real document marker.
+const mocks = vi.hoisted(() => ({ logout: vi.fn() }));
 
-// The extension-presence hook lives in @jeswr/app-shell (useSolidExtensionPresent).
-// Keep the real app-shell chrome components; override only the presence hook per test.
-vi.mock("@jeswr/app-shell", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@jeswr/app-shell")>()),
-  useSolidExtensionPresent: () => mocks.extensionPresent,
-}));
-
-vi.mock("./auth/SessionProvider", () => ({
-  useSession: () => ({
+const sessionState = {
+  webId: "https://alice.example/profile/card#me",
+  session: {
     webId: "https://alice.example/profile/card#me",
-    session: {
-      podRoot: "https://alice.example/",
-      podRootIsFallback: false,
-      displayName: "Alice Music",
-      avatarUrl: undefined,
-    },
-    logout: mocks.logout,
-    autologinPending: false,
-    restoring: false,
-  }),
+    podRoot: "https://alice.example/",
+    podRootIsFallback: false,
+    displayName: "Alice Music",
+    avatarUrl: undefined,
+  },
+  logout: mocks.logout,
+  fetch: globalThis.fetch,
+};
+
+vi.mock("@jeswr/app-session/react", async (original) => ({
+  ...(await original<typeof import("@jeswr/app-session/react")>()),
+  // These tests supply a signed-in fixture; App.session.test.tsx exercises the real gate.
+  SessionGate: ({ children }: { children: (signedIn: SignedInSession) => ReactNode }) =>
+    children(sessionState),
+  useSession: () => sessionState,
 }));
 
 // Stub the music base discovery so the header test resolves a base immediately
 // without driving a live pod fetch.
-vi.mock("./auth/session-derivation", () => ({
+vi.mock("./music-base", () => ({
   discoverMusicBase: () =>
     Promise.resolve({ base: "https://alice.example/music/", isFallback: false }),
 }));
@@ -63,22 +64,24 @@ function renderApp() {
 }
 
 afterEach(() => {
-  mocks.extensionPresent = false;
+  cleanup();
+  document.documentElement.removeAttribute("data-solid-extension");
   mocks.logout.mockReset();
 });
 
 describe("App header — extension duplicate-chrome fix (pod-music)", () => {
-  it("extension ABSENT: renders the full AccountMenu", () => {
-    mocks.extensionPresent = false;
+  it("extension ABSENT: renders the full AccountMenu", async () => {
     renderApp();
+    await screen.findByTestId("music-library");
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
     // No lone Sign-out button — sign-out lives inside the AccountMenu dropdown.
     expect(screen.queryByRole("button", { name: /^sign out$/i })).not.toBeInTheDocument();
   });
 
-  it("extension PRESENT: hides the AccountMenu but keeps a working Sign-out (no stranded logout)", () => {
-    mocks.extensionPresent = true;
+  it("extension PRESENT: hides the AccountMenu but keeps a working Sign-out (no stranded logout)", async () => {
+    document.documentElement.setAttribute("data-solid-extension", "1");
     renderApp();
+    await screen.findByTestId("music-library");
     // The duplicated profile menu is gone…
     expect(screen.queryByRole("button", { name: "Account menu" })).not.toBeInTheDocument();
     // …but a Sign-out control remains and calls the app's own logout.

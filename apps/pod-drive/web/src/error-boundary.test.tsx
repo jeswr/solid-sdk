@@ -9,8 +9,10 @@
 //   2. the fallback's Retry button resets the boundary and remounts children;
 //   3. a `resetKey` change (webId — this router-free app's navigation analog:
 //      the login ↔ app session transition) clears a caught error.
+import type { SignedInSession } from "@jeswr/app-session/react";
 import { ThemeProvider } from "@jeswr/app-shell";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mutable session state the mocked useSession returns (flipped per test).
@@ -34,6 +36,9 @@ function makeSession(webId: string) {
 
 vi.mock("@jeswr/app-session/react", async (original) => ({
   ...(await original<typeof import("@jeswr/app-session/react")>()),
+  // These tests supply a signed-in fixture; the gate is exercised in App.header.test.tsx.
+  SessionGate: ({ children }: { children: (signedIn: SignedInSession) => ReactNode }) =>
+    children(sessionState as unknown as SignedInSession),
   useSession: () => sessionState,
 }));
 

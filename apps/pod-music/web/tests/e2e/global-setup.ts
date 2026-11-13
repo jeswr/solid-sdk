@@ -1,15 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright globalSetup for the task #123 401-budget e2e. Runs once after the
-// webServers (CSS@3000 + vite@5173) are up. It:
-//   1. creates a fresh CSS account + pod (the verified solid-test-infrastructure recipe);
-//   2. seeds the WebID profile (foaf:name + pim:storage — a fresh CSS pod has neither,
-//      so without this the app sees no display name / no storage and looks broken);
-//   3. seeds the music library's `music/tracks/` container with MANY mo:Track resources
-//      (`track-0..N-1.ttl`) — this is the REGRESSION SURFACE: pod-music's MusicLibrary
-//      lists the tracks container AND THEN reads EACH track resource individually
-//      (loadLibrary → Promise.all(map(getTrack))), so N tracks => N+1 pod reads. The
-//      budget spec asserts the 401 count does NOT scale with N.
+// Playwright globalSetup for shared sign-in against local CSS. Seeds a fresh
+// account, profile and private music/tracks/ data for the popup sign-in smoke test.
 // It writes the seeded credentials to a JSON sidecar the spec reads (the spec drives
 // the real OIDC popup login with this account; the seeded data is its pod contents).
 //
@@ -32,8 +24,7 @@ const EMAIL = "alice@example.com";
 const PASSWORD = "test-password-123";
 // The music base + its `tracks/` per-class container (the conventional fallback the
 // app uses when no Type-Index registration is present — see session-derivation.ts /
-// MusicStore layout). The tracks container's child count is the regression surface
-// (the 401 count must NOT scale with it).
+// MusicStore layout). The smoke test lists these private tracks through auth.fetch.
 const MUSIC_BASE = `${BASE}/${POD}/music/`;
 const TRACKS_CONTAINER = `${MUSIC_BASE}tracks/`;
 const TRACK_COUNT = 12;
@@ -145,7 +136,7 @@ export default async function globalSetup() {
     "text/turtle",
   );
 
-  // 4. seed MANY mo:Track resources under music/tracks/ — the regression surface. A PUT
+  // 4. Seed private mo:Track resources under music/tracks/. A PUT
   //    to `tracks/track-K.ttl` auto-creates the `tracks/` container; each track is a
   //    distinct URL the MusicLibrary GETs individually when the library loads (the
   //    listing + one read per track), so N tracks => N+1 reads.
@@ -168,7 +159,7 @@ export default async function globalSetup() {
     );
   }
 
-  // 5. hand the spec the seeded facts (login credentials + the regression container).
+  // 5. Hand the spec the seeded facts (login credentials + the private container).
   writeFileSync(
     CREDS_PATH,
     JSON.stringify(

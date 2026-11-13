@@ -6,6 +6,7 @@ export {
   type SignInProviderOptions,
   signInProviders,
 } from "./LoginScreen.js";
+export { SessionGate, type SessionGateProps, type SignedInSession } from "./SessionGate.js";
 export {
   LOOKUP_TIMEOUT_MS,
   type SessionContextValue,
