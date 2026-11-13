@@ -9,7 +9,6 @@ import {
   WorkbookPartialSaveError,
   type WorkbookService,
 } from "./contract";
-import { hasStatus } from "./workbook/resources";
 
 /** Application-lifetime writers. Browser events and I/O enter through injected seams. */
 export function createPendingSaves() {
@@ -29,6 +28,7 @@ export function createPendingSaves() {
     let title = initial.metadata.title;
     let storedTitle = title;
     let dropped = false;
+    let snapshotCurrent = false;
     let local = initial.snapshot;
     let read = () => local;
     const savedListeners = new Set<SnapshotSaved>();
@@ -56,9 +56,11 @@ export function createPendingSaves() {
         try {
           const result = await service.save(initial.container, snapshot, opened.version, {
             force,
+            ...(snapshotCurrent ? { snapshotCurrent: true } : {}),
             ...(savingTitle === storedTitle ? {} : { title: savingTitle }),
           });
           if (dropped) return;
+          snapshotCurrent = false;
           opened = { ...opened, ...result, snapshot };
           acknowledge(snapshot, result.version.snapshotEtag);
           storedTitle = result.metadata.title;
@@ -66,7 +68,7 @@ export function createPendingSaves() {
         } catch (error) {
           if (dropped) return;
           for (let cause = error; cause instanceof Error; cause = cause.cause) {
-            if (hasStatus(cause, 403)) opened = { ...opened, readOnly: true };
+            if ("status" in cause && cause.status === 403) opened = { ...opened, readOnly: true };
           }
           if (error instanceof WorkbookPartialSaveError) {
             opened = { ...opened, version: error.version };
@@ -112,6 +114,15 @@ export function createPendingSaves() {
         };
       },
       schedule,
+      async restore(snapshot: Snapshot) {
+        await flush();
+        if (opened.readOnly || queue.status !== "saved")
+          throw new Error("Save your changes online before restoring a version");
+        snapshotCurrent = true;
+        schedule(() => snapshot);
+        await flush();
+        if (queue.status !== "saved") throw new Error("Could not restore this version");
+      },
       setReadOnly(readOnly = true) {
         if (!readOnly && !opened.readOnly) return;
         opened = { ...opened, readOnly };
@@ -129,6 +140,7 @@ export function createPendingSaves() {
         void flush();
       },
       reset(next: OpenedWorkbook) {
+        snapshotCurrent = false;
         opened = next;
         title = next.metadata.title;
         storedTitle = title;
@@ -138,6 +150,7 @@ export function createPendingSaves() {
         releaseIdle();
       },
       discard() {
+        snapshotCurrent = false;
         queue.reset();
         releaseIdle();
       },

@@ -465,3 +465,40 @@ it("switches the mounted editor to View only after a forbidden save", async () =
   await editor.unmount();
   pendingSaves.drop(book.container);
 });
+
+it("opens File version history, previews independently and restores through the conflict reload path", async () => {
+  const { book, service } = await setup();
+  const history = service.versions?.(book.container);
+  await history?.capture("Original workbook");
+  const changed = await service.save(book.container, snapshot("Current workbook"), book.version);
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const engine = await mocks.mount.mock.results[0]?.value;
+  const load = vi.spyOn(service, "open");
+  await key(button(editor.host, "File"), "ArrowDown");
+  const item = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (node) => node.textContent === "Version history",
+  );
+  if (!item) throw new Error("Missing version history menu item");
+  await click(item);
+  await act(async () => {
+    await import("../src/apps/sheets/components/version-history");
+  });
+  expect(document.querySelector('[aria-label="Spreadsheet versions"]')).not.toBeNull();
+  expect(engine.setReadOnly).toHaveBeenLastCalledWith(true);
+  const version = [
+    ...document.querySelectorAll<HTMLButtonElement>('[aria-label="Spreadsheet versions"] button'),
+  ].find((node) => node.textContent?.includes("Original workbook"));
+  if (!version) throw new Error("Missing original version");
+  await click(version);
+  expect(mocks.mount.mock.calls.at(-1)?.[1].readOnly).toBe(true);
+  expect(engine.load).not.toHaveBeenCalled();
+  await click(button(document, "Restore this version"));
+  await click(button(document, "Restore"));
+  await vi.waitFor(() => expect(engine.load).toHaveBeenCalled());
+  const opened = await service.open(book.container);
+  expect(engine.load).toHaveBeenCalledWith(book.snapshot, opened.version.snapshotEtag);
+  expect(opened.version.snapshotEtag).not.toBe(changed.version.snapshotEtag);
+  expect(load).toHaveBeenCalled();
+  expect(engine.setReadOnly).toHaveBeenLastCalledWith(false);
+  await editor.unmount();
+});

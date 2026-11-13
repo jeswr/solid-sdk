@@ -179,3 +179,23 @@ independent of the rendering budget: ranges above 10,000 cells remain saved and 
 Chart controls and the adapter also block chart changes while comments load.
 Charts follow the existing guarded autosave and conflict flow. XLSX import/export behavior
 is unchanged: charts are **not exported to XLSX**, and imported Excel charts are not read.
+
+
+Version history (SHT-13) stores immutable copies of `workbook.json` under the workbook's
+`versions/` container, with JSON sidecars for creation time, claimed author WebID and an
+optional name. It inherits workbook sharing without adding RDF fields or child ACLs.
+The first accepted save after opening preserves the previous stored snapshot; later saves
+capture at most once per 30 minutes. Failed saves retain their safety snapshot for retry.
+Automatic capture failures allow the save to continue and retry capture on the next save;
+baseline conflicts still stop the save. After a captured version is acknowledged, cleanup
+conditionally deletes older automatic versions, keeping the newest 50. Naming a
+version protects it from cleanup. Interrupted uploads or cleanup may leave unlisted JSON
+files; cleanup is best effort and never fails a published workbook save.
+
+File > Version history opens a side panel (a dialog on phones) with independent read-only engine previews.
+Viewers can browse and copy into a new spreadsheet. Editors can name current or earlier
+versions and restore after confirmation. Restore flushes pending edits, captures the current
+stored workbook even inside the automatic interval, and uses the normal ETag-guarded save
+queue and conflict reload path, including comment anchors and charts. A failed restore safety
+snapshot aborts the workbook write. Public shared history uses the same anonymous, redirect-refusing
+transport as the shared workbook. Author metadata is a claim, not verified provenance.
