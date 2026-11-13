@@ -17,6 +17,8 @@ const common = {
   id: z.string().regex(/^[a-z][a-z0-9+.-]*:[^\s<>"{}|\\^`]+$/i),
   output: name,
   inputsFrom: z.array(name).min(1),
+  /** Exact host-installed query; unsupported profiles retain it while blocked. */
+  proofQuery: z.string().min(1).optional(),
   assurances: z
     .array(z.enum(["recomputed", "by-source", "proved", "joint", "attested"]))
     .default(["recomputed"]),
@@ -91,6 +93,7 @@ export const ruleSchema = z.discriminatedUnion("template", [
 export type DerivationRule = z.infer<typeof ruleSchema>;
 /** A closed SELECT counterpart of the installed rule; the holder never chooses its text. */
 export function queryFor(rule: DerivationRule): string {
+  if (rule.proofQuery) return rule.proofQuery;
   const term = (value: string | number | boolean) =>
     typeof value === "string" ? JSON.stringify(value) : String(value);
   const predicate = (kind: string) => `<urn:claim:${encodeURIComponent(kind)}>`;

@@ -3,7 +3,7 @@
 import { digestOf } from "../core/canonical.js";
 import type { JsonObject } from "../core/types.js";
 import type { GateContext } from "../gates/common.js";
-import { type DerivationRule, ruleInputs } from "./rules.js";
+import { type DerivationRule, queryFor, ruleInputs } from "./rules.js";
 import type { JointOutcome, ProofBinds } from "./verifiers.js";
 
 // Claims are held across every asynchronous verifier and source check.
@@ -261,13 +261,29 @@ export async function verifyOpaqueDerivation(input: {
   if (!request) return fail("replay-conflict");
   inFlight.add(request);
   try {
+    if (request.query !== queryFor(rule)) {
+      step(
+        "DER-17",
+        false,
+        "derivation-not-verified",
+        "The stored request query differs from the verifier's installed profile rule.",
+      );
+      return fail("derivation-not-verified");
+    }
     let checked: Awaited<ReturnType<typeof verifier.verify>>;
     try {
       checked = await verifier.verify({
-        expectedQuery: request.query,
+        expectedQuery: queryFor(rule),
         presentation: proof.presentation as JsonObject,
         policy: request.policy,
         nonce: request.nonce,
+        seenNonces: {
+          has: () => request.consumed,
+          add: () => {
+            request.consumed = true;
+            gate.saveDerivationState?.();
+          },
+        },
       });
     } catch {
       checked = { ok: false, reason: "verifier failed" };

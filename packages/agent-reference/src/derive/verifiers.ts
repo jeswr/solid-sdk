@@ -7,6 +7,8 @@ export const DERIVATION_LIMITS = {
   maxStringLength: 2 * 1024 * 1024,
   maxJsonDepth: 32,
   maxJsonNodes: 50_000,
+  // The delivered result presentation carries its 14,656 proof bytes as an array.
+  maxArrayLength: 16_384,
 };
 
 export type JsonValue = Json;
@@ -33,6 +35,8 @@ export interface ProofSystem {
     presentation: JsonObject;
     policy: JsonObject;
     nonce: string;
+    /** Receiver-owned synchronous view of its persistent single-use nonce store. */
+    seenNonces?: { has(key: string): boolean; add(key: string): unknown };
   }): Promise<
     | {
         ok: true;

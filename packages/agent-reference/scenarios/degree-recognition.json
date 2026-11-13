@@ -885,7 +885,12 @@
   ],
   "suites": {},
   "assurance": "attested",
-  "blocked": [],
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "Blocked: needs issuer-scoped GRAPH and the unchanged BSc-or-MSc membership rule; this result-proof build rejects GRAPH and FILTER IN. Selecting only BSc would narrow the rule; releasing the degree would change disclosure."
+    }
+  ],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -897,9 +902,7 @@
     }
   ],
   "traceSteps": {},
-  "requiredMethods": [
-    "sparq-zk-result/5"
-  ],
+  "requiredMethods": [],
   "catalogueAssurance": "proved",
   "recordedAssurance": "attested",
   "proofCredentials": [

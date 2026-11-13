@@ -37,6 +37,7 @@ import type {
   SourceAuthorityAssessment,
   VerificationResult,
 } from "../core/types.js";
+import { admittedResultPolicy } from "../derive/result-trust.js";
 import { verifyDerivation } from "../derive/rules.js";
 import {
   opaqueDerivation,
@@ -1053,6 +1054,36 @@ export class InboundGate {
       }
     }
     if (phase === "source" && c?.derivation && opaqueDerivation(c as JsonObject)) {
+      const proof = (c.derivation as JsonObject).proof as JsonObject | undefined;
+      if (
+        proof?.method === "sparq-zk-result/5" &&
+        this.deps.gate.proofSystems?.get("sparq-zk-result/5")?.kind === "real"
+      ) {
+        const request = this.deps.gate.derivedRequests?.[String(proof.nonce)];
+        const checked = admittedResultPolicy(
+          this.deps.memory,
+          request?.policy,
+          this.deps.gate.proofIssuerKeys ?? [],
+          {
+            agent: this.deps.identity.actor,
+            purpose: need.purpose,
+            at: this.deps.now(),
+            reliance: this.deps.gate.reliance,
+          },
+        );
+        if (!checked.ok) {
+          this.verdictEvent("source", "fail", checked.detail, {
+            reason: checked.reason,
+            rule: {
+              id: "DER-key-binding",
+              text: "Admit each identity-signed result key statement and status snapshot before using its native policy.",
+            },
+          });
+          cache.set(item.value, { ...r, verdict: "fail", reason: checked.reason });
+          this.failedClaim(c, checked.reason, need.taskId ?? need.task);
+          return false;
+        }
+      }
       const result = await verifyOpaqueDerivation({
         statement: c as JsonObject,
         gate: this.deps.gate,
