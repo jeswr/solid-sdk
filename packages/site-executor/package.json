@@ -1,0 +1,41 @@
+{
+  "name": "@jeswr/site-executor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Semantic agent browser: compiles an RDF action request into a site's own HTTP calls with the user's session, behind an approval gate, and lifts responses back into RDF.",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Claude Opus 5.5",
+  "sideEffects": false,
+  "securityCritical": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/site-executor/tsconfig.json",
+    "typecheck": "pnpm -w exec tsc -p packages/site-executor/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/site-executor/tsconfig.test.json",
+    "lint": "pnpm -w exec biome check packages/site-executor",
+    "test": "pnpm -w exec vitest run --root packages/site-executor"
+  },
+  "dependencies": {
+    "@jeswr/site-model": "workspace:*",
+    "css-select": "^7.0.0",
+    "domhandler": "^6.0.1",
+    "domutils": "^4.0.2",
+    "htmlparser2": "^12.0.0",
+    "n3": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/n3": "^1.26.1"
+  }
+}
