@@ -1,0 +1,54 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Start: solid-federation-vocab/sectors/social/social.shacl.ttl Note + Feed.
+# This is a package projection, NOT a claim that the sector IRIs are aliases:
+# - Preserve the installed AS2 https namespace, not social:Note/social:Feed.
+#   social:content/attributedTo/published/inFeed/mediaType/inReplyTo correspond to
+#   as:content/attributedTo/published/context/mediaType/inReplyTo respectively.
+# - Omit advisory sh:class core:Agent/social:Feed/social:Note hints: foreign
+#   WebIDs, room and reply resources need not be materialised in this document.
+#   Narrow these links to one HTTP(S) IRI, matching the published package shape.
+# - Strengthen published to minCount 1 Violation, matching the package shape.
+# - The sector feed's unbounded dcterms:title SHOULD becomes the stored collection's
+#   exactly-one as:name MUST. Add exactly-one dct:identifier for storage identity.
+# - Omit core:hasPart aggregation: ChatWriter discovers separate message documents;
+#   CanonicalRoom.messages remains a plain-data adapter projection, not RDF nesting.
+# - Omit sector profile/version metadata; no new social vocabulary or aliases.
+# Package additions: edit/delete, PROV-O and task title/assignee (all unchanged IRIs),
+# plus optional writer dct:identifier and closed dct:type role metadata on notes.
+# Relative to shapes/message.shacl.ttl: retain every scalar constraint; use stable
+# identifier sh:name values; omit ONLY the advisory rdf:type qualifiedValueShape /
+# qualifiedMaxCount rule (closed admission rejects it and reserves rdf:type).
+# The facade keeps wf:Task co-typing and closed-wins state policy; the published
+# shape still validates the advisory qualified rule. No generated file is edited.
+# The runtime's iriScheme guard normalises URLs; lexical identity preservation
+# remains a facade policy through canonical-iris.ts's typed singleton accessor.
+# Required-field defaults are deliberately absent from config: the facade supplies
+# now only on write and preserves the historical incomplete-note read projection.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix as: <https://www.w3.org/ns/activitystreams#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix schema: <http://schema.org/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+[] a sh:NodeShape ; sh:targetClass as:Note ;
+  sh:property [ sh:path as:content ; sh:name "content" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path as:mediaType ; sh:name "mediaType" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path as:published ; sh:name "published" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path as:attributedTo ; sh:name "author" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path as:context ; sh:name "room" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path as:inReplyTo ; sh:name "inReplyTo" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path dct:isReplacedBy ; sh:name "replacedBy" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path schema:dateDeleted ; sh:name "deletedAt" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path prov:wasAttributedTo ; sh:name "provAttributedTo" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path prov:wasGeneratedBy ; sh:name "provGeneratedBy" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "provDerivedFrom" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path dct:title ; sh:name "taskTitle" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path wf:assignee ; sh:name "assignee" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path dct:identifier ; sh:name "identifier" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:type ; sh:name "role" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:in ( "system" "user" "assistant" "tool" ) ] .
+
+[] a sh:NodeShape ; sh:targetClass as:Collection ;
+  sh:property [ sh:path as:name ; sh:name "title" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:identifier ; sh:name "identifier" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
