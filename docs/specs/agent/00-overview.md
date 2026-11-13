@@ -1,8 +1,12 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
-# Overview and map
+# Answerable: overview and map
 
-Draft 0.4, 13 November 2026. Working title for the family: **Accountable Agents**. A name has
-not been chosen.
+Draft 0.4, 13 November 2026.
+
+**Answerable** is the name of this family of specifications. An agent that follows it answers
+for what it does, and answers to the person or organization it acts for. An implementation
+that passes the conformance scenarios for a configuration can call itself an Answerable
+agent under that configuration.
 
 This family of documents describes how software agents that act for people and organizations
 can deal with each other, and with ordinary services, in a way that can be checked afterwards.
@@ -108,7 +112,6 @@ Canal Bank, Paywell, a mortgage product index and a sector register.
 
 ## What is not decided
 
-- The name of the family and of the baseline configuration.
 - A permanent namespace for identifiers. Examples use `https://w3id.org/jeswr/awp#`, which is
   provisional and unregistered.
 - Which standards body, if any, should take this up. The alignment document lists the groups

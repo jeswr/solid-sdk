@@ -20,7 +20,7 @@ It was chosen by four rules.
 3. It needs no service that does not exist, except registers, which need an adapter.
 4. Each suite in it can be swapped for a stronger one without touching the others.
 
-## The baseline, `baseline/0.1`
+## The Answerable baseline, `baseline/0.1`
 
 | Layer | Suite | Why this one |
 |---|---|---|
@@ -104,14 +104,17 @@ authority, and can answer in kind.
 
 An agent that sends email under the entry configuration adds a short footer to the body.
 
-> Sent by Sam's agent, an automated assistant acting for Sam. This message is signed, says
-> what the agent is allowed to do, and is recorded. You can reply as normal. If you use an
-> agent of your own, it can check all of this for you: *link*.
+> Sent by Sam's agent, an automated assistant acting for Sam. It is an Answerable agent:
+> this message is signed, says what the agent is allowed to do, and is recorded. You can
+> reply as normal. If you use an agent of your own, it can check all of this for you. Get
+> one that is Answerable too: *link*.
 
 - **BL-3.** The footer MUST say that the message was sent by an automated agent and name
   whom it acts for (CORE-M-10).
 - **BL-4.** The footer MUST NOT appear on a message that does not carry a verifiable
-  message. It describes what is attached, not what the sender hopes to be.
+  message, and MUST NOT use the name Answerable unless the sender's signed statement of
+  what it runs carries a claim of conformance (CF-10). It describes what is attached, not
+  what the sender hopes to be.
 - **BL-5.** The footer MUST NOT claim that the message is safe, verified or trustworthy.
   Those are conclusions for the receiver's own checks.
 - **BL-6.** The message MUST also carry, in a header field, the address of the sender's
@@ -144,7 +147,6 @@ answer.
 
 ## Open questions
 
-- A name for the baseline that can be put in a footer in three words.
 - The header field for BL-6, and whether an existing one can be reused.
 - Whether the entry configuration should allow `register-chain`, so that an email from a
   bank can be checked against a register on first contact.
