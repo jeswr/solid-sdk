@@ -26,6 +26,7 @@ export {
   type VcMandateOptions,
 } from "./mandate.js";
 export { evaluateIntent, solidOdrlEngine } from "./policy.js";
+export { type RemovePermissionOptions, reissueMandate, removePermission } from "./reduce.js";
 export {
   AGENT,
   type Constraint,

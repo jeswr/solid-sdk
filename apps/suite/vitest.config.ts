@@ -26,6 +26,7 @@ export default defineConfig({
       include: [
         "src/apps/agent/lib/**/*.ts",
         "src/shell/lib/**/*.ts",
+        "src/shell/settings/assistants/{read,copy}.ts",
         "src/shell/sync/connection-state.ts",
         "src/shell/search/local-source.ts",
         "src/shell/notifications/pod-source.ts",
@@ -115,6 +116,7 @@ export default defineConfig({
         "src/lib/order/**/*.ts",
         "src/apps/tasks/lib/lists/**/*.ts",
         "src/apps/tasks/lib/tree/**/*.ts",
+        "src/apps/tasks/lib/projects/**/*.ts",
         "src/lib/search/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
         "src/apps/docs/lib/markdown/**/*.ts",

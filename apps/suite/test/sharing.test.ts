@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 
 import { LiteralAs, LiteralFrom, NamedGraphDataset, SetFrom } from "@rdfjs/wrapper";
@@ -36,8 +37,16 @@ const select = (
   role: "viewer" | "commenter" | "editor" | "owner",
 ): SharingSelection => ({ ...restricted, people: [{ webId, role }] });
 
+// Existing projection fixtures use the legacy symmetric comments shape.
+function symmetricComments(...args: Parameters<typeof authorization>) {
+  const [doc, , , target = doc.governingResource] = args;
+  const auth = authorization(...args);
+  if (!doc.inherited && target === COMMENTS) auth.default = COMMENTS;
+  return auth;
+}
+
 for (const model of ["wac", "acp"] as const) {
-  const grant = model === "wac" ? authorization : policy;
+  const grant = model === "wac" ? symmetricComments : policy;
   describe(model, () => {
     it("projects an empty effective document and leaves it unchanged", () => {
       const state = readSharing(input(document(model)));
@@ -300,7 +309,7 @@ for (const model of ["wac", "acp"] as const) {
           source: comment.source,
           resource: COMMENTS,
           principal: { kind: "webid", webId: ALICE },
-          add: ["Append"],
+          add: ["Read", "Append"],
           remove: [],
           inherited: false,
         },
@@ -366,7 +375,7 @@ for (const model of ["wac", "acp"] as const) {
       const comment = document(model, true);
       grant(comment, ALICE, ["Append"]);
       const value = { ...input(doc), comments: { resource: COMMENTS, documents: [comment] } };
-      expect(diffSharing(value, select(ALICE, "commenter"))).toHaveLength(1);
+      expect(() => diffSharing(value, select(ALICE, "commenter"))).toThrow("Inherited access");
       expect(() => diffSharing(value, select(ALICE, "viewer"))).toThrow("Inherited access");
       grant(doc, ALICE, ["Read"]);
       expect(readSharing(value).people[0]?.inherited).toBe(true);
@@ -722,8 +731,8 @@ it("does not mistake a vocabulary IRI used as an agent for a public grant", () =
 });
 
 for (const model of ["wac", "acp"] as const) {
-  it(`${model}: changes only Append in the comments container`, () => {
-    const grant = model === "wac" ? authorization : policy;
+  it(`${model}: plans all comments modes explicitly and refuses changes to Write`, () => {
+    const grant = model === "wac" ? symmetricComments : policy;
     const doc = document(model);
     const comment = document(model, false, COMMENTS);
     grant(doc, ALICE, ["Read"]);
@@ -736,7 +745,7 @@ for (const model of ["wac", "acp"] as const) {
         resource: COMMENTS,
         principal: { kind: "webid", webId: ALICE },
         add: [],
-        remove: ["Append"],
+        remove: ["Read", "Append"],
         inherited: false,
       },
     ]);
@@ -744,25 +753,14 @@ for (const model of ["wac", "acp"] as const) {
     expect(readSharing(value).people[0]?.role).toBe("commenter");
     expect(() => diffSharing(value, restricted)).toThrow("also comes from Write");
     const empty = document(model);
-    const expected = [
-      {
-        model,
-        source: empty.source,
-        resource: FILE,
-        principal: { kind: "webid" as const, webId: ALICE },
-        add: ["Read"],
-        remove: [],
-        inherited: false,
-      },
-    ];
-    expect(
+    expect(() =>
       diffSharing({ ...input(empty), comments: context(comment) }, select(ALICE, "commenter")),
-    ).toEqual(expected);
+    ).toThrow("also comes from Write");
     const writeOnly = document(model, false, COMMENTS);
     grant(writeOnly, ALICE, ["Write"]);
-    expect(
+    expect(() =>
       diffSharing({ ...input(empty), comments: context(writeOnly) }, select(ALICE, "commenter")),
-    ).toEqual(expected);
+    ).toThrow("also comes from Write");
   });
 }
 
@@ -857,4 +855,88 @@ it("compares effective WAC folder modes across split defaults and ignores redund
   expect(state.people.find((p) => p.webId === BOB)?.role).toBe("editor");
   expect(diffSharing(input(doc), state)).toEqual([]);
   expect(readSharing(input(document("wac", false, folder))).people).toEqual([]);
+});
+
+it.each([
+  "default",
+  "defaultForNew",
+])("projects narrow WAC commenters with %s member Read", (predicate) => {
+  const doc = document();
+  const comments = document("wac", false, COMMENTS);
+  authorization(doc, BOB, ["Read"]);
+  authorization(comments, BOB, ["Read", "Append"]);
+  const members = authorization(comments, BOB, ["Read"]);
+  members.accessTo = undefined;
+  properties(members)
+    .values(ACL + predicate)
+    .add(COMMENTS);
+  const value = { ...input(doc), comments: context(comments) };
+  const before = [...comments.dataset];
+  const state = readSharing(value);
+  expect(state.people).toEqual([
+    {
+      webId: BOB,
+      role: "commenter",
+      inherited: false,
+      explicit: true,
+      sources: [comments.source, doc.source].sort(),
+    },
+  ]);
+  expect(diffSharing(value, state)).toEqual([]);
+  expect(diffSharing(value, select(BOB, "viewer"))).toMatchObject([
+    { resource: COMMENTS, remove: ["Read", "Append"], add: [] },
+  ]);
+  expect([...comments.dataset]).toEqual(before);
+  // The exception belongs only to the separate comments context.
+  expect(() => readSharing({ access: context(comments) })).toThrow(
+    "Folder and descendant permissions differ",
+  );
+});
+
+it.each([
+  { own: ["Read", "Append"], members: [] },
+  { own: [], members: ["Read"] },
+  { own: ["Read"], members: ["Read", "Append"] },
+  { own: ["Append"], members: ["Read"] },
+  { own: ["Read", "Append"], members: ["Append"] },
+  { own: ["Read", "Append"], members: ["Read", "Write"] },
+  { own: ["Read", "Append"], members: ["Read", "Control"] },
+  { own: ["Read", "Write"], members: ["Read"] },
+  { own: ["Read", "Write", "Control"], members: ["Read"] },
+])("rejects unsupported WAC comments scopes $own / $members in reads and planning", ({
+  own,
+  members,
+}) => {
+  const doc = document();
+  const comments = document("wac", false, COMMENTS);
+  authorization(doc, BOB, ["Read"]);
+  authorization(comments, BOB, own);
+  const children = authorization(comments, BOB, members);
+  children.accessTo = undefined;
+  children.default = COMMENTS;
+  const value = { ...input(doc), comments: context(comments) };
+  expect(() => readSharing(value)).toThrow("Folder and descendant permissions differ");
+  expect(() => diffSharing(value, select(BOB, "viewer"))).toThrow(
+    "Folder and descendant permissions differ",
+  );
+});
+
+it.each([
+  "",
+  "?revision=1",
+])("projects Append-only container access with no member modes (%s)", (suffix) => {
+  const doc = document();
+  const resource = COMMENTS + suffix;
+  const comments = document("wac", false, resource);
+  authorization(doc, BOB, ["Read"]);
+  authorization(comments, BOB, ["Append"]);
+  const value = { ...input(doc), comments: context(comments) };
+  expect(readSharing(value).people).toMatchObject([{ webId: BOB, role: "commenter" }]);
+  expect(diffSharing(value, readSharing(value))).toEqual([]);
+  expect(diffSharing(value, select(BOB, "viewer"))).toMatchObject([
+    { resource, add: [], remove: ["Append"] },
+  ]);
+  expect(() => readSharing({ access: context(comments) })).toThrow(
+    "Folder and descendant permissions differ",
+  );
 });

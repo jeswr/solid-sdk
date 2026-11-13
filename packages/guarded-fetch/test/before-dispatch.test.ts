@@ -18,7 +18,7 @@ it("checks authority synchronously after awaited DNS and immediately before fetc
   });
   const fetch = vi.fn(async () => new Response("sent"));
   const guarded = createGuardedFetch({
-    fetch,
+    pinningFetch: fetch,
     beforeDispatch,
     dnsLookup: async () => {
       started();
@@ -43,7 +43,7 @@ it("checks authority synchronously after awaited DNS and immediately before fetc
         fenced = false;
       });
     },
-    fetch: async () => {
+    pinningFetch: async () => {
       expect(fenced).toBe(true);
       return new Response("sent");
     },
@@ -67,7 +67,7 @@ it("rechecks after DNS for every redirect hop", async () => {
       }),
   );
   const guarded = createGuardedFetch({
-    fetch,
+    pinningFetch: fetch,
     beforeDispatch,
     dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
   });

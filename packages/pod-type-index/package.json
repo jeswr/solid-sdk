@@ -26,13 +26,15 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/type-index.ontology.ttl --shapes codegen/type-index.shapes.ttl --config codegen/codegen.config.json --out src/generated",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run"
   },
   "license": "MIT",
   "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
@@ -41,6 +43,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@jeswr/federation-codegen": "workspace:*",
     "@types/n3": "^1.16.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"

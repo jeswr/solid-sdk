@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { ActionProposal, Transmission } from "@jeswr/agent-model";
+import type { ApprovalExplanation } from "./approval-details";
 import type { DisplayApproval } from "./readers";
 export interface PendingApproval {
+  explanation?: ApprovalExplanation;
   similarAllowed?: boolean;
   proposal: ActionProposal;
   reason: string;
@@ -25,7 +27,8 @@ export function pendingApprovals(
   transmissions = complete ? transmissions : [];
   return proposals
     .flatMap((proposal): PendingApproval[] => {
-      if (proposal.state !== "proposed" || Date.parse(proposal.validUntil) <= now) return [];
+      if (["expired", "failed"].includes(proposal.state) || Date.parse(proposal.validUntil) <= now)
+        return [];
       const decisions = approvals
         .filter(
           (a) =>
@@ -55,6 +58,7 @@ export function pendingApprovals(
           : current?.decision === "deny"
             ? "denied"
             : "pending";
+      if (proposal.state !== "proposed" && state === "pending") return [];
       return [
         {
           proposal,

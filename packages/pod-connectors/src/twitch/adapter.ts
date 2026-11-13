@@ -10,6 +10,7 @@
  * Snapshot semantics (the follows listing has page cursors, not change
  * cursors).
  */
+
 import { DataFactory, Store } from "n3";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
@@ -55,12 +56,14 @@ export const twitchAdapter: IntegrationAdapter = {
   fixtures: () => TWITCH_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     const skipped = new SkipCounter();
 
     ctx.progress({ label: "Checking who you are on Twitch…", done: 0, total: 2 });
-    const users = await getJson<TwitchUsersAnswer>(ID, ctx.api, `${API}/users`);
+    const users = await getJson<TwitchUsersAnswer>(ID, ctx.api, `${API}/users`, undefined);
     // `data` can be an empty array; the follows endpoint needs our user id, so
     // a missing id is genuinely fatal (not a per-item skip).
+    budget.items(arr(users?.data).length);
     const me = arr(users?.data)[0];
     const myId = optionalText(me?.id);
     if (myId === undefined) {
@@ -79,7 +82,9 @@ export const twitchAdapter: IntegrationAdapter = {
         ID,
         ctx.api,
         `${API}/channels/followed?user_id=${encodeURIComponent(myId)}&first=100${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+        undefined,
       );
+      budget.items(arr(page?.data).length);
       follows.push(...arr(page?.data));
       after = optionalText(page?.pagination?.cursor);
       if (after) pagination.next(after);

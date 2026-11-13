@@ -40,6 +40,13 @@ export function makeFakePod(resources: Record<string, FakeResource>): FakePod {
       typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const method = (init?.method ?? "GET").toUpperCase();
 
+    // This fixture server associates even absent resources with conventional WAC ACLs.
+    if (method === "HEAD")
+      return new Response(null, {
+        status: map[url]?.status ?? (map[url] ? 200 : 404),
+        headers: { link: `<${url}.acl>; rel="acl"` },
+      });
+
     if (method === "PUT") {
       const headers = new Headers(init?.headers);
       const body = typeof init?.body === "string" ? init.body : String(init?.body ?? "");

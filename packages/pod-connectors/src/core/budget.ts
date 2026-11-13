@@ -1,10 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
- * Resource bounds for source traffic. Every JSON response is read through a byte cap, and an
- * adapter that follows pagination owns one RunBudget per run, so a source that keeps returning
+ * Resource bounds for source traffic. Every JSON response is read through a byte cap, and the
+ * runner owns one RunBudget per run, so a source that keeps returning
  * pages (or very large ones) fails the run, keeping the checkpoint, instead of exhausting memory.
  */
 import { IntegrationSyncError } from "./errors.js";
+import { limitSourceBody } from "./source-timeout.js";
 
 /** Largest JSON response any adapter parses. */
 /** A response body exceeded its byte cap; adapters may skip the item instead of failing. */
@@ -27,42 +29,105 @@ export interface RunLimits {
    * run in memory can retain. Optional so hosts can pass the request and item limits alone.
    */
   readonly maxBytes?: number;
+  /** Total wall-clock allowance, including source waits and retries (30 minutes by default). */
+  readonly maxDurationMs?: number;
 }
 
-export const DEFAULT_RUN_LIMITS: RunLimits = {
+export const DEFAULT_RUN_LIMITS: Readonly<Required<RunLimits>> = Object.freeze({
   maxRequests: 20_000,
   maxItems: 2_000_000,
   maxBytes: 512 * 1024 * 1024,
-};
+  maxDurationMs: 30 * 60 * 1000,
+});
+
+export type BudgetResource = "requests" | "items" | "bytes" | "duration";
+
+/** A failed, potentially partial import; the runner retains the previous successful state. */
+export class RunBudgetExceededError extends IntegrationSyncError {
+  constructor(
+    adapterId: string,
+    readonly resource: BudgetResource,
+    readonly limit: number,
+  ) {
+    const label = { requests: "request", items: "item", bytes: "data", duration: "duration" }[
+      resource
+    ];
+    super(
+      adapterId,
+      `The import exceeded its ${label} budget. Partial data may have been saved; the checkpoint is unchanged.`,
+    );
+    this.name = "RunBudgetExceededError";
+  }
+}
 
 export class RunBudget {
   private requests = 0;
   private itemCount = 0;
   private byteCount = 0;
+  private readonly limits: Required<RunLimits>;
+  private failure?: RunBudgetExceededError;
+  private readonly startedAt = performance.now();
   constructor(
     private readonly adapterId: string,
-    private readonly limits: RunLimits = DEFAULT_RUN_LIMITS,
-  ) {}
+    limits: Partial<RunLimits> = {},
+  ) {
+    this.limits = {
+      maxRequests: limits.maxRequests ?? DEFAULT_RUN_LIMITS.maxRequests,
+      maxItems: limits.maxItems ?? DEFAULT_RUN_LIMITS.maxItems,
+      maxBytes: limits.maxBytes ?? DEFAULT_RUN_LIMITS.maxBytes,
+      maxDurationMs: limits.maxDurationMs ?? DEFAULT_RUN_LIMITS.maxDurationMs,
+    };
+    for (const [key, value] of Object.entries(this.limits))
+      if (!Number.isSafeInteger(value) || value < 0)
+        throw new TypeError(`${key} must be a non-negative safe integer.`);
+  }
+
+  private check(n: number, total: number, resource: BudgetResource, limit: number): void {
+    this.checkTime();
+    if (!Number.isSafeInteger(n) || n < 0)
+      throw new TypeError("Budget charges must be non-negative safe integers.");
+    if (n > limit - total) {
+      this.failure = new RunBudgetExceededError(this.adapterId, resource, limit);
+      throw this.failure;
+    }
+  }
+
+  /** Time still available for source backoff; never wait beyond the run deadline. */
+  get remainingMs(): number {
+    return Math.max(0, this.limits.maxDurationMs - (performance.now() - this.startedAt));
+  }
+
+  /** Check even between requests; exhaustion is sticky across all charge types. */
+  checkTime(): void {
+    if (this.failure) throw this.failure;
+    if (this.remainingMs === 0) throw this.expire();
+  }
+
+  expire(): RunBudgetExceededError {
+    this.failure ??= new RunBudgetExceededError(
+      this.adapterId,
+      "duration",
+      this.limits.maxDurationMs,
+    );
+    return this.failure;
+  }
 
   /** Count one source request; throws once the run exceeds its request budget. */
   request(): void {
-    if (++this.requests > this.limits.maxRequests)
-      throw new IntegrationSyncError(this.adapterId, "The import exceeded its request budget.");
+    this.check(1, this.requests, "requests", this.limits.maxRequests);
+    this.requests++;
   }
 
   /** Count `n` buffered source items; throws once the run exceeds its item budget. */
   items(n: number): void {
+    this.check(n, this.itemCount, "items", this.limits.maxItems);
     this.itemCount += n;
-    if (this.itemCount > this.limits.maxItems)
-      throw new IntegrationSyncError(this.adapterId, "The import exceeded its item budget.");
   }
 
   /** Count `n` response bytes read; throws once the run exceeds its byte budget. */
   bytes(n: number): void {
+    this.check(n, this.byteCount, "bytes", this.limits.maxBytes);
     this.byteCount += n;
-    const max = this.limits.maxBytes ?? DEFAULT_RUN_LIMITS.maxBytes ?? Number.POSITIVE_INFINITY;
-    if (this.byteCount > max)
-      throw new IntegrationSyncError(this.adapterId, "The import exceeded its data budget.");
   }
 }
 
@@ -77,39 +142,7 @@ export async function readJson(
   maxBytes = MAX_JSON_BYTES,
   budget?: RunBudget,
 ): Promise<unknown> {
-  const tooLarge = () => new ResponseTooLargeError(adapterId, url);
-  const declared = Number(res.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > maxBytes) {
-    await res.body?.cancel();
-    throw tooLarge();
-  }
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  if (res.body) {
-    const reader = res.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      try {
-        budget?.bytes(value.byteLength);
-      } catch (error) {
-        await reader.cancel();
-        throw error;
-      }
-      if (size > maxBytes) {
-        await reader.cancel();
-        throw tooLarge();
-      }
-      chunks.push(value);
-    }
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
+  const bytes = await readBytes(res, adapterId, url, maxBytes, budget);
   try {
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch (cause) {
@@ -118,4 +151,63 @@ export async function readJson(
       cause,
     });
   }
+}
+
+/** Read a bounded binary body; shared with JSON and per-file Drive content. */
+export async function readBytes(
+  res: Response,
+  adapterId: string,
+  url: string,
+  maxBytes: number,
+  budget?: RunBudget,
+): Promise<Uint8Array> {
+  limitSourceBody(res, maxBytes);
+  const tooLarge = () => new ResponseTooLargeError(adapterId, url);
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await res.body?.cancel().catch(() => undefined);
+    throw tooLarge();
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (res.body) {
+    const reader = res.body.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        budget?.bytes(value.byteLength);
+        if (size > maxBytes) throw tooLarge();
+        chunks.push(value);
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => undefined);
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+/** Factory and host limits can only tighten each other; undefined never erases a value. */
+export function stricterLimits(...sources: (Partial<RunLimits> | undefined)[]): Partial<RunLimits> {
+  const result: Partial<Record<keyof RunLimits, number>> = {};
+  for (const source of sources) {
+    for (const key of Object.keys(DEFAULT_RUN_LIMITS) as (keyof RunLimits)[]) {
+      const value = source?.[key];
+      if (value === undefined) continue;
+      if (!Number.isSafeInteger(value) || value < 0)
+        throw new TypeError(`${key} must be a non-negative safe integer.`);
+      result[key] = Math.min(result[key] ?? value, value);
+    }
+  }
+  return result;
 }

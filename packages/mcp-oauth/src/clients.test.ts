@@ -7,6 +7,15 @@ import { MemoryStore } from "./testing.js";
 import type { Client } from "./types.js";
 
 describe("registration metadata", () => {
+  it("caps redirect URIs at ten, including duplicates", () => {
+    const redirects = Array.from({ length: 10 }, (_, i) => `https://client.example/cb/${i}`);
+    expect(clientMetadata({ redirect_uris: redirects }, "id", 100).redirect_uris).toHaveLength(10);
+    for (const uris of [[...redirects, REDIRECT], Array(11).fill(REDIRECT)])
+      expect(() => clientMetadata({ redirect_uris: uris }, "id", 100)).toThrow(
+        "invalid_redirect_uri",
+      );
+  });
+
   it("preserves exact redirect spelling and accepts HTTPS/loopback HTTP", () => {
     const redirects = [
       REDIRECT,
@@ -67,6 +76,9 @@ describe("registration metadata", () => {
     { token_endpoint_auth_method: "client_secret_basic" },
     { client_secret: "fixture" },
     { client_secret_expires_at: 0 },
+    ...["Claude\u202E", "a\u0000b", "a\nb", "a\u200Db"].map((clientName) => ({
+      client_name: clientName,
+    })),
     { client_name: 123 },
     { client_name: "n".repeat(257) },
   ])("rejects unsupported client metadata %o", (input) => {
@@ -93,6 +105,14 @@ describe("client metadata fetching and bounded cache", () => {
       },
     };
   };
+
+  it("refuses metadata documents with eleven redirects", async () => {
+    const f = make();
+    f.fetcher.mockResolvedValue(
+      Response.json({ ...data, redirect_uris: Array(11).fill(REDIRECT) }),
+    );
+    await expect(f.clients.get(id)).rejects.toMatchObject({ error: "invalid_client" });
+  });
 
   it("uses stored clients, caches valid JSON and returns snapshots", async () => {
     const f = make();

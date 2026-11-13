@@ -84,6 +84,9 @@ describe("completed day groups", () => {
     );
     const unknown = view("unknown", { state: "closed", projectUrl: "a" });
     const rows = [...tasks, unknown];
+    const all = completedGroups(rows, {}, now);
+    expect(all.groups.flatMap((group) => group.tasks)).toEqual([...tasks.toReversed(), unknown]);
+    expect(all.hasMore).toBe(false);
     const first = completedGroups(rows, { page: 0 }, now);
     const second = completedGroups(rows, { page: 1 }, now);
     const third = completedGroups(rows, { page: 2 }, now);

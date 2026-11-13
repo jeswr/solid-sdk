@@ -15,7 +15,7 @@ import {
   writeResource,
 } from "./pod.js";
 import type { PodPort } from "./pod-port.js";
-import { defineTool, type PodTool, toolText } from "./tool.js";
+import { defineTool, type PodTool, READ_HINTS, toolText } from "./tool.js";
 
 export type { PodTool } from "./tool.js";
 
@@ -32,6 +32,7 @@ export function createPodToolRegistry(
         aliases: [],
         title: "Search the Solid pod",
         readOnly: true,
+        annotations: READ_HINTS,
         description:
           "Search by resource name, URL, or RDF literals, including chat titles. Personal memory and audit storage is excluded. Returns {results:[{id,title,url}]} within bounded depth, resources, and time.",
         inputSchema: z.object({ query: z.string().describe("Case-insensitive search term.") }),
@@ -52,6 +53,7 @@ export function createPodToolRegistry(
         aliases: [],
         title: "Fetch a Solid resource",
         readOnly: true,
+        annotations: READ_HINTS,
         description:
           "Fetch a pod URL from search. Returns {id,title,text,url,metadata}: RDF as Turtle, text/* as text, binary metadata only; metadata.truncated flags the 1 MiB cap.",
         inputSchema: z.object({ id: z.string().describe("Absolute resource URL within the pod.") }),
@@ -67,6 +69,7 @@ export function createPodToolRegistry(
         aliases: ["solid_list"],
         title: "List a Solid container",
         readOnly: true,
+        annotations: READ_HINTS,
         description:
           "List immediate children of an in-pod container, with available resource metadata.",
         inputSchema: z.object({ container: z.string().describe("Container URL within the pod.") }),
@@ -82,6 +85,7 @@ export function createPodToolRegistry(
         aliases: ["solid_read"],
         title: "Read a Solid resource",
         readOnly: true,
+        annotations: READ_HINTS,
         description: "Read an in-pod resource as Turtle, text, or base64 for binary data.",
         inputSchema: z.object({ url: z.string().describe("Resource URL within the pod.") }),
         async handler({ url }) {
@@ -104,6 +108,7 @@ export function createPodToolRegistry(
         aliases: [],
         title: "Search the Solid pod",
         readOnly: true,
+        annotations: READ_HINTS,
         description:
           "Search by URL, name and RDF literal using Type Index hints and a bounded container scan.",
         inputSchema: z.object({
@@ -124,6 +129,12 @@ export function createPodToolRegistry(
         aliases: ["solid_write"],
         title: "Write a Solid resource",
         readOnly: false,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: true,
+        },
         description: "PUT a resource strictly below the pod root. Disabled unless readOnly:false.",
         inputSchema: z.object({ url: z.string(), content: z.string(), contentType: z.string() }),
         async handler({ url, content, contentType }) {
@@ -149,11 +160,7 @@ export function registerPodTools(server: McpServer, tools: readonly PodTool[]): 
           description:
             tool.description + (name === tool.name ? "" : ` Deprecated alias; use ${tool.name}.`),
           inputSchema: tool.inputSchema,
-          annotations: {
-            readOnlyHint: tool.readOnly,
-            ...(!tool.readOnly ? { destructiveHint: true } : {}),
-            openWorldHint: true,
-          },
+          annotations: tool.annotations,
         },
         tool.handler,
       );

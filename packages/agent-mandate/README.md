@@ -19,6 +19,12 @@ Actual accounting and enforcement belong to agent-executor. Set `mandate.currenc
 code, signed into the agreement as `schema:currency`) whenever the mandate has spend limits: the
 executor refuses any action under a spend limit whose currency it cannot authenticate.
 
+`mandate.memoryScope` signs exact DPV personal-data category IRIs (for example
+`https://w3id.org/dpv/pd#Preference`) as `agent:memoryScope` on the agreement. An absent
+scope retains the memory reader's preference default. An empty scope disables personalisation;
+it is encoded as the single IRI `rdf:nil` so it cannot disappear during serialization.
+Malformed scopes fail closed, and changes to the scope invalidate the signature.
+
 `issueMandate(mandate, ed25519Key, { statusListCredential, statusListIndex })` creates a
 `solid-vc` AgentAuthorizationCredential with an embedded ODRL Agreement and
 `eddsa-rdfc-2022` proof by default. A fourth options argument `{ cryptosuite: "ecdsa-rdfc-2019" }`
@@ -84,6 +90,14 @@ checks suite/purpose, the owner's authoritative
 WebID assertionMethod, the canonical graph signature, proposal, digest, expiry and decision,
 in that order. Verification material inside the statement is never trusted. Digest
 comparison hashes both inputs to fixed-size arrays before constant-work comparison.
+
+`reissueMandate(m, id, now)` gives a mandate a fresh record identity and never moves
+`validFrom` earlier. `removePermission(m, set, index, id, { knownActions, now })` turns one
+permission off without broadening authority: an automatic rule (and every automatic rule
+for the same action) becomes ask-first; an ask-first rule becomes a top-level prohibition at
+the same scope, because unmatched actions still require confirmation, and automatic rules
+for that action are dropped. Rules for unknown actions, or that the engine can't evaluate
+fully, are refused ("Edit this rule…"). Both are exported from `./issue` and the root.
 
 Browser callers import `@jeswr/agent-mandate/approval`, `@jeswr/agent-mandate/control`,
 `@jeswr/agent-mandate/issue` and `@jeswr/agent-mandate/verify`. The latter two expose

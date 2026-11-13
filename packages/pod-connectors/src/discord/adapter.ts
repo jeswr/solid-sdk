@@ -5,6 +5,7 @@
  * `/users/@me/guilds` as `foaf:Group`. Discord supports secretless PKCE for
  * public clients, so live mode needs only a client id. Snapshot semantics.
  */
+
 import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import { Pagination } from "../core/pagination.js";
@@ -44,11 +45,13 @@ export const discordAdapter: IntegrationAdapter = {
   fixtures: () => DISCORD_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     const skipped = new SkipCounter();
 
     ctx.progress({ label: "Fetching your Discord profile…", done: 0, total: 2 });
-    const user = (await getJson<DiscordUser>(ID, ctx.api, `${API}/users/@me`)) ?? {};
+    const user = (await getJson<DiscordUser>(ID, ctx.api, `${API}/users/@me`, undefined)) ?? {};
 
+    budget.items(1);
     const profileDoc = ctx.resolve("social/profile.ttl");
     const profile = new Store();
     const account = new OnlineAccount(`${profileDoc}#account`, profile, DataFactory).mark();
@@ -78,8 +81,10 @@ export const discordAdapter: IntegrationAdapter = {
           ID,
           ctx.api,
           `${API}/users/@me/guilds?limit=200${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+          undefined,
         ),
       );
+      budget.items(batch.length);
       guilds.push(...batch);
       after = batch.length === 200 ? pagination.next(optionalText(batch.at(-1)?.id)) : undefined;
     } while (after);

@@ -10,6 +10,7 @@
  * confidential client for code→token, so live mode runs through the
  * maintainer's token proxy. Demoable now against recorded fixtures.
  */
+
 import { DataFactory, Store } from "n3";
 import { postJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -50,12 +51,14 @@ export const tiktokAdapter: IntegrationAdapter = {
   fixtures: () => TIKTOK_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your videos…", done: 0, total: 2 });
     const answer = await postJson<TikTokVideoListAnswer>(
       ID,
       ctx.api,
       `${API}/video/list/?fields=${VIDEO_FIELDS}`,
       { max_count: 20 },
+      undefined,
     );
 
     const mediaDoc = ctx.resolve("media/videos.ttl");
@@ -63,6 +66,7 @@ export const tiktokAdapter: IntegrationAdapter = {
     const media = new Store();
     const social = new Store();
 
+    budget.items(answer.data.videos.length);
     for (const v of answer.data.videos) {
       const when = new Date(v.create_time * 1000);
       const clip = new MediaItem(`${mediaDoc}#video-${v.id}`, media, DataFactory).mark(

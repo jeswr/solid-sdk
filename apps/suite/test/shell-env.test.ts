@@ -8,6 +8,48 @@ afterEach(() => {
   vi.resetModules();
 });
 describe("shell environment", () => {
+  it("accepts only the configured canonical HTTPS /mcp endpoint", () => {
+    expect(
+      parseSuiteEnv({ NEXT_PUBLIC_SUITE_MCP_URL: "https://mcp.example/mcp" })
+        .NEXT_PUBLIC_SUITE_MCP_URL,
+    ).toBe("https://mcp.example/mcp");
+    expect(parseSuiteEnv({}).NEXT_PUBLIC_SUITE_MCP_URL).toBeUndefined();
+  });
+  it.each([
+    "http://mcp.example/mcp",
+    "https://mcp.example/mcp?x=1",
+    "https://mcp.example/mcp?",
+    "https://mcp.example/mcp#x",
+    "https://mcp.example/mcp#",
+    "https://user:secret@mcp.example/mcp",
+    "https://mcp.example/mcp/",
+    "https://mcp.example/other",
+    "https://mcp.example/a/../mcp",
+    "https://mcp.example/%6dcp",
+    "",
+    "/mcp",
+    "javascript:alert(1)",
+  ])("rejects an unsafe assistant server without exposing it: %s", (url) => {
+    try {
+      parseSuiteEnv({ NEXT_PUBLIC_SUITE_MCP_URL: url });
+      expect.fail("Expected invalid assistant URL to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SuiteEnvError);
+      expect((error as SuiteEnvError).fields).toEqual(["NEXT_PUBLIC_SUITE_MCP_URL"]);
+      expect((error as Error).message).toBe("Invalid suite environment: NEXT_PUBLIC_SUITE_MCP_URL");
+    }
+  });
+  it("passes the literal public assistant URL and defaults invalid values independently", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUITE_MCP_URL", "https://mcp.example/mcp");
+    const first = await import("../src/shell/lib/env");
+    expect(first.suiteEnv().NEXT_PUBLIC_SUITE_MCP_URL).toBe("https://mcp.example/mcp");
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_SUITE_MCP_URL", "https://secret:password@mcp.example/mcp");
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const second = await import("../src/shell/lib/env");
+    expect(second.suiteEnv().NEXT_PUBLIC_SUITE_MCP_URL).toBeUndefined();
+    expect(warning.mock.calls.flat().join(" ")).not.toMatch(/secret|password/);
+  });
   it("has conservative capability defaults and the community providers", () => {
     const env = parseSuiteEnv({});
     expect(env).toMatchObject({

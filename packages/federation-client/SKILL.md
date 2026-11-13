@@ -23,6 +23,12 @@ and `ResolvedAddress` types for callers of its own functions. The separate
 `@jeswr/guarded-fetch/node`. Prefer the Node guarded fetch for server-side DNS pinning;
 the bare dispatcher rejects an explicit `timeoutMs`.
 
+Registry reads use guarded-fetch's DNS-pinned Node default. Custom Node hostname
+transports require `guard.pinningFetch`, or an explicit `guard.requireDnsPinning: false`
+with a reason for accepting the rebinding window. Browser and DNS-less edge policy is
+unchanged. Offline guard tests attest inert transports with `pinningFetch`; registry
+fixtures explicitly opt out because they open no sockets.
+
 The build bundles both entries together and shares guarded-fetch in a private chunk to
 preserve error-class identity. Keep every emitted chunk in `dist/`; mirrors ship that
 directory, while this workspace never commits it. Node helpers must import guarded-fetch

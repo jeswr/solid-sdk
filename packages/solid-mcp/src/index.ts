@@ -58,4 +58,5 @@ export {
 } from "./pod-port.js";
 export { createSolidMcpServer, type SolidMcpServerConfig } from "./server.js";
 export { createStoragePodPort } from "./storage-pod-port.js";
+export { AUDITED_READ_HINTS, READ_HINTS, type ToolHints } from "./tool.js";
 export { createPodToolRegistry, type PodTool, registerPodTools } from "./tools.js";

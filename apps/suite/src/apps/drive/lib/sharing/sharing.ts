@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
+import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { type Grant, MODES, PUBLIC, readGrants, SharingError } from "./rdf";
 import type {
   AccessMode,
@@ -28,23 +30,35 @@ function origin(grants: Grant[]): AccessOrigin {
 }
 
 /** One folder control cannot faithfully describe independent WAC defaults. Fail closed
- * in both projection and diff planning, including descendant-only people/public grants.
+ * except for narrow commenters on the separate comments container. Symmetric legacy
+ * rules remain readable so the adapter can migrate them conditionally.
  */
-function assertFolderDefaults(input: SharingInput, grants: Grant[]): void {
+function assertFolderDefaults(context: ResourceAccess, grants: Grant[], comments = false): void {
   if (
-    !input.access.resource.endsWith("/") ||
-    !input.access.documents.some((d) => d.model === "wac" && !d.inherited)
+    !isContainerUrl(context.resource) ||
+    !context.documents.some((d) => d.model === "wac" && !d.inherited)
   )
     return;
-  const defaults = readGrants(input.access, "members");
+  const defaults = readGrants(context, "members");
   const effective = (grants: Grant[], principal: string) => {
-    const values = allowed(forPrincipal(grants, principal, input.access.resource));
+    const values = allowed(forPrincipal(grants, principal, context.resource));
     if (values.has("Write")) values.add("Append");
     return values;
   };
   for (const principal of new Set([...grants, ...defaults].map((g) => g.principal))) {
     const folder = effective(grants, principal);
     const children = effective(defaults, principal);
+    // The separate comments container accepts new comments, while existing comments
+    // are readable only. No other asymmetric permission set represents a role.
+    if (
+      comments &&
+      principal !== PUBLIC &&
+      folder.has("Append") &&
+      [...folder].every((mode) => mode === "Read" || mode === "Append") &&
+      children.size === folder.size - 1 &&
+      [...children].every((mode) => mode !== "Append" && folder.has(mode))
+    )
+      continue;
     if (MODES.some((mode) => folder.has(mode) !== children.has(mode)))
       throw new SharingError(
         "Folder and descendant permissions differ. This configuration is not supported by the sharing dialog.",
@@ -52,7 +66,8 @@ function assertFolderDefaults(input: SharingInput, grants: Grant[]): void {
   }
 }
 function project(input: SharingInput, grants: Grant[], comments: Grant[]): SharingState {
-  assertFolderDefaults(input, grants);
+  assertFolderDefaults(input.access, grants);
+  if (input.comments) assertFolderDefaults(input.comments, comments, true);
   if (comments.some((grant) => grant.principal === PUBLIC && grant.modes.size > 0)) {
     throw new SharingError(
       "Anonymous comments permissions cannot be expressed by the sharing model",
@@ -177,14 +192,12 @@ export function diffSharing(input: SharingInput, desired: SharingSelection): Aut
     if (input.comments && role !== "editor" && role !== "owner") {
       const beforeComments = allowed(forPrincipal(comments, webId, input.comments.resource));
       const wantsComments = role === "commenter";
-      if (!wantsComments && beforeComments.has("Write")) {
+      if (beforeComments.has("Write")) {
         throw new SharingError(
           "Comment access also comes from Write; changing it requires a richer model",
         );
       }
-      const nextComments = MODES.filter((mode) => mode !== "Append" && beforeComments.has(mode));
-      if (wantsComments && (beforeComments.has("Append") || !beforeComments.has("Write")))
-        nextComments.push("Append");
+      const nextComments: AccessMode[] = wantsComments ? ["Read", "Append"] : [];
       plan(input.comments, comments, webId, input.comments.resource, nextComments, changes);
     }
   }

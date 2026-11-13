@@ -9,7 +9,10 @@ const factories = {
   refusal: (fetch: typeof globalThis.fetch) => refuseRedirects(fetch),
   scope: (fetch: typeof globalThis.fetch) => createPodScopedFetch(BASE, { fetch }),
   ssrf: (fetch: typeof globalThis.fetch) =>
-    createGuardedFetch({ fetch, dnsLookup: async () => [{ address: "93.184.216.34", family: 4 }] }),
+    createGuardedFetch({
+      pinningFetch: fetch,
+      dnsLookup: async () => [{ address: "93.184.216.34", family: 4 }],
+    }),
 };
 
 for (const [name, factory] of Object.entries(factories)) {

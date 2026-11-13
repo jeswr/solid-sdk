@@ -1,19 +1,23 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
+import { retryTransition } from "./retry.js";
 import { KvVaultStore, type VaultStore } from "./vault-stores.js";
 
-/** Server-only secret vault. Deleted identifiers are permanently retired. */
+/**
+ * Server-only secret vault. TTLs are positive whole seconds; omitted write TTLs are permanent.
+ * Deleted identifiers are permanently retired unless a TTL is explicitly supplied for ephemeral IDs.
+ */
 export interface SessionVault {
-  put(id: string, secret: Uint8Array): Promise<void>;
+  put(id: string, secret: Uint8Array, ttlSeconds?: number): Promise<void>;
   get(id: string): Promise<Uint8Array | undefined>;
-  delete(id: string): Promise<void>;
+  delete(id: string, ttlSeconds?: number): Promise<void>;
   /** Atomic secret transition; used for callback consumption and refresh ownership. */
   compareAndSwap(
     id: string,
     expected: Uint8Array | undefined,
     secret: Uint8Array,
+    ttlSeconds?: number,
   ): Promise<boolean>;
 }
 
@@ -57,7 +61,7 @@ export function createSessionVault(options: SessionVaultOptions = {}): SessionVa
     async get(id) {
       return decrypt(id, await store.get(id));
     },
-    async compareAndSwap(id, expected, secret) {
+    async compareAndSwap(id, expected, secret, ttlSeconds) {
       const current = await store.get(id);
       if (current === "deleted") return false;
       const plaintext = decrypt(id, current);
@@ -67,22 +71,23 @@ export function createSessionVault(options: SessionVaultOptions = {}): SessionVa
           : expected === undefined || !Buffer.from(plaintext).equals(expected)
       )
         return false;
-      return store.compareAndSwap(id, current, encrypt(id, secret));
+      return store.compareAndSwap(id, current, encrypt(id, secret), ttlSeconds);
     },
-    async put(id, secret) {
+    async put(id, secret, ttlSeconds) {
       const current = await store.get(id);
       decrypt(id, current);
-      if (current === "deleted" || !(await store.compareAndSwap(id, current, encrypt(id, secret))))
+      if (
+        current === "deleted" ||
+        !(await store.compareAndSwap(id, current, encrypt(id, secret), ttlSeconds))
+      )
         throw new Error("Vault write conflict");
     },
-    async delete(id) {
-      // Retirement must survive credential updates and transient file-lock contention.
-      // Keep retrying until this worker or a competing retiree has made it irreversible.
-      for (;;) {
+    async delete(id, ttlSeconds) {
+      // A permanent tombstone wins over rotations; persistent outages fail closed and surface.
+      await retryTransition(async () => {
         const current = await store.get(id);
-        if (current === "deleted" || (await store.compareAndSwap(id, current, "deleted"))) return;
-        await delay(10);
-      }
+        return current === "deleted" || store.compareAndSwap(id, current, "deleted", ttlSeconds);
+      }, "Vault retirement failed");
     },
   };
 }
