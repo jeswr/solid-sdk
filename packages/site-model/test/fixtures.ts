@@ -49,7 +49,7 @@ export const search: Operation = {
   request: {
     method: "GET",
     urlTemplate: "https://shop.test/api/search{?q,page,sort}",
-    headers: { Accept: "application/json", "X-Requested-With": "fetch" },
+    headers: { "X-Requested-With": "fetch" },
   },
   session: "none",
   effect: "read",

@@ -340,7 +340,7 @@ describe("CSRF and flow edge cases", () => {
 });
 
 describe("credentials and redaction", () => {
-  it("sends the session to the site, but drops vault Cookie/Host headers and model credential headers", async () => {
+  it("sends the session to the site, but drops vault Cookie/Host headers", async () => {
     routes["GET /search"] = (_q, res) => json(res, 200, {});
     const ex = createExecutor({
       model: model([
@@ -348,7 +348,7 @@ describe("credentials and redaction", () => {
           request: {
             method: "GET",
             urlTemplate: `${site.url}/search{?q}`,
-            headers: { Authorization: "Basic model", Cookie: "model=1", "X-App": "1" },
+            headers: { "X-App": "1" },
           },
         },
       ]),
@@ -522,23 +522,24 @@ describe("credentials and redaction", () => {
     });
     const r = await ex.execute(search("a\r\nCookie: stolen=1"));
     expect(r).toMatchObject({ status: "error", errorKind: "binding", requests: 0 });
-    const ex2 = createExecutor({
-      model: model([
-        {
-          inputs: [
-            {
-              name: "Cookie",
-              path: [`${S}query`],
-              range: `${XSD}string`,
-              required: true,
-              location: "header",
-            },
-          ],
-        },
-      ]),
-      sessions,
-    });
-    expect(await ex2.execute(search("x"))).toMatchObject({ status: "error", errorKind: "binding" });
+    expect(() =>
+      createExecutor({
+        model: model([
+          {
+            inputs: [
+              {
+                name: "Cookie",
+                path: [`${S}query`],
+                range: `${XSD}string`,
+                required: true,
+                location: "header",
+              },
+            ],
+          },
+        ]),
+        sessions,
+      }),
+    ).toThrow("forbidden");
   });
 
   it("reports an unavailable session store", async () => {

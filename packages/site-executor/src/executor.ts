@@ -25,6 +25,7 @@ import {
   bodyInit,
   bodyText,
   type CompiledRequest,
+  checkModelHeaders,
   compileOperation,
   endpointUrl,
   isForbiddenHeader,
@@ -264,6 +265,7 @@ function validatedModel(source: SiteModel): SiteModel {
       names.add(input.name);
     }
   }
+  for (const operation of model.operations) checkModelHeaders(operation);
   const operations = new Set(model.operations.map((op) => op.id));
   for (const flow of model.flows) {
     if (!flow.steps.length) throw new BindingError("empty flow");
@@ -443,7 +445,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         if (lower === "cookie" || lower === "host" || lower === "content-length") continue;
         h.set(k, v);
       }
-      if (accept && !h.has("accept")) h.set("accept", accept);
+      h.set("accept", accept ?? "*/*");
       const cookies = cookiesFor(ctx.jar, url, now());
       if (cookies.length > 0) h.set("cookie", cookieHeader(cookies));
       let res: Response;
@@ -992,6 +994,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
       addSecrets(ctx);
       for (const k of Object.keys(ctx.headers))
         if (isForbiddenHeader(k) && k.toLowerCase() !== "authorization") delete ctx.headers[k];
+      for (const operation of model.operations)
+        checkModelHeaders(operation, Object.keys(ctx.headers));
       const signedIn = ctx.jar.length > 0 || Object.keys(ctx.headers).length > 0;
       if (!signedIn && steps.some((op) => op.session === "signed-in"))
         throw new SessionError(`not signed in to ${new URL(origin).host}`);

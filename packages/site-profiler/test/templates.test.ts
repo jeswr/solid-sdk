@@ -142,7 +142,7 @@ describe("clusterRequests", () => {
     expect(a).toMatchObject({
       contentType: "application/json",
       bodyTemplate: '{"sku":"{sku}","qty":"{qty}","gift":"{gift}","meta":"{meta}"}',
-      headers: { "x-requested-with": "fetch", accept: "application/json" },
+      headers: { "x-requested-with": "fetch" },
       csrf: [
         {
           source: { kind: "cookie", name: "csrf" },
@@ -415,4 +415,43 @@ describe("util", () => {
     expect(slug("  View product (JSON) ")).toBe("view-product-json");
     expect(slug("!!!")).toBe("x");
   });
+});
+
+it("omits executor-owned headers from recorded and script-derived model candidates", () => {
+  const headers = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    Authorization: "secret",
+    Origin: O,
+    Host: "shop.test",
+    "Sec-Custom": "value",
+    "X-Requested-With": "XMLHttpRequest",
+  };
+  const [recorded] = clusterRequests(
+    [
+      req("GET", "/grid", {
+        requestHeaders: headers,
+        headersFromCookies: { Accept: "sid", "X-CSRF": "csrf" },
+        contentType: "application/json",
+      }),
+    ],
+    O,
+  );
+  expect(recorded?.headers).toEqual({ "X-Requested-With": "XMLHttpRequest" });
+  expect(recorded?.csrf.map((r) => r.target.name)).toEqual(["X-CSRF"]);
+  const script = candidateFromScriptCall({
+    scriptUrl: `${O}/app.js`,
+    method: "GET",
+    urlPattern: `${O}/grid`,
+    headers,
+    bodyKeys: [],
+    via: "fetch",
+    line: 1,
+    csrf: [
+      { source: { kind: "cookie", name: "sid" }, target: { kind: "header", name: "Accept" } },
+      { source: { kind: "cookie", name: "csrf" }, target: { kind: "header", name: "X-CSRF" } },
+    ],
+  });
+  expect(script?.headers).toEqual({ "X-Requested-With": "XMLHttpRequest" });
+  expect(script?.csrf.map((r) => r.target.name)).toEqual(["X-CSRF"]);
 });
