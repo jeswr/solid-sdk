@@ -388,7 +388,9 @@ Every popup load first checks optional `cookies` access, independently of site v
 If it is already granted or cannot be checked, sharing is blocked: no review, permission
 request or native message. The warning stays visible even on invalid pages or withheld
 sites. Click **Remove cookie access** to remove it and verify absence before sharing is
-enabled. If removal or verification fails, sharing stays blocked; remove cookie access
+enabled. Interrupted captures with a cleanup marker are recovered automatically before
+popup intents run; an unowned stale grant still requires this explicit removal. If removal
+or verification fails, sharing stays blocked; remove cookie access
 from Chrome's extension settings before retrying. The review click rechecks absence, so
 each capture starts without cookie permission.
 The service worker owns one capture lease across all popups, from Review until cleanup.
@@ -397,6 +399,11 @@ start another capture. Review checks the current active tab and existing host ac
 enabling **Allow cookies and review**. Click that button to request only optional `cookies`
 inside the popup's click gesture. The worker checks the tab and host access again after the
 prompt before contacting `beginLogin`, then shows the site, cookie count and persona.
+Tab activation, navigation of the lease tab, window focus changes and permission changes
+invalidate the armed button; Review must validate the site again before another request.
+The permission click uses the latest worker-pushed authorization synchronously to preserve
+Chrome's gesture requirement. In a sub-second race Chrome may still show the cookies prompt
+after authorization changes, but nothing is read or sent and the grant is removed.
 Click **Share this sign-in with my agent** to confirm. The worker verifies this lease's cookie
 grant and the current tab and host access again, reads a fresh exact-origin snapshot, and
 sends it only if its count still matches the review. Nothing is sent to the page.
@@ -408,6 +415,13 @@ change. Cancellation is final even if an older async step completes afterward. A
 permission prompt fences new captures after cancellation/closure until its result or late
 grant is cleaned; an old grant can never become another capture's authority. If Chrome never
 reports a closed prompt's outcome, sharing stays blocked for that worker lifetime.
+Before arming the permission click, the worker stores only a cleanup marker
+`{ leaseId, requestedAt }` in `chrome.storage.session`, falling back to `storage.local` if
+session storage is unavailable. Every worker start and `runtime.onStartup` recover a marker
+without a live owner under the same capture mutex: remove `cookies`, verify absence, then
+clear the marker. A marker without a grant is cleared after checking absence. Failed removal
+keeps the marker, popup warning and sharing block for retry. An unresolved prompt retains
+its marker even after cancellation cleanup, so worker termination cannot lose a late grant.
 
 Profiles/personas come from `@jeswr/agent-vault`, separately from the extension's Solid
 accounts. Configure an account for the exact site in the agent's store first. Install the

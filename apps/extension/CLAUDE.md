@@ -52,7 +52,11 @@ capture state machine (`background/agent-capture.ts`). The worker owns the exclu
 all tab/access checks, cookie reads, native requests and cleanup under one async mutex.
 Review validates the CURRENT active tab against the lease's tab/origin and existing host
 access before arming the popup's **Allow cookies and review** click. Only that click requests
-optional `cookies`, synchronously inside its gesture. After the prompt the worker rechecks
+optional `cookies`, synchronously inside its gesture.
+Armed views are invalidated on tab activation, lease-tab URL updates, window focus changes
+and permission additions/removals; the click checks the latest worker-pushed armed lease.
+In a sub-second race Chrome may still show the cookies prompt after authorization changes,
+but nothing is read or sent and the grant is removed. After the prompt the worker rechecks
 tab/origin and host access before `beginLogin`; confirmation rechecks lease ownership of the
 cookie grant, tab/origin and host access before reading a fresh snapshot and sending it.
 The preview shows site/count/persona; a changed cookie count refuses confirmation.
@@ -91,6 +95,13 @@ If Chrome never reports a closed prompt's outcome, sharing stays blocked for tha
 lifetime. Removal rejection or unconfirmed absence displays a warning alongside the actual
 outcome and blocks further sharing; worker cleanup failure sets a toolbar `!` badge.
 A surviving cookie grant blocks sharing on every popup load, including withheld sites.
+Before arming, persist only `{ leaseId, requestedAt }` to `chrome.storage.session`, with
+`storage.local` as the fallback. Top-level worker startup and `runtime.onStartup` serialize
+recovery through the capture mutex before popup intents: for an unowned marker, remove
+`cookies`, verify absence, then clear it. An already absent grant needs only verification.
+Keep the marker and warning on cleanup failure, and retain markers for unresolved prompts
+even after cancellation cleanup. Unowned stale grants without a marker still require the
+person's explicit removal.
 Required `<all_urls>` stays in place and host grants never change; temporary cookie access
 is extension-wide, so exact-origin filtering and explicit confirmation still apply.
 
