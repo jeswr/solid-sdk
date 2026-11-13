@@ -57,8 +57,8 @@ export interface StoreConfig<T> {
 
 /**
  * A typed CRUD handle for one app surface, bound to a pod root. Construct via
- * {@link createStore}. Production callers pass NO `fetchImpl` (the auth-patched
- * global runs); tests inject one.
+ * {@link createStore}. Pass pod-auth's `fetch` as `fetchImpl` for private data;
+ * omitting it uses the unauthenticated global fetch.
  */
 export class PodStore<T> {
   private readonly containerUrl: string;

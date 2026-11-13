@@ -7,17 +7,8 @@
 // LDP/RDF reading.
 //
 // ── AUTH SEAM ────────────────────────────────────────────────────────────────
-// The authenticated `fetch` is INJECTED, not imported. Pass the session's fetch
-// via the `fetch` option; omit it and the data layer falls back to the global
-// `fetch`. In production that global is the one
-// @solid/reactive-authentication's ReactiveFetchManager.registerGlobally()
-// patches (so a plain fetch transparently upgrades on a 401 with a DPoP token),
-// wired ONCE in the create-solid-app shell's <SolidAuthProvider>. That wiring is
-// #18-gated (create-solid-app S2 — interactive auth-code login;
-// https://github.com/solid-contrib/reactive-authentication/issues/18). This hook
-// is DELIBERATELY unaware of any of that: it works today against a stubbed fetch
-// in unit tests and later against the real session with NO code change. Do NOT
-// hard-wire a login flow here.
+// Pass the host's pod-auth session fetch explicitly. The data layer defaults to
+// unauthenticated global fetch and stays independent of the sign-in flow.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { errorMessage } from './format.js';
@@ -57,11 +48,7 @@ export interface PhotoGalleryState {
 
 /** Options for {@link usePhotoGallery}. */
 export interface UsePhotoGalleryOptions {
-  /**
-   * The authenticated fetch. Omit to use the ambient global fetch (which
-   * @solid/reactive-authentication patches in a real session). The injectable
-   * auth seam — see the file header.
-   */
+  /** Authenticated transport for pod reads; defaults to unauthenticated global fetch. */
   fetch?: typeof fetch;
 }
 

@@ -19,9 +19,8 @@
 //   2. fallback: the conventional `${podRoot}photos/` slug (PHOTOS_SLUG). The view
 //      surfaces a small banner when this fallback is used (see App.tsx).
 //
-// Reads go through the library's `freshRdf` (which composes @jeswr/fetch-rdf), so
-// in a real session the auth-patched global fetch carries the DPoP token; tests /
-// the pre-popup public read can pass an explicit fetch.
+// Reads go through the library's `freshRdf` with the host's explicit pod-auth
+// fetch. Omitting it uses the unauthenticated global fetch.
 
 import {
   freshRdf,
@@ -57,8 +56,8 @@ function conventionalRoot(podRoot: string): string {
  * to read the index must never block the gallery — the fallback always yields a
  * usable root, and the data layer's own scope guards protect every read.
  *
- * @param fetchImpl - omit in production so the auth-patched global fetch runs;
- *   the login flow may pass the pre-popup public fetch for a profile read.
+ * @param opts.fetchImpl - authenticated transport for profile and index reads;
+ *   omit to use the unauthenticated global fetch.
  */
 export async function resolvePhotosRoot(opts: {
   webId: string;

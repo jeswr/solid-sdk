@@ -42,9 +42,9 @@ surfaces in any Type-Index-aware Solid app.
 ```ts
 import { photosStore, albumsStore } from '@jeswr/pod-photos';
 
-// In production, omit fetchImpl — @solid/reactive-authentication patches the
-// global fetch, so authentication (DPoP) is automatic. Tests inject a fetch.
-const photos = photosStore({ podRoot: 'https://alice.example/', webId });
+// Pass the host's pod-auth transport for private pod reads and writes.
+// Omitting fetchImpl uses the unauthenticated global fetch.
+const photos = photosStore({ podRoot: 'https://alice.example/', webId, fetchImpl: auth.fetch });
 
 // Create a photo (registers schema:Photograph → photos/ in the Type Index).
 const { url } = await photos.create({

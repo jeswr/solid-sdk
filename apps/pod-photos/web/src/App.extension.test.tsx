@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Header behaviour for the extension duplicate-chrome fix (bead suite-tracker-lpo),
@@ -6,35 +7,35 @@
 //   - extension PRESENT → the duplicated profile display is dropped, BUT a Sign-out control is
 //     kept so a logged-in user (the app still owns its OWN session until it consumes the
 //     extension's identity) is NEVER stranded without a logout affordance.
+import type { SignedInSession } from "@jeswr/app-session/react";
 import { ThemeProvider } from "@jeswr/app-shell";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Shared mock state. Declared via vi.hoisted so it is initialized BEFORE the hoisted
-// vi.mock factories below reference it (avoids any TDZ/hoisting hazard — the factories
-// close over `mock`, and each test mutates `mock.extensionPresent`).
-const mock = vi.hoisted(() => ({ extensionPresent: false, logout: vi.fn() }));
-
-// The extension-presence hook lives in @jeswr/app-shell (useSolidExtensionPresent).
-// Keep the real app-shell chrome components; override only the presence hook per test.
-vi.mock("@jeswr/app-shell", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@jeswr/app-shell")>()),
-  useSolidExtensionPresent: () => mock.extensionPresent,
+// Signed-in fixture; the real gate and provider are exercised in App.session.test.tsx.
+const mock = vi.hoisted(() => ({
+  webId: "https://alice.example/profile/card#me",
+  session: {
+    webId: "https://alice.example/profile/card#me",
+    podRoot: "https://alice.example/",
+    podRootIsFallback: false,
+    displayName: "Alice Photos",
+    avatarUrl: undefined,
+  },
+  logout: vi.fn(),
 }));
 
-vi.mock("./auth/SessionProvider", () => ({
+vi.mock("@jeswr/app-session/react", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@jeswr/app-session/react")>()),
+  SessionGate: ({ children }: { children: (signedIn: SignedInSession) => ReactNode }) =>
+    children(mock),
   useSession: () => ({
-    webId: "https://alice.example/profile/card#me",
-    session: {
-      webId: "https://alice.example/profile/card#me",
-      podRoot: "https://alice.example/",
-      podRootIsFallback: false,
-      displayName: "Alice Photos",
-      avatarUrl: undefined,
-    },
-    logout: mock.logout,
-    autologinPending: false,
-    restoring: false,
+    ...mock,
+    fetch: globalThis.fetch,
+    ready: true,
+    restoringSession: false,
+    error: null,
   }),
 }));
 
@@ -60,22 +61,37 @@ function renderApp() {
 }
 
 afterEach(() => {
-  mock.extensionPresent = false;
+  cleanup();
+  document.documentElement.removeAttribute("data-solid-extension");
   mock.logout.mockReset();
 });
 
 describe("App header — extension duplicate-chrome fix", () => {
-  it("extension ABSENT: renders the full AccountMenu", () => {
-    mock.extensionPresent = false;
+  it("extension ABSENT: renders the full AccountMenu", async () => {
     renderApp();
+    await screen.findByTestId("photo-gallery");
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
     // No lone Sign-out button — sign-out lives inside the AccountMenu dropdown.
     expect(screen.queryByRole("button", { name: /^sign out$/i })).not.toBeInTheDocument();
   });
 
-  it("extension PRESENT: hides the AccountMenu but keeps a working Sign-out (no stranded logout)", () => {
-    mock.extensionPresent = true;
+  it("extension ABSENT: the account menu keeps a working Sign out", async () => {
     renderApp();
+    await screen.findByTestId("photo-gallery");
+    fireEvent(
+      screen.getByRole("button", { name: "Account menu" }),
+      new MouseEvent("pointerdown", { bubbles: true }),
+    );
+    expect(await screen.findByRole("menu")).toHaveTextContent(mock.webId);
+    expect(screen.getByRole("menu")).toHaveTextContent("Alice Photos");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+    expect(mock.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("extension PRESENT: hides the AccountMenu but keeps a working Sign-out (no stranded logout)", async () => {
+    document.documentElement.setAttribute("data-solid-extension", "1");
+    renderApp();
+    await screen.findByTestId("photo-gallery");
     // The duplicated profile menu is gone…
     expect(screen.queryByRole("button", { name: "Account menu" })).not.toBeInTheDocument();
     // …but a Sign-out control remains and calls the app's own logout.

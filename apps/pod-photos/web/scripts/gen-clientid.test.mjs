@@ -93,6 +93,16 @@ describe("resolveOriginValue — origin precedence", () => {
   });
 });
 
+describe("clientIdDocument — redirect_uris", () => {
+  it("registers only the popup callback.html redirect target", () => {
+    const doc = clientIdDocument("https://photos.example");
+    expect(doc.redirect_uris).toEqual(["https://photos.example/callback.html"]);
+    // client_id is byte-exact the served URL, and the doc stays a public client.
+    expect(doc.client_id).toBe("https://photos.example/clientid.jsonld");
+    expect(doc.token_endpoint_auth_method).toBe("none");
+  });
+});
+
 describe("normaliseOrigin", () => {
   it("strips path/query/hash + trailing slash to the byte-exact origin", () => {
     expect(normaliseOrigin("https://x.example/foo?q=1#h")).toBe("https://x.example");
@@ -107,28 +117,6 @@ describe("normaliseOrigin", () => {
   });
 });
 
-describe("clientIdDocument — redirect_uris", () => {
-  const origin = "https://photos.example";
-
-  it("registers BOTH the popup callback AND the app-root redirect_uri (autologin)", () => {
-    const doc = clientIdDocument(origin);
-    // The popup path posts back from callback.html; the full-page-redirect
-    // (autologin) path returns to the app root, so both MUST be registered or a
-    // compliant OP rejects the autologin redirect_uri.
-    expect(doc.redirect_uris).toContain(`${origin}/callback.html`);
-    expect(doc.redirect_uris).toContain(`${origin}/`);
-  });
-
-  it("the app-root redirect_uri is the EXACT origin + '/' (byte-for-byte)", () => {
-    // beginRedirectLogin uses `${origin}/` verbatim as both the authorization and
-    // the token-exchange redirect_uri; it must match this registered value exactly.
-    expect(clientIdDocument(origin).redirect_uris).toEqual([
-      `${origin}/callback.html`,
-      `${origin}/`,
-    ]);
-  });
-});
-
 // AUTHORED-BY Codex GPT-6
 describe("GitHub Pages client identity", () => {
   it("includes the app base in every identity and redirect URL", () => {
@@ -137,7 +125,6 @@ describe("GitHub Pages client identity", () => {
     expect(doc.client_uri).toBe("https://jeswr.github.io/solid-sdk/pod-photos/");
     expect(doc.redirect_uris).toEqual([
       "https://jeswr.github.io/solid-sdk/pod-photos/callback.html",
-      "https://jeswr.github.io/solid-sdk/pod-photos/",
     ]);
   });
   it.each([

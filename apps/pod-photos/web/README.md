@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY GPT-6.1 Sol -->
 <!-- AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate -->
 
 # `web/` — the Pod Photos static host shell
@@ -5,10 +6,8 @@
 This directory turns the framework-agnostic `@jeswr/pod-photos/ui` React component
 library (`../src/ui`) into a **deployable, statically-served single-page app**
 with standalone Solid login. It is the canonical "host shell" pattern (the same
-shape ships in every `pod-*` app); it is **stamped from the hardened `pod-docs/web`
-template** — `src/auth/*` is copied VERBATIM from that template (it went through
-two roborev rounds: cross-user-leak fix, StrictMode auth-flow-holder,
-generation-fenced `reset()`, per-probe login proof).
+shape ships in every `pod-*` app). It uses `@jeswr/app-session`, as Pod Docs and
+Pod Drive do, with a small Photos adapter and exact legacy-storage cleanup keys.
 
 The host is intentionally tiny. The whole app is: log in → derive the user's pod
 from the session → resolve the photos container → mount `<PhotoGallery>` → let it
@@ -19,46 +18,55 @@ model) lives in the library; the host only wires **auth + a gallery root**.
 
 ```
 index.html → src/main.tsx
-  └─ <SessionProvider>            (src/auth/SessionProvider.tsx — the ONE auth seam)
+  └─ <SessionProvider>            (@jeswr/app-session/react)
        └─ <App>                   (src/App.tsx)
-            ├─ logged out → <LoginScreen>          (WebID-first login)
+            ├─ logged out → <LoginScreen>          (@jeswr/app-session/react)
             └─ logged in  → <PhotoGallery          (@jeswr/pod-photos/ui)
-                              rootUrl />
+                              rootUrl fetch />
 ```
 
 ### Auth (standalone, no server)
 
-`SessionProvider` is the only place auth is wired, copied verbatim from the
-`pod-docs/web` template. On mount it:
+Photos configures `@jeswr/app-session` in `src/auth/pod-auth.ts` and passes its name,
+development flag and legacy keys to the shared React provider in `src/main.tsx`.
+The package owns the page-lifetime `@jeswr/pod-auth` core and the shared
+`@jeswr/suite-ui/sign-in` card, the same path as Pod Docs and Pod Drive. Recent accounts appear
+first; users can also enter an address, choose the home provider or another listed
+provider, or enter a custom provider address. Addresses are resolved through a
+pristine public fetch. A WebID with several providers asks the user to choose a
+provider explicitly.
 
-1. snapshots the pristine `globalThis.fetch` (for the pre-popup public profile
-   read, so it can never recurse on a 401);
-2. **dynamically** imports `@solid/reactive-authentication` (so the browser-only
-   custom element + oauth stack never evaluate at module-eval / SSR / prerender
-   time — verified by the build: `customElements.define` is `0` in the main
-   bundle and lives only in the lazily-imported chunk);
-3. builds a `WebIdDPoPTokenProvider` bound to this origin's **static Client
-   Identifier Document** at `${origin}/clientid.jsonld`, so the consent screen
-   shows "Pod Photos" instead of a throwaway dynamic registration;
-4. calls `manager.registerGlobally()` — **this is what patches the global
-   `fetch`** (the 0.1.3 constructor does NOT). Forgetting it is the #1
-   reactive-auth bug.
+The core restores once on mount, including React StrictMode replay, and owns all
+credentials, persistence and logout. `auth.fetch` is passed explicitly to
+`PhotoGallery` and Type Index discovery; global fetch stays public. The default automatic credential
+boundary uses only the authenticated WebID's advertised storage roots. Public
+profile reads for the display name, avatar and pod root use the pristine public
+transport.
 
-Once patched, every plain `fetch()` — including the ones inside `@jeswr/fetch-rdf`
-and the `@jeswr/pod-photos` data layer — transparently upgrades on a 401 with a
-DPoP token. So `<PhotoGallery>` is mounted with **no `fetch` prop**: its
-`fetch?:` seam falls back to the now-authenticated ambient global.
+The popup element is lazily registered from `@jeswr/reactive-authentication/registerElements`.
+A StrictMode-safe holder adapts its disposable result to the full callback URL.
+`allowInsecureLoopback` and pod-auth's dynamic client registration are enabled only
+in a development build (`npm run dev`) whose hostname is localhost, 127.0.0.0/8 or
+::1; every other build uses the HTTPS `clientid.jsonld`, so `vite preview` over HTTP
+cannot sign in. Silent `prompt=none` re-authentication during restore is declined
+(no popup without a click). The popup supports cancellation; errors use plain
+messages without raw protocol details. On first load the app removes the
+sessionStorage keys `pod-photos:pss.autologin.flow` and `pod-photos:autologin-attempted`,
+the localStorage key `pod-photos:remembered-account`, and the dedicated
+`pod-photos:sessions` IndexedDB database left by builds before pod-auth. The shared
+package's `clearLegacyCredentials` removes these entries independently when storage is unavailable.
+Other applications' storage and the theme preference are preserved.
 
-> Tokens are in-memory only — closing the tab logs out. `scope` already requests
-> `offline_access`, so durable session restore is a provider-level add, not a
-> redesign.
+A `#autologin/<encoded-webid>` deep link adds a one-click account row and is
+removed from the address bar. It never opens a popup or redirects without a click.
+Only `callback.html` is registered as an OAuth redirect URI.
 
 ### How the gallery root is derived from the session
 
 `<PhotoGallery rootUrl />` needs the **photos container** URL. The host derives it
 in two steps:
 
-1. **pod root** (`src/auth/session-derivation.ts`, verbatim) = the first
+1. **pod root** (`@jeswr/app-session`'s `deriveSession`) = the first
    `pim:storage` on the WebID profile, else the WebID origin (`scheme://host/`).
    A banner tells the user when the origin fallback is used.
 2. **photos container** under that pod root (`src/photos-root.ts`) = Type-Index
@@ -83,8 +91,9 @@ single `APP_ORIGIN` env, written into `public/` before every build:
   message at **our origin only** (`postMessage(href, "${origin}")`), never `"*"`,
   because the URL carries the authorization code.
 
-Both are git-ignored (a per-origin artifact; the script + `APP_ORIGIN` are the
-source of truth) and copied by Vite into `dist/` at the root.
+Both have committed localhost defaults, are regenerated for each deployment, and
+are copied by Vite into `dist/`. Set `CLIENT_BASE_PATH=/solid-sdk/pod-photos/`
+for the GitHub Pages deployment and use the same Vite base.
 
 > `ignore-scripts=true` (supply-chain hardening) means **npm lifecycle hooks do
 > NOT run** — so the generator is chained INLINE in the `build`/`dev` scripts
@@ -94,7 +103,8 @@ source of truth) and copied by Vite into `dist/` at the root.
 
 ```bash
 # Dev (defaults APP_ORIGIN to http://localhost:5173):
-npm install
+# Install workspace dependencies from the repository root:
+pnpm install --offline
 npm run dev
 
 # Production build for this app's subdomain:
@@ -103,7 +113,7 @@ APP_ORIGIN=https://photos.solid-test.jeswr.org npm run build
 #       dist/index.html
 #       dist/clientid.jsonld          (client_id = that origin)
 #       dist/callback.html            (postMessage target = that origin)
-#       dist/assets/*.js, *.css       (hashed; reactive-auth code-split into a
+#       dist/assets/*.js, *.css       (hashed; the popup element code-split into a
 #                                      lazily-imported chunk)
 ```
 
@@ -114,7 +124,10 @@ APP_ORIGIN=https://photos.solid-test.jeswr.org npm run build
 
 Gates: `npm run lint` (Biome), `npm run typecheck` (tsc — the library source is
 NOT re-typechecked here; `src/pod-photos-ui.d.ts` declares the consumed surface),
-`npm test` (the verbatim auth-seam unit tests), `npm run build`.
+`npm test` (Photos integration, discovery and client-ID tests), `npm run build`.
+Shared auth behavior is tested in `@jeswr/app-session`; this app uses its `/testing`
+fakes for adoption tests. The Playwright sign-in spec requires a local CSS and is
+separate from the offline unit gate.
 
 ## Env
 
@@ -122,4 +135,7 @@ NOT re-typechecked here; `src/pod-photos-ui.d.ts` declares the consumed surface)
 |---|---|---|---|
 | `APP_ORIGIN` | `gen-clientid.mjs` (build) | `http://localhost:5173` | The deployment origin. Set per-subdomain for prod. |
 | `VITE_APP_ORIGIN` | UI label only | `http://localhost:5173` | Mirror of `APP_ORIGIN`; non-load-bearing (the runtime `client_id` derives from the actual window origin). |
-| `VITE_HOME_IDP` | `LoginScreen` hint | `https://idp.solid-test.jeswr.org` | Display only — the auth issuer always comes from the WebID profile. |
+| `VITE_HOME_IDP` | `SignInCard` | `https://idp.solid-test.jeswr.org` | Home provider offered first. |
+| `VITE_HOME_IDP_NAME` | `SignInCard` | Provider host | Optional home-provider label. |
+| `VITE_KNOWN_PROVIDERS` | `SignInCard` | Shared directory | Comma-separated HTTPS providers. |
+| `CLIENT_BASE_PATH` | `gen-clientid.mjs` | `/` | App path ending in `/`; align with Vite's base. |
