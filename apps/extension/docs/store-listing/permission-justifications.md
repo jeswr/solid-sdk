@@ -81,8 +81,19 @@ are refused. The bridge never sends profile values unless the user approves them
 extension's review window.
 
 No `tabs` permission is requested. Existing host access supports the tab-origin checks
-needed to send access updates only to the relevant pages. There are no optional permissions
-in the current manifest.
+needed to send access updates only to the relevant pages.
+
+## Permissions: `cookies`, `nativeMessaging` and optional host access
+
+The optional agent sign-in feature requests one selected origin from an explicit popup
+click. Existing Solid host access can satisfy this without a further browser prompt. It
+reads cookies matching that page URL, checks exact-host or explicitly vetted parent-domain
+scope (never public suffixes or sibling host-only cookies), and shows site/count/persona.
+Separate confirmation sends them to the person's local encrypted agent vault through a
+Chrome native host registered for this extension ID. It does not send them to a developer
+service or page, store them in extension storage, export passkey keys, or run automatically.
+Only the actual extension popup can invoke the worker channel. The native connection
+allows the vault's configured keep-alive jobs to continue while Chrome is open.
 
 ## Remote code
 
@@ -103,7 +114,7 @@ that data stays local or travels directly to user-chosen services must not be pr
 | Form data type | Draft disclosure and use |
 |---|---|
 | Personally identifiable information | Account addresses, display names, profile photo addresses, and user-chosen account labels support account selection. An approved site sees only the account bound to its grant. When the user asks to fill a form, the extension reads their name, email address, phone number, organisation and postal addresses from their own profile and address book, shows them for review, and writes only approved values into that page. Choosing Fill shares those values with the website. The values are not stored or sent to the developer; remembered per-site choices (which kinds of detail were allowed, not the values) are kept until sign-out or profile removal. |
-| Authentication information | Account tokens and non-exportable security keys stay in worker storage. Sign-in exchanges go to the chosen provider; authenticated data requests go to approved pod destinations. Websites never receive tokens or private keys. The extension does not store passwords. |
+| Authentication information | Solid account tokens and non-exportable security keys stay in worker storage. Sign-in exchanges go to the chosen provider; authenticated data requests go to approved pod destinations. Explicitly reviewed site cookies may be handed to the person's local agent vault through native messaging. Websites never receive tokens or private keys through this channel. The extension does not store passwords. |
 | Web history | Limited site origins and resource addresses are retained in access decisions, application mappings, and cache metadata. The extension does not record general browsing history. Disclose this limited URL handling conservatively for Jesse's review. |
 | Website content | The extension handles the pod data requested by approved apps, may cache it locally, and returns permitted results to those apps. To offer form filling, it automatically inspects form fields on visited pages, locally in the browser: labels, autocomplete hints, accessible names, field names, IDs and placeholders. It does not read typed values or send this to anyone, and profile data is only fetched when the user asks to fill. It does not scrape arbitrary page contents. |
 | Personal communications / location | Not collected. Form-fill contact details are disclosed under personally identifiable information. Jesse should review whether postal-address filling also needs the location category. |

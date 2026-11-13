@@ -79,6 +79,29 @@ login and interactive login are injected seams.
   authorization, option injection, cross-origin/cookie attacks, ciphertext substitution,
   expiry and JSON/inspect/error redaction. Run package gates and root lint; do not commit.
 
+Native messaging and real-browser capture:
+- `./browser` is the browser-safe schema/scope export. Keep captureSchema there shared with
+  capture.ts; never import the host barrel or Node adapters into the extension bundle.
+- NativeVault owns port-bound five-minute, single-use generation tokens. Require a known
+  site/account/profile before beginLogin, and acceptCapture's persisted generation check.
+  No bundle or credential may appear in a reply, error, diagnostic or stdout log.
+- Only the browser-attested popup can use the worker's native bridge. Page/content-script
+  messages cannot list vault accounts, initiate login, read cookies or capture. Review is
+  explicit, requests exactly the selected origin, and confirms site/count/persona separately.
+- Exact host by default; parent cookieDomains require operator configuration, PSL checks
+  including private suffixes, and matching SessionStore options. Never widen to a sibling or
+  guess the last two labels. Preserve flags; refuse partitioned cookies until the contract
+  can retain their partition key. Never silently flatten them.
+- The native executable pins Chrome's caller before opening the store. The POSIX generator
+  writes private config/launcher files and one exact allowed_origins ID; no wildcard sender,
+  shell interpolation of arguments, or credentials in argv. Keep a bounded native-endian
+  frame parser, strict JSON schemas, sequential dispatch and bounded output.
+- One worker port keeps the native owner alive after popup close. Only that owner's existing
+  KeepAlive scheduler runs; frequent probes require explicit configuration and learned routes.
+  Stop on disconnect; rehydrate routes on startup. Stop an old job in NativeVault.beginning
+  before resetting its generation; restart it in captured, so an old 401 probe cannot mark
+  an empty review generation stale. SSO expiry requires explicit re-sharing.
+
 ## Agent persona
 
 None specific; the library is a host credential boundary, not application UI.

@@ -45,6 +45,18 @@ styles to `#login-form`** (the suite CSS-leak guards).
 - **Access management is OUT OF SCOPE** — `window.solid.requestAccess?` is a declared,
   throwing SEAM only. Do not implement it without the access-management design track.
 
+## Agent sign-in capture boundary
+
+`popup/agent-sign-in*.ts` offers explicit, reviewed sharing of the active site's browser
+cookies with the local agent vault. This is independent of Solid-OIDC tokens. The popup
+asks for the selected exact origin before reading cookies, shows site/count/persona, and
+requires confirmation. Never expose this action through window.solid or the content bridge.
+`background/agent-vault.ts` admits only Chrome-attested popup senders, never a content-script
+sender/tab. Its single native port is retained for the vault's keep-alive owner. Native host
+replies contain display metadata, a generation token or acknowledgements, never credentials.
+Use the browser-safe `@jeswr/agent-vault/browser` schemas and PSL boundary; parent cookies
+require explicit vetted host configuration. No cookie values in logs, errors, UI or storage.
+
 ## Gate
 
 `pnpm run gate` = lint (biome) + typecheck (tsc) + test (vitest, the core) + build (webpack).

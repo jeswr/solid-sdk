@@ -53,6 +53,7 @@ import type {
   WorkerRequest,
 } from '../shared/messages';
 import { setSignedInIcon, setSignedOutIcon } from './action-icon';
+import { installNativeVaultBridge } from './agent-vault';
 import { initiateLogin, refreshSession } from './auth-flow';
 import { authenticatedFetch, type FetchSession } from './core/authenticated-fetch';
 import {
@@ -2188,6 +2189,7 @@ async function handleOriginGrants(message: OriginGrantRequest, sender: MessageSe
   return { ok: true, grants: await originGrants.list() };
 }
 
+installNativeVaultBridge();
 chrome.runtime.onMessage.addListener(
   (message: WorkerRequest, sender, sendResponse: (r: unknown) => void) => {
     const respond = (task: Promise<unknown>) => {

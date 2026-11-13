@@ -21,6 +21,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@jeswr/agent-vault": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
     "@rdfjs/wrapper": "^0.32.0",

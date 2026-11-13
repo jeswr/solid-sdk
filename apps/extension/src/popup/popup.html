@@ -38,6 +38,19 @@
     </div>
 
     <main id="content">
+      <section id="agent-sign-in" aria-labelledby="agent-sign-in-title">
+        <h2 id="agent-sign-in-title">Share this sign-in with my agent</h2>
+        <p id="agent-site"></p>
+        <label for="agent-profile">Vault profile</label>
+        <select id="agent-profile" disabled></select>
+        <label for="agent-persona">Persona for this site</label>
+        <select id="agent-persona" disabled></select>
+        <button id="agent-review" type="button" disabled>Review sign-in sharing</button>
+        <p id="agent-preview" hidden></p>
+        <button id="agent-confirm" type="button" disabled>Share this sign-in with my agent</button>
+        <button id="agent-cancel" type="button">Cancel sharing</button>
+        <p id="agent-sign-in-status" role="status" aria-live="polite"></p>
+      </section>
       <!-- Signed out: the suite-wide login surface, driven by MessageBridgeLoginController
            (see account-surface.ts, shared with the side panel) so the actual auth still
            runs in the service worker. The panel's OWN auto-restore is disabled via the
