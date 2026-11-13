@@ -23,6 +23,7 @@ import { useTasks } from "../../state/tasks-context";
 import { BulkToolbar } from "../bulk-toolbar";
 import { LabelFilterBar } from "../label-filter-bar";
 import { ProjectDot } from "../project-dot";
+import { ProjectBreadcrumb } from "../project-nesting";
 import { TaskList } from "../task-list";
 import { projectHref, useViewMode } from "../view-toggle";
 import { ProjectError } from "./project-error";
@@ -114,6 +115,7 @@ export function ProjectView({
   return (
     <TaskListFocus className="tsk-content">
       <header className="tsk-view-header">
+        {!inbox && project && <ProjectBreadcrumb project={project} />}
         <h1>
           {!inbox && project && <ProjectDot colour={project.tracker.color} />}
           {!inbox && project ? (
