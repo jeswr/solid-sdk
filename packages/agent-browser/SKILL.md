@@ -114,8 +114,9 @@ Fallback review invariants:
   Never give Chromium an unchecked redirect. Off-origin redirects render a navigation error.
   301/302/303 writes continue as GET; 307/308 body resends need a new exact grant/fingerprint.
   Decorate each hop with matching cookies and site-only session headers in the driver.
-- Build fingerprints and learned inputs from the wire inventory. Form evidence can type a sent
-  field or locate its CSRF source, but cannot add unsent controls, examples or defaults.
+- Build fingerprints and learned inputs with the same wire-operation builder over one transmitted
+  request. Form evidence can locate a CSRF source; it cannot type fields or add controls/defaults.
+  Refuse repeated wire names that the scalar-input contract cannot preserve.
 - Remember sent writes before processing learning results. Retain the previous executor/model
   on any admission/construction/processing failure. Clean writes that cannot be learned stay
   completed; uncertain writes stay Uncertain. Dry-construct candidates and reject reserved
@@ -127,3 +128,12 @@ Fallback review invariants:
 - Bind grants to document/frame generation and the exact pending request; recheck immediately
   before dispatch. Approval text quotes page strings, escapes controls/newlines, marks truncation,
   shows method/path and uses the actual visible enabled submitter and its form.
+- Discover credentials from every same-origin HTML/JSON/script response before snapshots, trace
+  exposure or learning/replay; include external scripts and unsuccessful/non-GET sources. Reuse
+  profiler script analysis for token variables/global assignments. Unsupported sources stay secret
+  and unresolved token constants must be rejected with a reason.
+- Trim session headers, canonicalize recognized scheme prefixes case-insensitively, and remember
+  both source and transmitted spellings plus the credential. Share URL scrubbing across snapshot
+  names/values and trace text, covering sensitive query/fragment parameters, opaque bare fragments,
+  userinfo and exact secret path segments. Escape all Unicode formatting/control characters in
+  snapshot and approval strings, including bidi and zero-width characters.

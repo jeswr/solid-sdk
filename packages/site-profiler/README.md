@@ -184,8 +184,12 @@ therefore retain their JSON negotiation without storing Accept in the learned mo
 Accept media types require a future first-class, inventoried field.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-`discoverCredentialSources(pages, cookies)` returns explicit first-use credential secrets and
+`discoverCredentialSources(pages, cookies, responses?)` returns explicit first-use credential secrets and
 supported CSRF sources independently of repetition. Meta/hidden token fields and cookies can
 supply session slots; recognised script credential literals are secrets only, since script
 variables are outside CsrfSource. The fallback uses this stricter credential boundary alongside
 `discoverSessionTokens`; ordinary opaque-value repetition discovery is unchanged.
+The optional same-origin response inventory scans HTML from any method/status, nested JSON
+credential keys and external scripts (including scripts with nonstandard media types). Script
+credential analysis shares the profiler's parser, AST traversal and constant evaluation; variable
+and global-object assignments supply secrets, never invented executable CSRF sources.

@@ -14,7 +14,6 @@ import {
   writeSiteModel,
 } from "@jeswr/site-model";
 import {
-  buildOperation,
   discoverCredentialSources,
   discoverSessionTokens,
   type EndpointCandidate,
@@ -27,11 +26,24 @@ import {
 } from "@jeswr/site-profiler";
 import { randomUUID } from "crypto";
 import type { BrowserDriver } from "./driver.js";
-import { fallbackRedactor } from "./redact.js";
-import { wireCandidates } from "./wire.js";
+import { fallbackRedactor, redactSnapshot } from "./redact.js";
+import { buildWireOperation, wireCandidates } from "./wire.js";
 
 const sensitive =
   /pass(word|wd)?|pwd|secret|token|csrf|xsrf|session|api.?key|authorization|form.?key/i;
+const unresolvedSecret = (value: string) => /\[redacted\]|%5bredacted%5d/i.test(value);
+
+/** Opaque URL constants need a verified session source; shape alone cannot authorize replay. */
+function unresolvedTokenConstant(operation: Operation): boolean {
+  const opaque = (value: string) => /^[A-Za-z0-9_-]{16,256}$/.test(value) && /[a-z]/i.test(value);
+  const url = new URL(operation.request.urlTemplate.replace(/\{[^}]*\}/g, ""));
+  return [
+    ...url.pathname.split("/").map((part) => decodeURIComponent(part)),
+    ...url.searchParams.values(),
+    ...Object.values(operation.request.headers ?? {}),
+    ...operation.inputs.flatMap((p) => (p.default === undefined ? [] : [p.default])),
+  ].some(opaque);
+}
 
 /** Host-internal raw evidence -> credential-free template candidates. Never return raw traffic. */
 export function candidatesFromTrace(
@@ -50,13 +62,12 @@ export function candidatesFromTrace(
       r.status >= 200 &&
       r.status < 400,
   );
-  const pages = safe
-    .filter(
-      (r) =>
-        r.method === "GET" && /html/i.test(r.contentType ?? "") && r.bodySample && !r.bodyTruncated,
-    )
+  // Credential evidence is independent of candidate admission, method and response status.
+  const evidence = trace.filter((r) => !r.blocked && new URL(r.url).origin === origin);
+  const pages = evidence
+    .filter((r) => /html/i.test(r.contentType ?? "") && r.bodySample)
     .map((r) => ({ url: r.url, html: r.bodySample as string }));
-  const credentials = discoverCredentialSources(pages, cookies);
+  const credentials = discoverCredentialSources(pages, cookies, evidence);
   const tokens = new Map([...discoverSessionTokens(pages, cookies, safe), ...credentials.tokens]);
   // Recognised session URL tokens are slotted by the profiler before any redaction.
   const forms = pages
@@ -74,7 +85,10 @@ export function candidatesFromTrace(
     ),
   ].filter(Boolean);
   const redactSecrets = fallbackRedactor(new Set(secrets));
-  const clean = (value: string) => redactSecrets(redact(value));
+  const clean = (value: string) =>
+    secrets.includes(value)
+      ? "[redacted]"
+      : redactSnapshot(redact(value), redactSecrets, new Set(secrets));
   return merged
     .filter((c) => c.samples.length)
     .map((c) => {
@@ -86,7 +100,9 @@ export function candidatesFromTrace(
       );
       c.params = c.params.map((p) => ({
         ...p,
-        examples: sensitive.test(p.name) ? [] : p.examples.filter((v) => clean(v) === v),
+        examples: sensitive.test(p.name)
+          ? []
+          : p.examples.map((v) => (clean(v) === v ? v : "[redacted]")),
       }));
       const walk = (value: unknown): unknown => {
         if (typeof value === "string") return clean(value);
@@ -158,8 +174,18 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
         reject("Credential-bearing candidate.");
         continue;
       }
+      if (
+        candidate.params.some(
+          (p) =>
+            p.examples.some(unresolvedSecret) &&
+            !candidate.csrf.some((r) => r.target.name === p.name),
+        )
+      ) {
+        reject("Unresolved session material in a transmitted parameter.");
+        continue;
+      }
       // Never retain redacted URL constants: an unsupported or one-off session token fails closed.
-      if (candidate.urlTemplate.includes("[redacted]")) {
+      if (unresolvedSecret(candidate.urlTemplate)) {
         reject("Unresolved session material in URL.");
         continue;
       }
@@ -173,7 +199,7 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
       }
       if (
         candidate.csrf.some(
-          (r) => r.source.kind !== "cookie" && r.source.urlTemplate.includes("[redacted]"),
+          (r) => r.source.kind !== "cookie" && unresolvedSecret(r.source.urlTemplate),
         )
       ) {
         reject("Unresolved session source URL.");
@@ -221,7 +247,7 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
           )
             field.untrusted = true;
       }
-      const operation = buildOperation(
+      const operation = buildWireOperation(
         candidate,
         { ...label, confidence: Math.min(label.confidence, 0.35) },
         {
@@ -234,18 +260,13 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
           sessionCookies: [...new Set(candidate.samples.flatMap((r) => r.cookieNames))],
         },
       );
-      for (const input of operation.inputs) {
-        // Demonstrated personal values are runtime inputs, never model constants/examples.
-        if (write) {
-          delete input.example;
-          if (!input.options) delete input.default;
-          const parameter = candidate.params.find((p) => p.name === input.name);
-          if (parameter?.required && !parameter.hidden && !input.options) input.required = true;
-        }
-      }
       // No redacted or credential-bearing constant/default can become executable code.
-      if (JSON.stringify(operation).includes("[redacted]")) {
+      if (unresolvedSecret(JSON.stringify(operation))) {
         reject("Unresolved session material in proposed operation.");
+        continue;
+      }
+      if (unresolvedTokenConstant(operation)) {
+        reject("Unresolved token-like constant in proposed operation.");
         continue;
       }
       if (

@@ -2,9 +2,9 @@
 // Opaque values are session material only when a page/cookie supplies them and at least two
 // requests repeat them. Ordinary IDs, one-off nonces and user input never qualify by shape alone.
 import type { CsrfSource } from "@jeswr/site-model";
-import { parse } from "acorn";
 import { isCsrfFieldName } from "./forms.js";
 import { attr, attrValue, descendants, parseHtml } from "./html.js";
+import { scriptCredentialSecrets } from "./scripts.js";
 import type { RecordedRequest } from "./types.js";
 
 export type SessionTokens = ReadonlyMap<string, CsrfSource>;
@@ -16,51 +16,44 @@ const opaque = (v: string) =>
 export function discoverCredentialSources(
   pages: Array<{ url: string; html: string }>,
   cookies: Array<{ name: string; value: string }>,
+  responses: readonly RecordedRequest[] = [],
 ): { tokens: Map<string, CsrfSource>; secrets: Set<string> } {
   const tokens = new Map<string, CsrfSource>();
   const secrets = new Set<string>();
   const credentialName = (name: string) =>
     isCsrfFieldName(name) || /token|secret|session|auth|password|api.?key/i.test(name);
   const scriptSecrets = (source: string) => {
-    const visit = (value: unknown): void => {
-      if (!value || typeof value !== "object") return;
-      const node = value as Record<string, unknown>;
-      const left = node.left as Record<string, unknown> | undefined;
-      const key = (node.id ?? node.key ?? left?.property ?? left) as
-        | Record<string, unknown>
-        | undefined;
-      const name = key?.name ?? key?.value;
-      const rhs = (node.init ?? node.value ?? node.right) as Record<string, unknown> | undefined;
-      if (typeof name === "string" && credentialName(name)) {
-        const literals = (value: unknown): void => {
-          if (!value || typeof value !== "object") return;
-          const item = value as Record<string, unknown>;
-          if (item.type === "Literal" && typeof item.value === "string") secrets.add(item.value);
-          if (item.type === "TemplateElement") {
-            const cooked = (item.value as Record<string, unknown>)?.cooked;
-            if (typeof cooked === "string" && cooked) secrets.add(cooked);
-          }
-          for (const child of Object.values(item)) {
-            if (Array.isArray(child)) child.forEach(literals);
-            else if (child && typeof child === "object") literals(child);
-          }
-        };
-        literals(rhs);
-      }
-      for (const child of Object.values(node)) {
-        if (Array.isArray(child)) child.forEach(visit);
-        else if (child && typeof child === "object") visit(child);
-      }
-    };
-    try {
-      visit(parse(source, { ecmaVersion: "latest", sourceType: "module" }));
-    } catch {
-      // Invalid scripts teach no source; still retain obvious credential literals for redaction.
-      for (const match of source.matchAll(/([\w$]+)\s*[:=]\s*["']([^"'\r\n]+)["']/g))
-        if (credentialName(match[1] ?? "")) secrets.add(match[2] ?? "");
-    }
+    for (const value of scriptCredentialSecrets(source)) secrets.add(value);
   };
-  for (const page of pages) {
+  const jsonSecrets = (value: unknown, credential = false): void => {
+    if ((typeof value === "string" || typeof value === "number") && credential)
+      secrets.add(String(value));
+    else if (Array.isArray(value)) {
+      for (const item of value) jsonSecrets(item, credential);
+    } else if (value && typeof value === "object")
+      for (const [key, item] of Object.entries(value))
+        jsonSecrets(item, credential || credentialName(key));
+  };
+  // Callers supply only same-origin responses, including POST/error responses and scripts.
+  const htmlPages = [...pages];
+  for (const response of responses) {
+    if (!response.bodySample) continue;
+    if (/html/i.test(response.contentType ?? ""))
+      htmlPages.push({ url: response.url, html: response.bodySample });
+    else if (
+      response.resourceType === "script" ||
+      /(?:java|ecma)script/i.test(response.contentType ?? "")
+    )
+      scriptSecrets(response.bodySample);
+    else if (/json/i.test(response.contentType ?? "")) {
+      try {
+        jsonSecrets(JSON.parse(response.bodySample));
+      } catch {
+        scriptSecrets(response.bodySample);
+      }
+    }
+  }
+  for (const page of htmlPages) {
     for (const el of descendants(parseHtml(page.html))) {
       if (el.name === "script")
         scriptSecrets(el.children.map((child) => ("data" in child ? child.data : "")).join(""));

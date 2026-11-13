@@ -9,6 +9,7 @@ import {
   siteOrigin,
 } from "@jeswr/site-executor";
 import { type ActionRequest, type Operation, SCHEMA, type SiteModel } from "@jeswr/site-model";
+import { rememberSessionHeader } from "./fallback/redact.js";
 import type { TaskExecutor } from "./types.js";
 
 const secrets = new WeakMap<SessionProvider, Map<string, Set<string>>>();
@@ -154,9 +155,7 @@ export function createTaskExecutor(options: Omit<ExecutorOptions, "gate">): Task
         const bundle = await options.sessions.get(siteOrigin(options.model.site), options.persona);
         for (const c of bundle?.cookies ?? []) values.add(c.value);
         for (const v of Object.values(bundle?.headers ?? {})) {
-          values.add(v);
-          const token = v.trim().split(/\s+/).at(-1);
-          if (token) values.add(token);
+          rememberSessionHeader(values, v);
         }
       };
       await remember();
