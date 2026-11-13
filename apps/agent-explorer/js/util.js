@@ -40,6 +40,17 @@
       (AX.suiteIndex[s.id] = AX.suiteIndex[s.id] || []).push({ layer: l, suite: s });
     });
   });
+  // The settlement choice: how money is moved and what shows that it was. It is part of the
+  // commitments layer and is chosen at the point of payment, not in the configuration bar.
+  AX.settlement = M.settlement || null;
+  if (AX.settlement) {
+    AX.layerById[AX.settlement.id] = AX.settlement;
+    AX.settlement.suites.forEach(function (s) {
+      (AX.suiteIndex[s.id] = AX.suiteIndex[s.id] || []).push({ layer: AX.settlement, suite: s });
+    });
+  }
+  // The page that explains a layer: a choice that is part of another layer is explained there.
+  AX.layerPage = function (l) { return (l && l.partOf) || (l && l.id); };
   AX.suite = function (layerId, suiteId) {
     var l = AX.layerById[layerId];
     if (!l) return null;
@@ -59,6 +70,22 @@
     var b = l.suites.filter(function (s) { return s.baseline; })[0] || l.suites[0];
     AX.baselineLayers[l.id] = b.id;
   });
+  if (AX.settlement) {
+    AX.baselineLayers[AX.settlement.id] = (AX.settlement.suites.filter(function (s) { return s.baseline; })[0] || AX.settlement.suites[0]).id;
+  }
+  // A named stretch of a trace, marked on its first and last events. Where a run stops
+  // before the stretch closes, it runs to the end.
+  AX.segmentRange = function (t, name) {
+    t._segments = t._segments || {};
+    if (t._segments[name] !== undefined) return t._segments[name];
+    var a = -1, b = -1;
+    t.events.forEach(function (e, i) {
+      if (e.segment === name && a < 0) a = i;
+      if (e.segmentEnd === name) b = i;
+    });
+    if (a >= 0 && b < a) b = t.events.length - 1;
+    return (t._segments[name] = a >= 0 ? [a, b] : null);
+  };
   // Plumbing layers first, then the numbered ones.
   AX.orderedLayers = (M.layers || []).filter(function (l) { return l.group === 'plumbing'; })
     .concat((M.layers || []).filter(function (l) { return l.group !== 'plumbing'; }));
@@ -394,10 +421,10 @@
       return { kind: 'check', name: c.name + ' check', href: AX.buildHash('architecture', { select: id }) };
     }
     if (AX.messageLayerById[id]) return { kind: 'message layer', name: AX.messageLayerById[id].name, href: AX.buildHash('message', { select: id }) };
-    if (AX.layerById[id]) return { kind: 'layer', name: AX.layerById[id].name, href: AX.buildHash('layers', { select: id }) };
+    if (AX.layerById[id]) return { kind: 'layer', name: AX.layerById[id].name, href: AX.buildHash('layers', { select: AX.layerPage(AX.layerById[id]) }) };
     if (AX.suiteIndex[id]) {
       var s = AX.suiteIndex[id][0];
-      return { kind: 'suite', name: s.suite.name, href: AX.buildHash('layers', { select: s.layer.id + '/' + id }) };
+      return { kind: 'suite', name: s.suite.name, href: AX.buildHash('layers', { select: s.layer.partOf ? s.layer.partOf : s.layer.id + '/' + id }) };
     }
     return null;
   };

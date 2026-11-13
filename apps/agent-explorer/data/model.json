@@ -1318,5 +1318,55 @@
       "A proof makes a claim checkable, not better founded. A total of self-reported figures is still self-reported.",
       "A model's summary is not a derivation. No rule can be named, so it is marked as model output."
     ]
+  },
+  "settlement": {
+    "id": "settlement",
+    "partOf": "commitments",
+    "name": "Settlement",
+    "question": "How is money moved, and what shows that it was?",
+    "note": "A payment settles an agreement. Whichever is chosen, the same checks run: the amount, the payee, the mandate, the approval, and that it is paid once.",
+    "suites": [
+      {
+        "id": "rdf-order",
+        "name": "Described in RDF",
+        "short": "Described in RDF",
+        "baseline": true,
+        "summary": "The invoice, the order to pay and the receipt are plain linked data inside ordinary signed messages.",
+        "maturity": "reference design",
+        "basis": "ODRL Offer and Agreement; schema.org Invoice and PayAction"
+      },
+      {
+        "id": "x402",
+        "name": "x402 version 2",
+        "short": "x402",
+        "summary": "The service answers \"payment required\" over HTTP, and the payer retries with a signed authorisation for one transfer.",
+        "maturity": "industry specification",
+        "basis": "x402 version 2, scheme exact, EIP-3009 authorisation"
+      },
+      {
+        "id": "mpp",
+        "name": "Machine Payments Protocol",
+        "short": "MPP",
+        "summary": "The service sends a payment challenge as an HTTP authentication scheme, and the payer answers it with a credential bound to that challenge.",
+        "maturity": "internet draft",
+        "basis": "The \"Payment\" HTTP authentication scheme, draft 01, intent charge"
+      },
+      {
+        "id": "ap2",
+        "name": "Agent Payments Protocol",
+        "short": "AP2",
+        "summary": "The person signs a mandate for this checkout and a mandate for this payment, each usable once.",
+        "maturity": "industry specification",
+        "basis": "Agent Payments Protocol 0.2, mandates as SD-JWT"
+      },
+      {
+        "id": "acp",
+        "name": "Agentic Commerce Protocol",
+        "short": "ACP",
+        "summary": "The agent opens a checkout session with the seller and completes it with a payment token limited to that session.",
+        "maturity": "industry specification",
+        "basis": "Agentic Commerce Protocol 2026-04-17, delegated payment"
+      }
+    ]
   }
 }

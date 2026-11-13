@@ -68,7 +68,7 @@
     var sw = Object.keys(u.suites);
     if (sw.length) {
       h += '<dt>Beyond the baseline</dt><dd class="chips">' + sw.map(function (l) {
-        return '<a class="chip" href="' + AX.buildHash('layers', { select: l }) + '">' + esc(AX.layerById[l].name) + ': ' + esc(AX.suiteName(l, u.suites[l])) + '</a>';
+        return '<a class="chip" href="' + AX.buildHash('layers', { select: AX.layerPage(AX.layerById[l]) }) + '">' + esc(AX.layerById[l].name) + ': ' + esc(AX.suiteName(l, u.suites[l])) + '</a>';
       }).join('') + '</dd>';
     }
     if (u.assurance) {

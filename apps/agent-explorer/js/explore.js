@@ -54,6 +54,7 @@
       '<aside class="chat" data-anchor="chat" aria-label="Principal chat"><details id="chat-details" open><summary>Sam\'s chat</summary><ol class="chat-list" id="chat-list"></ol></details></aside>' +
       '<section class="stage" aria-label="Stage">' +
       '  <div class="parties" id="parties" data-anchor="stage.parties"></div>' +
+      '  <div class="pay-choice" id="pay-choice" data-anchor="stage.payment" hidden></div>' +
       '  <div class="stage-body"><div class="stage-figure" id="stage-figure"></div><pre class="raw" id="raw" hidden></pre></div>' +
       '  <p class="caption" id="caption" aria-live="polite" data-anchor="stage.caption"></p>' +
       '</section>' +
@@ -116,6 +117,10 @@
       var i = Number(t.dataset.i);
       if (S.level === 'steps') i = stepOf(i).last;
       go(stopIndexFor(i));
+    });
+    root.querySelector('#pay-choice').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-settle]');
+      if (b && !b.disabled && b.getAttribute('aria-pressed') !== 'true') changeSuite('settlement', b.dataset.settle);
     });
     root.querySelector('#inspector').addEventListener('click', function (e) {
       var j = e.target.closest('[data-jump]');
@@ -300,6 +305,26 @@
       item.title = AX.suiteName(l.id, cur) + ': ' + (AX.suite(l.id, cur) || {}).summary;
     });
     document.dispatchEvent(new CustomEvent('ax:trace', { detail: t }));
+  }
+
+  // ---- The choice at the point of payment ----------------------------------
+  // Shown only while the trace is inside its payment stretch. Changing it switches to the
+  // run of the same journey with only the way of settling changed, at the same place.
+  function renderPayChoice() {
+    var el = root.querySelector('#pay-choice');
+    var st = AX.settlement;
+    var r = st && AX.segmentRange(S.trace, 'payment');
+    if (!st || !r || S.idx < r[0] || S.idx > r[1]) { el.hidden = true; el.innerHTML = ''; return; }
+    var cur = S.trace.layersFull[st.id];
+    var curSuite = AX.suite(st.id, cur) || {};
+    el.hidden = false;
+    el.innerHTML = '<span class="pay-label">Payment, settled by</span>' +
+      '<span class="seg small" role="group" aria-label="How the payment is settled">' + st.suites.map(function (s) {
+        var on = s.id === cur || suiteEnabled(st.id, s.id);
+        return '<button type="button" data-settle="' + esc(s.id) + '" aria-pressed="' + (s.id === cur) + '"' + (on ? '' : ' disabled') +
+          ' title="' + esc(s.name + '. ' + s.summary + (on ? '' : ' Not run yet.')) + '">' + esc(s.short || s.name) + '</button>';
+      }).join('') + '</span>' +
+      '<span class="pay-note">' + esc((curSuite.summary ? curSuite.summary + ' ' : '') + 'The same checks run whichever is chosen.') + '</span>';
   }
 
   // ---- Timeline -----------------------------------------------------------
@@ -585,6 +610,35 @@
     h += '</div></section>';
     return h;
   }
+  // A payment event: the chosen protocol's own objects as they were sent, then the terms the
+  // gate lifted from them and checked. The second part reads the same under every choice.
+  function show(v) { return typeof v === 'string' ? v : JSON.stringify(v, null, 2); }
+  function settlementHtml(s) {
+    var suite = AX.suite('settlement', s.suite) || { name: s.suite };
+    var h = '<section class="settle" data-anchor="inspector.settlement"><h3>Payment: ' + esc(suite.name) + '</h3>';
+    var objects = s.objects || [];
+    if (objects.length) h += '<p class="settle-sub">What was sent, in this protocol\'s own form</p>';
+    objects.forEach(function (o) {
+      h += '<details class="layer present"><summary class="layer-head"><span class="ln">' + esc(o.name) + '</span><span class="lstate">' + esc(o.form || '') + '</span></summary>';
+      if (o.shown !== undefined) h += '<pre class="json">' + esc(show(o.shown)) + '</pre>';
+      if (o.raw !== undefined) h += '<details class="as-sent"><summary>As sent</summary><pre class="json">' + esc(show(o.raw)) + '</pre></details>';
+      h += '</details>';
+    });
+    if (s.note) h += '<p class="rdf-note">' + esc(s.note) + '</p>';
+    var facts = s.facts;
+    if (facts !== undefined && facts !== null) {
+      h += '<p class="settle-sub">What the gate read from it and checked</p>';
+      if (Array.isArray(facts) && facts.length && facts.every(function (f) { return f && typeof f === 'object' && f.value !== undefined; })) {
+        h += '<dl class="kv facts">' + facts.map(function (f) {
+          return '<dt>' + esc(f.label || f.name || f.term || '') + '</dt><dd>' + esc(show(f.value)) + (f.from ? '<div class="rule-id">from <code>' + esc(f.from) + '</code></div>' : '') + '</dd>';
+        }).join('') + '</dl>';
+      } else {
+        h += '<pre class="json rdf-doc">' + esc(show(facts)) + '</pre>';
+      }
+      h += '<p class="rdf-note">These terms are the same whichever way of settling is chosen, and the same checks run on them.</p>';
+    }
+    return h + '</section>';
+  }
   function checkHtml(e) {
     var c = AX.checkById[e.check] || { name: e.check, question: '', n: '' };
     var h = '<section class="chk' + (e.verdict === 'not-applicable' ? ' quiet' : '') + '" data-anchor="inspector.check"><h3>' + esc(c.n + '. ' + c.name) + ' check</h3>';
@@ -645,6 +699,7 @@
     else if (e.kind === 'decision') {
       h += '<section class="dec"><h3>' + esc(AX.partName(e.part)) + ' outcome</h3><div class="verdict-row">' + AX.outcomePill(e.outcomeKey) + (e.reason && e.reason !== e.outcomeKey ? '<code class="reason">' + esc(e.reason) + '</code>' : '') + '</div><p>' + esc(AX.outcomeSummary(e.outcomeKey)) + '</p></section>';
     }
+    if (e.settlement) h += settlementHtml(e.settlement);
     if (e.packet) h += packetHtml(e.packet, e);
     if (e.kind !== 'check' && e.kind !== 'decision' && !e.packet) {
       var part = AX.partById[e.part];
@@ -666,6 +721,7 @@
   function render() {
     if (!root || !S.trace) return;
     renderControls();
+    renderPayChoice();
     renderStage();
     renderChat();
     renderInspector();
