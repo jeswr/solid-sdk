@@ -1,0 +1,2253 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "content-licence",
+ "path": "main",
+ "parties": [
+  {
+   "id": "owner",
+   "name": "The publisher"
+  },
+  {
+   "id": "receiver",
+   "name": "The sister company"
+  },
+  {
+   "id": "photographer",
+   "name": "The photographer"
+  },
+  {
+   "id": "owner-agent",
+   "name": "The publisher's agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The sister company's agent"
+  },
+  {
+   "id": "coordinator",
+   "name": "The licence registrar"
+  },
+  {
+   "id": "coordinator-agent",
+   "name": "The licence registrar's agent"
+  },
+  {
+   "id": "photographer-agent",
+   "name": "The photographer's agent"
+  },
+  {
+   "id": "external-receiver",
+   "name": "The publishing platform"
+  },
+  {
+   "id": "external-receiver-agent",
+   "name": "The publishing platform's agent"
+  }
+ ],
+ "scenario": {
+  "id": "content-licence",
+  "title": "Licensing a photograph",
+  "steps": {
+   "1": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "2": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "3": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "4": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "5": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "6": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "7": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "8": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "9": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "10": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+   "11": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right."
+  }
+ },
+ "configuration": {
+  "id": "content-licence-local",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "agreement-credential",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "owner-agent",
+   "name": "The publisher's agent",
+   "actsFor": "owner",
+   "role": "agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The sister company's agent",
+   "actsFor": "receiver",
+   "role": "agent"
+  },
+  {
+   "id": "coordinator-agent",
+   "name": "The licence registrar's agent",
+   "actsFor": "coordinator",
+   "role": "agent"
+  },
+  {
+   "id": "photographer-agent",
+   "name": "The photographer's agent",
+   "actsFor": "photographer",
+   "role": "agent"
+  },
+  {
+   "id": "external-receiver-agent",
+   "name": "The publishing platform's agent",
+   "actsFor": "external-receiver",
+   "role": "agent"
+  },
+  {
+   "id": "coordinator",
+   "name": "The licence registrar",
+   "actsFor": "coordinator",
+   "role": "source"
+  }
+ ],
+ "generated": {
+  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Multi-party completion, local conditional escrow and reservation providers",
+   "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+  },
+  {
+   "what": "Outside organizations and data sources",
+   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+  },
+  {
+   "what": "Licence-lifecycle-free onward restriction",
+   "replacedBy": "The photographer's signed asset binding and terms allow the publisher but explicitly prohibit its sister company; original synthetic image bytes are present in the stopped proposal"
+  },
+  {
+   "what": "Multi-party completion, local conditional escrow and reservation providers",
+   "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "coordinator-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The licence registrar's mandate covers this action."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The licence registrar a party I can send Accepting the same agreement terms to?",
+    "path": [
+     {
+      "at": "The licence registrar's own list",
+      "kind": "own-list",
+      "says": "The licence registrar is accepted for Accepting the same agreement terms."
+     }
+    ],
+    "answer": "Accepted, for Accepting the same agreement terms only."
+   },
+   "reason": "recipient-established",
+   "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The licence registrar's limits."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "sha-256:ed10a37835689befd013c482202a3563c37397dad2eb409f51c5eca35391c381",
+    "text": "Write-ahead: the intended activity is recorded first."
+   },
+   "reason": "evidence-complete",
+   "caption": "The activity is written to the record before it runs."
+  },
+  {
+   "seq": 8,
+   "step": 1,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 9,
+   "step": 1,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 10,
+   "step": 1,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 11,
+   "step": 1,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "reason": "authority-valid",
+   "caption": "The service checks authority."
+  },
+  {
+   "seq": 12,
+   "step": 1,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "reason": "terms-acceptable",
+   "caption": "The service checks terms."
+  },
+  {
+   "seq": 13,
+   "step": 1,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "reason": "fit-for-use",
+   "caption": "The service checks fitness."
+  },
+  {
+   "seq": 14,
+   "step": 1,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "outcome": "admit",
+   "reason": "authority-valid",
+   "caption": "The service admits the signed request."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "photographer-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 16,
+   "step": 2,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The photographer's mandate covers this action."
+  },
+  {
+   "seq": 17,
+   "step": 2,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The licence registrar a party I can send Accepting the same agreement terms to?",
+    "path": [
+     {
+      "at": "The photographer's own list",
+      "kind": "own-list",
+      "says": "The licence registrar is accepted for Accepting the same agreement terms."
+     }
+    ],
+    "answer": "Accepted, for Accepting the same agreement terms only."
+   },
+   "reason": "recipient-established",
+   "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+  },
+  {
+   "seq": 18,
+   "step": 2,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 19,
+   "step": 2,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 20,
+   "step": 2,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The photographer's limits."
+  },
+  {
+   "seq": 21,
+   "step": 2,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "sha-256:4cfd76161e8e32fe3e9893764ace958fb547ef0eb70aab6950e4aef3a0f98109",
+    "text": "Write-ahead: the intended activity is recorded first."
+   },
+   "reason": "evidence-complete",
+   "caption": "The activity is written to the record before it runs."
+  },
+  {
+   "seq": 22,
+   "step": 2,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 23,
+   "step": 2,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 24,
+   "step": 2,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 25,
+   "step": 2,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "reason": "authority-valid",
+   "caption": "The service checks authority."
+  },
+  {
+   "seq": 26,
+   "step": 2,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "reason": "terms-acceptable",
+   "caption": "The service checks terms."
+  },
+  {
+   "seq": 27,
+   "step": 2,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "reason": "fit-for-use",
+   "caption": "The service checks fitness."
+  },
+  {
+   "seq": 28,
+   "step": 2,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "outcome": "admit",
+   "reason": "authority-valid",
+   "caption": "The service admits the signed request."
+  },
+  {
+   "seq": 29,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 30,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The publisher's mandate covers this action."
+  },
+  {
+   "seq": 31,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The licence registrar a party I can send Accepting the same agreement terms to?",
+    "path": [
+     {
+      "at": "The publisher's own list",
+      "kind": "own-list",
+      "says": "The licence registrar is accepted for Accepting the same agreement terms."
+     }
+    ],
+    "answer": "Accepted, for Accepting the same agreement terms only."
+   },
+   "reason": "recipient-established",
+   "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+  },
+  {
+   "seq": 32,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 33,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 34,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The publisher's limits."
+  },
+  {
+   "seq": 35,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "sha-256:8abdc0369803d0c1a288f78000c6fd20f03508b3d818ae8a9b54f835218db829",
+    "text": "Write-ahead: the intended activity is recorded first."
+   },
+   "reason": "evidence-complete",
+   "caption": "The activity is written to the record before it runs."
+  },
+  {
+   "seq": 36,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 37,
+   "step": 3,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 38,
+   "step": 3,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 39,
+   "step": 3,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "reason": "authority-valid",
+   "caption": "The service checks authority."
+  },
+  {
+   "seq": 40,
+   "step": 3,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "reason": "terms-acceptable",
+   "caption": "The service checks terms."
+  },
+  {
+   "seq": 41,
+   "step": 3,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "reason": "fit-for-use",
+   "caption": "The service checks fitness."
+  },
+  {
+   "seq": 42,
+   "step": 3,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "outcome": "admit",
+   "reason": "authority-valid",
+   "caption": "The service admits the signed request."
+  },
+  {
+   "seq": 43,
+   "step": 4,
+   "agent": "coordinator-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 44,
+   "step": 4,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The licence registrar's mandate covers this action."
+  },
+  {
+   "seq": 45,
+   "step": 4,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The licence registrar a party I can send Accepting the same agreement terms to?",
+    "path": [
+     {
+      "at": "The licence registrar's own list",
+      "kind": "own-list",
+      "says": "The licence registrar is accepted for Accepting the same agreement terms."
+     }
+    ],
+    "answer": "Accepted, for Accepting the same agreement terms only."
+   },
+   "reason": "recipient-established",
+   "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+  },
+  {
+   "seq": 46,
+   "step": 4,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 47,
+   "step": 4,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 48,
+   "step": 4,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The licence registrar's limits."
+  },
+  {
+   "seq": 49,
+   "step": 4,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "sha-256:e7ad01476d0824986075eb6532eee078934daea170b4f463b90e1cced490e633",
+    "text": "Write-ahead: the intended activity is recorded first."
+   },
+   "reason": "evidence-complete",
+   "caption": "The activity is written to the record before it runs."
+  },
+  {
+   "seq": 50,
+   "step": 4,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 51,
+   "step": 4,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 52,
+   "step": 4,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 53,
+   "step": 4,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "reason": "authority-valid",
+   "caption": "The service checks authority."
+  },
+  {
+   "seq": 54,
+   "step": 4,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "reason": "terms-acceptable",
+   "caption": "The service checks terms."
+  },
+  {
+   "seq": 55,
+   "step": 4,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "reason": "fit-for-use",
+   "caption": "The service checks fitness."
+  },
+  {
+   "seq": 56,
+   "step": 4,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "outcome": "admit",
+   "reason": "authority-valid",
+   "caption": "The service admits the signed request."
+  },
+  {
+   "seq": 57,
+   "step": 5,
+   "agent": "coordinator-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 58,
+   "step": 5,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The licence registrar's mandate covers this action."
+  },
+  {
+   "seq": 59,
+   "step": 5,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The licence registrar a party I can send Accepting the same agreement terms to?",
+    "path": [
+     {
+      "at": "The licence registrar's own list",
+      "kind": "own-list",
+      "says": "The licence registrar is accepted for Accepting the same agreement terms."
+     }
+    ],
+    "answer": "Accepted, for Accepting the same agreement terms only."
+   },
+   "reason": "recipient-established",
+   "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+  },
+  {
+   "seq": 60,
+   "step": 5,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 61,
+   "step": 5,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 62,
+   "step": 5,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The licence registrar's limits."
+  },
+  {
+   "seq": 63,
+   "step": 5,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "sha-256:ab39a15cb07d52e7ddd5e405f61e92aaf8fb9dad10843d1dc6428a8b7cf12fbb",
+    "text": "Write-ahead: the intended activity is recorded first."
+   },
+   "reason": "evidence-complete",
+   "caption": "The activity is written to the record before it runs."
+  },
+  {
+   "seq": 64,
+   "step": 5,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 65,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 66,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 67,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 68,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 69,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 70,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 71,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 72,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 73,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "reason": "authority-valid",
+   "caption": "The service checks authority."
+  },
+  {
+   "seq": 74,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "reason": "terms-acceptable",
+   "caption": "The service checks terms."
+  },
+  {
+   "seq": 75,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "reason": "fit-for-use",
+   "caption": "The service checks fitness."
+  },
+  {
+   "seq": 76,
+   "step": 5,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "outcome": "admit",
+   "reason": "authority-valid",
+   "caption": "The service admits the signed request."
+  },
+  {
+   "seq": 77,
+   "step": 7,
+   "agent": "photographer-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 78,
+   "step": 7,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The photographer's mandate covers this action."
+  },
+  {
+   "seq": 79,
+   "step": 7,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The licence registrar a party I can send Accepting the same agreement terms to?",
+    "path": [
+     {
+      "at": "The photographer's own list",
+      "kind": "own-list",
+      "says": "The licence registrar is accepted for Accepting the same agreement terms."
+     }
+    ],
+    "answer": "Accepted, for Accepting the same agreement terms only."
+   },
+   "reason": "recipient-established",
+   "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+  },
+  {
+   "seq": 80,
+   "step": 7,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 81,
+   "step": 7,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 82,
+   "step": 7,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The photographer's limits."
+  },
+  {
+   "seq": 83,
+   "step": 7,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "sha-256:387b00716117a5afef03892183e585a84ffd1729251b10e828432811437750e5",
+    "text": "Write-ahead: the intended activity is recorded first."
+   },
+   "reason": "evidence-complete",
+   "caption": "The activity is written to the record before it runs."
+  },
+  {
+   "seq": 84,
+   "step": 7,
+   "agent": "photographer-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 85,
+   "step": 7,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 86,
+   "step": 7,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 87,
+   "step": 7,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "reason": "authority-valid",
+   "caption": "The service checks authority."
+  },
+  {
+   "seq": 88,
+   "step": 7,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "reason": "terms-acceptable",
+   "caption": "The service checks terms."
+  },
+  {
+   "seq": 89,
+   "step": 7,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "reason": "fit-for-use",
+   "caption": "The service checks fitness."
+  },
+  {
+   "seq": 90,
+   "step": 7,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "outcome": "admit",
+   "reason": "authority-valid",
+   "caption": "The service admits the signed request."
+  },
+  {
+   "seq": 91,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 92,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The publisher's mandate covers this action."
+  },
+  {
+   "seq": 93,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The licence registrar a party I can send Accepting the same agreement terms to?",
+    "path": [
+     {
+      "at": "The publisher's own list",
+      "kind": "own-list",
+      "says": "The licence registrar is accepted for Accepting the same agreement terms."
+     }
+    ],
+    "answer": "Accepted, for Accepting the same agreement terms only."
+   },
+   "reason": "recipient-established",
+   "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+  },
+  {
+   "seq": 94,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 95,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 96,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The publisher's limits."
+  },
+  {
+   "seq": 97,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "sha-256:0f2fcafdb0b0df672f04345f332791be83fe47a0c838c45b08d996c900f05748",
+    "text": "Write-ahead: the intended activity is recorded first."
+   },
+   "reason": "evidence-complete",
+   "caption": "The activity is written to the record before it runs."
+  },
+  {
+   "seq": 98,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 99,
+   "step": 8,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 100,
+   "step": 8,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 101,
+   "step": 8,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "reason": "authority-valid",
+   "caption": "The service checks authority."
+  },
+  {
+   "seq": 102,
+   "step": 8,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "reason": "terms-acceptable",
+   "caption": "The service checks terms."
+  },
+  {
+   "seq": 103,
+   "step": 8,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "reason": "fit-for-use",
+   "caption": "The service checks fitness."
+  },
+  {
+   "seq": 104,
+   "step": 8,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "outcome": "admit",
+   "reason": "authority-valid",
+   "caption": "The service admits the signed request."
+  },
+  {
+   "seq": 105,
+   "step": 9,
+   "agent": "coordinator-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 106,
+   "step": 9,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The licence registrar's mandate covers this action."
+  },
+  {
+   "seq": 107,
+   "step": 9,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The licence registrar a party I can send Accepting the same agreement terms to?",
+    "path": [
+     {
+      "at": "The licence registrar's own list",
+      "kind": "own-list",
+      "says": "The licence registrar is accepted for Accepting the same agreement terms."
+     }
+    ],
+    "answer": "Accepted, for Accepting the same agreement terms only."
+   },
+   "reason": "recipient-established",
+   "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+  },
+  {
+   "seq": 108,
+   "step": 9,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 109,
+   "step": 9,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 110,
+   "step": 9,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The licence registrar's limits."
+  },
+  {
+   "seq": 111,
+   "step": 9,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "sha-256:1c83bc03d9e01bf0ef0caac7c7f296bce14cdcee2fe746d34f5c2d02c28cc853",
+    "text": "Write-ahead: the intended activity is recorded first."
+   },
+   "reason": "evidence-complete",
+   "caption": "The activity is written to the record before it runs."
+  },
+  {
+   "seq": 112,
+   "step": 9,
+   "agent": "coordinator-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+  },
+  {
+   "seq": 113,
+   "step": 9,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 114,
+   "step": 9,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 115,
+   "step": 9,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "reason": "authority-valid",
+   "caption": "The service checks authority."
+  },
+  {
+   "seq": 116,
+   "step": 9,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "reason": "terms-acceptable",
+   "caption": "The service checks terms."
+  },
+  {
+   "seq": 117,
+   "step": 9,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "reason": "fit-for-use",
+   "caption": "The service checks fitness."
+  },
+  {
+   "seq": 118,
+   "step": 9,
+   "agent": "coordinator",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "outcome": "admit",
+   "reason": "authority-valid",
+   "caption": "The service admits the signed request."
+  },
+  {
+   "seq": 119,
+   "step": 10,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to share urn:op:agreement with The publishing platform."
+  },
+  {
+   "seq": 120,
+   "step": 10,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The publisher's mandate covers this action."
+  },
+  {
+   "seq": 121,
+   "step": 10,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The publishing platform a party I can send Accepting the same agreement terms to?",
+    "path": [
+     {
+      "at": "The publisher's own list",
+      "kind": "own-list",
+      "says": "The publishing platform is accepted for Accepting the same agreement terms."
+     }
+    ],
+    "answer": "Accepted, for Accepting the same agreement terms only."
+   },
+   "reason": "recipient-established",
+   "caption": "The publishing platform: Accepted, for Accepting the same agreement terms only."
+  },
+  {
+   "seq": 122,
+   "step": 10,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 123,
+   "step": 10,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 124,
+   "step": 10,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The publisher's limits."
+  },
+  {
+   "seq": 125,
+   "step": 10,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "sha-256:f08bf53f8fd6fad5e745399665c124a4bcbeb9f69ea741c9b7d142975f7935a5",
+    "text": "Write-ahead: the intended activity is recorded first."
+   },
+   "reason": "evidence-complete",
+   "caption": "The activity is written to the record before it runs."
+  },
+  {
+   "seq": 126,
+   "step": 10,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The action goes: share urn:op:agreement with The publishing platform."
+  },
+  {
+   "seq": 127,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 128,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 129,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 130,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 131,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 132,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 133,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "reason": "intact",
+   "caption": "The service checks integrity."
+  },
+  {
+   "seq": 134,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "reason": "source-accepted",
+   "caption": "The service checks source."
+  },
+  {
+   "seq": 135,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "reason": "terms-acceptable",
+   "caption": "The service checks terms."
+  },
+  {
+   "seq": 136,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "reason": "fit-for-use",
+   "caption": "The service checks fitness."
+  },
+  {
+   "seq": 137,
+   "step": 10,
+   "agent": "external-receiver-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "outcome": "admit",
+   "reason": "authority-valid",
+   "caption": "The service admits the signed request."
+  }
+ ]
+}

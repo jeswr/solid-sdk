@@ -105,7 +105,7 @@
   }
  ],
  "generated": {
-  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
+  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
   "core": "scripted"
  },
  "standIns": [
@@ -2915,7 +2915,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:cbadd1de501…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:91ab61cb341…; never trusted."
     },
     "layers": {
      "header": {
@@ -2944,7 +2944,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:439438e0fe0b7978e81c62649565a4e9c1f65d63d7793b8ad25d3801a51fd019"
+      "digest": "sha-256:bf06961d85108ff337763c509f09271dec9a9950d0a69892f3aa930899c794e6"
      },
      "authority": {
       "present": false,
@@ -3016,6 +3016,9 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1",
+          "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
+          "https://w3id.org/jeswr/awp#config/local-approved-query/0.1",
           "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
           "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
           "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
@@ -3087,7 +3090,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:248e4dc612d01c20b9cbd7073dee60cd1c8e13b9842ca42dc09ed34c8f3941b2"
+      "digest": "sha-256:0f317ed802b16c346d8a37741ea2b0c8bb169ec7a54596a5bf3fce7e8b5ec2d9"
      },
      "evidence": {
       "present": false,
@@ -3478,7 +3481,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:713ab31b128…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:74dcc40bc07…; never trusted."
     },
     "layers": {
      "header": {
@@ -3507,7 +3510,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:8062cdec95b3a0f43f8fc2c5673efff8b8a3d3501f7225b89e526a4edc956ecc"
+      "digest": "sha-256:97acdb82e0f075b316ea2144566be9685824b0668be293cda37b0f18bb202605"
      },
      "authority": {
       "present": false,
@@ -3579,6 +3582,9 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1",
+          "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
+          "https://w3id.org/jeswr/awp#config/local-approved-query/0.1",
           "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
           "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
           "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
@@ -3650,7 +3656,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:d15fb893856b73e0c16563e02f9c9d6945ba7fcd1df628c289ec3fe82778157d"
+      "digest": "sha-256:3d8c269b4436aab4d229d4aa16b2657744642e7757e5c03dc6d9880c9e9bd3bb"
      },
      "evidence": {
       "present": false,

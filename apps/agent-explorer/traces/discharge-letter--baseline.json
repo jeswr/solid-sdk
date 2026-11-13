@@ -83,7 +83,7 @@
   }
  ],
  "generated": {
-  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
+  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
   "core": "scripted"
  },
  "standIns": [
@@ -1853,7 +1853,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:42fb97aba8c…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:493cf42c7a3…; never trusted."
     },
     "layers": {
      "header": {
@@ -1882,7 +1882,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:ccf547f79fa57672036278077da8aa2252bb4a73658bfef9c931af878e1faaa8"
+      "digest": "sha-256:d9f03c199c71de2e437f7d5703e924ef7253da7161f87849263af2f5f69cce7a"
      },
      "authority": {
       "present": false,
@@ -1954,6 +1954,9 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1",
+          "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
+          "https://w3id.org/jeswr/awp#config/local-approved-query/0.1",
           "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
           "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
           "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
@@ -2043,7 +2046,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:3680de42e4aabf7a472aaa388e7af39b0c5efade2f6d46870e2a113f0a81c88b"
+      "digest": "sha-256:5597c2b704e2ae140b93859b15e6d0f46f63d95a5c2f74f3dfd42dddba0d03f4"
      },
      "evidence": {
       "present": false,
@@ -2092,7 +2095,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:42fb97aba8c…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:493cf42c7a3…; never trusted."
     },
     "layers": {
      "header": {
@@ -2121,7 +2124,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:ccf547f79fa57672036278077da8aa2252bb4a73658bfef9c931af878e1faaa8"
+      "digest": "sha-256:d9f03c199c71de2e437f7d5703e924ef7253da7161f87849263af2f5f69cce7a"
      },
      "authority": {
       "present": false,
@@ -2129,7 +2132,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"urn:fictional:hospital-agent:agent\"; \"urn:fictional:hospital\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/local-record-forum/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"urn:op:letter\"; \"0.1\"; \"urn:op:letter\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"urn:op:structured-form\"; \"0.1\"; \"urn:op:structured-form\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"urn:op:clinical-record\"; \"0.1\"; \"urn:op:clinical-record\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
+      "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"urn:fictional:hospital-agent:agent\"; \"urn:fictional:hospital\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1\"; \"https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1\"; \"https://w3id.org/jeswr/awp#config/local-approved-query/0.1\"; \"https://w3id.org/jeswr/awp#config/local-record-forum/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"urn:op:letter\"; \"0.1\"; \"urn:op:letter\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"urn:op:structured-form\"; \"0.1\"; \"urn:op:structured-form\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"urn:op:clinical-record\"; \"0.1\"; \"urn:op:clinical-record\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
       "raw": {
        "description": {
         "type": "ImplementationDescription",
@@ -2193,6 +2196,9 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1",
+          "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
+          "https://w3id.org/jeswr/awp#config/local-approved-query/0.1",
           "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
           "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
           "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
@@ -2282,7 +2288,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:3680de42e4aabf7a472aaa388e7af39b0c5efade2f6d46870e2a113f0a81c88b",
+      "digest": "sha-256:5597c2b704e2ae140b93859b15e6d0f46f63d95a5c2f74f3dfd42dddba0d03f4",
       "untrusted": [
        {
         "path": "description.type",
@@ -2402,42 +2408,54 @@
        },
        {
         "path": "description.configurations.implemented.0",
-        "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1"
        },
        {
         "path": "description.configurations.implemented.1",
-        "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1"
        },
        {
         "path": "description.configurations.implemented.2",
-        "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/local-approved-query/0.1"
        },
        {
         "path": "description.configurations.implemented.3",
-        "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
        },
        {
         "path": "description.configurations.implemented.4",
-        "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
        },
        {
         "path": "description.configurations.implemented.5",
-        "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
        },
        {
         "path": "description.configurations.implemented.6",
-        "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
        },
        {
         "path": "description.configurations.implemented.7",
-        "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
        },
        {
         "path": "description.configurations.implemented.8",
-        "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
        },
        {
         "path": "description.configurations.implemented.9",
+        "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+       },
+       {
+        "path": "description.configurations.implemented.10",
+        "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+       },
+       {
+        "path": "description.configurations.implemented.11",
+        "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+       },
+       {
+        "path": "description.configurations.implemented.12",
         "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
        },
        {

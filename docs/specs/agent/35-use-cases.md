@@ -205,50 +205,44 @@ Checks that carry the weight, by number of use cases: source 32, limits-approval
 
 Use cases that convey a derived answer instead of records: 23 (by-source 9, proved 9, joint 3, attested 2).
 
-Use cases with a real run: 65 of 70. The rest are specified and not yet run.
+Use cases with a real run: 68 of 70. The rest are specified and not yet run.
 
-Every use case is written as a profile and a scenario file and run through the reference gates with a scripted core. Of 166 paths, 135 run and give the outcome the catalogue expects, 3 run and give a different outcome or reason, and 28 cannot run yet. By use case: 49 run on every path, 16 run on some, 5 on none.
+Every use case is written as a profile and a scenario file and run through the reference gates with a scripted core. Of 166 paths, 141 run and give the outcome the catalogue expects, 10 run and differ (a different outcome or reason, or a branch whose run is no different from the main path, so that what goes wrong in it was not exercised), and 15 cannot run yet. By use case: 58 run on every path, 10 run on some, 2 on none.
 
 ### Runs that differ from the catalogue
 
 | Use case | Path | The gates gave | The catalogue expected |
 |---|---|---|---|
-| Moving a health record to a new practice | The patient's note of an allergy differs from the clinical entry | admit (`superseded-by-better-source`) | ask more (`superseded-by-better-source`) |
+| Asking a lender for breathing space | The agent would send a diagnosis to explain the request | ask principal (`approval-required`). No different from the main path | ask principal (`approval-required`) |
+| A referral from a family doctor to a specialist | The clinic asks for the full record | ask principal (`approval-required`). No different from the main path | ask principal (`approval-required`) |
+| Moving a health record to a new practice | The patient's note of an allergy differs from the clinical entry | admit (`superseded-by-better-source`). No different from the main path | ask more (`superseded-by-better-source`) |
+| Access to allergies in an emergency | The request comes from a registered clinician with an emergency flag | go (`source-accepted`). No different from the main path | go (`source-accepted`) |
+| A reference from a former employer | An agent scores the reference and rejects the candidate on the score | ask principal (`approval-required`). No different from the main path | ask principal (`approval-required`) |
+| Two people agree to share a flat | One side's identity cannot be tied to any source the other accepts | ask principal (`source-unknown`). No different from the main path | ask principal (`source-unknown`) |
 | Booking a trip | A hotel listing contains text telling the agent to book a different, dearer hotel | ask principal (`context-not-clear`) | stop (`not-authorised`) |
+| Negotiating the wording of a contract | An agent accepts a clause its principal's policy does not cover | ask principal (`approval-required`). No different from the main path | ask principal (`approval-required`) |
 | A service agent that keeps asking | The tenth request, like the first, is outside the mandate | refuse (`representation-missing`) | stop (`not-authorised`) |
+| A registered source signs something false | Nothing fails | go (`source-accepted`). No different from the main path | go (`source-accepted`) |
 
 ### Paths that cannot run yet, and why
 
 | Use case | Path | What is missing |
 |---|---|---|
-| A joint mortgage for two people | The main path | Needs a multi-principal agreement binding both applicants' distinct approvals to one terms digest. |
 | An insurance quote with the least disclosure | The main path | Needs a proof system |
 | Proving eligibility for a clinical trial | The main path | Needs a proof system |
-| Health data across a border | The main path | Needs attestation |
-| Health data across a border | No mapping exists for a medicine | Needs a versioned clinical-code mapping registry and unsupported-term admission; these checks are independent of attestation but are not implemented. |
 | Hospitals count a cohort together | The main path | Needs joint computation |
 | Hospitals count a cohort together | The result would cover fewer than the minimum number of patients | Needs joint computation |
-| Hospitals count a cohort together | One hospital does not attest its input | Needs attestation |
+| Hospitals count a cohort together | One hospital does not attest its input | Needs joint computation |
 | Hiring: right to work and qualifications | Show valid until at least a date while hiding the actual date | Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates. |
 | Proving income from several platforms | The main path | Needs joint computation |
 | Applying to rent a home | The main path | Needs a proof system |
-| Buying a home | The main path | Needs a durable multi-party conveyancing agreement chain, escrow/funds conditions and coordinated completion; the local submission adapter does not implement a home purchase. |
 | Showing a degree to an employer abroad | The main path | Needs a proof system |
 | Proving age to buy something | The main path | Needs a proof system |
-| Booking a trip | The main path | Needs a coordinated flight/hotel reservation plan, total-trip budget accounting and ticketing-only passport release; the synthetic effect adapter cannot confirm travel reservations. |
 | Applying for a visa | The main path | Needs a proof system |
-| Switching energy supplier | The main path | Needs a transferable supply agreement credential and service-switch completion/rollback binding; an ordinary local offer/acceptance is not the catalogue's switching workflow. |
 | Proving recycled content along a supply chain | The main path | Needs a proof system |
 | Competitors compare pay without sharing it | The main path | Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result. |
 | Competitors compare pay without sharing it | Only two employers contribute | Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result. |
-| A researcher queries sensitive data | The main path | Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap. |
-| A researcher queries sensitive data | A query is outside the approved protocol | Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap. |
-| A researcher queries sensitive data | The number of related queries passes the cap | Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap. |
-| Two people's agents find a time to meet | The main path | Needs attestation |
 | Being introduced to a stranger safely | The main path | Needs a proof system |
-| Licensing a photograph | The main path | Needs transferable agreement credentials and licence-specific asset/expiry enforcement across publisher systems; an ordinary offer/acceptance trace does not implement that lifecycle. |
-| The other side has no agent | The main path | Needs an unsigned prose email-endpoint entry configuration with pinned endpoint identity and human approval. The data runner only routes signed agent messages and cannot give an email-only business a fictional agent. |
-| The other side has no agent | The reply asks for payment details by email | Needs an unsigned prose email-endpoint entry configuration with pinned endpoint identity and human approval. The data runner only routes signed agent messages and cannot give an email-only business a fictional agent. |
 
 ## 7. What is missing
 

@@ -794,10 +794,15 @@ if os.path.exists(RUNS_FILE):
                 exp = dict(u['branches'][idx]) if idx is not None and idx < len(u['branches']) else p['expected']
                 exp = dict(outcome=exp['outcome'], reason=exp['reason'])
                 same = lambda x: 'stop' if x == 'refuse' else x
-                if same(p['actual']['outcome']) == same(exp['outcome']) and p['actual']['reason'] == exp['reason']:
+                # A branch whose run is no different from the main path did not exercise what
+                # goes wrong in it. The runtime counts that as a disagreement even when the
+                # final outcome matches, and so does this page.
+                vacuous = 'does not diverge' in (p.get('note') or '')
+                if not vacuous and same(p['actual']['outcome']) == same(exp['outcome']) and p['actual']['reason'] == exp['reason']:
                     run['status'] = 'runs'; run['corrected'] = True
                 else:
                     run['actual'] = p['actual']; run['expected'] = exp
+                    if vacuous: run['notExercised'] = True
         if sid in MORTGAGE: run['mortgage'] = sid
         u['runs'].append(run)
     by['mortgage-in-principle']['runs'].sort(key=lambda r: MORTGAGE.index(r['mortgage']))
@@ -871,12 +876,12 @@ allp = [(u, r) for u in U for r in u.get('runs', [])]
 if allp:
     st = Counter(r['status'] for _, r in allp)
     rs = Counter(u.get('runState', 'none') for u in U)
-    w('Every use case is written as a profile and a scenario file and run through the reference gates with a scripted core. Of %d paths, %d run and give the outcome the catalogue expects, %d run and give a different outcome or reason, and %d cannot run yet. By use case: %d run on every path, %d run on some, %d on none.\n' % (len(allp), st['runs'], st['disagrees'], st['blocked'], rs['all'], rs['some'], rs['none']))
+    w('Every use case is written as a profile and a scenario file and run through the reference gates with a scripted core. Of %d paths, %d run and give the outcome the catalogue expects, %d run and differ (a different outcome or reason, or a branch whose run is no different from the main path, so that what goes wrong in it was not exercised), and %d cannot run yet. By use case: %d run on every path, %d run on some, %d on none.\n' % (len(allp), st['runs'], st['disagrees'], st['blocked'], rs['all'], rs['some'], rs['none']))
     dis = [(u, r) for u, r in allp if r['status'] == 'disagrees']
     if dis:
         w('### Runs that differ from the catalogue\n')
         w('| Use case | Path | The gates gave | The catalogue expected |\n|---|---|---|---|')
-        for u, r in dis: w('| %s | %s | %s (`%s`) | %s (`%s`) |' % (u['title'], r['label'], r['actual']['outcome'].replace('-', ' '), r['actual']['reason'], r['expected']['outcome'].replace('-', ' '), r['expected']['reason']))
+        for u, r in dis: w('| %s | %s | %s (`%s`)%s | %s (`%s`) |' % (u['title'], r['label'], r['actual']['outcome'].replace('-', ' '), r['actual']['reason'], '. No different from the main path' if r.get('notExercised') else '', r['expected']['outcome'].replace('-', ' '), r['expected']['reason']))
         w('')
     blk = [(u, r) for u, r in allp if r['status'] == 'blocked']
     if blk:

@@ -654,7 +654,7 @@
    "fitNote": "An agreement with two principals needs two approvals bound to one digest. The commitments layer allows it; no trace shows it yet.",
    "benchmarks": [],
    "status": "worked",
-   "trace": "joint-mortgage--branch-1",
+   "trace": "joint-mortgage",
    "strains": [
     "many"
    ],
@@ -662,8 +662,8 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs a multi-principal agreement binding both applicants' distinct approvals to one terms digest."
+     "status": "runs",
+     "scenario": "joint-mortgage"
     },
     {
      "path": "branch-1",
@@ -678,7 +678,7 @@
      "scenario": "joint-mortgage--branch-2"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "pay-an-invoice",
@@ -991,9 +991,18 @@
     {
      "path": "branch-1",
      "label": "The agent would send a diagnosis to explain the request",
-     "status": "runs",
+     "status": "disagrees",
      "scenario": "hardship-request--branch-1",
-     "corrected": true
+     "actual": {
+      "outcome": "ask-principal",
+      "reason": "approval-required",
+      "check": "limits-approval"
+     },
+     "expected": {
+      "outcome": "ask-principal",
+      "reason": "approval-required"
+     },
+     "notExercised": true
     }
    ],
    "runState": "all"
@@ -1106,9 +1115,18 @@
     {
      "path": "branch-1",
      "label": "The clinic asks for the full record",
-     "status": "runs",
+     "status": "disagrees",
      "scenario": "health-referral--branch-1",
-     "corrected": true
+     "actual": {
+      "outcome": "ask-principal",
+      "reason": "approval-required",
+      "check": "limits-approval"
+     },
+     "expected": {
+      "outcome": "ask-principal",
+      "reason": "approval-required"
+     },
+     "notExercised": true
     },
     {
      "path": "branch-2",
@@ -1173,7 +1191,8 @@
      "expected": {
       "outcome": "ask-more",
       "reason": "superseded-by-better-source"
-     }
+     },
+     "notExercised": true
     }
    ],
    "runState": "all"
@@ -1395,9 +1414,18 @@
     {
      "path": "branch-1",
      "label": "The request comes from a registered clinician with an emergency flag",
-     "status": "runs",
+     "status": "disagrees",
      "scenario": "emergency-access--branch-1",
-     "corrected": true
+     "actual": {
+      "outcome": "go",
+      "reason": "source-accepted",
+      "check": "source"
+     },
+     "expected": {
+      "outcome": "go",
+      "reason": "source-accepted"
+     },
+     "notExercised": true
     },
     {
      "path": "branch-2",
@@ -1553,8 +1581,8 @@
    "fit": "strains",
    "fitNote": "A mapped value is a derived value. It names the mapping and carries the original code beside it.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "care-abroad",
    "strains": [
     "meaning"
    ],
@@ -1562,17 +1590,17 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "needs attestation"
+     "status": "runs",
+     "scenario": "care-abroad"
     },
     {
      "path": "branch-1",
      "label": "No mapping exists for a medicine",
-     "status": "blocked",
-     "reason": "Needs a versioned clinical-code mapping registry and unsupported-term admission; these checks are independent of attestation but are not implemented."
+     "status": "runs",
+     "scenario": "care-abroad--branch-1"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "cohort-count",
@@ -1630,7 +1658,7 @@
      "path": "branch-2",
      "label": "One hospital does not attest its input",
      "status": "blocked",
-     "reason": "needs attestation"
+     "reason": "needs joint computation"
     }
    ],
    "runState": "none"
@@ -1790,9 +1818,18 @@
     {
      "path": "branch-1",
      "label": "An agent scores the reference and rejects the candidate on the score",
-     "status": "runs",
+     "status": "disagrees",
      "scenario": "employment-reference--branch-1",
-     "corrected": true
+     "actual": {
+      "outcome": "ask-principal",
+      "reason": "approval-required",
+      "check": "limits-approval"
+     },
+     "expected": {
+      "outcome": "ask-principal",
+      "reason": "approval-required"
+     },
+     "notExercised": true
     }
    ],
    "runState": "all"
@@ -2073,9 +2110,18 @@
     {
      "path": "branch-1",
      "label": "One side's identity cannot be tied to any source the other accepts",
-     "status": "runs",
+     "status": "disagrees",
      "scenario": "flat-share--branch-1",
-     "corrected": true
+     "actual": {
+      "outcome": "ask-principal",
+      "reason": "source-unknown",
+      "check": "source"
+     },
+     "expected": {
+      "outcome": "ask-principal",
+      "reason": "source-unknown"
+     },
+     "notExercised": true
     }
    ],
    "runState": "all"
@@ -2174,7 +2220,7 @@
     "converse"
    ],
    "status": "worked",
-   "trace": "home-purchase--branch-1",
+   "trace": "home-purchase",
    "strains": [
     "many"
    ],
@@ -2182,8 +2228,8 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs a durable multi-party conveyancing agreement chain, escrow/funds conditions and coordinated completion; the local submission adapter does not implement a home purchase."
+     "status": "runs",
+     "scenario": "home-purchase"
     },
     {
      "path": "branch-1",
@@ -2198,7 +2244,7 @@
      "scenario": "home-purchase--branch-2"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "benefit-claim",
@@ -2860,14 +2906,14 @@
     "agentdam"
    ],
    "status": "worked",
-   "trace": "trip-booking--branch-1",
+   "trace": "trip-booking",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs a coordinated flight/hotel reservation plan, total-trip budget accounting and ticketing-only passport release; the synthetic effect adapter cannot confirm travel reservations."
+     "status": "runs",
+     "scenario": "trip-booking"
     },
     {
      "path": "branch-1",
@@ -2891,7 +2937,7 @@
      "scenario": "trip-booking--branch-2"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "disruption-rebooking",
@@ -3030,14 +3076,14 @@
    "fitNote": "",
    "benchmarks": [],
    "status": "worked",
-   "trace": "energy-switch--branch-1",
+   "trace": "energy-switch",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs a transferable supply agreement credential and service-switch completion/rollback binding; an ordinary local offer/acceptance is not the catalogue's switching workflow."
+     "status": "runs",
+     "scenario": "energy-switch"
     },
     {
      "path": "branch-1",
@@ -3046,7 +3092,7 @@
      "scenario": "energy-switch--branch-1"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "telecom-fault",
@@ -3292,9 +3338,18 @@
     {
      "path": "branch-1",
      "label": "An agent accepts a clause its principal's policy does not cover",
-     "status": "runs",
+     "status": "disagrees",
      "scenario": "contract-wording--branch-1",
-     "corrected": true
+     "actual": {
+      "outcome": "ask-principal",
+      "reason": "approval-required",
+      "check": "limits-approval"
+     },
+     "expected": {
+      "outcome": "ask-principal",
+      "reason": "approval-required"
+     },
+     "notExercised": true
     }
    ],
    "runState": "all"
@@ -3610,8 +3665,8 @@
    "fit": "strains",
    "fitNote": "The design records and caps questions. It does not yet bound what a set of answers reveals.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "research-data-access",
    "strains": [
     "repeat"
    ],
@@ -3619,23 +3674,23 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap."
+     "status": "runs",
+     "scenario": "research-data-access"
     },
     {
      "path": "branch-1",
      "label": "A query is outside the approved protocol",
-     "status": "blocked",
-     "reason": "Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap."
+     "status": "runs",
+     "scenario": "research-data-access--branch-1"
     },
     {
      "path": "branch-2",
      "label": "The number of related queries passes the cap",
-     "status": "blocked",
-     "reason": "Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap."
+     "status": "runs",
+     "scenario": "research-data-access--branch-2"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "incident-notice",
@@ -3991,7 +4046,7 @@
     "privacylens"
    ],
    "status": "worked",
-   "trace": "find-a-time--branch-1",
+   "trace": "find-a-time",
    "strains": [
     "own-words",
     "low-stakes"
@@ -4000,8 +4055,8 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "needs attestation"
+     "status": "runs",
+     "scenario": "find-a-time"
     },
     {
      "path": "branch-1",
@@ -4010,7 +4065,7 @@
      "scenario": "find-a-time--branch-1"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "sell-a-car",
@@ -4148,14 +4203,14 @@
    "fitNote": "This is what the terms language was designed for.",
    "benchmarks": [],
    "status": "worked",
-   "trace": "content-licence--branch-1",
+   "trace": "content-licence",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs transferable agreement credentials and licence-specific asset/expiry enforcement across publisher systems; an ordinary offer/acceptance trace does not implement that lifecycle."
+     "status": "runs",
+     "scenario": "content-licence"
     },
     {
      "path": "branch-1",
@@ -4164,7 +4219,7 @@
      "scenario": "content-licence--branch-1"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "no-training-terms",
@@ -4333,9 +4388,18 @@
     {
      "path": "branch-1",
      "label": "Nothing fails",
-     "status": "runs",
+     "status": "disagrees",
      "scenario": "false-but-signed--branch-1",
-     "corrected": true
+     "actual": {
+      "outcome": "go",
+      "reason": "source-accepted",
+      "check": "source"
+     },
+     "expected": {
+      "outcome": "go",
+      "reason": "source-accepted"
+     },
+     "notExercised": true
     }
    ],
    "runState": "all"
@@ -4423,8 +4487,8 @@
    "fit": "strains",
    "fitNote": "The entry configuration: prose can be read and answered, cannot be evidence, and anything that commits the person is asked about.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "no-agent-on-the-other-side",
    "strains": [
     "no-register",
     "own-words"
@@ -4433,17 +4497,17 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs an unsigned prose email-endpoint entry configuration with pinned endpoint identity and human approval. The data runner only routes signed agent messages and cannot give an email-only business a fictional agent."
+     "status": "runs",
+     "scenario": "no-agent-on-the-other-side"
     },
     {
      "path": "branch-1",
      "label": "The reply asks for payment details by email",
-     "status": "blocked",
-     "reason": "Needs an unsigned prose email-endpoint entry configuration with pinned endpoint identity and human approval. The data runner only routes signed agent messages and cannot give an email-only business a fictional agent."
+     "status": "runs",
+     "scenario": "no-agent-on-the-other-side--branch-1"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   }
  ]
 }

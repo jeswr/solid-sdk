@@ -22,6 +22,14 @@
   {
    "id": "receiver-agent",
    "name": "The second person's agent"
+  },
+  {
+   "id": "calendar-service",
+   "name": "The fictional shared calendar service"
+  },
+  {
+   "id": "calendar-agent",
+   "name": "The calendar service's agent"
   }
  ],
  "scenario": {
@@ -31,7 +39,14 @@
    "1": "The first person's agent checks the signed statements.",
    "2": "The second person's agent sends the signed request.",
    "3": "The first person's agent checks the message and prepares a response.",
-   "4": "The first person's agent sends the signed request."
+   "4": "The first person's agent sends the signed request.",
+   "5": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+   "6": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+   "7": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+   "8": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+   "9": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+   "10": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+   "11": "The calendar service signs the free-slot derivation, and each receiving agent verifies it."
   }
  },
  "configuration": {
@@ -62,13 +77,23 @@
    "name": "The second person's agent",
    "actsFor": "receiver",
    "role": "agent"
+  },
+  {
+   "id": "calendar-agent",
+   "name": "The calendar service's agent",
+   "actsFor": "calendar-service",
+   "role": "agent"
   }
  ],
  "generated": {
-  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
+  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
   "core": "scripted"
  },
  "standIns": [
+  {
+   "what": "Attested calendar derivation",
+   "replacedBy": "A separately keyed fictional calendar service holds both synthetic availability records, evaluates the installed all-of rule for a named candidate slot, signs its derivation and releases only that free-slot result through both receiving agents' gates. No hardware attestation or joint computation is claimed."
+  },
   {
    "what": "Outside organizations and data sources",
    "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -76,6 +101,10 @@
   {
    "what": "Attestation-free calendar privacy preflight",
    "replacedBy": "The real signed request cannot widen meeting coordination to a held private appointment; no attested free/busy predicate is made"
+  },
+  {
+   "what": "Attested calendar derivation",
+   "replacedBy": "A separately keyed fictional calendar service holds both synthetic availability records, evaluates the installed all-of rule for a named candidate slot, signs its derivation and releases only that free-slot result through both receiving agents' gates. No hardware attestation or joint computation is claimed."
   }
  ],
  "events": [
@@ -427,7 +456,7 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:efbc8802b2b…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:37873c7b654…; never trusted."
     },
     "layers": {
      "header": {
@@ -455,7 +484,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:f9e661fd39996435102496fc38f42e636258db3c25e38ed62ef6bf119260fd85"
+      "digest": "sha-256:cb2740594aab86484fd868b44d32e51686dc98cfeb9831af2d35ec9d6b1186d3"
      },
      "authority": {
       "present": true,
@@ -469,14 +498,15 @@
         "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
         "operations": [
          "urn:op:find-a-time",
-         "urn:op:find-a-time:request"
+         "urn:op:find-a-time:request",
+         "urn:op:find-a-time:slots"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:93d3dc4265307d91e2984279371c689e357387920915eea77a48fade3ec5820a"
+      "digest": "sha-256:175585f91b09e7252108051e5e0662de65f28d5f97b1b20e61dc356188998845"
      },
      "content": {
       "present": true,
@@ -546,7 +576,7 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:efbc8802b2b…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:37873c7b654…; never trusted."
     },
     "layers": {
      "header": {
@@ -574,7 +604,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:f9e661fd39996435102496fc38f42e636258db3c25e38ed62ef6bf119260fd85"
+      "digest": "sha-256:cb2740594aab86484fd868b44d32e51686dc98cfeb9831af2d35ec9d6b1186d3"
      },
      "authority": {
       "present": true,
@@ -588,14 +618,15 @@
         "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
         "operations": [
          "urn:op:find-a-time",
-         "urn:op:find-a-time:request"
+         "urn:op:find-a-time:request",
+         "urn:op:find-a-time:slots"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:93d3dc4265307d91e2984279371c689e357387920915eea77a48fade3ec5820a"
+      "digest": "sha-256:175585f91b09e7252108051e5e0662de65f28d5f97b1b20e61dc356188998845"
      },
      "content": {
       "present": true,

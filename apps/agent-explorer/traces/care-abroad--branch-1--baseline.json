@@ -1,0 +1,250 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "care-abroad",
+ "path": {
+  "index": 1,
+  "what": "No mapping exists for a medicine"
+ },
+ "parties": [
+  {
+   "id": "party-1",
+   "name": "A traveller"
+  },
+  {
+   "id": "party-2",
+   "name": "A home practice"
+  },
+  {
+   "id": "party-3",
+   "name": "A clinic abroad"
+  },
+  {
+   "id": "clinic-agent",
+   "name": "The clinic's agent"
+  },
+  {
+   "id": "mapping-registry",
+   "name": "The fictional clinical mapping registry"
+  }
+ ],
+ "scenario": {
+  "id": "care-abroad--branch-1",
+  "title": "Health data across a border: No mapping exists for a medicine",
+  "steps": {
+   "1": "The clinic checks the original source and asks the signed registry about the unsupported medicine code.",
+   "2": "The clinic verifies the original source, the mapping service's signed result and the current mapping version.",
+   "3": "The clinic verifies the original source, the mapping service's signed result and the current mapping version.",
+   "4": "The clinic verifies the original source, the mapping service's signed result and the current mapping version."
+  }
+ },
+ "configuration": {
+  "id": "care-abroad-local",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "registry-lookup",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "clinic-agent",
+   "name": "The clinic's agent",
+   "actsFor": "party-3",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Cross-border clinical sources and mapping registry",
+   "replacedBy": "Separately keyed fictional clinical and registry sources publish the original signed medicine statement, a versioned signed mapping table and fresh signed status via a local resolver. Local explicit source rules replace the catalogue federation trust route; no federation transport is claimed."
+  },
+  {
+   "what": "An attested mapping result",
+   "replacedBy": "The fictional mapping registry is an issuer-only deriver with its own key. It verifies the actual original signature and computes the mapping from the signed table, then publishes a signed record bound to the original digest, table version and output; the clinic's profile accepts it for this purpose."
+  },
+  {
+   "what": "Cross-border clinical sources and mapping registry",
+   "replacedBy": "Separately keyed fictional clinical and registry sources publish the original signed medicine statement, a versioned signed mapping table and fresh signed status via a local resolver. Local explicit source rules replace the catalogue federation trust route; no federation transport is claimed."
+  },
+  {
+   "what": "An attested mapping result",
+   "replacedBy": "The fictional mapping registry is an issuer-only deriver with its own key. It verifies the actual original signature and computes the mapping from the signed table, then publishes a signed record bound to the original digest, table version and output; the clinic's profile accepts it for this purpose."
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "clinic-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "A home practice's medicine.code statement is intact and signed with A home practice's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "clinic-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:fictional:care-abroad:clinical-source",
+    "text": "A home practice is accepted for medicine.code claims."
+   },
+   "resolution": {
+    "question": "Is A home practice an authority for medicine.code claims about A traveller?",
+    "path": [
+     {
+      "at": "A clinic abroad's own list",
+      "kind": "own-list",
+      "says": "A home practice is accepted for medicine.code."
+     }
+    ],
+    "answer": "Accepted, for medicine.code claims only."
+   },
+   "caption": "A home practice's medicine.code statement: A home practice is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "clinic-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "A home practice's medicine.code statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "clinic-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:fictional:care-abroad:medicine-terms",
+    "text": "Its terms allow this: use for urn:purpose:care abroad; share for urn:purpose:care abroad."
+   },
+   "caption": "A home practice's medicine.code statement: its terms allow this: use for urn:purpose:care abroad; share for urn:purpose:care abroad."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "clinic-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:care-abroad:medicine.code",
+    "text": "Accept medicine.code from urn:fictional:care-abroad:party-2 by recorded-by-authority, derived, at most 30 days old."
+   },
+   "caption": "A home practice's medicine.code statement is fit for urn:scenario:care-abroad:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "clinic-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "ask-more",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "unsupported-term",
+   "rule": {
+    "id": "urn:medicine-list:A",
+    "text": "Unsupported or unusable code: UNMAPPED"
+   },
+   "caption": "Code UNMAPPED cannot be used through this mapping: unsupported-term."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "clinic-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "ask-more",
+   "outcome": "ask-more",
+   "reason": "unsupported-term",
+   "caption": "A home practice's medicine.code statement is refused and kept out of memory."
+  }
+ ]
+}

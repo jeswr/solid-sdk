@@ -93,6 +93,7 @@
         if (r.status === 'blocked') return '<li><span class="tag">Not run</span><span>' + esc(r.label) + '. ' + esc(r.reason.charAt(0).toUpperCase() + r.reason.slice(1)) + (/[.!?]$/.test(r.reason) ? '' : '.') + '</span></li>';
         var rt = AX.baselineTrace(r.scenario);
         var link = '<a href="' + AX.buildHash('explore', { scenario: rt.scenario.id, config: rt.configuration.id }) + '">' + esc(r.label) + '</a>';
+        if (r.status === 'disagrees' && r.notExercised) return '<li><span class="tag fx">Differs</span><span>' + link + '. The run is no different from the main path, so what goes wrong here was not exercised.</span></li>';
         if (r.status === 'disagrees') return '<li><span class="tag fx">Differs</span><span>' + link + '. The gates gave ' + esc(outcomeText(r.actual)) + '; the catalogue expected ' + esc(outcomeText(r.expected)) + '.</span></li>';
         return '<li><span class="tag ok">Real run</span><span>' + link + (r.corrected ? '. The catalogue row was corrected after this run.' : '') + '</span></li>';
       }).join('') + '</ul>';
@@ -296,14 +297,14 @@
     h += '<h2 id="runs">Runs so far</h2><p style="max-width:72ch">All ' + U.length + ' use cases in the catalogue are written as a profile and a scenario file and put through the real gates with a scripted core. Each has a main path and the things that go wrong: <strong>' + allPaths.length + ' paths</strong>. Outside systems (a bank, a register, a record store) are local stand-ins, named at the top of each run.</p>';
     h += '<div class="table-wrap"><table class="data results"><thead><tr><th></th><th>Paths</th><th>What it means</th></tr></thead><tbody>';
     h += '<tr><td><strong>Run, as the catalogue expects</strong></td><td class="num">' + count('runs') + '</td><td>The gates gave the outcome and the reason the catalogue wrote down before the run.</td></tr>';
-    h += '<tr><td><strong>Run, and differ</strong></td><td class="num">' + count('disagrees') + '</td><td>The gates gave another outcome or reason. Each is listed below. Nothing was adjusted to make them agree.</td></tr>';
+    h += '<tr><td><strong>Run, and differ</strong></td><td class="num">' + count('disagrees') + '</td><td>The gates gave another outcome or reason, or the run was no different from the main path and so did not exercise what goes wrong. Each is listed below. Nothing was adjusted to make them agree.</td></tr>';
     h += '<tr><td><strong>Cannot run yet</strong></td><td class="num">' + count('blocked') + '</td><td>The runtime lacks something the path needs. Each is listed below with what is missing.</td></tr>';
     h += '</tbody></table></div>';
     h += '<p style="max-width:72ch;margin-top:10px">By use case: <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'yes' }) + '">' + ucCount('yes') + ' run on every path</a>, <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'part' }) + '">' + ucCount('part') + ' on some</a>, <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'no' }) + '">' + ucCount('no') + ' on none</a>.</p>';
     var dis = allPaths.filter(function (x) { return x.r.status === 'disagrees'; });
     if (dis.length) {
       h += '<h3 class="sub" id="differs">Runs that differ from the catalogue</h3><p class="small muted" style="max-width:72ch">Each one is either an error in the catalogue, a defect in the gates, or a scenario that did not model the situation. They are being ruled on one by one.</p><div class="table-wrap"><table class="data"><thead><tr><th>Use case</th><th>What goes wrong</th><th>The gates gave</th><th>The catalogue expected</th></tr></thead><tbody>' + dis.map(function (x) {
-        return '<tr><td>' + ucLink(x.u) + '</td><td>' + pathLink(x.r) + '</td><td>' + esc(outcomeText(x.r.actual)) + '</td><td>' + esc(outcomeText(x.r.expected)) + '</td></tr>';
+        return '<tr><td>' + ucLink(x.u) + '</td><td>' + pathLink(x.r) + '</td><td>' + esc(outcomeText(x.r.actual)) + (x.r.notExercised ? '<div class="small muted">No different from the main path: the fault was not exercised.</div>' : '') + '</td><td>' + esc(outcomeText(x.r.expected)) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     }
     var blk = allPaths.filter(function (x) { return x.r.status === 'blocked'; });

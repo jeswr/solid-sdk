@@ -159,16 +159,32 @@
    "scenario": "care-abroad",
    "useCase": "care-abroad",
    "path": "main",
-   "status": "blocked",
-   "reason": "needs attestation"
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+   },
+   "consequences": [],
+   "trace": "care-abroad--baseline.json"
   },
   {
    "scenario": "care-abroad",
    "useCase": "care-abroad",
    "path": "branch-1",
    "what": "No mapping exists for a medicine",
-   "status": "blocked",
-   "reason": "Needs a versioned clinical-code mapping registry and unsupported-term admission; these checks are independent of attestation but are not implemented."
+   "status": "runs",
+   "actual": {
+    "outcome": "ask-more",
+    "reason": "unsupported-term",
+    "check": "fitness"
+   },
+   "expected": {
+    "outcome": "ask-more",
+    "reason": "unsupported-term"
+   },
+   "consequences": [],
+   "trace": "care-abroad--branch-1--baseline.json"
   },
   {
    "scenario": "carer-acts-for-parent",
@@ -278,7 +294,7 @@
    "path": "branch-2",
    "what": "One hospital does not attest its input",
    "status": "blocked",
-   "reason": "needs attestation"
+   "reason": "needs joint computation"
   },
   {
    "scenario": "consent-for-a-child",
@@ -310,8 +326,13 @@
    "scenario": "content-licence",
    "useCase": "content-licence",
    "path": "main",
-   "status": "blocked",
-   "reason": "Needs transferable agreement credentials and licence-specific asset/expiry enforcement across publisher systems; an ordinary offer/acceptance trace does not implement that lifecycle."
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "authority-valid"
+   },
+   "consequences": [],
+   "trace": "content-licence--baseline.json"
   },
   {
    "scenario": "content-licence",
@@ -654,8 +675,13 @@
    "scenario": "energy-switch",
    "useCase": "energy-switch",
    "path": "main",
-   "status": "blocked",
-   "reason": "Needs a transferable supply agreement credential and service-switch completion/rollback binding; an ordinary local offer/acceptance is not the catalogue\u2019s switching workflow."
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "authority-valid"
+   },
+   "consequences": [],
+   "trace": "energy-switch--baseline.json"
   },
   {
    "scenario": "energy-switch",
@@ -846,8 +872,14 @@
    "scenario": "find-a-time",
    "useCase": "find-a-time",
    "path": "main",
-   "status": "blocked",
-   "reason": "needs attestation"
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+   },
+   "consequences": [],
+   "trace": "find-a-time--baseline.json"
   },
   {
    "scenario": "find-a-time",
@@ -1078,8 +1110,14 @@
    "scenario": "home-purchase",
    "useCase": "home-purchase",
    "path": "main",
-   "status": "blocked",
-   "reason": "Needs a durable multi-party conveyancing agreement chain, escrow/funds conditions and coordinated completion; the local submission adapter does not implement a home purchase."
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "authority-valid",
+    "check": "authority"
+   },
+   "consequences": [],
+   "trace": "home-purchase--baseline.json"
   },
   {
    "scenario": "home-purchase",
@@ -1333,8 +1371,14 @@
    "scenario": "joint-mortgage",
    "useCase": "joint-mortgage",
    "path": "main",
-   "status": "blocked",
-   "reason": "Needs a multi-principal agreement binding both applicants\u2019 distinct approvals to one terms digest."
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "authority-valid",
+    "check": "authority"
+   },
+   "consequences": [],
+   "trace": "joint-mortgage--baseline.json"
   },
   {
    "scenario": "joint-mortgage",
@@ -1887,16 +1931,44 @@
    "scenario": "no-agent-on-the-other-side",
    "useCase": "no-agent-on-the-other-side",
    "path": "main",
-   "status": "blocked",
-   "reason": "Needs an unsigned prose email-endpoint entry configuration with pinned endpoint identity and human approval. The data runner only routes signed agent messages and cannot give an email-only business a fictional agent."
+   "status": "runs",
+   "actual": {
+    "outcome": "ask-principal",
+    "reason": "approval-required",
+    "check": "limits-approval"
+   },
+   "consequences": [
+    {
+     "seq": 18,
+     "agent": "reader-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 22,
+     "agent": "reader-agent",
+     "outcome": "admit",
+     "reason": "fit-for-use"
+    }
+   ],
+   "trace": "no-agent-on-the-other-side--baseline.json"
   },
   {
    "scenario": "no-agent-on-the-other-side",
    "useCase": "no-agent-on-the-other-side",
    "path": "branch-1",
    "what": "The reply asks for payment details by email",
-   "status": "blocked",
-   "reason": "Needs an unsigned prose email-endpoint entry configuration with pinned endpoint identity and human approval. The data runner only routes signed agent messages and cannot give an email-only business a fictional agent."
+   "status": "runs",
+   "actual": {
+    "outcome": "ask-principal",
+    "reason": "approval-required",
+    "check": "limits-approval"
+   },
+   "expected": {
+    "outcome": "ask-principal",
+    "reason": "approval-required"
+   },
+   "consequences": [],
+   "trace": "no-agent-on-the-other-side--branch-1--baseline.json"
   },
   {
    "scenario": "no-training-terms",
@@ -2691,24 +2763,50 @@
    "scenario": "research-data-access",
    "useCase": "research-data-access",
    "path": "main",
-   "status": "blocked",
-   "reason": "Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap."
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+   },
+   "consequences": [],
+   "trace": "research-data-access--baseline.json"
   },
   {
    "scenario": "research-data-access",
    "useCase": "research-data-access",
    "path": "branch-1",
    "what": "A query is outside the approved protocol",
-   "status": "blocked",
-   "reason": "Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap."
+   "status": "runs",
+   "actual": {
+    "outcome": "stop",
+    "reason": "purpose-not-permitted",
+    "check": "data-terms"
+   },
+   "expected": {
+    "outcome": "stop",
+    "reason": "purpose-not-permitted"
+   },
+   "consequences": [],
+   "trace": "research-data-access--branch-1--baseline.json"
   },
   {
    "scenario": "research-data-access",
    "useCase": "research-data-access",
    "path": "branch-2",
    "what": "The number of related queries passes the cap",
-   "status": "blocked",
-   "reason": "Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap."
+   "status": "runs",
+   "actual": {
+    "outcome": "stop",
+    "reason": "limit-exceeded",
+    "check": "limits-approval"
+   },
+   "expected": {
+    "outcome": "stop",
+    "reason": "limit-exceeded"
+   },
+   "consequences": [],
+   "trace": "research-data-access--branch-2--baseline.json"
   },
   {
    "scenario": "return-and-refund",
@@ -3278,8 +3376,14 @@
    "scenario": "trip-booking",
    "useCase": "trip-booking",
    "path": "main",
-   "status": "blocked",
-   "reason": "Needs a coordinated flight/hotel reservation plan, total-trip budget accounting and ticketing-only passport release; the synthetic effect adapter cannot confirm travel reservations."
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+   },
+   "consequences": [],
+   "trace": "trip-booking--baseline.json"
   },
   {
    "scenario": "trip-booking",
