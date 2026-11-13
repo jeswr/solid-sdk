@@ -29,16 +29,16 @@ await profiles.putAccount({ id: 'alex', profile: 'personal', site: model.site,
 await profiles.putRoute({ ...model.login[0], site: model.site,
   account: 'alex', profile: 'personal' });
 const vault = new AgentVault({ profiles, sessions, permissions, backends: [local],
-  passwordLogin: async ({ credentials, account }) => {
+  passwordLogin: async ({ credentials, account, sessions: loginSessions }) => {
     await credentials.use(value => loginWithPassword(model,
-      createExecutorFetch({ model, sessions, persona: account.id }), value));
+      createExecutorFetch({ model, sessions: loginSessions, persona: account.id }), value));
   },
   interactiveLogin: trustedPopupLogin,
   offerSave: chooseSaveBackendUI,
 });
 const result = await vault.ensureSession(model.site, { profileHint: 'personal' });
 // An ask is safe for the host account-selection UI. A session is host-only.
-// Use this SAME sessions provider with executor persona = result.account.id.
+// Use the host sessions store for later execution, with persona = result.account.id.
 ```
 
 Provision initial credentials through the person's UI as `Secret<LoginItem>` in
@@ -46,10 +46,17 @@ Provision initial credentials through the person's UI as `Secret<LoginItem>` in
 receives only backend ids eligible for this profile. Returning `undefined` declines.
 A choice requires a separate `save` permission and a matching `profileFor(ref)` binding.
 Optional saves report saved/declined/denied/failed without invalidating the successful session. Backend-supplied credentials never trigger
-that offer. `PasswordLogin` may return a `Secret<SessionCapture>` or update the shared
+that offer. `PasswordLogin` may return a `Secret<SessionCapture>` or update its supplied
 executor SessionProvider and return void. Before either login callback the vault explicitly resets
 old session material and binds `LoginRequest.transaction` to a new login generation. A callback
-failure marks only that generation stale; it cannot revoke a newer login. The OTP callback receives
+receives a provider restricted to that transaction's site, account and generation, rather than
+the host store's administrative methods. Always use `request.sessions` throughout password
+login, including executor construction, probes and retries. Interactive login receives the
+same restricted provider. A superseded or revoked provider returns no session from `get`
+and `{ accepted: false }` from `update`, even when supplied a newer login's revision.
+Reads and writes check the generation under the record lock after key acquisition; writes
+also compare the revision there. A callback failure marks only its own generation stale;
+it cannot revoke a newer login or leave its delayed cookies in that newer session. The OTP callback receives
 a separately permitted backend code, or `askOtp` obtains it from the person. Standalone OTP
 routes use the same seam through `InteractiveLogin`.
 
@@ -169,10 +176,17 @@ the extension sender, popup/tab and login transaction.** Origin metadata alone d
 authenticate a message; the vault does not implement browser messaging or nonce/replay deduplication.
 
 SessionProvider `get/update` uses site + **account id**, supplied as executor `persona`.
-Missing account refuses. `get()` includes the record's current `revision`; executors must pass
-that value unchanged into every `update()` from that execution. After key acquisition and
-under the record lock, updates with missing or superseded revisions silently drop, as do
-updates to stale records. Accepted updates assign a new revision. `beginLogin` supplies an
+Missing account refuses. `get()` includes the record's current `revision`.
+`update(site, persona, bundle)` returns `{ accepted: boolean; revision?: string }`.
+After key acquisition and under the record lock, updates with missing or superseded
+revisions, missing records or stale records return `{ accepted: false }` without writing.
+Accepted updates return `{ accepted: true, revision }` with the new revision created by
+that same atomic write. The executor must carry this returned revision into its next
+update in the same execution. On rejection, never attach a freshly fetched revision to
+the rejected cookie jar; it belongs to a superseded session. These additive provider types
+are declared structurally in this package while the executor lane updates its implementation.
+`sessions.forLogin(transaction)` creates the restricted provider used by both login callbacks;
+it preserves its generation across accepted writes and revision rotation. `beginLogin` supplies an
 empty bundle with a revision so the executor can persist the first login cookie; an empty
 bundle alone is not an authenticated session. Expired cookies are filtered; expired bearer
 sessions and stale sessions refuse, while encrypted refresh metadata remains available to keep-alive. Captures

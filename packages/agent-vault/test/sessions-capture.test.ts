@@ -53,6 +53,162 @@ const initialState = (): SessionState => ({
 });
 
 describe("encrypted sessions and validated capture", () => {
+  it("acknowledges each new revision so consecutive cookie updates persist deletions", async () => {
+    const { sessions } = setup();
+    await sessions.store(initialState());
+    const initial = await sessions.get(SITE, "alex");
+    const tracking = { ...cookie(), name: "tracking", value: "tracking" };
+    const first = await sessions.update(SITE, "alex", {
+      ...initial,
+      cookies: [cookie(), tracking],
+    });
+    expect(first).toEqual({ accepted: true, revision: expect.any(String) });
+    expect(first.revision).not.toBe(initial?.revision);
+    const second = await sessions.update(SITE, "alex", {
+      revision: first.revision,
+      cookies: [tracking],
+    });
+    expect(second).toEqual({ accepted: true, revision: expect.any(String) });
+    expect(second.revision).not.toBe(first.revision);
+    const persisted = await sessions.get(SITE, "alex");
+    expect(persisted?.revision).toBe(second.revision);
+    expect(persisted?.cookies.map((c) => c.name)).toEqual(["tracking"]);
+    expect(await sessions.update(SITE, "alex", { ...initial, cookies: [cookie()] })).toEqual({
+      accepted: false,
+    });
+    expect(await sessions.update(SITE, "alex", { cookies: [cookie()] })).toEqual({
+      accepted: false,
+    });
+    expect((await sessions.get(SITE, "alex"))?.revision).toBe(second.revision);
+    expect(await sessions.update(SITE, "missing", { ...persisted, cookies: [cookie()] })).toEqual({
+      accepted: false,
+    });
+    await sessions.stale(SITE, "alex");
+    expect(await sessions.update(SITE, "alex", { ...persisted, cookies: [cookie()] })).toEqual({
+      accepted: false,
+    });
+  });
+  it("acknowledges the committed revision even when another write precedes delivery", async () => {
+    const { sessions, writer, store } = delayedSessions();
+    await sessions.store(initialState());
+    const initial = await sessions.get(SITE, "alex");
+    let committedRevision: string | undefined;
+    const withLock = store.withLock.bind(store);
+    vi.spyOn(store, "withLock").mockImplementationOnce(async (name, fn, options) => {
+      const result = await withLock(name, fn, options);
+      const committed = await writer.get(SITE, "alex");
+      committedRevision = committed?.revision;
+      await writer.update(SITE, "alex", {
+        ...committed,
+        cookies: [{ ...cookie(), value: "intervening" }],
+      });
+      return result;
+    });
+    const receipt = await sessions.update(SITE, "alex", {
+      ...initial,
+      cookies: [{ ...cookie(), value: "first" }],
+    });
+    expect(receipt).toEqual({ accepted: true, revision: committedRevision });
+    expect(receipt.revision).not.toBe(initial?.revision);
+    expect(receipt.revision).not.toBe((await sessions.get(SITE, "alex"))?.revision);
+    expect(
+      await sessions.update(SITE, "alex", { revision: receipt.revision, cookies: [cookie()] }),
+    ).toEqual({ accepted: false });
+    expect((await sessions.get(SITE, "alex"))?.cookies[0]?.value).toBe("intervening");
+  });
+  it("acknowledges exactly one competing update of the same revision", async () => {
+    const { sessions } = setup();
+    await sessions.store(initialState());
+    const initial = await sessions.get(SITE, "alex");
+    const receipts = await Promise.all(
+      ["first", "second"].map((value) =>
+        sessions.update(SITE, "alex", { ...initial, cookies: [{ ...cookie(), value }] }),
+      ),
+    );
+    expect(receipts.filter((r) => r.accepted)).toEqual([
+      { accepted: true, revision: (await sessions.get(SITE, "alex"))?.revision },
+    ]);
+    expect(receipts.filter((r) => !r.accepted)).toEqual([{ accepted: false }]);
+  });
+  it.each([
+    "key acquisition",
+    "record lock",
+  ])("rechecks transaction-bound reads after waiting for %s", async (wait) => {
+    const { sessions, writer, store, entered, release, block } = delayedSessions();
+    const provider = sessions.forLogin(await sessions.beginLogin(SITE, "alex"));
+    if (wait === "key acquisition") block();
+    else {
+      const withLock = store.withLock.bind(store);
+      vi.spyOn(store, "withLock").mockImplementationOnce(async (name, fn, options) => {
+        entered.resolve();
+        await release.promise;
+        return withLock(name, fn, options);
+      });
+    }
+    const pending = provider.get(SITE, "alex");
+    await entered.promise;
+    await acceptCapture(writer, capture(), await writer.beginLogin(SITE, "alex"), () => NOW);
+    const writes = vi.spyOn(store, "putPrivateRecord");
+    release.resolve();
+    expect(await pending).toBeUndefined();
+    expect(writes).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["key acquisition", "login"],
+    ["key acquisition", "revocation"],
+    ["key acquisition", "update"],
+    ["record lock", "login"],
+    ["record lock", "revocation"],
+    ["record lock", "update"],
+  ])("rechecks transaction-bound writes after %s against %s", async (wait, change) => {
+    const { sessions, writer, store, entered, release, block } = delayedSessions();
+    const provider = sessions.forLogin(await sessions.beginLogin(SITE, "alex"));
+    const initial = await provider.get(SITE, "alex");
+    if (wait === "key acquisition") block();
+    else {
+      const withLock = store.withLock.bind(store);
+      vi.spyOn(store, "withLock").mockImplementationOnce(async (name, fn, options) => {
+        entered.resolve();
+        await release.promise;
+        return withLock(name, fn, options);
+      });
+    }
+    const pending = provider.update(SITE, "alex", { ...initial, cookies: [cookie()] });
+    await entered.promise;
+    if (change === "login") await writer.beginLogin(SITE, "alex");
+    else if (change === "revocation") await writer.stale(SITE, "alex");
+    else
+      await writer.update(SITE, "alex", { ...initial, cookies: [{ ...cookie(), name: "csrf" }] });
+    const before = await (await writer.state(SITE, "alex"))?.use((s) => s);
+    const writes = vi.spyOn(store, "putPrivateRecord");
+    release.resolve();
+    expect(await pending).toEqual({ accepted: false });
+    expect(writes).not.toHaveBeenCalled();
+    expect(await (await sessions.state(SITE, "alex"))?.use((s) => s)).toEqual(before);
+  });
+  it("restricts login providers to their site and account and refuses revoked generations", async () => {
+    const { sessions, store } = setup();
+    const provider = sessions.forLogin(await sessions.beginLogin(SITE, "alex"));
+    const initial = await provider.get(SITE, "alex");
+    const writes = vi.spyOn(store, "putPrivateRecord");
+    for (const [site, account] of [
+      ["https://other.test", "alex"],
+      [SITE, "other"],
+      [SITE, undefined],
+    ] as const) {
+      expect(await provider.get(site, account)).toBeUndefined();
+      expect(await provider.update(site, account, { ...initial, cookies: [cookie()] })).toEqual({
+        accepted: false,
+      });
+    }
+    expect(writes).not.toHaveBeenCalled();
+    expect(Object.keys(provider).sort()).toEqual(["get", "update"]);
+    await sessions.stale(SITE, "alex");
+    expect(await provider.get(SITE, "alex")).toBeUndefined();
+    expect(await provider.update(SITE, "alex", { ...initial, cookies: [cookie()] })).toEqual({
+      accepted: false,
+    });
+  });
   it("returns and rotates persisted executor revisions; drops missing and reused revisions", async () => {
     const { sessions, store } = setup();
     await sessions.store(initialState());

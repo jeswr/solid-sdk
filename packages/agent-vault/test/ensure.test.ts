@@ -6,9 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AgentVault,
   LocalEncryptedBackend,
+  type LoginRequest,
   PermissionPolicy,
   Secret,
   type SecretBackend,
+  type SessionBundle,
   type VaultOptions,
 } from "../src/index.js";
 import {
@@ -51,6 +53,54 @@ async function fixture(method = "password") {
   return { ...base, backend, ask, read, save, totp, passwordLogin, interactiveLogin, options };
 }
 describe("ensureSession host orchestration", () => {
+  it.each([
+    "password",
+    "passkey",
+    "magic-link",
+    "otp",
+  ])("superseded %s callbacks cannot read or overwrite a newer login", async (method) => {
+    const f = await fixture(method);
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    let newest: SessionBundle | undefined;
+    let read: SessionBundle | undefined;
+    let update: unknown;
+    const callback = async (request: LoginRequest) => {
+      entered.resolve();
+      await release.promise;
+      read = await request.sessions.get(SITE, "alex");
+      // Even possession of the newer revision must not let the old transaction write.
+      update = await request.sessions.update(SITE, "alex", {
+        ...(read ?? newest),
+        cookies: [{ ...cookie(), value: "superseded-login" }],
+      });
+      return capture();
+    };
+    const outcome = new AgentVault({
+      ...f.options,
+      passwordLogin: async (request) => {
+        await callback(request);
+      },
+      interactiveLogin: callback,
+    })
+      .ensureSession(SITE)
+      .then(
+        () => "accepted",
+        () => "refused",
+      );
+    await entered.promise;
+    await new AgentVault(f.options).ensureSession(SITE);
+    newest = await f.sessions.get(SITE, "alex");
+    const before = await (await f.sessions.state(SITE, "alex"))?.use((s) => s);
+    const writes = vi.spyOn(f.store, "putPrivateRecord");
+    release.resolve();
+    expect(await outcome).toBe("refused");
+    expect((await f.sessions.get(SITE, "alex"))?.cookies[0]?.value).toBe(cookie().value);
+    expect(read).toBeUndefined();
+    expect(update).toEqual({ accepted: false });
+    expect(writes).not.toHaveBeenCalled();
+    expect(await (await f.sessions.state(SITE, "alex"))?.use((s) => s)).toEqual(before);
+  });
   it.each([
     "password",
     "passkey",
@@ -263,12 +313,16 @@ describe("ensureSession host orchestration", () => {
   it("accepts a callback that writes through executor SessionProvider and returns void", async () => {
     const f = await fixture();
     const passwordLogin: VaultOptions["passwordLogin"] = async (r) => {
-      await capture().use(async (c) =>
-        r.sessions.update(SITE, "alex", {
-          ...(await r.sessions.get(SITE, "alex")),
-          cookies: c.cookies,
-        }),
-      );
+      const initial = await r.sessions.get(SITE, "alex");
+      const tracking = { ...cookie(), name: "tracking", value: "tracking" };
+      const first = await r.sessions.update(SITE, "alex", { ...initial, cookies: [tracking] });
+      expect(first).toEqual({ accepted: true, revision: expect.any(String) });
+      const second = await r.sessions.update(SITE, "alex", {
+        revision: first.revision,
+        cookies: [cookie()],
+      });
+      expect(second).toEqual({ accepted: true, revision: expect.any(String) });
+      expect(second.revision).not.toBe(first.revision);
     };
     expect(
       await new AgentVault({ ...f.options, passwordLogin }).ensureSession(SITE),
