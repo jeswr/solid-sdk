@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // profileSite: learn a site once and return its SiteModel. Runs the steps in order (login, crawl,
@@ -10,6 +11,7 @@ import type { Extraction, LearnMethod, LoginRoute, Operation, SiteModel } from "
 import type { Browser } from "playwright";
 import { crawl } from "./crawl.js";
 import { buildFlow, type DemoStep, runDemonstration } from "./demonstrations.js";
+import { emptyListProbe } from "./empty-list-probe.js";
 import { applyExtraction, proposeHtmlExtraction, proposeJsonExtraction } from "./extraction.js";
 import { addFilterInputs } from "./filters.js";
 import { isCsrfFieldName, parseForms } from "./forms.js";
@@ -48,6 +50,7 @@ import {
   valueKind,
 } from "./util.js";
 import { findProbeUrl, playwrightReplayer, verifyOperations } from "./verify.js";
+import { learnDemonstratedForm } from "./write-learning.js";
 
 const FALLBACK_CHROMIUM = ["/opt/pw-browsers/chromium-1243/chrome-linux64/chrome"];
 
@@ -73,7 +76,7 @@ export function proposeExtraction(c: EndpointCandidate): Extraction | undefined 
     const body = sample.bodySample;
     if (!body || sample.bodyTruncated || (sample.status ?? 0) >= 400) continue;
     let ex: Extraction | undefined;
-    if (isJsonType(sample.contentType)) ex = proposeJsonExtraction(body);
+    if (isJsonType(sample.contentType)) ex = proposeJsonExtraction(body, c.urlTemplate);
     else if (isHtmlType(sample.contentType)) ex = proposeHtmlExtraction(body);
     if (!ex) continue;
     const items = applyExtraction(ex, body, sample.url).filter((i) => Object.keys(i).length);
@@ -174,7 +177,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       networkIdleTimeoutMs: options.networkIdleTimeoutMs ?? 5_000,
       maxCrawlMs: Math.min(maxProfileMs, 120_000),
     });
-    const tokens = discoverSessionTokens(
+    let tokens = discoverSessionTokens(
       crawled.pages.map((p) => ({ url: p.finalUrl, html: p.html })),
       await context.cookies(),
       recorder.trace,
@@ -224,6 +227,25 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         });
     }
 
+    // A user's saved search may return zero rows. Clear only its ordinary search on
+    // the witnessed GET, preserving dispatch/session fields and never saving preferences.
+    const emptyProbes = new Set<string>();
+    for (const sample of recorder.trace.slice()) {
+      const url = emptyListProbe(sample);
+      if (!url || emptyProbes.size >= 8 || emptyProbes.has(url)) continue;
+      emptyProbes.add(url);
+      await prober
+        .get(url, {
+          signedIn: true,
+          headers: Object.fromEntries(
+            Object.entries(sample.requestHeaders).filter(([name]) =>
+              /^x-requested-with$|^accept$/i.test(name),
+            ),
+          ),
+        })
+        .catch(() => undefined);
+    }
+
     // 7a. Demonstrations.
     const demoRuns: Array<{
       name: string;
@@ -245,6 +267,22 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     const blockedWrites = recorder.trace.filter((r) => r.blocked);
     for (const r of blockedWrites)
       warnings.push(`guard: blocked ${r.method} ${r.url} during ${r.phase}`);
+
+    tokens = discoverSessionTokens(
+      [
+        ...crawled.pages.map((p) => ({ url: p.finalUrl, html: p.html })),
+        ...recorder.trace
+          .filter((r) => r.phase === "demonstration" && r.bodySample && isHtmlType(r.contentType))
+          .map((r) => ({ url: r.url, html: r.bodySample ?? "" })),
+      ],
+      await context.cookies(),
+      recorder.trace,
+    );
+    for (const r of recorder.trace)
+      if (r.postDataTruncated || r.postDataUnsupported)
+        warnings.push(
+          `write body omitted (${r.postDataTruncated ? "size limit" : "unsupported form"}); not used to learn an operation`,
+        );
 
     // 2 + 3. Templates and forms; merge with script evidence.
     knownIds = collectKnownIds(recorder.trace);
@@ -278,9 +316,9 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         formCandidates.push(candidateFromForm(form, templateForPage(clusters, page.url)));
       }
     }
-    const candidates = mergeCandidates([...clusters, ...formCandidates, ...scriptCandidates]).map(
-      (c) => addFilterInputs(c, formPages),
-    );
+    const candidates = mergeCandidates([...clusters, ...formCandidates, ...scriptCandidates])
+      .map((c) => addFilterInputs(c, formPages))
+      .map((c) => learnDemonstratedForm(c, formPages));
 
     // 5 + 6. Extraction proposals and labels; decide what enters the model.
     const usedIds = new Set<string>();
@@ -307,6 +345,10 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         : [c],
     );
     for (const c of readableCandidates) {
+      if (c.unsupported) {
+        warnings.push(`write omitted: ${c.unsupported}`);
+        continue;
+      }
       const label: Label = await labeller.label(c);
       if (label.skip) continue;
       const demoRunIds = uniq(
@@ -334,7 +376,17 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         continue;
       }
       if (c.method !== "GET") {
-        if (!demoRunIds.length) {
+        if (
+          !c.samples.some(
+            (r) =>
+              r.phase === "demonstration" &&
+              !r.blocked &&
+              r.status !== undefined &&
+              r.status >= 200 &&
+              r.status < 400,
+          )
+        ) {
+          if (demoRunIds.length) continue;
           const from = c.sources.join(", ");
           warnings.push(
             `write ${c.method} ${c.urlTemplate} (${from}) left out: writes are learned only from demonstrations`,

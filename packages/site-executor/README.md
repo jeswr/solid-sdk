@@ -333,3 +333,24 @@ Form field names encoded as RFC 6570 variable names are decoded once on the form
 bracketed credential fields. A signed-in operation that receives an HTML password form with HTTP
 200 returns `errorKind: "no-session"`, rather than an empty successful observation. Unit and
 adversarial cases are in `test/session-reads.test.ts`.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Paged display facts and redirected write identities
+
+An extraction's optional `totalPath` reads a safe integer from the response root (JSON pointer)
+or one HTML selector. One ItemList carries numberOfItems; `sab:partial true` and
+`truncation.items` mark unseen rows. Invalid totals fail extraction. Counts and display totals
+are not payment evidence; the existing Money/Rule W checks remain unchanged.
+
+List row price/totalPrice text is normalized to xsd:decimal only with a row currency-code fact;
+symbols alone do not establish currency. ISO-like creation/modification timestamps become
+xsd:dateTime (a space separator becomes T; no timezone is invented). Other strings stay text.
+Untrusted fields remain untrusted and secret redaction precedes presentation conversion.
+Endpoint-described refund records use Thing plus additionalType text, never Invoice/category.
+
+A 301/302/303 write redirect can provide a result identity, extending the existing 303 behavior.
+When no extraction is declared, a checked numeric/UUID identifier in the server's on-origin
+redirect becomes trusted identifier/url facts and a result receipt. This also supplies flow
+bindings from a JS-rendered form. Secret-bearing URLs, off-origin targets and non-ID routes do
+not supply identities. The POST is sent once; only GET follows the redirect. Approvals,
+commitment/repeat guards, CSRF decoration and payment rules retain their existing boundaries.

@@ -175,6 +175,7 @@ sabsh:ExtractionShape a sh:NodeShape ;
   sh:targetClass sab:Extraction ;
   sh:property [ sh:path sab:format ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "json" "html" ) ] ;
   sh:property [ sh:path sab:itemPath ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path sab:totalPath ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
   sh:property [ sh:path sab:itemType ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
   sh:property [ sh:path sab:idField ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
   sh:property [ sh:path sab:fieldRule ; sh:nodeKind sh:IRI ; sh:class sab:FieldRule ] .

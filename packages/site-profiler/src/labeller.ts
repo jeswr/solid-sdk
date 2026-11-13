@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 6: labelling. The Labeller seam names what an endpoint does in schema.org terms and its
@@ -25,6 +26,12 @@ function noun(c: EndpointCandidate, fallback: string): string {
     /^(namespace|resource|collection|dataset)$/i.test(k),
   )?.[1];
   if (dispatch) return dispatch.replace(/[_-]+(?:grid|listing|list)$/, "").replace(/[_-]+/g, " ");
+  if (c.method !== "GET") {
+    const actionAt = words.findIndex((w) =>
+      /^(create|save|update|edit|delete|remove|massdelete|validate)$/.test(w),
+    );
+    if (actionAt > 0) return singular(words[actionAt - 1] ?? fallback);
+  }
   const last = words[words.length - 1];
   return last ? singular(last).replace(/[-_]+/g, " ") : fallback;
 }
@@ -144,7 +151,7 @@ export class HeuristicLabeller implements Labeller {
         confidence: 0.7,
       };
     }
-    if (c.method === "DELETE") {
+    if (c.method === "DELETE" || /(?:^|\/)(?:mass[-_]?)?(?:delete|remove)(?:\/|$)/.test(joined)) {
       return {
         actionType: s("DeleteAction"),
         label: `Delete ${noun(c, "item")}`,
@@ -152,7 +159,14 @@ export class HeuristicLabeller implements Labeller {
         confidence: 0.6,
       };
     }
-    if (c.method === "PUT" || c.method === "PATCH") {
+    const firstAction = words.find((w) => /^(create|save|update|edit|delete|remove)$/.test(w));
+    if (
+      c.method === "PUT" ||
+      c.method === "PATCH" ||
+      firstAction === "update" ||
+      firstAction === "edit" ||
+      (firstAction === "save" && /\/(?:id|identifier)\/\{/.test(c.urlTemplate))
+    ) {
       return {
         actionType: s("UpdateAction"),
         label: `Update ${noun(c, "item")}`,

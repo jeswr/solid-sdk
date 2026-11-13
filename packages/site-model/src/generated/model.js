@@ -302,6 +302,16 @@ const manifest = {
           "guards": {
             "requiredFailClosed": true
           }
+        },
+        {
+          "name": "totalPath",
+          "predicate": "https://jeswr.org/ns/site-action#totalPath",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
         }
       ]
     },

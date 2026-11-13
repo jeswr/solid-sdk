@@ -60,3 +60,24 @@ Repeat guard and recovery:
   correct the mapped inputs instead of weakening typed identity matching.
 - Session revisions belong to the executor/vault seam. Advance accepted update revisions; rejection stops persistence for the rest of the execution
   while keeping the in-memory jar; void retains the prior token. Never fetch a new token for old cookies; model learning and planner history must never carry it.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+List/write learning additions: keep totalPath synchronized through types, ontology, both shapes,
+codegen config and generated artifacts (regenerate, never hand-edit). List counts are integers
+on ItemList; unseen records make observations partial. Display coercion requires a row currency
+code for formatted prices and strict ISO-like timestamp syntax; payment evidence rules stay
+unchanged. Type records from endpoint-owned words, ignoring user query values. Refund documents
+fall back to Thing/additionalType text rather than Invoice/category.
+
+Composite write templates must be witnessed by successful demonstrations, size bounded and
+redacted. Prefer witnessed cookie CSRF over hidden/meta sources; script variables require a
+contract discussion, never a hard-coded token. Preserve ordinary flat-form defaults/options.
+Created identities may come from checked on-origin 301/302/303 redirects and supply later flow
+bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
+The harness's opt-in live test creates and cleans up only its own product, blocks background
+preference writes and uses a scripted planner. Never invoke a planner/model CLI for acceptance.
+
+For product administration, a quantity input describes inventoryLevel, not purchase quantity.
+A demonstrated destructive grid search remains a required dynamic input, including when the
+site submits no explicit selected IDs. Never drop or fix that selector to a demonstration SKU.

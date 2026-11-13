@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { Operation, SiteModel } from "@jeswr/site-model";
 import { describe, expect, it, vi } from "vitest";
@@ -240,4 +241,31 @@ describe("read routing and expired sessions", () => {
     expect(result.status).toBe("needs-approval");
     expect(transport).not.toHaveBeenCalled();
   });
+});
+
+it("extracts an on-origin created identifier from a 302 without replaying the POST", async () => {
+  const op = operation("create");
+  op.actionType = "https://schema.org/CreateAction";
+  op.effect = "irreversible-write";
+  op.request = { method: "POST", urlTemplate: `${origin}/products/save` };
+  op.csrf = undefined;
+  op.extraction = undefined;
+  const calls: string[] = [];
+  const transport: NonNullable<ExecutorOptions["fetch"]> = async (input, init) => {
+    calls.push(init?.method ?? "GET");
+    return String(input).endsWith("/save")
+      ? new Response(null, { status: 302, headers: { location: `${origin}/products/edit/id/42/` } })
+      : new Response("<html>Client rendered form</html>");
+  };
+  const executor = createExecutor({
+    model: model([op]),
+    sessions: sessions(),
+    fetch: transport,
+    gate: { authorize: async () => ({ kind: "allow" }) },
+  });
+  const result = await executor.execute(actionRequest("[] a schema:CreateAction."));
+  expect(result.status).toBe("done");
+  expect(calls).toEqual(["POST", "GET"]);
+  expect(result.outcome?.result).toBe(`${origin}/products/edit/id/42/`);
+  expect(result.observations.map((o) => o.turtle).join("\n")).toContain('schema:identifier "42"');
 });

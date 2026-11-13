@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 5: extraction proposals. JSON responses with an array of objects (or one product-like object)
@@ -5,7 +6,7 @@
 // Extraction rules mapping to schema.org by key name. Third-party text (descriptions, reviews) is
 // marked untrusted so the planner only ever sees it as data.
 
-import type { Extraction, FieldRule } from "@jeswr/site-model";
+import { type Extraction, endpointItemType, type FieldRule } from "@jeswr/site-model";
 import {
   attr,
   classes,
@@ -58,7 +59,7 @@ const KEY_RULES: Array<[RegExp, KeyRule]> = [
   [/^(ordernumber|incrementid)$/, { property: s("orderNumber") }],
   [/^(createdat|datecreated)$/, { property: s("dateCreated") }],
   [/^(updatedat|datemodified)$/, { property: s("dateModified") }],
-  [/^(ordercurrencycode)$/, { property: s("priceCurrency") }],
+  [/currency(?:code)?$/, { property: s("priceCurrency") }],
 ];
 
 function normKey(key: string): string {
@@ -111,7 +112,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 function findArray(
   doc: unknown,
   depth = 0,
-): { pointer: string; items: Record<string, unknown>[] } | undefined {
+): { pointer: string; items: Record<string, unknown>[]; totalPath?: string } | undefined {
   if (Array.isArray(doc)) {
     const items = doc.filter(isRecord);
     return items.length && items.length === doc.length ? { pointer: "", items } : undefined;
@@ -125,13 +126,27 @@ function findArray(
   for (const k of keys) {
     const v = doc[k];
     if (Array.isArray(v) && v.length && v.every(isRecord)) {
-      return { pointer: `/${pointerEscape(k)}`, items: v as Record<string, unknown>[] };
+      const totalKey = Object.keys(doc).find(
+        (key) =>
+          /(?:total|count)/i.test(key) &&
+          Number.isSafeInteger(doc[key]) &&
+          Number(doc[key]) >= v.length,
+      );
+      return {
+        pointer: `/${pointerEscape(k)}`,
+        items: v as Record<string, unknown>[],
+        ...(totalKey ? { totalPath: `/${pointerEscape(totalKey)}` } : {}),
+      };
     }
   }
   for (const k of keys) {
     const inner = findArray(doc[k], depth + 1);
     if (inner?.pointer)
-      return { pointer: `/${pointerEscape(k)}${inner.pointer}`, items: inner.items };
+      return {
+        pointer: `/${pointerEscape(k)}${inner.pointer}`,
+        items: inner.items,
+        ...(inner.totalPath ? { totalPath: `/${pointerEscape(k)}${inner.totalPath}` } : {}),
+      };
   }
   return undefined;
 }
@@ -140,7 +155,10 @@ function fieldsForObject(obj: Record<string, unknown>): FieldRule[] {
   const out: FieldRule[] = [];
   for (const [k, v] of Object.entries(obj)) {
     const rule = mapKey(k, v);
-    if (rule && !out.some((f) => f.property === rule.property))
+    if (
+      rule &&
+      (rule.property === s("priceCurrency") || !out.some((f) => f.property === rule.property))
+    )
       out.push(field(rule, `/${pointerEscape(k)}`));
   }
   if (
@@ -171,7 +189,10 @@ function fieldsForObject(obj: Record<string, unknown>): FieldRule[] {
 const MAX_NESTED = 5;
 
 /** Propose an Extraction for a JSON response body; undefined when nothing maps. */
-export function proposeJsonExtraction(body: string | unknown): Extraction | undefined {
+export function proposeJsonExtraction(
+  body: string | unknown,
+  endpoint?: string,
+): Extraction | undefined {
   const doc = typeof body === "string" ? tryJson(body) : body;
   if (doc === undefined) return undefined;
   if (isRecord(doc)) {
@@ -208,7 +229,13 @@ export function proposeJsonExtraction(body: string | unknown): Extraction | unde
   }
   const fields = fieldsForObject(merged);
   if (fields.length < 2) return undefined;
-  return withId({ format: "json", itemPath: found.pointer, itemType: itemTypeFor(fields), fields });
+  return withId({
+    format: "json",
+    itemPath: found.pointer,
+    ...(found.totalPath ? { totalPath: found.totalPath } : {}),
+    itemType: (endpoint ? endpointItemType(endpoint)?.itemType : undefined) ?? itemTypeFor(fields),
+    fields,
+  });
 }
 
 // ---------------------------------------------------------------------------------------------

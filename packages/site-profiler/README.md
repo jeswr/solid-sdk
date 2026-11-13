@@ -107,7 +107,7 @@ site's actual filter semantics and page through large results explicitly; no aut
 Known JSON keys map to schema.org (including identifiers, names, email, order numbers, totals,
 statuses and creation dates). Unknown scalar keys map to `sab:` plus the percent-encoded original
 key; unknown text is untrusted. Nested objects, nulls and credential-like fields are not flattened.
-Formatted monetary strings remain strings, with a separate currency field when available.
+Formatted monetary strings keep their text unless a row currency code supports conservative display conversion by the executor.
 
 Opaque URL values (16–256 characters) repeated in at least two requests and supplied by a hidden
 HTML input, meta tag or cookie become session/CSRF sources, never planner inputs or constants.
@@ -125,3 +125,41 @@ signed-out probe even when the server uses HTTP 200.
 The opt-in live acceptance test lives in `tools/webarena-bench/test/live.test.ts`, where the profiler,
 executor and host login dependencies already exist. See that tool's README for the command and
 artifact option. It performs only GETs and sign-in, without a planner or mutation demonstration.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Demonstrated composite forms and list quality
+
+A JSON row envelope proposes `totalPath` only for a sibling safe integer whose key contains
+`total` or `count` and whose value covers the observed items. Endpoint-owned nouns override
+coarser field-based item typing. Query text never chooses a type. Currency-code suffix keys
+map to priceCurrency; the executor conservatively types formatted row prices and ISO-like dates.
+
+Successful demonstrated composite form payloads become semantic name, sku, price and quantity
+inputs, with form templates mapping them to original bracketed wire fields. Presence/nonempty
+values across the demonstration determine requiredness. Other stable, witnessed fields remain
+fixed template values; missing, redacted, opaque session-like and undemonstrated values do not.
+Routing configuration numbers stay fixed; item IDs remain inputs and matching body identity
+fields bind to that ID. Ordinary flat forms keep their existing defaults/options.
+
+Text multipart bodies are decoded under a 256 KiB request-body bound and a 2000-field limit.
+Oversized/malformed/upload payloads are marked and excluded from write learning. CSRF fields
+are redacted structurally; a witnessed matching cookie is preferred to a hidden input. Hidden
+sources come from observed pages, including JS-page responses. Script-only token sources are
+unsupported by the current CsrfSource union and are never baked into templates.
+
+Tokens are rediscovered after demonstrations. Server redirect identities can supply later
+flow bindings even when the destination form is rendered by JavaScript. Demonstrated POST
+save-with-ID and delete/remove routes are labelled UpdateAction/DeleteAction conservatively;
+unknown writes, including creates, remain irreversible-write. Failed/aborted demonstration
+requests never teach a write. The opt-in harness demonstration and acceptance create and clean
+up their own disposable products, block background preference writes, and run no model CLI.
+
+For product administration, a quantity input describes inventoryLevel, not purchase quantity.
+A demonstrated destructive grid search remains a required dynamic input, including when the
+site submits no explicit selected IDs. Never drop or fix that selector to a demonstration SKU.
+
+A saved search returning no rows can teach its row shape through at most eight deduplicated,
+read-only probes with the ordinary search cleared, page reset to 1 and size capped at 25.
+Dispatch/session values and observed XHR headers are preserved; preferences are never saved.
+A fresh password login retains its page CSRF source so the host can bootstrap its cookie jar;
+the cookie preference applies to demonstrated writes after sign-in.

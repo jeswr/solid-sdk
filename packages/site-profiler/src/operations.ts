@@ -1,9 +1,16 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Turns a labelled endpoint candidate into a contract Operation: parameters mapped onto property
 // paths of the RDF action node, the request template, CSRF rules, extraction and provenance.
 
-import type { Extraction, LearnMethod, Operation, Parameter } from "@jeswr/site-model";
+import {
+  type Extraction,
+  endpointItemType,
+  type LearnMethod,
+  type Operation,
+  type Parameter,
+} from "@jeswr/site-model";
 import type { CandidateParam, EndpointCandidate, Label } from "./types.js";
 import { s, sab, singular, slug, xsd } from "./util.js";
 
@@ -78,6 +85,8 @@ export function toParameter(
     };
   } else if (p.location === "path" && p.kind !== "text" && /sku/i.test(p.name)) {
     param = { ...base, path: [s("object"), s("sku")], range: xsd("string"), required: true };
+  } else if (p.location === "path" && /\/(?:id|identifier)\/\{/.test(c.urlTemplate)) {
+    param = { ...base, path: [s("object"), s("identifier")], range: xsd("string"), required: true };
   } else if (p.location === "path") {
     param = {
       ...base,
@@ -88,6 +97,13 @@ export function toParameter(
     };
   } else if (SEARCH_PARAM.test(p.name) && (p.location === "query" || p.location === "form")) {
     param = { ...base, path: [s("query")], range: xsd("string"), required: true };
+  } else if (/^(name|price)$/i.test(p.name) && c.method !== "GET") {
+    param = {
+      ...base,
+      path: [s("object"), s(p.name.toLowerCase())],
+      range: xsd(p.name === "price" ? "decimal" : "string"),
+      required: p.required,
+    };
   } else if (/^sku$/i.test(p.name)) {
     param = { ...base, path: [s("object"), s("sku")], range: xsd("string"), required: true };
   } else if (/^(id|product_?id|item_?id)$/i.test(p.name)) {
@@ -95,10 +111,15 @@ export function toParameter(
   } else if (/^(qty|quantity)$/i.test(p.name)) {
     param = {
       ...base,
-      path: [sab("quantity")],
+      path:
+        p.name === "quantity" &&
+        c.bodyTemplate &&
+        endpointItemType(c.urlTemplate)?.itemType === s("Product")
+          ? [s("object"), s("inventoryLevel")]
+          : [sab("quantity")],
       range: xsd("integer"),
-      required: false,
-      default: example ?? "1",
+      required: c.bodyTemplate && p.name === "quantity" ? p.required : false,
+      ...(c.bodyTemplate && p.name === "quantity" ? {} : { default: example ?? "1" }),
     };
   } else if (/^page$/i.test(p.name)) {
     param = { ...base, path: [sab("page")], range: xsd("integer"), required: false, default: "1" };
@@ -117,6 +138,10 @@ export function toParameter(
     if (example !== undefined) param.default = example;
     if (/page.?size|limit|per.?page/i.test(decoded) && /^\d+$/.test(example ?? ""))
       param.default = String(Math.min(Number(example), 25));
+    if (/page.?size|limit|per.?page/i.test(decoded))
+      param.description = "Rows per page, at most 25.";
+    else if (/(?:page|current)(?:\]|$)/i.test(decoded))
+      param.description = "Page number, starting at 1.";
   }
   if (example !== undefined && example !== "[redacted]" && param.path.length)
     param.example = example;

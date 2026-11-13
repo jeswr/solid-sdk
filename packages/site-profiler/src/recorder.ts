@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Records every same-origin request a browser context makes, without credentials, and enforces the
@@ -5,6 +6,8 @@
 // the browser. Blocked requests are kept in the trace as evidence of candidate writes.
 
 import type { BrowserContext, Request, Response } from "playwright";
+import { formFields } from "./form-body.js";
+import { isCsrfFieldName } from "./forms.js";
 import type { Phase, RecordedRequest } from "./types.js";
 import { isDangerousLink, isStatic, truncate } from "./util.js";
 
@@ -34,6 +37,18 @@ export function redactBody(
   contentType: string | undefined,
 ): string | undefined {
   if (body === undefined) return undefined;
+  if (/multipart\/form-data/i.test(contentType ?? "")) {
+    const fields = formFields(body, contentType ?? "");
+    if (!fields) return "[omitted: unsupported multipart]";
+    const boundary = /\bboundary=(?:"([^"\r\n]+)"|([^;\s]+))/i.exec(contentType ?? "");
+    const marker = boundary?.[1] ?? boundary?.[2];
+    return `${fields
+      .map(
+        ([name, value]) =>
+          `--${marker}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${SENSITIVE_FIELD.test(name) ? "[redacted]" : value}\r\n`,
+      )
+      .join("")}--${marker}--\r\n`;
+  }
   if (/json/i.test(contentType ?? "") || /^\s*\{/.test(body)) {
     try {
       const parsed = JSON.parse(body) as unknown;
@@ -191,8 +206,24 @@ export class Recorder {
       entry.headersFromCookies = clean.headersFromCookies;
     const post = req.postData();
     if (post !== null) {
-      const redacted = redactBody(post, headers["content-type"]);
-      if (redacted !== undefined) entry.postData = redacted;
+      if (Buffer.byteLength(post) > BODY_LIMIT) {
+        entry.postDataTruncated = true;
+      } else {
+        const type = headers["content-type"] ?? "";
+        const fields = formFields(post, type);
+        if (/multipart\/form-data/i.test(type) && !fields) entry.postDataUnsupported = true;
+        const bodyFromCookies: Record<string, string> = {};
+        for (const [key, value] of fields ?? []) {
+          if (!isCsrfFieldName(key)) continue;
+          const cookie = parseCookieHeader(headers.cookie).find(
+            ([, v]) => v === value && value !== "",
+          );
+          if (cookie) bodyFromCookies[key] = cookie[0];
+        }
+        if (Object.keys(bodyFromCookies).length) entry.bodyFromCookies = bodyFromCookies;
+        const redacted = redactBody(post, type);
+        if (redacted !== undefined) entry.postData = redacted;
+      }
     }
   }
 
@@ -224,13 +255,14 @@ export class Recorder {
   recordReplay(
     entry: Omit<RecordedRequest, "seq" | "phase" | "requestHeaders" | "cookieNames"> & {
       cookieNames?: string[];
+      requestHeaders?: Record<string, string>;
     },
   ): RecordedRequest {
     const full: RecordedRequest = {
       ...this.stamp(),
-      requestHeaders: {},
       cookieNames: entry.cookieNames ?? [],
       ...entry,
+      requestHeaders: sanitiseHeaders(entry.requestHeaders ?? {}).requestHeaders,
     };
     if (full.bodySample !== undefined) {
       const t = truncate(full.bodySample, BODY_LIMIT);

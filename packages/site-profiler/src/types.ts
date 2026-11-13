@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Types local to the profiler. The output contract (SiteModel and friends) lives in @jeswr/site-model.
@@ -27,6 +28,11 @@ export interface RecordedRequest {
   /** Authorization scheme sent (e.g. 'Bearer'), never the credential. */
   authScheme?: string;
   postData?: string;
+  /** Request bodies are bounded independently of response samples. Incomplete bodies cannot teach writes. */
+  postDataTruncated?: boolean;
+  postDataUnsupported?: boolean;
+  /** Body field -> matching cookie name; values never retained. */
+  bodyFromCookies?: Record<string, string>;
   status?: number;
   contentType?: string;
   /** Location header of a redirect response. */
@@ -122,6 +128,8 @@ export interface EndpointCandidate {
   form?: FormInfo;
   script?: ScriptCall;
   authScheme?: string;
+  /** A witnessed write whose required replay source is unavailable in the shared contract. */
+  unsupported?: string;
 }
 
 /** What an endpoint does, in schema.org terms. */

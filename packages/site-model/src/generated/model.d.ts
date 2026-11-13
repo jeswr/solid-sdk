@@ -149,6 +149,7 @@ export interface ExtractionData {
   "idField"?: string;
   "itemPath"?: string;
   "itemType": string;
+  "totalPath"?: string;
 }
 
 export interface ExtractionWrapper extends EntityWrapper {
@@ -157,6 +158,7 @@ export interface ExtractionWrapper extends EntityWrapper {
   "idField"?: string;
   "itemPath"?: string;
   "itemType"?: string;
+  "totalPath"?: string;
 }
 
 export interface ExtractionEntity {
