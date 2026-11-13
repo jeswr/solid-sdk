@@ -16,6 +16,7 @@
  * The partner-program application draft lives in
  * `docs/garmin-partner-application.md`.
  */
+
 import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -58,11 +59,13 @@ export const garminAdapter: IntegrationAdapter = {
   fixtures: () => GARMIN_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your Garmin activities…", done: 0, total: 2 });
     const list = await getJson<GarminActivitiesAnswer>(
       ID,
       ctx.api,
       `${API}/activity-service/activities?limit=100`,
+      undefined,
     );
 
     const exDoc = ctx.resolve("health/activities.ttl");
@@ -70,6 +73,7 @@ export const garminAdapter: IntegrationAdapter = {
     const exercises = new Store();
     const journeys = new Store();
 
+    budget.items(list.length);
     for (const a of list) {
       const start = new Date(`${a.startTimeGMT.replace(" ", "T")}Z`);
       const distance =

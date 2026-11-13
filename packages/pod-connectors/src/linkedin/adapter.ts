@@ -10,6 +10,7 @@
  * LinkedIn's OAuth uses a confidential client for code→token, so live mode
  * runs through the maintainer's token proxy. Demoable now against fixtures.
  */
+
 import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -48,11 +49,13 @@ export const linkedinAdapter: IntegrationAdapter = {
   fixtures: () => LINKEDIN_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your work history…", done: 0, total: 1 });
-    const answer = await getJson<LiPositionsAnswer>(ID, ctx.api, `${API}/positions`);
+    const answer = await getJson<LiPositionsAnswer>(ID, ctx.api, `${API}/positions`, undefined);
 
     const doc = ctx.resolve("work/positions.ttl");
     const positions = new Store();
+    budget.items(answer.elements.length);
     for (const p of answer.elements) {
       const pos = new WorkPosition(`${doc}#position-${p.id}`, positions, DataFactory).mark();
       pos.name = p.companyName;

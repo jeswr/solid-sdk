@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
-import { MAX_JSON_BYTES, type RunLimits } from "../core/budget.js";
+import { MAX_JSON_BYTES, RunBudget, type RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
@@ -10,7 +10,7 @@ import { API, spotifyJson } from "./api.js";
 
 const json = (body: unknown) => new Response(JSON.stringify(body));
 
-/** One item per collection/page, twelve requests and eleven items per complete import. */
+/** One item per collection/page, twelve requests and twelve items per complete import. */
 function source(prefix: string, override: (url: URL) => Response | undefined = () => undefined) {
   return vi.fn<typeof fetch>(async (input) => {
     const url = new URL(String(input));
@@ -113,7 +113,7 @@ describe("Spotify source bounds", () => {
     );
     await expectPreserved(
       api,
-      { maxRequests: kind === "request" ? 12 : 100, maxItems: kind === "item" ? 11 : 100 },
+      { maxRequests: kind === "request" ? 12 : 100, maxItems: kind === "item" ? 12 : 100 },
       `${kind} budget`,
     );
     expect(api).toHaveBeenCalledTimes(kind === "request" ? 12 : 13);
@@ -202,7 +202,7 @@ describe("Spotify source bounds", () => {
       podWriter,
       sourceAuth: { fetch: measured },
     });
-    const limits = { maxRequests: 12, maxItems: 11, maxBytes };
+    const limits = { maxRequests: 12, maxItems: 12, maxBytes };
     const adapter = createSpotifyAdapter(limits);
     for (let run = 0; run < 2; run++) {
       const api = source("replacement");
@@ -244,7 +244,9 @@ describe("Spotify source bounds", () => {
   });
 
   it("maps invalid JSON through the shared bounded reader", async () => {
-    await expect(spotifyJson(async () => new Response("{"), `${API}/me`)).rejects.toMatchObject({
+    await expect(
+      spotifyJson(async () => new Response("{"), `${API}/me`, new RunBudget("spotify")),
+    ).rejects.toMatchObject({
       name: "IntegrationSyncError",
       adapterId: "spotify",
       url: `${API}/me`,
