@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import type { ApprovalRequest } from "@jeswr/site-executor";
 import type { SiteModel } from "@jeswr/site-model";
@@ -43,9 +44,11 @@ describe("fresh test shop -> profiler -> RDF model -> executor -> planner", () =
       decision === "approve" ? "done" : "denied",
       "answer",
     ]);
-    expect(approver).toHaveBeenCalledTimes(1);
+    // The executor gates each write: add to basket, then checkout. Denial stops at the first.
+    expect(approver).toHaveBeenCalledTimes(decision === "approve" ? 2 : 1);
     expect(approver.mock.calls[0]?.[0].summary).toContain("Trail Runner sneakers");
     expect(approver.mock.calls[0]?.[0].summary).toContain("GBP 20.00");
+    for (const [approval] of approver.mock.calls) expect(approval.summary).toContain("GBP 20.00");
     expect(shop.state.orders).toHaveLength(decision === "approve" ? 1 : 0);
     if (decision === "approve") {
       expect(shop.state.orders[0]?.lines).toEqual([

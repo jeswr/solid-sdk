@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { SCHEMA, type SiteModel } from "@jeswr/site-model";
 import { DataFactory } from "n3";
 import { PREFIXES, writeQuads } from "../src/rdf.js";
@@ -106,7 +107,35 @@ export function modelFixture(): SiteModel {
         },
       },
     ],
-    flows: [],
+    flows: [
+      {
+        id: "https://shop.test/model#buy",
+        actionType: s("BuyAction"),
+        label: "Buy a product",
+        effect: "payment",
+        provenance,
+        inputs: [
+          {
+            name: "id",
+            path: [s("object")],
+            range: s("Product"),
+            required: true,
+            location: "body",
+          },
+          {
+            name: "name",
+            path: [s("object"), s("name")],
+            range: x("string"),
+            required: true,
+            location: "query",
+          },
+        ],
+        steps: [
+          { operation: "https://shop.test/model#search", bind: { q: "$input.name" } },
+          { operation: "https://shop.test/model#checkout", bind: { id: "$input.id" } },
+        ],
+      },
+    ],
     login: [
       {
         method: "password",

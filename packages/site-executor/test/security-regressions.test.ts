@@ -126,7 +126,7 @@ describe("security review regressions", () => {
       gate: allow,
       fetch,
     });
-    expect((await ex.execute(pay())).status).toBe("error");
+    expect((await ex.execute(pay())).status).toBe("refused");
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -146,7 +146,7 @@ describe("security review regressions", () => {
       fetch,
     });
     const r = await ex.execute(buy());
-    expect(r.status).toBe("error");
+    expect(r.status).toBe("refused");
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(authorize.mock.calls[0]?.[0].effect).toBe("read");
   });

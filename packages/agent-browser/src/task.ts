@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ExecutionResult } from "@jeswr/site-executor";
 import { parseActionRequest, renderCatalogue } from "@jeswr/site-model";
 import { budgetHistory, plainText, promptFor } from "./planner.js";
@@ -37,11 +38,14 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
   const { executor, planner, approver } = options;
   const maxSteps = options.maxSteps ?? 12;
   const budget = options.observationBudget ?? 12_000;
+  const maxApprovals = options.maxApprovals ?? 25;
   if (
     !Number.isSafeInteger(maxSteps) ||
     maxSteps < 0 ||
     !Number.isSafeInteger(budget) ||
-    budget < 0
+    budget < 0 ||
+    !Number.isSafeInteger(maxApprovals) ||
+    maxApprovals < 1
   )
     throw new Error("Invalid task bounds.");
   const redact = (text: string) => executor.redact?.(text) ?? text;
@@ -118,7 +122,13 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
         result = failure("Executor failed to execute the action.");
       }
       step.statuses.push(result.status);
-      if (result.status === "needs-approval" && result.approval) {
+      let approvalCount = 0;
+      while (result.status === "needs-approval" && result.approval) {
+        if (approvalCount++ >= maxApprovals) {
+          result = failure("Approval limit reached; do not assume the action completed.");
+          step.statuses.push(result.status);
+          break;
+        }
         // Keep the original request and approval id for the retry; the planner cannot edit either.
         const approval = result.approval;
         let decision: ApprovalDecision;
@@ -138,6 +148,8 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
                 : "deny",
           outcome: allowed ? "approved" : "denied",
         };
+        step.approvals ??= [];
+        step.approvals.push(step.approval);
         if (!allowed) {
           executor.reject?.(approval.id);
           result = {
@@ -194,7 +206,7 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
     if (step.request !== undefined) step.request = redact(step.request);
     if (step.error !== undefined) step.error = redact(step.error);
     step.observations = redact(step.observations);
-    if (step.approval) step.approval.summary = redact(step.approval.summary);
+    for (const approval of step.approvals ?? []) approval.summary = redact(approval.summary);
   }
   return trace;
 }

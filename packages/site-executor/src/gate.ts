@@ -18,7 +18,7 @@ export interface GateRequest {
   effect: EffectClass;
   /** Concrete operation inputs; flows also include $input.<name> and $step. */
   inputs: Record<string, string>;
-  /** Authorized monetary total from mapped operation inputs (lexical decimal). */
+  /** Authorized monetary total from wire mappings or trusted site facts (lexical decimal). */
   amount?: string;
   currency?: string;
   /** Plain-English description, e.g. "Buy Trail Runner sneakers for GBP 20.00 on shop.test". */
@@ -179,8 +179,9 @@ function clean(text: string, max = 80): string {
 }
 
 function formatAmount(amount: string): string {
-  const n = Number(amount);
-  return Number.isFinite(n) ? n.toFixed(2) : amount;
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(amount)) return amount;
+  const [whole = "0", fraction = ""] = canonicalDecimal(amount).split(".");
+  return `${whole || "0"}.${fraction.padEnd(2, "0")}`;
 }
 
 /** Plain-English summary, e.g. "Buy Trail Runner sneakers for GBP 20.00 on shop.test". */

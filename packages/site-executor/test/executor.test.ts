@@ -407,7 +407,7 @@ describe("flows", () => {
     expect(ask.status).toBe("needs-approval");
     expect(ask.target).toMatchObject({ kind: "flow", id: "urn:flow:buy" });
     expect(ask.approval?.effect).toBe("payment");
-    expect(ask.approval?.summary).toMatch(/^Buy Trail Runner on 127\.0\.0\.1:\d+$/);
+    expect(ask.approval?.summary).toMatch(/^Buy Trail Runner for GBP 20.00 on 127\.0\.0\.1:\d+$/);
     gate.approve(ask.approval?.id as string);
     const checkout = await executor.execute(buy(), { approvalId: ask.approval?.id as string });
     expect(checkout.status).toBe("needs-approval");
@@ -423,17 +423,19 @@ describe("flows", () => {
     expect(shop.state.orders).toEqual([
       { id: 1000, sid: SID, delivery: "express", items: [{ sku: "TR-20", qty: 1 }] },
     ]);
-    // search, add, CSRF page, checkout POST, 303 GET
-    expect(r.requests).toBe(5);
+    // search, price re-read at each approval, add, CSRF page, checkout POST, 303 GET
+    expect(r.requests).toBe(7);
     expect(shop.requests.map((q) => `${q.method} ${q.url}`)).toEqual([
       "GET /api/search?q=Trail%20Runner&page=1",
+      "GET /api/search?q=Trail%20Runner&page=1",
       "POST /api/cart/items",
+      "GET /api/search?q=Trail%20Runner&page=1",
       "GET /checkout",
       "POST /checkout",
       "GET /orders/1000",
     ]);
-    expect(shop.requests[4]?.body).toBe("");
-    expect(shop.requests[3]?.body).toBe(
+    expect(shop.requests[6]?.body).toBe("");
+    expect(shop.requests[5]?.body).toBe(
       `delivery=express&amount=20&currency=GBP&csrf_token=${CSRF}`,
     );
     const order = new Store(new Parser().parse(r.observations[2]?.turtle ?? ""));
@@ -484,7 +486,7 @@ describe("flows", () => {
     const r = await executor.execute(
       actionRequest(`[] a schema:SearchAction ; schema:query "x" .`),
     );
-    expect(r.status).toBe("error");
+    expect(r.status).toBe("refused");
     expect(r.errorKind).toBe("binding");
     expect(r.requests).toBe(0);
   });
