@@ -220,11 +220,36 @@ must replay through the HTTP executor with the session and extract an item. Read
 `provenance.method: "fallback"`, confidence at most 0.35, and verification counters. Only
 approved successful writes become write operations; they are never replayed while learning.
 No flow is inferred. Aborts, other origins and credential-bearing candidates are excluded.
-Session URL tokens use the profiler's source/repetition detection and CSRF slots; unresolved
-secret URL constants are rejected. Models validate and round-trip through site-model RDF.
+Explicit credential sources (meta/hidden tokens, cookies and recognised script variables) are
+registered as secrets on their first use. Verified sources use CSRF slots, including path slots;
+unsupported sources and unresolved secret constants are rejected. Ordinary opaque IDs still need
+the profiler's source/repetition evidence. Models validate, round-trip through site-model RDF,
+and pass a dry executor construction before admission.
 Writes currently support flat JSON string/number/boolean fields and URL-encoded forms; unsupported bodies fail closed.
 
 `test/fallback.test.ts` exercises real Chromium/loopback order learning, address approval and
 zero-launch executor replay, plus browser guards, pacing, snapshots, refs and revision rejection.
 `test/fallback-learning.test.ts` covers executor verification, token slots, write admission and
 canonical fingerprints. `test/fallback-routing.test.ts` covers statuses that must stay in the executor.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The driver sends every redirect hop with automatic redirects disabled. Cross-origin redirects
+become a navigation error page before transmission. A 301/302/303 after a write continues only
+as GET; a 307/308 body resend needs another approval bound to its exact method, URL and body,
+with a separate fingerprint. Cookies and session headers are attached by the driver per hop.
+Fingerprints and learned parameters use the transmitted inventory; unsent controls and form
+defaults cannot change them. Grants also bind the page generation and are invalidated by
+navigation, frame changes or document replacement during approval.
+
+Approval summaries identify the clicked submitter (or pressed control's form), show method and
+target path, quote page strings, escape controls/newlines, and explicitly mark truncation.
+Snapshots use the executor's secret redactor with display-encoding normalization and also scrub
+sensitive URL queries and userinfo. Sent-write commitments survive learning, validation,
+construction and task-processing errors. A clean write that cannot be learned retains a Completed
+receipt with an explanation; an incomplete/uncertain execution retains Uncertain. The previous
+model/executor pair stays available when admission fails.
+
+`test/fallback-review-r1.test.ts` covers all seven review findings: controlled redirects and
+reapproval; wire-only fingerprints and the one-POST constructor regression; learning/construction
+and task-processing failures; first-use meta/script tokens; encoded snapshot secrets and URL
+credentials; navigation during approval; and quoted, submitter-specific approval summaries.

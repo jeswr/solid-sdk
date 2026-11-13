@@ -409,3 +409,7 @@ header, form/multipart, JSON, query and path targets; trusted and untrusted RDF;
 results and errors; observations retained across approval pauses; vault headers; common echo
 encodings and the eight-character redaction threshold. Transports inspect serialized `Request`
 objects to verify the effective token values.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`secretRedactor(secrets)` is also exported as a read-only utility for browser snapshot consumers.
+This exposes the existing mixed/nested percent-encoding redactor; executor behavior is unchanged.

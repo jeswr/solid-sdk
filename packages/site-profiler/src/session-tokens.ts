@@ -2,12 +2,94 @@
 // Opaque values are session material only when a page/cookie supplies them and at least two
 // requests repeat them. Ordinary IDs, one-off nonces and user input never qualify by shape alone.
 import type { CsrfSource } from "@jeswr/site-model";
+import { parse } from "acorn";
+import { isCsrfFieldName } from "./forms.js";
 import { attr, attrValue, descendants, parseHtml } from "./html.js";
 import type { RecordedRequest } from "./types.js";
 
 export type SessionTokens = ReadonlyMap<string, CsrfSource>;
 const opaque = (v: string) =>
   v.length >= 16 && v.length <= 256 && /^[A-Za-z0-9_-]+$/.test(v) && /[a-z]/i.test(v);
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** Explicit credentials qualify on their first use. Unsupported script sources are secrets only. */
+export function discoverCredentialSources(
+  pages: Array<{ url: string; html: string }>,
+  cookies: Array<{ name: string; value: string }>,
+): { tokens: Map<string, CsrfSource>; secrets: Set<string> } {
+  const tokens = new Map<string, CsrfSource>();
+  const secrets = new Set<string>();
+  const credentialName = (name: string) =>
+    isCsrfFieldName(name) || /token|secret|session|auth|password|api.?key/i.test(name);
+  const scriptSecrets = (source: string) => {
+    const visit = (value: unknown): void => {
+      if (!value || typeof value !== "object") return;
+      const node = value as Record<string, unknown>;
+      const left = node.left as Record<string, unknown> | undefined;
+      const key = (node.id ?? node.key ?? left?.property ?? left) as
+        | Record<string, unknown>
+        | undefined;
+      const name = key?.name ?? key?.value;
+      const rhs = (node.init ?? node.value ?? node.right) as Record<string, unknown> | undefined;
+      if (typeof name === "string" && credentialName(name)) {
+        const literals = (value: unknown): void => {
+          if (!value || typeof value !== "object") return;
+          const item = value as Record<string, unknown>;
+          if (item.type === "Literal" && typeof item.value === "string") secrets.add(item.value);
+          if (item.type === "TemplateElement") {
+            const cooked = (item.value as Record<string, unknown>)?.cooked;
+            if (typeof cooked === "string" && cooked) secrets.add(cooked);
+          }
+          for (const child of Object.values(item)) {
+            if (Array.isArray(child)) child.forEach(literals);
+            else if (child && typeof child === "object") literals(child);
+          }
+        };
+        literals(rhs);
+      }
+      for (const child of Object.values(node)) {
+        if (Array.isArray(child)) child.forEach(visit);
+        else if (child && typeof child === "object") visit(child);
+      }
+    };
+    try {
+      visit(parse(source, { ecmaVersion: "latest", sourceType: "module" }));
+    } catch {
+      // Invalid scripts teach no source; still retain obvious credential literals for redaction.
+      for (const match of source.matchAll(/([\w$]+)\s*[:=]\s*["']([^"'\r\n]+)["']/g))
+        if (credentialName(match[1] ?? "")) secrets.add(match[2] ?? "");
+    }
+  };
+  for (const page of pages) {
+    for (const el of descendants(parseHtml(page.html))) {
+      if (el.name === "script")
+        scriptSecrets(el.children.map((child) => ("data" in child ? child.data : "")).join(""));
+      const name = attr(el, "name") ?? "";
+      const value = attr(el, el.name === "meta" ? "content" : "value");
+      if (!value) continue;
+      if (el.name === "input" && attr(el, "type") === "password") secrets.add(value);
+      if (!credentialName(name)) continue;
+      if (el.name === "meta") {
+        tokens.set(value, { kind: "meta", urlTemplate: page.url, name });
+        secrets.add(value);
+      } else if (el.name === "input" && attr(el, "type") === "hidden") {
+        tokens.set(value, {
+          kind: "html",
+          urlTemplate: page.url,
+          selector: `input[name=${attrValue(name)}]`,
+          attribute: "value",
+        });
+        secrets.add(value);
+      }
+    }
+  }
+  for (const cookie of cookies) {
+    if (!cookie.value) continue;
+    tokens.set(cookie.value, { kind: "cookie", name: cookie.name });
+    secrets.add(cookie.value);
+  }
+  return { tokens, secrets };
+}
 
 export function discoverSessionTokens(
   pages: Array<{ url: string; html: string }>,

@@ -182,3 +182,10 @@ Model headers omit executor-owned content negotiation, credential and framing he
 Accept. Verification derives Accept from extraction format, as the executor does; JSON grid reads
 therefore retain their JSON negotiation without storing Accept in the learned model. Vendor-specific
 Accept media types require a future first-class, inventoried field.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`discoverCredentialSources(pages, cookies)` returns explicit first-use credential secrets and
+supported CSRF sources independently of repetition. Meta/hidden token fields and cookies can
+supply session slots; recognised script credential literals are secrets only, since script
+variables are outside CsrfSource. The fallback uses this stricter credential boundary alongside
+`discoverSessionTokens`; ordinary opaque-value repetition discovery is unchanged.

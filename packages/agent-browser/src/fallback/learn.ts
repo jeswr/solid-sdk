@@ -15,22 +15,20 @@ import {
 } from "@jeswr/site-model";
 import {
   buildOperation,
-  candidateFromForm,
-  clusterRequests,
-  collectKnownIds,
+  discoverCredentialSources,
   discoverSessionTokens,
   type EndpointCandidate,
   heuristicLabeller,
   type Labeller,
   matchRequest,
-  mergeCandidates,
   parseForms,
   proposeExtraction,
   type RecordedRequest,
-  templateForPage,
 } from "@jeswr/site-profiler";
 import { randomUUID } from "crypto";
 import type { BrowserDriver } from "./driver.js";
+import { fallbackRedactor } from "./redact.js";
+import { wireCandidates } from "./wire.js";
 
 const sensitive =
   /pass(word|wd)?|pwd|secret|token|csrf|xsrf|session|api.?key|authorization|form.?key/i;
@@ -58,32 +56,15 @@ export function candidatesFromTrace(
         r.method === "GET" && /html/i.test(r.contentType ?? "") && r.bodySample && !r.bodyTruncated,
     )
     .map((r) => ({ url: r.url, html: r.bodySample as string }));
-  const tokens = discoverSessionTokens(pages, cookies, safe);
+  const credentials = discoverCredentialSources(pages, cookies);
+  const tokens = new Map([...discoverSessionTokens(pages, cookies, safe), ...credentials.tokens]);
   // Recognised session URL tokens are slotted by the profiler before any redaction.
-  const clusters = clusterRequests(safe, origin, collectKnownIds(safe), tokens);
   const forms = pages
     .flatMap((p) => parseForms(p.html, p.url))
     .filter((f) => new URL(f.action).origin === origin);
-  const merged = mergeCandidates([
-    ...clusters,
-    ...forms.map((f) => {
-      const form = candidateFromForm(f, templateForPage(clusters, f.pageUrl));
-      const witnessed = clusters.find((c) =>
-        matchRequest(c, {
-          seq: -1,
-          phase: "crawl",
-          method: f.method,
-          url: f.action,
-          requestHeaders: {},
-          cookieNames: [],
-          resourceType: "document",
-        }),
-      );
-      // Session path slots belong to the witnessed endpoint, including its form CSRF rules.
-      return witnessed ? { ...form, key: witnessed.key, urlTemplate: witnessed.urlTemplate } : form;
-    }),
-  ]);
+  const merged = wireCandidates(safe, origin, forms, tokens);
   const secrets = [
+    ...credentials.secrets,
     ...tokens.keys(),
     ...cookies.map((c) => c.value),
     ...forms.flatMap((f) =>
@@ -92,8 +73,8 @@ export function candidatesFromTrace(
         .map((p) => p.value ?? ""),
     ),
   ].filter(Boolean);
-  const clean = (value: string) =>
-    secrets.reduce((out, secret) => out.split(secret).join("[redacted]"), redact(value));
+  const redactSecrets = fallbackRedactor(new Set(secrets));
+  const clean = (value: string) => redactSecrets(redact(value));
   return merged
     .filter((c) => c.samples.length)
     .map((c) => {
@@ -183,6 +164,14 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
         continue;
       }
       if (
+        candidate.params.some((p) =>
+          ["constructor", "__proto__", "prototype"].includes(decodeURIComponent(p.name)),
+        )
+      ) {
+        reject("Reserved parameter name.");
+        continue;
+      }
+      if (
         candidate.csrf.some(
           (r) => r.source.kind !== "cookie" && r.source.urlTemplate.includes("[redacted]"),
         )
@@ -254,6 +243,11 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
           if (parameter?.required && !parameter.hidden && !input.options) input.required = true;
         }
       }
+      // No redacted or credential-bearing constant/default can become executable code.
+      if (JSON.stringify(operation).includes("[redacted]")) {
+        reject("Unresolved session material in proposed operation.");
+        continue;
+      }
       if (
         model.operations.some(
           (o) =>
@@ -272,6 +266,13 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
         reject("Invalid proposed operation.");
         continue;
       }
+      // Shared model validation is necessary but executor construction has stricter checks.
+      createExecutor({
+        model: { ...model, operations: [...model.operations, ...proposed, operation] },
+        sessions: options.sessions,
+        persona: options.persona,
+        fetch: options.transport,
+      });
       if (!write) {
         const values = matchRequest(candidate, candidate.samples.at(-1) as RecordedRequest) ?? {};
         const request: ActionRequest = {
