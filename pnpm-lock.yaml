@@ -3956,6 +3956,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@jeswr/solid-federation-vocab':
+        specifier: workspace:*
+        version: link:../solid-federation-vocab
       '@types/n3':
         specifier: ^1.26.1
         version: 1.26.1
@@ -3965,6 +3968,9 @@ importers:
       rdf-isomorphic:
         specifier: ^2.0.1
         version: 2.0.1
+      rdf-validate-shacl:
+        specifier: 0.6.5
+        version: 0.6.5
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

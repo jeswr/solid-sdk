@@ -32,11 +32,13 @@ const parsed = await parseNanopublications(trig);
 ```
 
 `createFactAssertion` supports `address`, `email`, `phone`, `preference`,
-`condition`, `allergy`, `medication`, `relationship`, and `paymentCard`. Use its discriminated
+`condition`, `allergy`, `medication`, `relationship`, `paymentCard`, `observation`,
+`immunization`, and `encounter`. Use its discriminated
 `Fact` type for the value fields. Residence, clinical, product and role identifiers
 are explicit entity IRIs. Nested preferences, codes and dose schedules use blank
 nodes, canonically skolemized on build. Temporal bounds retain their declared
 `date`, `dateTime`, `gYearMonth`, or `gYear` precision.
+Template dispatch reads the template once, so a getter cannot change the selected branch.
 
 `paymentCard` records a blank-node `schema:PaymentCard` that the owner
 `schema:owns`, with `schema:brand`, the last four digits as a
@@ -50,6 +52,116 @@ address IRIs, so mint a slug for the address entity or leave it out. One fact
 cannot reveal more than its last four digits; splitting a number across many
 facts or other templates is outside what this template can check. Each field is read once, so a getter or proxy cannot
 change a value after it is checked.
+
+`observation` records a measurement or lab result as `health:Observation`, with
+an explicit entity `id`, a `code: HealthCode`, exactly one numeric or string
+`value`, an `effective: HealthTemporalValue`, optional UCUM `unitCode` and optional
+`kind` (`measurement` or `lab`, stored as `schema:category`). Finite numbers use the
+package's canonical `xsd:decimal` spelling, expanding exponent notation. To retain
+clinical scale, pass `value: { decimal: "1.10" }`: the lexical form is validated
+against the package's decimal policy (optional minus, no leading zeroes except
+zero itself, optional fractional digits, no exponent or whitespace) and kept
+verbatim. Plain strings remain `xsd:string`. `health:hasCode` links the explicitly
+identified `health:CodeableConcept`, also typed `core:Identifier` as the ontology
+defines it. Both `HealthCode.code` (`core:value`) and `system` (`core:inScheme`)
+are required by the combined health and Core shapes. The system is typed
+`core:IdentifierScheme`; optional `display` becomes `schema:name`.
+
+`immunization` records `health:Immunization` with an explicit `id`, `vaccine` and
+`occurrence: HealthTemporalValue`. The shape requires `health:medication` to
+reference a `health:MedicinalProduct`, so `vaccine.id` identifies that product.
+Its optional `display` becomes `schema:name`; when coding is supplied, both
+`code` and `system` are required and a nested blank-node `health:CodeableConcept`
+is linked through `core:identifiedBy`. An uncoded vaccine product is accepted.
+Occurrence uses `core:atTime` because the health profile has no occurrence property.
+
+`encounter` records `health:Encounter` with an explicit `id`, a required
+`period: { start: HealthTemporalValue; end?: HealthTemporalValue }` and optional
+`serviceProvider` IRI. The period is an OWL-Time interval linked through
+`core:atTime`, with `time:hasBeginning` and optional `time:hasEnd` instants; these
+describe occurrence, not assertion validity. The provider is linked through
+`health:careProvider`, without asserting a Core Organization whose required
+identifier this template cannot supply. The template does not assume that a
+custodial provider also performed the encounter (`health:recordedBy`, a SHOULD).
+
+Vocabulary gaps: the health ontology and alignments define no lot/batch-number
+predicate and no encounter-type predicate. The templates therefore omit and
+reject `lotNumber` and encounter `type`; `schema:lotNumber` is not a schema.org
+term and `schema:additionalType` requires a class IRI rather than a coded instance.
+
+All three health templates mirror `condition`'s entry-to-owner `health:patient`
+link, with no reverse link. They explicitly type the owner as `core:Person`
+and time nodes as `time:TemporalEntity`, satisfying MUST class constraints
+without an ontology reasoner. `HealthTemporalValue` accepts only `date` and
+`dateTime`; dates use `time:inXSDDate`, date-times `time:inXSDDateTime`. Year 0000
+is refused and every date-time must carry `Z` or a valid ±hh:mm timezone.
+Date-times retain the package's microsecond normalization. Encounter endpoints
+are compared as UTC instants at that precision. When both endpoints are dates,
+their calendar values are compared directly: the end must be on or after the start.
+For mixed date/dateTime endpoints, a date-only bound denotes the whole calendar
+day with no timezone. Following XSD's indeterminate comparison, its possible UTC
+range is widened by ±14 hours: from 10:00Z on the preceding day through
+13:59:59.999999Z on the following day. The earliest possible start and latest
+possible end are compared; only an interval reversed throughout these ranges is
+refused. For example, a start of `2026-01-02` and an end of
+`2026-01-01T20:00:00+10:00` are accepted at the earliest-start boundary.
+Nested times and vaccine codes are blank nodes, skolemized on build.
+
+Every input field is read once from its own properties into a snapshot; inherited
+fields are ignored. Unknown keys, wrong types, invalid times, non-finite numbers
+and detected card numbers in text or decimal values are refused. Numbers are
+scanned after expansion to fixed-point decimal; `{ decimal }` lexical forms are
+scanned before validation. This includes Luhn-valid 12–19 digit windows across
+the decimal point or other separators, so some large clinical values are refused.
+The `kind` and temporal datatype fields use closed enums. Entity IRIs must be unchanged
+HTTP(S) IRIs accepted by `safeHttpIri`; all entity, concept, vaccine, coding-system
+and provider identifiers must differ from each other and from the owner. The owner
+and all supplied IRIs are NFKC-normalized before percent-decoding and after each
+of at most four decoding rounds, then scanned for card numbers. Malformed or
+residual percent escapes in the normalized text are refused, including escapes
+introduced by fullwidth or small percent signs and fullwidth hex characters.
+The original IRI is retained in the RDF. The sole exemption is clinical
+coding under an `http://snomed.info/` system: a Verhoeff-valid SNOMED CT concept
+identifier (6–18 ASCII digits, no leading zero, partition `00` or `10`), either
+as digits or an exact `http://snomed.info/id/<id>` code or concept/product IRI.
+Extension concepts (`10`) require at least 11 digits to fit an item identifier,
+the seven-digit namespace, partition and check digit. Description, relationship,
+subset and map partitions are refused. Codes under a SNOMED system must meet
+these concept rules even when too short to trigger the card detector. Whenever a
+supplied concept/product IRI is in `http://snomed.info/id/`, its SCTID must match
+the supplied code's SCTID, whether the code is digits or an exact SNOMED IRI.
+Other identifier roles and coding systems receive no exemption. This includes dm+d's
+`https://dmd.nhs.uk` system; a SNOMED UK drug-extension system under
+`http://snomed.info/` follows the SNOMED rule. This is a structural check without
+an assigned-concept or namespace registry lookup. Residual false acceptance is
+roughly 1 in 500 Luhn-valid 12–18 digit candidates (Verhoeff: 1/10; concept
+partitions: 2/100), or about 1 in 5,000 arbitrary candidates when also counting
+Luhn, assuming approximately independent, uniformly distributed digits. These
+estimates are not an adversarial bound: a deliberately constructed number can
+pass all checks. Nineteen-digit identifiers never receive the exemption.
+Snapshot refusals use fixed
+messages (`Invalid observation`, `Invalid immunization`, `Invalid encounter`);
+inherited health-template headers are refused, and an unreadable template getter
+or proxy produces `Invalid fact template` without exposing its thrown value.
+Programming errors during graph construction surface unchanged. Tests resolve the
+vocabulary through its package, compose the health and imported Core shapes using
+the fixture gate's local `owl:imports` traversal, assert zero MUST Violations for
+complete and minimal variants, and check the Encounter `recordedBy` SHOULD Warning.
+
+`buildNanopublications` always adds `pd:MedicalHealth` to the provenance categories
+of assertions explicitly typed with any class in the exported, frozen
+`CLINICAL_TYPES` array: Condition, MedicationStatement, MedicinalProduct,
+Observation, Immunization and Encounter in the canonical or legacy health
+namespace; FHIR AllergyIntolerance and Observation; and schema.org MedicalCondition,
+Drug and Observation. This covers every class currently matched by MCP's
+`health_query` and the clinical record/product classes emitted by the templates.
+Only exact named-node `rdf:type` values match; look-alikes and literal type values
+do not. Caller-supplied categories are retained; omitting or mislabelling them
+cannot bypass special-category authorization for these classes. Assertion contents
+and their identifiers remain unchanged. Consumers can import `CLINICAL_TYPES` to
+share this class inventory. Behaviour change: an agent-memory mandate whose
+memoryScope names only `pd:Health` no longer recalls clinical facts; it must also
+name `pd:MedicalHealth` (pinned in agent-memory's recall tests).
 
 `findCardNumbers` and `containsCardNumber` expose the detector. It flags every
 Luhn-valid window of 12 to 19 digits that does not start with 0, in linear time.

@@ -208,7 +208,10 @@ it.each([
   await seed(pod, condition, category);
   const denied = await run(pod)("memory_recall", { purpose });
   expect(denied.isError).toBe(true);
-  expect(text(denied)).toBe(`purpose denied: ${category}`);
+  // Clinical classes are always tagged MedicalHealth in addition to the caller's categories.
+  expect(text(denied)).toBe(
+    `purpose denied: ${[...new Set([category, "MedicalHealth"])].join(", ")}`,
+  );
   const health = await run(pod)("health_query", { purpose, kind: "conditions" });
   expect(health.isError).toBe(true);
   expect(text(health)).not.toContain("Fictional condition");
