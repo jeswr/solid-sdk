@@ -253,3 +253,19 @@ html[data-app-colours="true"] .suite-rail-button[href="/health"] {
 .export-skipped {
   overflow-wrap: anywhere;
 }
+
+.legacy-settings {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+.legacy-settings :where(p, li, a) {
+  overflow-wrap: anywhere;
+}
+.legacy-settings li {
+  margin-block: var(--space-2);
+}
+.legacy-folder-path {
+  font-size: var(--text-xs);
+  color: var(--foreground-muted);
+}

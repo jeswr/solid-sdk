@@ -1,0 +1,56 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/pod-legacy",
+  "version": "0.1.0",
+  "description": "Private generated recovery and digital legacy plans; evaluation and previews only.",
+  "type": "module",
+  "license": "MIT",
+  "securityCritical": true,
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "legacy.ttl",
+    "legacy.shacl.ttl",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology legacy.ttl --shapes legacy.shacl.ttl --config codegen.config.json --out src/generated",
+    "lint": "biome check src scripts test *.json *.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
+    "@jeswr/solid-odrl": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
+    "n3": "2.0.3"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*",
+    "@biomejs/biome": "^2.5.1",
+    "@rdfjs/types": "2.0.1",
+    "@types/n3": "1.26.1",
+    "@types/node": "^25.9.2",
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  }
+}

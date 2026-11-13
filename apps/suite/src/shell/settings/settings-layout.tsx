@@ -5,6 +5,7 @@ import { CapabilityProvider } from "@jeswr/suite-ui/sync";
 import type { ReactNode } from "react";
 import { useRoutePathname } from "@/lib/route-params";
 import { useSuiteEnvironment } from "../environment";
+import { LegacyBanner } from "../legacy/banner";
 import { demoCapabilitiesWith } from "../lib/settings-capabilities";
 import { useAccounts } from "../session/accounts-provider";
 import { SuiteShell } from "../suite-shell";
@@ -12,6 +13,7 @@ import { AutosaveStatus } from "./preferences";
 
 const sections = [
   ["account", "Account"],
+  ["legacy", "Recovery & legacy"],
   ["appearance", "Appearance"],
   ["storage", "Storage"],
   ["export", "Export"],
@@ -52,6 +54,7 @@ export function SettingsLayout({ children }: { children: ReactNode }) {
         }}
       >
         <div className="settings-content">
+          <LegacyBanner />
           {children}
           <AutosaveStatus />
         </div>
