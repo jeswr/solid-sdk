@@ -17,6 +17,7 @@ const sections = [
   ["notifications", "Notifications"],
   ["offline", "Offline"],
   ["shortcuts", "Shortcuts"],
+  ["assistants", "Assistants"],
   ["advanced", "Advanced"],
 ] as const;
 

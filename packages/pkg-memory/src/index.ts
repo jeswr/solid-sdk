@@ -4,6 +4,7 @@
 export type { Belief, ClassifiedNanopublication } from "./belief.js";
 export { classifyNanopublications } from "./belief.js";
 export { containsCardNumber, findCardNumbers } from "./cards.js";
+export { SPECIAL_CATEGORIES } from "./categories.js";
 export {
   UnsupportedBlankNodeLabelError,
   UnsupportedLiteralCharacterError,
