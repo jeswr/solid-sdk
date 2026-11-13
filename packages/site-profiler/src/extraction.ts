@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 5: extraction proposals. JSON responses with an array of objects (or one product-like object)
 // and HTML pages with repeated items (a link plus a price) or a product detail layout become
@@ -31,6 +32,7 @@ const KEY_RULES: Array<[RegExp, KeyRule]> = [
     /^(price|amount|saleprice|unitprice|currentprice)$/,
     { property: s("price"), datatype: xsd("decimal") },
   ],
+  [/^totalpaymentdue$/, { property: s("totalPaymentDue"), datatype: xsd("decimal") }],
   [/^(currency|pricecurrency|currencycode)$/, { property: s("priceCurrency") }],
   [/^sku$/, { property: s("sku") }],
   [/^(url|link|href|permalink|weburl)$/, { property: s("url"), datatype: "iri" }],
@@ -81,6 +83,7 @@ function field(rule: KeyRule, path: string, attribute?: string): FieldRule {
 
 function itemTypeFor(fields: FieldRule[]): string {
   const props = new Set(fields.map((f) => f.property));
+  if (props.has(s("totalPaymentDue"))) return s("Order");
   if (props.has(s("price")) || props.has(s("sku"))) return s("Product");
   if (props.has(s("reviewBody"))) return s("Review");
   return s("Thing");
@@ -142,7 +145,9 @@ export function proposeJsonExtraction(body: string | unknown): Extraction | unde
   if (doc === undefined) return undefined;
   if (isRecord(doc)) {
     const own = fieldsForObject(doc);
-    const productLike = own.some((f) => f.property === s("price") || f.property === s("sku"));
+    const productLike = own.some((f) =>
+      [s("price"), s("sku"), s("totalPaymentDue")].includes(f.property),
+    );
     if (own.length >= 2 && productLike) {
       // One item. Nested review arrays: their text becomes untrusted schema:review values.
       for (const [k, v] of Object.entries(doc)) {
@@ -161,7 +166,7 @@ export function proposeJsonExtraction(body: string | unknown): Extraction | unde
           }
         });
       }
-      return withId({ format: "json", itemType: s("Product"), fields: own });
+      return withId({ format: "json", itemType: itemTypeFor(own), fields: own });
     }
   }
   const found = findArray(doc);

@@ -1,11 +1,14 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-// Step 9: verification. Replays each learned read once with sample values, signed out and (when a
+// Step 9: verification. Replays each learned read with observed values, signed out and (when a
 // session exists) signed in. Sets the session requirement and provenance counters, flags reads whose
 // extraction finds nothing, and drops reads that fail both ways. Never replays a write.
 
 import type { Operation } from "@jeswr/site-model";
 import { applyExtraction } from "./extraction.js";
 import type { Recorder } from "./recorder.js";
+import { matchRequest } from "./templates.js";
+import type { RecordedRequest } from "./types.js";
 import { expandTemplate } from "./util.js";
 
 export interface ReplayResponse {
@@ -38,6 +41,41 @@ export interface VerifyOptions {
   now: () => Date;
   /** True when the profiler holds a signed-in session. */
   haveSession: boolean;
+  /** Credential-redacted requests recorded before verification, used only for their own operation. */
+  recordedRequests?: readonly RecordedRequest[];
+}
+
+/** Keep each successful request's values together; never build a tuple from independent pools. */
+function recordedValues(
+  op: Operation,
+  requests: readonly RecordedRequest[],
+): Record<string, string>[] {
+  const values: Record<string, string>[] = [];
+  const seenUrls = new Set<string>();
+  const rank = (r: RecordedRequest) =>
+    r.phase === "demonstration" ? 0 : r.phase === "crawl" ? 1 : 2;
+  for (const r of [...requests].sort((a, b) => rank(a) - rank(b))) {
+    if (
+      r.blocked ||
+      r.resourceType === "replay-anonymous" ||
+      r.status === undefined ||
+      r.status < 200 ||
+      r.status >= 300
+    )
+      continue;
+    const matched = matchRequest(op.request, r);
+    if (!matched || op.inputs.some((p) => p.required && matched[p.name] === undefined)) continue;
+    const tuple = Object.fromEntries(
+      op.inputs.flatMap((p) =>
+        matched[p.name] === undefined ? [] : [[p.name, matched[p.name] as string]],
+      ),
+    );
+    const url = expandTemplate(op.request.urlTemplate, tuple);
+    if (seenUrls.has(url)) continue;
+    seenUrls.add(url);
+    values.push(tuple);
+  }
+  return values;
 }
 
 export async function verifyOperations(
@@ -51,20 +89,34 @@ export async function verifyOperations(
       out.push(op);
       continue;
     }
-    const values = sampleValues(op);
+    const recorded = recordedValues(op, options.recordedRequests ?? []);
+    const values = recorded[0] ?? sampleValues(op);
     if (!values) {
       warnings.push(`verify: no sample values for ${op.label}; left unverified`);
       out.push(op);
       continue;
     }
-    const url = expandTemplate(op.request.urlTemplate, values);
-    const anon = await options.replayer.get(url, { signedIn: false }).catch(() => undefined);
-    const auth =
-      options.haveSession && !ok(anon)
-        ? await options.replayer.get(url, { signedIn: true }).catch(() => undefined)
-        : undefined;
-    const good = ok(anon) ? anon : ok(auth) ? auth : undefined;
-    const attempts = (op.provenance.attempts ?? 0) + 1;
+    // One replay round tries anonymous and, if needed, authenticated access. After failure, one
+    // more round uses another recorded success (or retries the sole recorded tuple).
+    const replayValues = [values];
+    const retry = recorded[1] ?? recorded[0];
+    if (retry) replayValues.push(retry);
+    let url = "";
+    let anon: ReplayResponse | undefined;
+    let auth: ReplayResponse | undefined;
+    let good: ReplayResponse | undefined;
+    let attempts = op.provenance.attempts ?? 0;
+    for (const tuple of replayValues) {
+      url = expandTemplate(op.request.urlTemplate, tuple);
+      anon = await options.replayer.get(url, { signedIn: false }).catch(() => undefined);
+      auth =
+        options.haveSession && !ok(anon)
+          ? await options.replayer.get(url, { signedIn: true }).catch(() => undefined)
+          : undefined;
+      good = ok(anon) ? anon : ok(auth) ? auth : undefined;
+      attempts++;
+      if (good) break;
+    }
     if (!good) {
       warnings.push(
         `verify: dropped ${op.label} (${url} answered ${anon?.status ?? "no response"}${auth ? ` / ${auth.status}` : ""})`,

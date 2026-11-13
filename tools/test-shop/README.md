@@ -1,4 +1,6 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
+
 # @jeswr/test-shop
 
 A small, deterministic, fictional shop for the semantic agent browser's profiler and executor
@@ -18,6 +20,9 @@ Standalone: `pnpm --filter @jeswr/test-shop run build && node tools/test-shop/di
   `/orders`, `/orders/:id`, `/help/delivery`; bundle `/static/app.js`.
 - JSON: `/api/search`, `/api/products/:id`, `/api/cart`, `POST /api/cart/items` (session +
   `X-CSRF-Token` equal to the `csrf` cookie), `DELETE /api/cart/items/:sku`.
+- Checkout evidence: `GET /api/checkout?delivery=standard` (signed in) exposes the basket
+  plus delivery total as `totalPaymentDue`, `currency` and the checkout URL. The checkout page
+  reads it on load and delivery changes; the profiler retains it between add and payment.
 - Forms: `POST /login`, `POST /checkout`, `POST /logout` (hidden `csrf_token`).
 - Bearer: `POST /api/token`, `POST /api/token/refresh` (rotating), `GET /api/me`.
 - `state` exposes `carts` (by email), `orders`, `logins`, `requests` (every request with method,

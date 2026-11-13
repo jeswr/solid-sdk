@@ -112,6 +112,15 @@ export async function startShop(): Promise<Shop> {
       json(res, 201, { items: cart });
       return;
     }
+    if (path === "/api/total" && req.method === "GET") {
+      const sid = signedIn(req);
+      if (!sid) return json(res, 401, { error: "sign in" });
+      const total = (state.carts.get(sid) ?? []).reduce(
+        (sum, line) => sum + (PRODUCTS.find((p) => p.sku === line.sku)?.price ?? 0) * line.qty,
+        0,
+      );
+      return json(res, 200, { total, currency: "GBP" });
+    }
     if (path === "/checkout" && req.method === "GET") {
       const sid = signedIn(req);
       if (!sid) return send(res, 302, "", "text/html", { location: "/login" });
@@ -321,6 +330,23 @@ export function shopModel(origin: string): SiteModel {
         },
       }),
       op({
+        id: "urn:op:total",
+        actionType: `${S}ViewAction`,
+        label: "Basket total",
+        inputs: [],
+        request: { method: "GET", urlTemplate: `${origin}/api/total` },
+        session: "signed-in",
+        effect: "read",
+        extraction: {
+          format: "json",
+          itemType: `${S}Order`,
+          fields: [
+            { property: `${S}totalPaymentDue`, path: "/total" },
+            { property: `${S}currency`, path: "/currency" },
+          ],
+        },
+      }),
+      op({
         id: "urn:op:checkout",
         actionType: `${S}PayAction`,
         label: "Place order",
@@ -474,6 +500,7 @@ export function shopModel(origin: string): SiteModel {
         steps: [
           { operation: "urn:op:search", bind: { q: "$input.name" } },
           { operation: "urn:op:add-to-cart", bind: { sku: `$step0.${S}sku`, qty: "1" } },
+          { operation: "urn:op:total", bind: {} },
           {
             operation: "urn:op:checkout",
             bind: {

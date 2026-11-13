@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Unit tests for labelling, operation building, flow inference and verification.
 
@@ -354,6 +355,27 @@ describe("buildFlow", () => {
     learnedAt: "t",
     derivedFrom: ["urn:uuid:d"],
     usedIds: new Set<string>(),
+  });
+
+  it("retains a demonstrated total read after the last write before payment", () => {
+    const total = op("total", "ViewAction", "read", [], {
+      format: "json",
+      itemType: s("Order"),
+      fields: [
+        { property: s("totalPaymentDue"), path: "/totalPaymentDue" },
+        { property: s("priceCurrency"), path: "/currency" },
+      ],
+    });
+    const { flow } = buildFlow(
+      { name: "buy" },
+      [
+        step(add, { sku: "TRAIL" }),
+        step(total, {}, '{"totalPaymentDue":"20","currency":"GBP"}'),
+        step(pay, { delivery: "standard" }),
+      ],
+      ctx(),
+    );
+    expect(flow?.steps.map((st) => st.operation)).toEqual([add.id, total.id, pay.id]);
   });
 
   it("binds a write to the latest step showing the value and reads to the earliest", () => {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // A small, deterministic, fictional shop on node:http. It behaves like a real site (cookie
 // sessions, double-submit CSRF, a JSON API next to server-rendered pages, a bearer token API with
@@ -383,6 +384,23 @@ export async function startShop(options: ShopOptions = {}): Promise<RunningShop>
         if (s) {
           const v = cartView(s.email);
           json(200, { items: v.lines, count: v.count, total: v.total, currency: "GBP" });
+        }
+        return true;
+      }
+      if (path === "/api/checkout") {
+        const session = requireApi();
+        if (session) {
+          const delivery = url.searchParams.get("delivery") ?? "standard";
+          if (!Object.hasOwn(DELIVERY_OPTIONS, delivery)) json(400, { error: "unknown_delivery" });
+          else
+            json(200, {
+              url: `${origin}/checkout`,
+              totalPaymentDue: money(
+                Number(cartView(session.email).total) +
+                  Number(DELIVERY_OPTIONS[delivery as DeliveryOption].cost),
+              ),
+              currency: "GBP",
+            });
         }
         return true;
       }

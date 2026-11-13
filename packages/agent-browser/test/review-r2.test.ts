@@ -72,7 +72,7 @@ const action = (qty: string, extra = "") =>
   `[] a schema:BuyAction; schema:orderQuantity ${qty}${extra}.`;
 
 describe("review r2 repeat guard", () => {
-  it("blocks canonical duplicate writes with changed typed lexical and unused blank-node inputs", async () => {
+  it("blocks canonical duplicate writes with changed typed lexical and unused literal inputs", async () => {
     const { model } = fixture();
     const transport = vi.fn<Transport>(async () => Response.json({}));
     const executor = createTaskExecutor({
@@ -91,7 +91,7 @@ describe("review r2 repeat guard", () => {
         { kind: "act", turtle: action("1") },
         {
           kind: "act",
-          turtle: action('"+01"^^xsd:integer', '; schema:name [schema:name "unused"]'),
+          turtle: action('"+01"^^xsd:integer', '; schema:name "unused"'),
         },
       ]),
     });
@@ -102,7 +102,54 @@ describe("review r2 repeat guard", () => {
 
   it("blocks a successful charge with malformed JSON after an uncertain receipt", async () => {
     const { model } = fixture(true);
-    const transport = vi.fn<Transport>(async () => new Response("malformed"));
+    const quote: Operation = {
+      ...(model.operations[0] as Operation),
+      id: "urn:quote",
+      actionType: `${S}ViewAction`,
+      effect: "read",
+      inputs: [],
+      request: { method: "GET", urlTemplate: "https://shop.test/quote" },
+      extraction: {
+        format: "json",
+        itemType: `${S}Product`,
+        fields: [
+          { property: `${S}productID`, path: "/id" },
+          { property: `${S}price`, path: "/price" },
+          { property: `${S}currency`, path: "/currency" },
+        ],
+      },
+    };
+    const pay = model.operations[0];
+    if (!pay) throw new Error("Missing payment");
+    pay.inputs.push({
+      name: "item",
+      path: [`${S}object`, `${S}productID`],
+      range: `${X}string`,
+      default: "104",
+      required: false,
+      location: "body",
+    });
+    pay.request.bodyTemplate = '{"item":{item},"qty":{qty},"price":{price},"currency":{currency}}';
+    model.operations.push(quote);
+    model.flows = [
+      {
+        id: "urn:flow",
+        actionType: `${S}BuyAction`,
+        label: "Pay",
+        effect: "payment",
+        provenance: pay.provenance,
+        inputs: pay.inputs.filter((p) => p.name === "qty"),
+        steps: [
+          { operation: quote.id, bind: {} },
+          { operation: pay.id, bind: { qty: "$input.qty" } },
+        ],
+      },
+    ];
+    const transport = vi.fn<Transport>(async (_url, init) =>
+      init?.method === "GET"
+        ? Response.json({ id: "104", price: "20", currency: "GBP" })
+        : new Response("malformed"),
+    );
     const executor = createTaskExecutor({
       model,
       fetch: transport,
@@ -121,7 +168,7 @@ describe("review r2 repeat guard", () => {
     });
     expect(trace.steps.map((s) => s.status)).toEqual(["error", "repeat-blocked"]);
     expect(trace.steps[0]?.observations).toContain("sab:Uncertain");
-    expect(transport).toHaveBeenCalledTimes(1);
+    expect(transport.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
 
   it("checks response-bound fingerprints at the write boundary on a repeated flow", async () => {

@@ -33,23 +33,17 @@ Security review hardening:
   inputs after earlier steps resolve. Bind the request, step index, session fingerprint, flow
   inputs and resolved write inputs. Approval retries resume a stored snapshot; never replay
   completed writes. Flow gate inputs expose `$step` and `$input.<name>` alongside concrete values.
-- Derive money from wire-mapped operation/flow inputs or trusted extracted facts from earlier
-  reads in the same flow. Recognize schema price/amount/value/totalPaymentDue and currency mappings.
-  Prefer a same-origin Order/Invoice/totalPaymentDue total read after the last write of any effect class before payment;
-  otherwise match a product's typed SKU/productID/identifier or exact normalized IRI to concrete write inputs and multiply its unit price
-  by the bound quantity. Ignore untrusted fields and off-origin items/read provenance. Never use
-  observations from another action. Wire money wins; disagreement with facts refuses execution.
-  Planner money is only a cap/cross-check: fact totals above the cap or currency mismatches return
-  `refused` with the site's real price and no approval. Missing planner money is allowed when the
-  site establishes it; missing both evidence sources fails closed. Keep strict wire-only checks.
-  Run preparatory reads before write approval so each summary shows the real price. Bind facts'
-  amount/currency/source item in the digest and re-read that source on approval retry. A change
-  voids approval and re-asks; never replay completed writes. Other reads retain their snapshot.
-  Unit price times schema:orderQuantity (or profiler sab:quantity) and cumulative flow payments
-  use exact decimals; the gate sees the cumulative total. Verify each wire monetary input reaches
-  the request once as a whole value; refuse unused/transformed/duplicate bindings and JSON number
-  rounding. Facts need not be sent as price fields: real checkouts derive prices from the basket.
-  Never authorize from moneyFields alone.
+- Payment requires site evidence: after any preceding write, aggregate every trusted on-origin
+  Order/Invoice/totalPaymentDue record read after the last write. Require one distinct amount/currency
+  pair or "needs one fresh basket total"; never fall back to unit prices. Only a first-write direct
+  buy may use product price times quantity. Aggregate all matching own IRIs/typed IDs, reject
+  conflicts, and never borrow a product identity from schema:object. No untyped suffix fallback.
+- Totals match every order/basket identity bound by payment (orderNumber, identifier, object or
+  referencesOrder IRI); empty identity lists cannot prove a match. Bind all contributing records
+  and revalidate all source reads on retry. Planner prices are caps; wire amounts are cross-checks.
+  Keep whole-value, exact-decimal and cumulative-spending checks. The README Money threat model
+  is normative: client checks cannot prevent a site displaying one amount and charging another;
+  the payment instrument's own limit is the backstop.
 - Reject endpoint dot segments, including encoded values, route separator injection and route
   changes caused by URL normalization. CSRF tokens cannot overwrite approved inputs.
 - Untrusted marking overrides datatype, including `iri`, and untrusted fields cannot supply item
@@ -64,31 +58,26 @@ Security review hardening:
   Keep deadline tests on injected transports; never depend on external idle timeouts.
 
 The execute/approval methods retain their existing use; additive commitment, revision and repeat-guard fields are documented below; callers must handle `refused`, multiple approvals
-per flow, and supply payment wire mappings or trusted flow reads. README documents the intentional
+per flow, and supply trusted flow reads for payments. README documents the intentional
 refusals and the additive deadline and extraction budget options. Tests use the in-memory fixture fallback when
 127.0.0.1 socket binding is unavailable.
 
-Round 2 rules:
-- Selected money evidence must have one distinct amount and currency across every mapped
-  amount/currency property. Refuse conflicts, bind all raw values, and revalidate every total
-  source on retry. Totals with different amounts, currencies, basket identities or quantities
-  conflict. A payment carrying item/quantity inputs needs a total carrying that same identity
-  and schema:orderQuantity; otherwise use explainable unit prices or "needs a fresh basket total".
-- Preserve identifier types and original request IRIs through flattened class-valued wire inputs.
-  Never compare SKU to productID/identifier. An identifier-free suffix fallback needs a unique
-  on-origin item; a second candidate matching any identifier type is ambiguous. All quantity
-  writes, including a checkout without product IDs, must be explained by the amount.
-- Record 2xx/3xx writes before any response processing. Every ExecutionResult includes committed
-  entries with operation targets and canonical request fingerprints, even after later failures
-  or approval pauses. Terminal partial/uncertain executions emit sab:Uncertain, never sab:Failed.
-  Keep the shared site-model contract unchanged by using local ExecutionOutcome for this status.
+Execution rules:
+- Record any sent write without a 4xx rejection: 5xx, reset, network error, timeout and failed
+  extraction after 2xx/3xx are uncertain. Retain their fingerprints in committed before response
+  processing. Emit sab:Uncertain for terminal failures with any retained write, and block automatic
+  repeats. Only 4xx is Failed and uncommitted (unless an earlier write already committed).
+- Keep RDF term kinds through resolution. Blank nodes cannot bind scalar inputs; IRI terms use
+  WHATWG normalization before wire encoding and fingerprinting. Literal text stays literal.
 - Fingerprint concrete writes before session/CSRF decoration: method, WHATWG URL (sorted query)
   and canonical body. Canonicalize typed values on all wire surfaces and exclude unused inputs.
   Expose concrete plan fingerprints and enforce execute's excludeFingerprints at the boundary
   for response-bound writes too. Never fingerprint placeholder bindings as concrete writes.
 - Redact each complete display value against all session secrets before normalization, formatting
   or truncation; include object names absent from mapped inputs and model labels.
-- SessionBundle.revision is opaque. Pass get()'s token unchanged to every update() in the execution.
-  InMemorySessions.set creates a new generation; updates preserve it and silently reject stale ones.
+- SessionProvider.update may return { accepted, revision? }. Advance the token after acceptance;
+  after rejection stop persistence for the execution and keep the in-memory jar. Never fetch a
+  revision to pair with old cookies. Void returns keep the old token. InMemorySessions uses this
+  contract, advances accepted revisions and reports stale updates as rejected.
 - no-path returns safe missing required input names from the closest matching action candidate.
   Do not invent a name/search query from an IRI. Keep diagnostics free of URLs and binding specs.

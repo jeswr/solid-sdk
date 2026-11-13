@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 2: endpoint templates. Clusters recorded requests into endpoints, inferring path variables
 // (numeric, uuid, sku-like, or ids seen in earlier responses), query parameters and body keys, and
@@ -219,6 +220,13 @@ export function clusterRequests(
       varPositions.push({ index: i, kind: strongestKind(values, knownIds), prev });
     });
     const names = nameVars(varPositions);
+    // Failed probes are guesses, not usable examples. Keep them as trace/shape evidence only.
+    const successful = samples.filter(
+      (s) =>
+        s.status !== undefined &&
+        s.status >= 200 &&
+        (s.status < 300 || (method !== "GET" && s.status < 400)),
+    );
     const params: CandidateParam[] = [];
     const path = segs
       .map((seg, i) => {
@@ -228,7 +236,7 @@ export function clusterRequests(
         const p: CandidateParam = {
           name,
           location: "path",
-          examples: uniq(samples.map((s) => segmentsOf.get(s)?.[i] ?? "")),
+          examples: uniq(successful.map((s) => segmentsOf.get(s)?.[i] ?? "")),
           required: true,
         };
         if (pos) p.kind = pos.kind;
@@ -248,15 +256,16 @@ export function clusterRequests(
     let bodyLocation: "body" | "form" | undefined;
     for (const s of samples) {
       const v = requestValues(s);
+      const useExample = successful.includes(s);
       for (const [k, val] of uniqPairs(v.query)) {
         if (!queryNames.includes(k)) queryNames.push(k);
-        queryExamples.set(k, uniq([...(queryExamples.get(k) ?? []), val]));
+        if (useExample) queryExamples.set(k, uniq([...(queryExamples.get(k) ?? []), val]));
         queryCount.set(k, (queryCount.get(k) ?? 0) + 1);
       }
       bodyLocation = bodyLocation ?? v.bodyLocation;
       for (const [k, val, t] of v.body) {
         if (!bodyNames.includes(k)) bodyNames.push(k);
-        bodyExamples.set(k, uniq([...(bodyExamples.get(k) ?? []), val]));
+        if (useExample) bodyExamples.set(k, uniq([...(bodyExamples.get(k) ?? []), val]));
         if (!bodyTypes.has(k)) bodyTypes.set(k, t);
         bodyCount.set(k, (bodyCount.get(k) ?? 0) + 1);
       }
@@ -509,12 +518,19 @@ export function mergeCandidates(candidates: EndpointCandidate[]): EndpointCandid
 
 /** Values a request supplies for each of a candidate's parameters, or undefined when it does not match. */
 export function matchRequest(
-  candidate: EndpointCandidate,
+  candidate: Pick<EndpointCandidate, "method" | "urlTemplate">,
   r: RecordedRequest,
 ): Record<string, string> | undefined {
   if (r.method.toUpperCase() !== candidate.method) return undefined;
   const pathTemplate = candidate.urlTemplate.replace(/\{[?&][^}]*\}$/, "").replace(/\?.*$/, "");
   const url = new URL(r.url);
+  // A literal query is part of the operation, not a parameter shared with other variants.
+  const fixedQuery = new URL(
+    candidate.urlTemplate.replace(/\{[?&][^}]*\}/g, "").replace(/\{[^}]+\}/g, "x"),
+  ).searchParams;
+  for (const [name, value] of fixedQuery) {
+    if (url.searchParams.get(name) !== value) return undefined;
+  }
   const tSegs = new URL(pathTemplate.replace(/\{([^}]+)\}/g, "%7B$1%7D")).pathname.split("/");
   const rSegs = url.pathname.split("/");
   if (

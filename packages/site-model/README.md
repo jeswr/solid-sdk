@@ -53,8 +53,8 @@ Ordered collections (inputs, steps, CSRF rules, field rules, login routes, opera
 carry `schema:position`; a reader orders by position, then by IRI.
 Execution outcomes are runtime receipts, separate from the learned `SiteModel` graph.
 `sab:Completed` means the action is done and must not be repeated. `sab:Failed` means execution
-stopped without a write returning a successful HTTP response. `sab:Uncertain` means at least one
-write returned 2xx/3xx but response processing or a later step failed; those writes must not be
+stopped without a committed or uncertain write. `sab:Uncertain` means at least one
+write may have reached the site without a 4xx rejection, but execution did not finish; those writes must not be
 repeated. Completed payment outcomes require an authorized amount and currency in the normative
 shapes. Failed and uncertain receipts allow those fields to be absent. The ontology and both
 SHACL profiles admit Uncertain; generated artifacts are regenerated through codegen. The shared
@@ -240,3 +240,10 @@ pnpm --filter @jeswr/site-model run typecheck
 pnpm --filter @jeswr/site-model run test
 pnpm run check:codegen
 ```
+
+Parsed action requests retain RDF term kinds through `actionRequestTerms(request, path)` in addition
+to the unchanged lexical `values(path)` contract. Custom ActionRequest implementations can provide
+an optional `terms(path)` method; otherwise the helper returns undefined. This lets executors reject
+scalar blank nodes and normalize IRI terms without confusing them with literal text.
+`sab:Uncertain` includes writes that may have reached the site without a 4xx rejection (5xx,
+network/reset/timeout, or failed extraction after 2xx/3xx); hosts retain and guard their fingerprints.
