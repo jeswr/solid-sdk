@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Dynamic approval requests. When the outbound gate asks the principal, this module writes
@@ -396,6 +397,8 @@ export function checkResponse(
   now: Date,
   ruleId = `rule:${request.id}`,
 ): ResponseCheck {
+  if (response.requestId !== request.id) return { ok: false, reason: "request-mismatch" };
+  if (response.digest !== request.digest) return { ok: false, reason: "digest-mismatch" };
   const offered = request.offered.find((o) => o.id === response.offeredId);
   if (!offered || offered.type !== response.type) return { ok: false, reason: "not-offered" };
   if (now.getTime() >= Date.parse(request.expiresAt)) return { ok: false, reason: "expired" };

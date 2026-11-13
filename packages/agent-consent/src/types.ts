@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The engine/UI contract of a consumer Answerable agent (design of record:
@@ -190,7 +191,10 @@ export interface ApprovalRequest {
   readonly offered: readonly OfferedResponse[];
 }
 
-export type PrincipalResponse =
+export type PrincipalResponse = {
+  readonly requestId: string;
+  readonly digest: string;
+} & (
   | { readonly type: "approve-once"; readonly offeredId: string }
   | { readonly type: "deny"; readonly offeredId: string }
   | {
@@ -200,4 +204,5 @@ export type PrincipalResponse =
     }
   | { readonly type: "trust-recipient"; readonly offeredId: string }
   | { readonly type: "share-less"; readonly offeredId: string; readonly keep: readonly string[] }
-  | { readonly type: "step-up-done"; readonly offeredId: string; readonly attestation: string };
+  | { readonly type: "step-up-done"; readonly offeredId: string; readonly attestation: string }
+);

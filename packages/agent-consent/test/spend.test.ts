@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import { addMoney, formatMoney, isMoney, money } from "../src/money.js";
@@ -259,5 +260,48 @@ describe("checkSpend", () => {
       used: usd(0),
       remaining: usd(25),
     });
+  });
+});
+
+describe("rule accounting lineage", () => {
+  it.each([
+    "budget",
+    "allowance",
+  ] as const)("counts the whole %s lineage without counting refunds or other rules", (kind) => {
+    const raised = rule({
+      kind,
+      id: "rule:raised",
+      limit: usd(150),
+      supersedes: ["rule:first", "rule:second"],
+    });
+    const usage = ruleUsage(
+      raised,
+      [
+        spent(20, { ruleId: "rule:first" }),
+        spent(12, { ruleId: "rule:second" }),
+        spent(85, { ruleId: "rule:raised" }),
+        spent(90, { ruleId: "rule:other" }),
+        spent(10, { ruleId: "rule:first", refunded: true }),
+        spent(10, { ruleId: undefined }),
+      ],
+      usd(0),
+      NOW,
+    );
+    expect(isSpendingRule(raised)).toBe(true);
+    expect(usage.used).toEqual(usd(117));
+    expect(usage.remaining).toEqual(usd(33));
+  });
+
+  it.each([
+    null,
+    "rule:old",
+    [],
+    Array(1),
+    [1],
+    ["bad id"],
+    ["rule:allowance"],
+    ["rule:old", "rule:old"],
+  ])("rejects malformed supersedes %j", (supersedes) => {
+    expect(isSpendingRule({ ...rule({ kind: "allowance" }), supersedes })).toBe(false);
   });
 });

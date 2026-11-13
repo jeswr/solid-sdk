@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The outbound gate for a consumer agent's purchases, data sharing and step-up requests.
@@ -86,8 +87,10 @@ type Step =
 const pass = (plain: string, code: string): Step => ({ result: "pass", plain, code });
 const na = (plain: string): Step => ({ result: "not-applicable", plain });
 
-function recipientStep(action: ProposedAction): Step {
+function recipientStep(action: ProposedAction, approved: boolean): Step {
   const r = action.recipient;
+  if (r.established === "not-established" && approved)
+    return pass(`You approved this interaction with ${r.name} once.`, "approved-once-recipient");
   if (r.established === "not-established")
     return {
       result: "ask",
@@ -130,7 +133,7 @@ function purchaseSteps(
       ],
     };
   steps.push(pass(`Your rules allow buying ${a.category}.`, "within-mandate"));
-  const recipient = recipientStep(a);
+  const recipient = recipientStep(a, input.approvals.has(input.digest));
   steps.push(recipient);
   if (recipient.result !== "pass") return { steps };
   steps.push(
@@ -204,7 +207,7 @@ function shareSteps(
       steps: [{ result: "fail", plain: "There is nothing left to share.", code: "no-data" }],
     };
   const steps: Step[] = [pass("Your rules allow sharing these with your OK.", "within-mandate")];
-  const recipient = recipientStep(a);
+  const recipient = recipientStep(a, input.approvals.has(input.digest));
   steps.push(recipient);
   if (recipient.result !== "pass") return { steps };
   const approved = input.approvals.has(input.digest);
@@ -241,7 +244,7 @@ function stepUpSteps(
   a: StepUpAction,
 ): { steps: Step[]; basis?: GateResult["basis"] } {
   const steps: Step[] = [pass("Your rules allow this with your OK.", "within-mandate")];
-  const recipient = recipientStep(a);
+  const recipient = recipientStep(a, input.approvals.has(input.digest));
   steps.push(recipient);
   if (recipient.result !== "pass") return { steps };
   steps.push(na("The check itself shares nothing with them."));

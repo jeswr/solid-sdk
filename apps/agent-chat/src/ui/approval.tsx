@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The approval sheet and the spending-limit editor. Everything shown here comes from the
@@ -409,7 +410,13 @@ export function ApprovalSheet({
   );
 
   const choose = (o: OfferedResponse) => {
-    if (o.type === "deny") return void send({ type: "deny", offeredId: o.id });
+    if (o.type === "deny")
+      return void send({
+        requestId: request.id,
+        digest: request.digest,
+        type: "deny",
+        offeredId: o.id,
+      });
     if (o.type === "set-limit" || o.type === "raise-limit")
       return setMode({ type: "editor", offered: o });
     if (o.type === "step-up-done") return setMode({ type: "face", offered: o });
@@ -418,11 +425,25 @@ export function ApprovalSheet({
       if (less)
         return setMode({
           type: "device",
-          response: { type: "share-less", offeredId: less.id, keep: [...keep] },
+          response: {
+            requestId: request.id,
+            digest: request.digest,
+            type: "share-less",
+            offeredId: less.id,
+            keep: [...keep],
+          },
         });
     }
     if (o.type === "approve-once")
-      return setMode({ type: "device", response: { type: "approve-once", offeredId: o.id } });
+      return setMode({
+        type: "device",
+        response: {
+          requestId: request.id,
+          digest: request.digest,
+          type: "approve-once",
+          offeredId: o.id,
+        },
+      });
   };
 
   const missingRequired = offeredFields.some((f) => f.required && !keep.has(f.id));
@@ -460,6 +481,8 @@ export function ApprovalSheet({
               setMode({
                 type: "device",
                 response: {
+                  requestId: request.id,
+                  digest: request.digest,
                   type: mode.offered.type as "set-limit" | "raise-limit",
                   offeredId: mode.offered.id,
                   draft,
@@ -655,6 +678,8 @@ export function ApprovalSheet({
           by={action.performedBy}
           onDone={() =>
             void send({
+              requestId: request.id,
+              digest: request.digest,
               type: "step-up-done",
               offeredId: mode.offered.id,
               attestation: "face-check",

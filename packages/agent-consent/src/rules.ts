@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Spending rules: the standing permissions a principal gives so their agent can buy without
@@ -22,6 +23,8 @@ export type BudgetPeriod = "week" | "month";
 
 export interface SpendingRule {
   readonly id: string;
+  /** All previous rule IDs, retained when a limit is raised. */
+  readonly supersedes?: readonly string[];
   readonly kind: SpendingRuleKind;
   readonly limit: Money;
   /** Required for `budget`, absent otherwise. */
@@ -61,6 +64,7 @@ function validScope(scope: unknown): scope is RuleScope {
 
 const RULE_KEYS = new Set([
   "id",
+  "supersedes",
   "kind",
   "limit",
   "period",
@@ -76,6 +80,12 @@ export function isSpendingRule(value: unknown): value is SpendingRule {
   const r = value as Record<string, unknown>;
   if (Object.keys(r).some((k) => !RULE_KEYS.has(k))) return false;
   if (typeof r.id !== "string" || !ID.test(r.id)) return false;
+  if (r.supersedes !== undefined) {
+    if (!Array.isArray(r.supersedes) || r.supersedes.length === 0) return false;
+    if ([...r.supersedes].some((id) => typeof id !== "string" || !ID.test(id) || id === r.id))
+      return false;
+    if (new Set(r.supersedes).size !== r.supersedes.length) return false;
+  }
   if (!isMoney(r.limit) || r.limit.minor === 0) return false;
   if (!validScope(r.scope) || !instant(r.createdAt)) return false;
   if (r.expiresAt !== undefined && (!instant(r.expiresAt) || r.expiresAt <= r.createdAt))

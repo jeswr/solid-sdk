@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The agent engine behind the chat. The core (scripted or a live model) only proposes; every
@@ -67,6 +68,10 @@ export interface EngineOptions {
   readonly now?: () => Date;
 }
 
+export interface RunToken {
+  readonly signal: AbortSignal;
+}
+
 type Listener = (state: EngineState) => void;
 type Resolver = { resolve: (r: PrincipalResponse) => void; reject: (e: Error) => void };
 type Done = "done" | "denied" | "stopped" | "blocked";
@@ -93,6 +98,8 @@ export class Engine {
   private readonly declined = new Map<string, number>();
   private resolver: Resolver | undefined;
   private seq = 0;
+  private runController = new AbortController();
+  private actionQueue: Promise<void> = Promise.resolve();
   private readonly pace: number;
   private readonly clock: () => Date;
   /** Products shown in the current chat, so "choose" and follow-ups can find them. */
@@ -158,8 +165,65 @@ export class Engine {
     return ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve();
   }
 
-  private guard(): void {
-    if (this.state.stopped) throw new StoppedError();
+  createRun(): RunToken {
+    return { signal: this.runController.signal };
+  }
+
+  checkRun(run: RunToken): void {
+    this.guard(run);
+  }
+
+  private guard(run: RunToken): void {
+    if (this.state.stopped || run.signal.aborted) throw new StoppedError();
+  }
+
+  /** One lock covers the gate, authority reservation, execution and accounting. */
+  private async withAction<T>(run: RunToken, task: () => Promise<T>): Promise<T> {
+    const previous = this.actionQueue;
+    let release!: () => void;
+    this.actionQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      this.guard(run);
+      return await task();
+    } finally {
+      release();
+    }
+  }
+
+  /** Cancellation rejects the run immediately, even if a counterparty has not replied. */
+  waitFor<T>(run: RunToken, effect: () => Promise<T>): Promise<T> {
+    this.guard(run);
+    return new Promise<T>((resolve, reject) => {
+      const cancel = () => reject(new StoppedError());
+      run.signal.addEventListener("abort", cancel, { once: true });
+      effect().then(
+        (value) => {
+          run.signal.removeEventListener("abort", cancel);
+          if (run.signal.aborted) reject(new StoppedError());
+          else resolve(value);
+        },
+        (error: unknown) => {
+          run.signal.removeEventListener("abort", cancel);
+          reject(error);
+        },
+      );
+    });
+  }
+
+  private sign(run: RunToken, from: string, payload: Record<string, unknown>): Promise<string> {
+    return this.waitFor(run, () => this.parties.sign(from, payload));
+  }
+
+  private receive<T extends Record<string, unknown>>(
+    run: RunToken,
+    jws: string,
+    expected: string,
+    fitness?: (payload: T) => string | undefined,
+  ) {
+    return this.waitFor(run, () => this.parties.receive<T>(jws, expected, fitness));
   }
 
   private chat(chatId: string): Chat {
@@ -187,8 +251,8 @@ export class Engine {
   }
 
   /** Stream an agent line word by word. */
-  async say(chatId: string, text: string): Promise<void> {
-    this.guard();
+  async say(chatId: string, text: string, run = this.createRun()): Promise<void> {
+    this.guard(run);
     const id = this.push(chatId, { type: "text", role: "agent", text: "", streaming: true });
     const words = text.split(/(\s+)/);
     if (this.pace === 0) {
@@ -197,28 +261,37 @@ export class Engine {
     }
     let shown = "";
     for (const w of words) {
+      this.guard(run);
       shown += w;
       this.patch(chatId, id, { text: shown });
-      if (w.trim()) await this.sleep(1);
+      if (w.trim()) await this.waitFor(run, () => this.sleep(1));
     }
+    this.guard(run);
     this.patch(chatId, id, { streaming: false });
   }
 
   /** A live step list; returns a setter for each step's state. */
-  progress(chatId: string, title: string, steps: { label: string; party?: string }[]) {
+  progress(
+    chatId: string,
+    title: string,
+    steps: { label: string; party?: string }[],
+    run = this.createRun(),
+  ) {
+    this.guard(run);
     const id = this.push(chatId, {
       type: "progress",
       title,
       steps: steps.map((s, i) => ({ ...s, id: `s${i}`, state: "pending" as ProgressState })),
     });
     return async (index: number, state: ProgressState, wait = 14) => {
+      this.guard(run);
       const chat = this.chat(chatId);
       const msg = chat.messages.find((m) => m.id === id);
       if (msg?.type !== "progress") return;
       this.patch(chatId, id, {
         steps: msg.steps.map((s, i) => (i === index ? { ...s, state } : s)),
       });
-      if (state === "running") await this.sleep(wait);
+      if (state === "running") await this.waitFor(run, () => this.sleep(wait));
     };
   }
 
@@ -265,6 +338,9 @@ export class Engine {
   /** One tap stops everything at once; pending approvals are cancelled. */
   stop(): void {
     if (this.state.stopped) return;
+    this.runController.abort();
+    this.approvalRecords.clear();
+    this.attestations.clear();
     const pending = this.state.pending;
     if (pending) {
       this.markStub(pending.chatId, pending.request.id, "cancelled");
@@ -284,6 +360,7 @@ export class Engine {
   }
 
   resume(): void {
+    if (this.runController.signal.aborted) this.runController = new AbortController();
     this.set({ stopped: false });
     this.log({ outcome: "go", filter: "asked", summary: "You resumed Errand", checks: [] });
   }
@@ -304,17 +381,22 @@ export class Engine {
 
   private async verifiedApprovals(): Promise<Set<string>> {
     const out = new Set<string>();
-    const t = this.now().toISOString();
     for (const jws of this.approvalRecords.values()) {
       const r = await verifyRecord(jws, this.key.publicJwk);
-      if (r?.type === "approval" && r.decision === "approve" && r.expiresAt > t)
+      if (
+        r?.type === "approval" &&
+        r.decision === "approve" &&
+        r.issuedAt <= this.now().toISOString() &&
+        r.expiresAt > this.now().toISOString()
+      )
         out.add(r.actionDigest);
     }
     return out;
   }
 
-  private async refreshRules(): Promise<void> {
+  private async refreshRules(run: RunToken): Promise<void> {
     const rules = await this.verifiedRules();
+    this.guard(run);
     const now = this.now();
     const views: RuleView[] = rules.map((rule) => {
       const u = ruleUsage(rule, this.ledger, { minor: 0, currency: rule.limit.currency }, now);
@@ -335,27 +417,38 @@ export class Engine {
 
   private readonly ruleJwsIds = new Map<string, string>();
 
-  private async signRule(rule: SpendingRule): Promise<string> {
+  private async signRule(rule: SpendingRule, run: RunToken): Promise<string> {
     const jws = await signRecord(this.key, {
       type: "spending-rule",
       rule,
       issuedAt: this.now().toISOString(),
     });
+    this.guard(run);
     this.ruleRecords.push(jws);
     this.ruleJwsIds.set(jws, rule.id);
     return jws;
   }
 
   /** Turn a rule off (from Can do, or Undo). Writes a signed revocation. */
-  async revokeRule(ruleId: string, chatId?: string): Promise<void> {
+  revokeRule(ruleId: string, chatId?: string, run = this.createRun()): Promise<void> {
+    return this.withAction(run, () => this.revokeRuleAction(ruleId, chatId, run));
+  }
+
+  private async revokeRuleAction(
+    ruleId: string,
+    chatId: string | undefined,
+    run: RunToken,
+  ): Promise<void> {
     const jws = await signRecord(this.key, {
       type: "revocation",
       ruleId,
       issuedAt: this.now().toISOString(),
     });
+    this.guard(run);
     this.ruleRecords.push(jws);
     const view = this.state.rules.find((r) => r.rule.id === ruleId);
-    await this.refreshRules();
+    await this.refreshRules(run);
+    this.guard(run);
     if (view) {
       this.log({
         outcome: "go",
@@ -382,7 +475,10 @@ export class Engine {
     return actionDigest(action);
   }
 
-  private async gate(action: ProposedAction): Promise<{ gate: GateResult; digest: string }> {
+  private async gate(
+    action: ProposedAction,
+    run: RunToken,
+  ): Promise<{ gate: GateResult; digest: string }> {
     const digest = this.digestOf(action);
     const gate = evaluateAction({
       action,
@@ -391,10 +487,41 @@ export class Engine {
       rules: await this.verifiedRules(),
       records: this.ledger,
       approvals: await this.verifiedApprovals(),
-      attestations: new Set(this.attestations.keys()),
+      attestations: await this.verifiedAttestations(action, digest, run),
       now: this.now(),
     });
     return { gate, digest };
+  }
+
+  /** Check the signed action, method, issuer and time window on every use. */
+  private async verifiedAttestations(
+    action: ProposedAction,
+    digest: string,
+    run: RunToken,
+  ): Promise<Set<string>> {
+    const verified = new Set<string>();
+    if (action.type !== "step-up") return verified;
+    const jws = this.attestations.get(digest);
+    if (!jws) return verified;
+    const attestation = await this.receive(run, jws, "org:idp", (payload) => {
+      const issued = typeof payload.issuedAt === "string" ? Date.parse(payload.issuedAt) : NaN;
+      const minutes = payload.validMinutes;
+      const now = this.now().getTime();
+      return payload.digest === digest &&
+        payload.method === action.method &&
+        typeof minutes === "number" &&
+        Number.isFinite(minutes) &&
+        minutes > 0 &&
+        minutes === action.validMinutes &&
+        Number.isFinite(issued) &&
+        issued <= now &&
+        now < issued + minutes * 60_000
+        ? undefined
+        : "invalid or expired attestation";
+    });
+    if (attestation) verified.add(digest);
+    else this.attestations.delete(digest);
+    return verified;
   }
 
   private markStub(chatId: string, requestId: string, state: string): void {
@@ -408,8 +535,9 @@ export class Engine {
     chatId: string,
     request: ApprovalRequest,
     summary: string,
+    run: RunToken,
   ): Promise<PrincipalResponse> {
-    this.guard();
+    this.guard(run);
     this.push(chatId, { type: "approval", requestId: request.id, summary, state: "pending" });
     this.set({ pending: { chatId, request } });
     this.log({
@@ -445,6 +573,7 @@ export class Engine {
     chatId: string,
     initial: ProposedAction,
     summary: string,
+    run: RunToken,
   ): Promise<{
     result: Done;
     action: ProposedAction;
@@ -457,9 +586,12 @@ export class Engine {
     let authority: string | undefined;
     let consentJws: string | undefined;
     for (let round = 0; round < 4; round += 1) {
-      this.guard();
-      const { gate, digest } = await this.gate(action);
+      this.guard(run);
+      const { gate, digest } = await this.gate(action, run);
+      this.guard(run);
       if (gate.outcome === "go") {
+        // Reserve single-use authority before any effect, including failed or paused work.
+        this.approvalRecords.delete(digest);
         if (!authority && gate.basis === "rule" && gate.spend?.outcome === "covered")
           authority = `Within ${describeRule(gate.spend.usage.rule).replace(/^your /, "your ")}`;
         return {
@@ -479,9 +611,9 @@ export class Engine {
         action,
         declinedStanding: this.declined.get(chatId) ?? 0,
       });
-      await this.leadIn(chatId, action, gate);
-      const response = await this.ask(chatId, request, summary);
-      this.guard();
+      await this.leadIn(chatId, action, gate, run);
+      const response = await this.ask(chatId, request, summary, run);
+      this.guard(run);
       const now = this.now();
       if (response.type === "deny") {
         this.markStub(chatId, request.id, "denied");
@@ -499,27 +631,37 @@ export class Engine {
       if (response.type === "set-limit" || response.type === "raise-limit") {
         const check = checkResponse(request, response, now, this.id("rule"));
         if (!check.ok || !check.rule) return { result: "denied", action };
+        let rule = check.rule;
         if (
           response.type === "raise-limit" &&
           request.offered.find((o) => o.id === response.offeredId)?.replacesRuleId
         ) {
           const old = request.offered.find((o) => o.id === response.offeredId)
             ?.replacesRuleId as string;
-          this.ruleRecords.push(
-            await signRecord(this.key, {
-              type: "revocation",
-              ruleId: old,
-              issuedAt: now.toISOString(),
-            }),
-          );
+          const previous = (await this.verifiedRules()).find((r) => r.id === old);
+          this.guard(run);
+          if (!previous) return { result: "denied", action };
+          rule = {
+            ...rule,
+            createdAt: previous.createdAt,
+            supersedes: [previous.id, ...(previous.supersedes ?? [])],
+          };
+          const revocation = await signRecord(this.key, {
+            type: "revocation",
+            ruleId: old,
+            issuedAt: now.toISOString(),
+          });
+          this.guard(run);
+          this.ruleRecords.push(revocation);
         }
-        consentJws = await this.signRule(check.rule);
-        await this.refreshRules();
+        consentJws = await this.signRule(rule, run);
+        await this.refreshRules(run);
+        this.guard(run);
         this.markStub(chatId, request.id, "standing-set");
-        const sentence = ruleLabel(check.rule);
+        const sentence = ruleLabel(rule);
         this.push(chatId, {
           type: "rule-change",
-          rule: check.rule,
+          rule,
           summary: `${response.type === "raise-limit" ? "Raised" : "New rule"}: up to ${sentence}.`,
           change: response.type === "raise-limit" ? "raised" : "created",
           undoUntil: new Date(now.getTime() + UNDO_MS).toISOString(),
@@ -550,15 +692,14 @@ export class Engine {
         };
       }
       if (response.type === "step-up-done") {
-        const attestation = await this.parties.sign("org:idp", {
-          attests: digest,
-          method: "face-check",
-          at: now.toISOString(),
+        const attestation = await this.sign(run, "org:idp", {
+          digest,
+          method: (action as StepUpAction).method,
+          issuedAt: now.toISOString(),
+          validMinutes: (action as StepUpAction).validMinutes,
         });
-        const ok = await this.parties.receive<{ attests: string }>(attestation, "org:idp", (p) =>
-          p.attests === digest ? undefined : "wrong action",
-        );
-        if (ok) this.attestations.set(digest, attestation);
+        this.guard(run);
+        this.attestations.set(digest, attestation);
         this.markStub(chatId, request.id, "approved-once");
         authority = "You completed a face check";
         continue;
@@ -573,6 +714,7 @@ export class Engine {
         issuedAt: now.toISOString(),
         expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(),
       });
+      this.guard(run);
       this.approvalRecords.set(approvedDigest, jws);
       consentJws = jws;
       authority =
@@ -583,24 +725,32 @@ export class Engine {
   }
 
   /** The chat line before a sheet. The sheet itself is written by the gate. */
-  private async leadIn(chatId: string, action: ProposedAction, gate: GateResult): Promise<void> {
+  private async leadIn(
+    chatId: string,
+    action: ProposedAction,
+    gate: GateResult,
+    run: RunToken,
+  ): Promise<void> {
     if (action.type === "purchase") {
       const item = action.items[0]?.name ?? "This";
       if (gate.kind === "limit-exceeded")
         await this.say(
           chatId,
           `The ${item} is ${formatMoney(action.total)}. That takes you over your limit, so I need your OK.`,
+          run,
         );
       else if (gate.kind === "new-recipient")
         await this.say(
           chatId,
           `I could not confirm ${action.recipient.name} from your list or a register, so I need your OK first.`,
+          run,
         );
-      else await this.say(chatId, "I need your OK to buy these.");
+      else await this.say(chatId, "I need your OK to buy these.", run);
     } else if (action.type === "step-up") {
       await this.say(
         chatId,
         `${action.recipient.name} wants a stronger approval before it releases ${action.releases}.`,
+        run,
       );
     }
   }
@@ -624,21 +774,30 @@ export class Engine {
   }
 
   /** Search the three stores. Prices and records come signed from each store. */
-  async searchProducts(
+  searchProducts(
     chatId: string,
     query: { category?: string; maxPrice?: Money; text?: string },
+    run = this.createRun(),
   ): Promise<ProductView[]> {
-    this.guard();
-    const step = this.progress(chatId, "Searching", [{ label: "Searching 3 stores" }]);
+    return this.withAction(run, () => this.searchProductsAction(chatId, query, run));
+  }
+
+  private async searchProductsAction(
+    chatId: string,
+    query: { category?: string; maxPrice?: Money; text?: string },
+    run: RunToken,
+  ): Promise<ProductView[]> {
+    this.guard(run);
+    const step = this.progress(chatId, "Searching", [{ label: "Searching 3 stores" }], run);
     await step(0, "running", 30);
     const hits: ProductView[] = [];
     for (const p of PRODUCTS) {
-      const listing = await this.parties.sign(p.store, {
+      const listing = await this.sign(run, p.store, {
         product: p.id,
         price: p.price.minor,
         currency: p.price.currency,
       });
-      const ok = await this.parties.receive<{ price: number }>(listing, p.store, (x) =>
+      const ok = await this.receive<{ price: number }>(run, listing, p.store, (x) =>
         x.price === p.price.minor ? undefined : "price changed",
       );
       if (!ok) continue;
@@ -658,8 +817,17 @@ export class Engine {
    * Buy one product. Reads the product page first: its text is content, so any instruction
    * in it is refused by the gate and surfaced.
    */
-  async buy(chatId: string, productId: string, variant?: string): Promise<Done> {
-    this.guard();
+  buy(chatId: string, productId: string, variant?: string, run = this.createRun()): Promise<Done> {
+    return this.withAction(run, () => this.buyAction(chatId, productId, variant, run));
+  }
+
+  private async buyAction(
+    chatId: string,
+    productId: string,
+    variant: string | undefined,
+    run: RunToken,
+  ): Promise<Done> {
+    this.guard(run);
     const p = productById(productId);
     const store = storeById(p.store);
     const chosen = variant ?? (p.variants[0] as string);
@@ -672,7 +840,8 @@ export class Engine {
         fees: [],
         origin: "content",
       };
-      const { gate, digest } = await this.gate(upsell);
+      const { gate, digest } = await this.gate(upsell, run);
+      this.guard(run);
       const recordId = this.log({
         outcome: "stop",
         filter: "blocked",
@@ -704,7 +873,12 @@ export class Engine {
       });
     }
     const action = this.purchaseAction(p, chosen);
-    return this.completePurchase(chatId, action, `buy ${p.name}, ${formatMoney(action.total)}`);
+    return this.completePurchase(
+      chatId,
+      action,
+      `buy ${p.name}, ${formatMoney(action.total)}`,
+      run,
+    );
   }
 
   private purchaseAction(p: Product, variant: string): PurchaseAction {
@@ -736,14 +910,16 @@ export class Engine {
     chatId: string,
     action: PurchaseAction,
     summary: string,
+    run: RunToken,
   ): Promise<Done> {
-    const outcome = await this.passGate(chatId, action, summary);
+    const outcome = await this.passGate(chatId, action, summary, run);
+    this.guard(run);
     if (outcome.result !== "done" || !outcome.gate || outcome.action.type !== "purchase") {
       if (outcome.result === "denied")
-        await this.say(chatId, "OK, I did not buy it. Nothing was charged.");
+        await this.say(chatId, "OK, I did not buy it. Nothing was charged.", run);
       if (outcome.result === "blocked" && outcome.gate) {
         const why = outcome.gate.checks.find((c) => c.result === "fail")?.plain ?? "";
-        await this.say(chatId, `I can't do that: ${why}`);
+        await this.say(chatId, `I can't do that: ${why}`, run);
       }
       return outcome.result;
     }
@@ -752,11 +928,12 @@ export class Engine {
     // The store confirms the order with a signed receipt; the inbound gate checks it.
     this.ordinal += 13;
     const orderRef = `SC-${this.ordinal}`;
-    const receiptJws = await this.parties.sign(a.recipient.id, {
+    const receiptJws = await this.sign(run, a.recipient.id, {
       order: orderRef,
       total: a.total.minor,
     });
-    const receipt = await this.parties.receive<{ order: string; total: number }>(
+    const receipt = await this.receive<{ order: string; total: number }>(
+      run,
       receiptJws,
       a.recipient.id,
       (x) => (x.total === a.total.minor ? undefined : "total differs"),
@@ -765,11 +942,13 @@ export class Engine {
       await this.say(
         chatId,
         "The store's confirmation did not check out, so I am treating this order as not placed.",
+        run,
       );
       return "blocked";
     }
     const ruleId =
       g.basis === "rule" && g.spend?.outcome === "covered" ? g.spend.usage.rule.id : undefined;
+    this.guard(run);
     this.ledger.push({
       id: orderRef,
       ...(ruleId ? { ruleId } : {}),
@@ -778,12 +957,11 @@ export class Engine {
       amount: a.total,
       at: this.now().toISOString(),
     });
-    // The approval was single use.
-    if (outcome.digest) this.approvalRecords.delete(outcome.digest);
     const h = this.history.get(a.recipient.id) ?? { purchases: 0, shares: 0 };
     this.history.set(a.recipient.id, { ...h, purchases: h.purchases + 1 });
-    await this.refreshRules();
+    await this.refreshRules(run);
     const authority = outcome.authority ?? "You approved this purchase";
+    this.guard(run);
     const recordId = this.log({
       outcome: "go",
       filter: "purchases",
@@ -801,13 +979,16 @@ export class Engine {
       await this.say(
         chatId,
         `Bought. ${item.name}, ${formatMoney(a.total)}, ${arrives}. I did not need to ask: this is inside your limit.`,
+        run,
       );
     } else {
       await this.say(
         chatId,
         `Bought. ${item.name}${item.variant ? `, ${item.variant.split(",")[0]}` : ""}, ${arrives}.`,
+        run,
       );
     }
+    this.guard(run);
     this.push(chatId, {
       type: "receipt",
       store: a.recipient.name,
@@ -845,12 +1026,17 @@ export class Engine {
   }
 
   /** "What can you do without asking me?" */
-  async explainRules(chatId: string): Promise<void> {
+  explainRules(chatId: string, run = this.createRun()): Promise<void> {
+    return this.withAction(run, () => this.explainRulesAction(chatId, run));
+  }
+
+  private async explainRulesAction(chatId: string, run: RunToken): Promise<void> {
     const rules = this.state.rules;
     if (rules.length === 0) {
       await this.say(
         chatId,
         "Right now I ask before every purchase and before sharing anything about you. You can set a spending limit for a store from any purchase, and I will buy inside it and tell you after. I never follow instructions found on web pages, and accepting a loan always comes back to you.",
+        run,
       );
       return;
     }
@@ -858,34 +1044,45 @@ export class Engine {
     await this.say(
       chatId,
       `Without asking, I can buy inside these limits: ${list}. Everything else, I ask first.`,
+      run,
     );
   }
 
   // ---- mortgage --------------------------------------------------------------------------
 
-  async mortgageSearch(chatId: string): Promise<void> {
+  mortgageSearch(chatId: string, run = this.createRun()): Promise<void> {
+    return this.withAction(run, () => this.mortgageSearchAction(chatId, run));
+  }
+
+  private async mortgageSearchAction(chatId: string, run: RunToken): Promise<void> {
     const loan = MORTGAGE.price - MORTGAGE.deposit;
-    const step = this.progress(chatId, "Finding mortgages", [
-      { label: "Asking the mortgage product index (no personal data sent)", party: "Index" },
-      { label: "Checking each product against its lender" },
-      { label: "Looking up lenders on the sector register" },
-    ]);
+    const step = this.progress(
+      chatId,
+      "Finding mortgages",
+      [
+        { label: "Asking the mortgage product index (no personal data sent)", party: "Index" },
+        { label: "Checking each product against its lender" },
+        { label: "Looking up lenders on the sector register" },
+      ],
+      run,
+    );
     await step(0, "running", 40);
-    const answer = await this.parties.sign(MORTGAGE.index.id, {
+    const answer = await this.sign(run, MORTGAGE.index.id, {
       products: 14,
       lenders: 6,
       updated: "2 hours ago",
     });
-    const index = await this.parties.receive<{ products: number }>(answer, MORTGAGE.index.id);
+    const index = await this.receive<{ products: number }>(run, answer, MORTGAGE.index.id);
     await step(0, "done");
     await step(1, "running", 40);
     for (const l of MORTGAGE.lenders) {
-      const rec = await this.parties.sign(l.id, { product: l.product, rate: l.rate });
-      await this.parties.receive(rec, l.id);
+      const rec = await this.sign(run, l.id, { product: l.product, rate: l.rate });
+      await this.receive(run, rec, l.id);
     }
     await step(1, "done");
     await step(2, "running", 30);
     await step(2, "done");
+    this.guard(run);
     this.log({
       outcome: "go",
       filter: "shared",
@@ -916,7 +1113,9 @@ export class Engine {
     await this.say(
       chatId,
       `The index holds ${index?.payload.products ?? 14} products from 6 lenders, updated 2 hours ago. Three fit a $${loan.toLocaleString("en-US")} loan.`,
+      run,
     );
+    this.guard(run);
     this.push(chatId, {
       type: "comparison",
       columns: MORTGAGE.lenders.map((l, i) => ({
@@ -935,13 +1134,22 @@ export class Engine {
     });
   }
 
-  async mortgageApply(chatId: string, lenderId = "org:north"): Promise<Done> {
+  mortgageApply(chatId: string, lenderId = "org:north", run = this.createRun()): Promise<Done> {
+    return this.withAction(run, () => this.mortgageApplyAction(chatId, lenderId, run));
+  }
+
+  private async mortgageApplyAction(
+    chatId: string,
+    lenderId: string,
+    run: RunToken,
+  ): Promise<Done> {
     const lender =
       MORTGAGE.lenders.find((l) => l.id === lenderId) ??
       (MORTGAGE.lenders[0] as (typeof MORTGAGE.lenders)[number]);
     await this.say(
       chatId,
       `${lender.name} is a registered mortgage lender. It has told me what it needs. It asked for more than a decision in principle requires, so I am proposing to share less.`,
+      run,
     );
     const fields: DataField[] = [
       {
@@ -1014,10 +1222,12 @@ export class Engine {
       chatId,
       share,
       `share income and balance with ${lender.name}`,
+      run,
     );
+    this.guard(run);
     if (shared.result !== "done" || shared.action.type !== "share" || !shared.gate) {
       if (shared.result === "denied")
-        await this.say(chatId, `OK, I have not shared anything with ${lender.name}.`);
+        await this.say(chatId, `OK, I have not shared anything with ${lender.name}.`, run);
       return shared.result;
     }
     const sent = shared.action.fields
@@ -1033,21 +1243,26 @@ export class Engine {
       authority: shared.authority,
       ...(shared.consentJws ? { consentJws: shared.consentJws } : {}),
     });
-    const step = this.progress(chatId, "Applying", [
-      { label: `Agreement on evidence signed by ${lender.name}`, party: lender.name },
-      { label: "Asking Paywell for pay records", party: "Paywell" },
-      { label: "Asking Harbour Bank for your balance", party: "Harbour Bank" },
-      { label: `Application sent to ${lender.name} as a verifiable message` },
-      { label: `${lender.name} is checking` },
-    ]);
+    const step = this.progress(
+      chatId,
+      "Applying",
+      [
+        { label: `Agreement on evidence signed by ${lender.name}`, party: lender.name },
+        { label: "Asking Paywell for pay records", party: "Paywell" },
+        { label: "Asking Harbour Bank for your balance", party: "Harbour Bank" },
+        { label: `Application sent to ${lender.name} as a verifiable message` },
+        { label: `${lender.name} is checking` },
+      ],
+      run,
+    );
     await step(0, "running", 25);
     await step(0, "done");
     await step(1, "running", 30);
-    const pay = await this.parties.sign(MORTGAGE.payroll.id, {
+    const pay = await this.sign(run, MORTGAGE.payroll.id, {
       statement: "net-pay-3m",
       issued: this.now().toISOString(),
     });
-    await this.parties.receive(pay, MORTGAGE.payroll.id);
+    await this.receive(run, pay, MORTGAGE.payroll.id);
     await step(1, "done");
     await step(2, "running", 20);
     const stepUp: StepUpAction = {
@@ -1067,47 +1282,54 @@ export class Engine {
       origin: "agent-plan",
     };
     await step(2, "asked");
-    const stepped = await this.passGate(chatId, stepUp, "face check for Harbour Bank");
+    await step(2, "running", 20);
+    const stepped = await this.passGate(chatId, stepUp, "face check for Harbour Bank", run);
+    this.guard(run);
     if (stepped.result !== "done") {
       await step(2, "stopped");
       if (stepped.result === "denied")
         await this.say(
           chatId,
           "OK. Without the face check Harbour Bank will not release your balance, so I have paused the application.",
+          run,
         );
       return stepped.result;
     }
-    await step(2, "running", 20);
-    const balance = await this.parties.sign(MORTGAGE.bank.id, {
+    if (stepped.digest) this.attestations.delete(stepped.digest);
+    this.guard(run);
+    const balance = await this.sign(run, MORTGAGE.bank.id, {
       statement: "balance",
       asOf: this.now().toISOString(),
     });
-    const bal = await this.parties.receive(balance, MORTGAGE.bank.id);
+    const bal = await this.receive(run, balance, MORTGAGE.bank.id);
     await step(2, "done");
     await step(3, "running", 25);
+    this.guard(run);
     await step(3, "done");
     await step(4, "running", 40);
-    const dip = await this.parties.sign(lender.id, {
+    const dip = await this.sign(run, lender.id, {
       decision: "decision-in-principle",
       upTo: 285_000,
       product: `${lender.product}, ${lender.rate}`,
       validUntil: "2026-12-13",
       binding: false,
     });
-    const offer = await this.parties.receive<{
+    const offer = await this.receive<{
       upTo: number;
       product: string;
       validUntil: string;
       binding: boolean;
-    }>(dip, lender.id);
+    }>(run, dip, lender.id);
     await step(4, "done");
     if (!offer) {
       await this.say(
         chatId,
         `${lender.name}'s reply did not check out, so I am not relying on it.`,
+        run,
       );
       return "blocked";
     }
+    this.guard(run);
     const recordId = this.log({
       outcome: "go",
       filter: "shared",
@@ -1116,7 +1338,8 @@ export class Engine {
       checks: [],
       inbound: [...offer.checks, ...(bal?.checks ?? []).slice(0, 0)],
     });
-    await this.say(chatId, `${lender.name} has replied.`);
+    await this.say(chatId, `${lender.name} has replied.`, run);
+    this.guard(run);
     this.push(chatId, {
       type: "offer",
       party: lender.name,
@@ -1133,6 +1356,7 @@ export class Engine {
     await this.say(
       chatId,
       `This does not commit you or ${lender.name}. I will always ask before accepting an offer.`,
+      run,
     );
     return "done";
   }

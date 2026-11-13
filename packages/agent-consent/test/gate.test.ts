@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import { CHECK_ORDER, evaluateAction } from "../src/gate.js";
@@ -220,5 +221,28 @@ describe("evaluateAction: step-up", () => {
       input({ action: stepUp({ recipient: party({ established: "not-established" }) }) }),
     );
     expect(r.kind).toBe("new-recipient");
+  });
+});
+
+describe("exact consent for an unestablished recipient", () => {
+  it.each([
+    purchase(),
+    share(),
+    stepUp(),
+  ])("only permits the approved $type interaction", (original) => {
+    const action = { ...original, recipient: party({ established: "not-established" }) };
+    const approved = input({
+      action,
+      approvals: new Set(["sha256:abc"]),
+      attestations: new Set(["sha256:abc"]),
+    });
+    expect(evaluateAction(approved)).toMatchObject({ outcome: "go" });
+    expect(evaluateAction(approved).checks[1]).toMatchObject({
+      result: "pass",
+      code: "approved-once-recipient",
+    });
+    expect(action.recipient.established).toBe("not-established");
+    expect(evaluateAction({ ...approved, digest: "sha256:other" }).kind).toBe("new-recipient");
+    expect(evaluateAction({ ...approved, approvals: new Set() }).kind).toBe("new-recipient");
   });
 });

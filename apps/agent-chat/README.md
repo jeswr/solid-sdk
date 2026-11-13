@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Errand: consumer agent app
 
 `@jeswr/app-agent-chat` is a chat app for a personal agent that buys things, shares
@@ -31,6 +32,13 @@ place for the sign-in and password-manager connector, which is built separately.
 - Built-in demo (default): a scripted core that needs no model and no network.
 - Live model: when the page runs as a claude.ai artifact with the `sample` capability, the
   composer can switch to Claude, which plans through the same tools. The gate still decides.
+
+Actions share one lock through approval, execution and accounting. One-time purchase and
+sharing consent is spent before execution, including attempts that fail or pause. Face-check
+attestations are checked against the signed action, method, issuer and fifteen-minute window,
+then consumed for the bank release. Stop permanently cancels active and queued tasks and
+discards their unused consent; resume starts fresh work. A live-model failure uses the demo
+fallback only if no tool started, and repeated tool calls within one request return the same result.
 
 ## Commands
 

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The limits half of the outbound gate's "limits and approval" check for purchases.
@@ -78,6 +79,7 @@ export function ruleUsage(
   amount: Money,
   now: Date,
 ): RuleUsage {
+  const lineage = new Set([rule.id, ...(rule.supersedes ?? [])]);
   const from =
     rule.kind === "budget" && rule.period
       ? periodStart(now, rule.period)
@@ -88,7 +90,8 @@ export function ruleUsage(
       : records
           .filter(
             (r) =>
-              r.ruleId === rule.id &&
+              r.ruleId !== undefined &&
+              lineage.has(r.ruleId) &&
               !r.refunded &&
               validRecord(r) &&
               r.amount.currency === rule.limit.currency &&

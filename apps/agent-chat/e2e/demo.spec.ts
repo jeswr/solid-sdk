@@ -28,14 +28,18 @@ test("shopping: blocked upsell, set a limit, buy inside it, ask when over it", a
   await expect(sheet.getByRole("heading", { name: "Buy Roadrunner Lite for $20?" })).toBeVisible();
   await expect(page.getByText("I ignored an instruction that was not from you")).toBeVisible();
   await sheet.getByRole("button", { name: "Set a spending limit" }).click();
-  await expect(sheet.getByText(/can spend up to \$100 a month at Stride & Co without asking/)).toBeVisible();
+  await expect(
+    sheet.getByText(/can spend up to \$100 a month at Stride & Co without asking/),
+  ).toBeVisible();
   await hold(page, /Hold to set limit/);
   await expect(page.getByText(/New rule: up to \$100\/month at Stride & Co/)).toBeVisible();
   await send(page, "Reorder my usual socks");
   await expect(page.locator(".limit-chip").last()).toContainText("$32 of $100");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await send(page, "Get the Stormshell jacket too");
-  await expect(page.getByRole("heading", { name: /This goes over your \$100 a month at Stride & Co by \$17/ })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /This goes over your \$100 a month at Stride & Co by \$17/ }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Not now" }).last().click();
   await expect(page.getByText(/Nothing was charged/)).toBeVisible();
   expect(errors).toEqual([]);
@@ -45,11 +49,18 @@ test("mortgage: share only what is needed, face check, signed decision", async (
   await page.goto("/");
   await page.getByRole("button", { name: "Get a mortgage decision in principle" }).first().click();
   await page.getByRole("button", { name: "Go with North Bank" }).click();
-  await expect(page.getByRole("heading", { name: "Share 3 things with North Bank?" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Share 3 things with North Bank?" }),
+  ).toBeVisible();
   await expect(page.getByText("3 years of bank transactions")).toBeVisible();
-  await page.getByRole("dialog").getByRole("button", { name: /^Share 3/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Share 3/ })
+    .click();
   await hold(page, /hold/i);
-  await expect(page.getByRole("heading", { name: /Harbour Bank needs a face check/ })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Harbour Bank needs a face check/ }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Start face check" }).click();
   await expect(page.getByText("up to $285,000")).toBeVisible({ timeout: 20_000 });
 });

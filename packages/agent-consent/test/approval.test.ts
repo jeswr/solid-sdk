@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import {
@@ -406,28 +407,78 @@ describe("checkResponse", () => {
   const req = ask();
   const draft = req.offered[1]?.draft as RuleDraft;
 
+  it("rejects a response for another request or digest", () => {
+    const response = {
+      type: "approve-once" as const,
+      offeredId: "once",
+      requestId: req.id,
+      digest: req.digest,
+    };
+    expect(checkResponse(req, { ...response, requestId: "req:other" }, NOW)).toEqual({
+      ok: false,
+      reason: "request-mismatch",
+    });
+    expect(checkResponse(req, { ...response, digest: "sha256:other" }, NOW)).toEqual({
+      ok: false,
+      reason: "digest-mismatch",
+    });
+  });
+
   it("accepts an offered response and returns the rule for a limit", () => {
-    expect(checkResponse(req, { type: "approve-once", offeredId: "once" }, NOW)).toMatchObject({
+    expect(
+      checkResponse(
+        req,
+        { requestId: req.id, digest: req.digest, type: "approve-once", offeredId: "once" },
+        NOW,
+      ),
+    ).toMatchObject({
       ok: true,
     });
-    const r = checkResponse(req, { type: "set-limit", offeredId: "set-limit", draft }, NOW);
+    const r = checkResponse(
+      req,
+      { requestId: req.id, digest: req.digest, type: "set-limit", offeredId: "set-limit", draft },
+      NOW,
+    );
     expect(r).toMatchObject({ ok: true, rule: { id: "rule:req:1", kind: "budget" } });
     expect(
-      checkResponse(req, { type: "set-limit", offeredId: "set-limit", draft }, NOW, "r9"),
+      checkResponse(
+        req,
+        { requestId: req.id, digest: req.digest, type: "set-limit", offeredId: "set-limit", draft },
+        NOW,
+        "r9",
+      ),
     ).toMatchObject({ rule: { id: "r9" } });
   });
 
   it("refuses responses that were not offered, or that came too late", () => {
-    expect(checkResponse(req, { type: "approve-once", offeredId: "nope" }, NOW)).toEqual({
+    expect(
+      checkResponse(
+        req,
+        { requestId: req.id, digest: req.digest, type: "approve-once", offeredId: "nope" },
+        NOW,
+      ),
+    ).toEqual({
       ok: false,
       reason: "not-offered",
     });
-    expect(checkResponse(req, { type: "deny", offeredId: "once" }, NOW)).toEqual({
+    expect(
+      checkResponse(
+        req,
+        { requestId: req.id, digest: req.digest, type: "deny", offeredId: "once" },
+        NOW,
+      ),
+    ).toEqual({
       ok: false,
       reason: "not-offered",
     });
     const late = new Date(NOW.getTime() + APPROVAL_TTL_MS);
-    expect(checkResponse(req, { type: "approve-once", offeredId: "once" }, late)).toEqual({
+    expect(
+      checkResponse(
+        req,
+        { requestId: req.id, digest: req.digest, type: "approve-once", offeredId: "once" },
+        late,
+      ),
+    ).toEqual({
       ok: false,
       reason: "expired",
     });
@@ -435,7 +486,17 @@ describe("checkResponse", () => {
 
   it("refuses a malformed, foreign-currency or huge limit", () => {
     const bad = (d: RuleDraft) =>
-      checkResponse(req, { type: "set-limit", offeredId: "set-limit", draft: d }, NOW);
+      checkResponse(
+        req,
+        {
+          requestId: req.id,
+          digest: req.digest,
+          type: "set-limit",
+          offeredId: "set-limit",
+          draft: d,
+        },
+        NOW,
+      );
     expect(bad({ ...draft, limit: usd(0) })).toEqual({ ok: false, reason: "invalid-limit" });
     expect(bad({ ...draft, limit: money(100, "GBP") })).toEqual({
       ok: false,
@@ -449,7 +510,17 @@ describe("checkResponse", () => {
       ],
     };
     expect(
-      checkResponse(forged, { type: "set-limit", offeredId: "set-limit", draft }, NOW),
+      checkResponse(
+        forged,
+        {
+          requestId: forged.id,
+          digest: forged.digest,
+          type: "set-limit",
+          offeredId: "set-limit",
+          draft,
+        },
+        NOW,
+      ),
     ).toEqual({ ok: false, reason: "invalid-limit" });
   });
 
@@ -464,13 +535,27 @@ describe("checkResponse", () => {
       }),
     });
     const less = (keep: string[]) =>
-      checkResponse(r, { type: "share-less", offeredId: "share-less", keep }, NOW);
+      checkResponse(
+        r,
+        { requestId: r.id, digest: r.digest, type: "share-less", offeredId: "share-less", keep },
+        NOW,
+      );
     expect(less(["income"])).toMatchObject({ ok: true });
     expect(less(["income", "tx"])).toEqual({ ok: false, reason: "invalid-selection" });
     expect(less(["employer"])).toEqual({ ok: false, reason: "invalid-selection" });
     const optionalOnly = ask({ action: share({ fields: [field({ required: false })] }) });
     expect(
-      checkResponse(optionalOnly, { type: "share-less", offeredId: "share-less", keep: [] }, NOW),
+      checkResponse(
+        optionalOnly,
+        {
+          requestId: optionalOnly.id,
+          digest: optionalOnly.digest,
+          type: "share-less",
+          offeredId: "share-less",
+          keep: [],
+        },
+        NOW,
+      ),
     ).toEqual({ ok: false, reason: "invalid-selection" });
     const forged: ApprovalRequest = {
       ...req,
@@ -479,17 +564,47 @@ describe("checkResponse", () => {
       ],
     };
     expect(
-      checkResponse(forged, { type: "share-less", offeredId: "share-less", keep: ["income"] }, NOW),
+      checkResponse(
+        forged,
+        {
+          requestId: forged.id,
+          digest: forged.digest,
+          type: "share-less",
+          offeredId: "share-less",
+          keep: ["income"],
+        },
+        NOW,
+      ),
     ).toEqual({ ok: false, reason: "not-offered" });
   });
 
   it("needs an attestation for a step-up", () => {
     const r = ask({ action: stepUp() });
     expect(
-      checkResponse(r, { type: "step-up-done", offeredId: "step-up", attestation: "" }, NOW),
+      checkResponse(
+        r,
+        {
+          requestId: r.id,
+          digest: r.digest,
+          type: "step-up-done",
+          offeredId: "step-up",
+          attestation: "",
+        },
+        NOW,
+      ),
     ).toEqual({ ok: false, reason: "no-attestation" });
     expect(
-      checkResponse(r, { type: "step-up-done", offeredId: "step-up", attestation: "jws" }, NOW),
+      checkResponse(
+        r,
+        {
+          requestId: r.id,
+          digest: r.digest,
+          type: "step-up-done",
+          offeredId: "step-up",
+          attestation: "jws",
+        },
+        NOW,
+      ),
     ).toMatchObject({ ok: true });
   });
 });

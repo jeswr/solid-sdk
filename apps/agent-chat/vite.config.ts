@@ -10,10 +10,18 @@ export function basePath(value = "/"): string {
 }
 
 export default defineConfig(({ mode }) => ({
-  base: mode === "artifact" ? "./" : basePath(process.env.CLIENT_BASE_PATH || process.env.APP_BASE_PATH),
+  base:
+    mode === "artifact"
+      ? "./"
+      : basePath(process.env.CLIENT_BASE_PATH || process.env.APP_BASE_PATH),
   plugins: [react()],
   build:
     mode === "artifact"
-      ? { outDir: "dist-artifact", assetsInlineLimit: 100_000_000, cssCodeSplit: false, modulePreload: false }
+      ? {
+          outDir: "dist-artifact",
+          assetsInlineLimit: 100_000_000,
+          cssCodeSplit: false,
+          modulePreload: false,
+        }
       : {},
 }));

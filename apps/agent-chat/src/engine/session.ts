@@ -1,7 +1,8 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /** What the UI calls: send a message, choose a product. One task runs at a time. */
 import { type Core, liveCore, type SampleFn, scriptedCore } from "./core.js";
-import { Engine, type EngineOptions, StoppedError } from "./engine.js";
+import { Engine, type EngineOptions, type RunToken, StoppedError } from "./engine.js";
 
 export class Session {
   readonly engine: Engine;
@@ -17,19 +18,23 @@ export class Session {
     this.engine.setLiveAvailable(true);
   }
 
-  private run(task: () => Promise<unknown>): Promise<void> {
-    this.queue = this.queue.then(async () => {
-      await this.engine.ready;
-      if (this.engine.getState().stopped) return;
-      this.engine.setWorking(true);
-      try {
-        await task();
-      } catch (error) {
-        if (!(error instanceof StoppedError)) throw error;
-      } finally {
-        this.engine.setWorking(false);
-      }
-    });
+  private run(task: (run: RunToken) => Promise<unknown>): Promise<void> {
+    const run = this.engine.createRun();
+    this.queue = this.queue
+      .catch(() => undefined)
+      .then(async () => {
+        await this.engine.ready;
+        if (this.engine.getState().stopped) return;
+        this.engine.setWorking(true);
+        try {
+          this.engine.checkRun(run);
+          await task(run);
+        } catch (error) {
+          if (!(error instanceof StoppedError)) throw error;
+        } finally {
+          this.engine.setWorking(false);
+        }
+      });
     return this.queue;
   }
 
@@ -39,12 +44,12 @@ export class Session {
     const chatId = this.engine.getState().activeChat;
     this.engine.push(chatId, { type: "text", role: "user", text: trimmed });
     const core = this.engine.getState().core === "live" && this.live ? this.live : scriptedCore;
-    return this.run(() => core(this.engine, chatId, trimmed));
+    return this.run((run) => core(this.engine, chatId, trimmed, run));
   }
 
   choose(productId: string, variant: string, label: string): Promise<void> {
     const chatId = this.engine.getState().activeChat;
     this.engine.push(chatId, { type: "text", role: "user", text: label });
-    return this.run(() => this.engine.buy(chatId, productId, variant));
+    return this.run((run) => this.engine.buy(chatId, productId, variant, run));
   }
 }

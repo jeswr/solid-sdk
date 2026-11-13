@@ -11,7 +11,9 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:5191",
     browserName: "chromium",
     trace: "off",
-    ...(process.env.PW_CHROMIUM ? { launchOptions: { executablePath: process.env.PW_CHROMIUM } } : {}),
+    ...(process.env.PW_CHROMIUM
+      ? { launchOptions: { executablePath: process.env.PW_CHROMIUM } }
+      : {}),
   },
   projects: [
     { name: "phone", use: { viewport: { width: 390, height: 844 } } },
