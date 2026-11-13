@@ -93,7 +93,7 @@ uc('insurance-claim-photos', 'An insurance claim with photographs', 'finance', '
    'After an accident the agent files a claim: what happened, photographs of the damage, and a garage\'s estimate.',
    'The photographs and the account of what happened are not claims in any vocabulary.',
    ['fitness', 'source', 'evidence'],
-   [('The insurer\'s model reads the photo as minor damage; the garage says otherwise', 'ask-more', 'method-not-accepted'), ('The estimate is from a garage the insurer does not accept', 'ask-more', 'source-not-authoritative')],
+   [('The insurer\'s model reads the photo as minor damage; the garage says otherwise', 'ask-more', 'structured-form-required'), ('The estimate is from a garage the insurer does not accept', 'ask-more', 'source-not-authoritative')],
    'strains', 'The photograph travels as an original statement by the policyholder: it shows who sent it, not what it shows. Anything a model reads from it is model output and cannot settle the claim alone.',
    benchmarks=['converse'])
 uc('hardship-request', 'Asking a lender for breathing space', 'finance', 'B2C',
@@ -171,7 +171,7 @@ uc('fit-note-to-employer', 'Telling an employer about fitness for work', 'health
    'An employer needs to know whether someone can work and with what adjustments. It has no need for the diagnosis.',
    'The same fact is appropriate in one context and a breach in another.',
    ['disclosure', 'data-terms'],
-   [('The employer\'s agent asks what the condition is', 'stop', 'purpose-not-permitted')],
+   [('The employer\'s agent asks what the condition is', 'stop', 'excessive-scope')],
    'fits', 'The clinician signs the narrower statement itself. Purposes do the work that context does for people, as far as purposes can be listed.',
    assurance='by-source', benchmarks=['privacylens'])
 uc('care-abroad', 'Health data across a border', 'health', 'B2B2C',
@@ -307,7 +307,7 @@ uc('degree-recognition', 'Showing a degree to an employer abroad', 'education', 
    'A graduate shows a degree to an employer in another country, which has never heard of the university.',
    'Trust has to cross a border: the employer\'s root must reach the university\'s register.',
    ['source', 'fitness'],
-   [('No chain links the two national registers', 'ask-more', 'lookup-failed')],
+   [('No chain links the two national registers', 'ask-more', 'source-unknown')],
    'fits', 'The lookup path is own list, national root, then an international one. Where the chain is missing, the answer is "cannot establish", not "no".',
    suites={'authenticity': 'selective-disclosure', 'trust': 'federation'}, assurance='proved')
 uc('consent-for-a-child', 'A parent consents for a child', 'education', 'B2C',
@@ -385,7 +385,7 @@ uc('visa-application', 'Applying for a visa', 'travel', 'B2C',
    'An applicant sends a consulate proof of funds, an employer\'s letter and an itinerary.',
    'The consulate is in another country\'s trust framework, and the employer\'s letter is prose.',
    ['source', 'fitness', 'disclosure'],
-   [('The consulate cannot verify the foreign bank', 'ask-more', 'lookup-failed')],
+   [('The consulate cannot verify the foreign bank', 'ask-more', 'source-unknown')],
    'strains', 'Proof of funds fits once the two trust frameworks are linked. The employer\'s letter is prose, signed by the employer, and a consular officer reads it.',
    suites={'trust': 'federation'}, assurance='proved')
 
@@ -503,7 +503,7 @@ uc('cross-department-request', 'One department\'s agent asks another\'s for data
    'The people team\'s agent asks finance for salary costs by team for a planning exercise.',
    'Inside one organization everyone is "trusted", and purposes blur.',
    ['mandate', 'data-terms', 'disclosure'],
-   [('The request would reveal one named person\'s salary', 'stop', 'purpose-not-permitted')],
+   [('The request would reveal one named person\'s salary', 'stop', 'excessive-scope')],
    'fits', 'Mandates come from roles, not people. The same checks run; the registers are the organization\'s own.', assurance='by-source')
 uc('production-change', 'An operations agent changes a live system', 'enterprise', 'internal',
    ['An operations agent', 'An on-call engineer', 'A change register'],

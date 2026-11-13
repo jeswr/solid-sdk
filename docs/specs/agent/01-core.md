@@ -303,6 +303,15 @@ rules. Deciding to accept an issuer is validation, not verification.
   `source-unknown` and the question. A yes adds an entry limited to that party and purpose,
   with an expiry, and the message is checked again from the start. A no refuses it. An entry
   made this way is never treated as more than the principal's own word.
+- **CORE-IN-20. A statement that fails, and the message that carried it.** A statement that
+  fails the source or the fitness check is not admitted and stays out of memory, whatever
+  happens to the rest of the message. When the operation the message belongs to needs a
+  claim of that kind, and the sender could cure the failure with another statement (from a
+  source the receiver accepts, made by an accepted method, fresher, or complete), the outcome
+  for the message is ask for more: the receiver names the kind of claim and what it would
+  accept, and gives the reason the statement failed. When nothing the sender could supply
+  would cure it, the outcome is refuse. An action proposed later that depends on a claim
+  that was not admitted MUST stop, with the reason that claim failed for.
 
 ### 5.3 Outbound checks
 

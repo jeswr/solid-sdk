@@ -40,6 +40,15 @@ that is good enough for a task, and which statement prevails when two disagree.
 - **RL-7. Honesty about confidence.** How a number for confidence was arrived at. A number
   with no stated method MUST be treated as an opinion, and a model's own estimate of its
   confidence MUST be marked as uncalibrated unless a method is recorded.
+- **RL-8. A person may choose to rely.** Between people there is often no register and no
+  accepted method: one side can show only what it says about itself. A profile MAY name
+  kinds of claim that a person may choose to rely on. Such a statement is still not
+  admitted and never reaches the core. When an action depends on it, the outbound limits
+  and approval check gives ask the principal, with `method-not-accepted`, and the gate shows
+  the principal the statement, who made it and that nobody vouches for it (UNS-18, UNS-19).
+  A yes covers that action only. A profile SHOULD NOT name a kind of claim this way when
+  the action pays, or discloses personal data to anyone but the person who made the
+  statement.
 
 ## Which checks draw on it
 

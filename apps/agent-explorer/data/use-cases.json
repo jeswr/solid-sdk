@@ -834,7 +834,7 @@
     {
      "what": "The insurer's model reads the photo as minor damage; the garage says otherwise",
      "outcome": "ask-more",
-     "reason": "method-not-accepted"
+     "reason": "structured-form-required"
     },
     {
      "what": "The estimate is from a garage the insurer does not accept",
@@ -1297,7 +1297,7 @@
     {
      "what": "The employer's agent asks what the condition is",
      "outcome": "stop",
-     "reason": "purpose-not-permitted"
+     "reason": "excessive-scope"
     }
    ],
    "fit": "fits",
@@ -1993,7 +1993,7 @@
     {
      "what": "No chain links the two national registers",
      "outcome": "ask-more",
-     "reason": "lookup-failed"
+     "reason": "source-unknown"
     }
    ],
    "fit": "fits",
@@ -2373,7 +2373,7 @@
     {
      "what": "The consulate cannot verify the foreign bank",
      "outcome": "ask-more",
-     "reason": "lookup-failed"
+     "reason": "source-unknown"
     }
    ],
    "fit": "strains",
@@ -2972,7 +2972,7 @@
     {
      "what": "The request would reveal one named person's salary",
      "outcome": "stop",
-     "reason": "purpose-not-permitted"
+     "reason": "excessive-scope"
     }
    ],
    "fit": "fits",
