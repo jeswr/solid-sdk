@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 export {
   type AuthSessionPlugin,
   createNativeCodeDriver,
@@ -37,6 +38,10 @@ export {
   type PdfPreviewPlugin,
 } from "./pdf-preview.js";
 export { type CapacitorRuntime, isNativeApp, type Platform, platform } from "./platform.js";
+export {
+  type PredecessorOriginsValidation,
+  validatePredecessorOrigins,
+} from "./predecessor-origins.js";
 export {
   createSecureStore,
   type RefreshTokenIdentity,

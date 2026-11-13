@@ -97,3 +97,33 @@ asserts acceptance/reload only when the provider reports non-extractability; exp
 must be rejected and deleted, including on the simulator.
 Hardware key backing, APNs/FCM delivery, direct boot, OS permission prompts, extension expiry,
 and concurrent delivered-notification replacement still require native CI/device verification.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Predecessor secure-store migration (MOB-P3d)
+
+Bundled builds read `public/build-info.json` before the Capacitor bridge starts. The suite
+export's `PREDECESSOR_ORIGINS` setting is baked as `predecessorOrigins`, defaulting to the
+public deployed suite origin (`https://solid-suite.vercel.app` by default). Use a JSON array
+of at most 32 canonical https origins; duplicates are removed by the exporter. `[]` is an
+explicit empty migration plan. Paths (including `/`), userinfo, queries, fragments,
+noncanonical spellings, port zero, and `localhost` / `.localhost` hosts are rejected.
+`prepare-www` checks the list before copying, and both native implementations validate the
+entire list again before deleting anything. Sync-time environment variables do not override it.
+
+Android migrates in `MainActivity.load()` before `super.load()`; iOS migrates while preparing
+the web-view configuration, before `CapacitorBridge` construction. Only the listed namespaces'
+state files and their exact Keystore alias prefixes or Keychain service/key tags are deleted.
+The Android adapter also removes namespace-scoped interrupted-write temporary files.
+The current origin, unlisted origins and pending share batches are untouched. No token is
+read, decrypted or logged. Remote builds skip migration. Invalid metadata or storage failures
+fail closed before starting the bridge.
+
+A no-backup `securestore-migration` journal records notice intent before deletion and marks
+each predecessor complete only after its file and keys are removed. Every startup checks
+artifacts again, even with a marker, to resume interrupted deletion. `SuiteSecureStore` adds
+only `takeMigrationNotice()` → `{ signInAgain: boolean }`, which atomically consumes the
+pending notice. It accepts no origin or namespace and performs no migration. The native
+sign-in surface displays “Sign in again to continue” once; fresh installs show no notice.
+The JVM and XCTest migration tests cover partial artifacts, retries, malformed plans, namespace
+isolation, inbox retention and consumption failures. Android Gradle and iOS XCTest remain
+required CI checks, including the real Keychain namespace-deletion test on the simulator.

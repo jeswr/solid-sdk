@@ -77,6 +77,26 @@ which must allow the native Origin through `FEEDBACK_ALLOWED_ORIGINS`. When that
 cannot be reached, the guide works locally and Download my feedback preserves JSON,
 Markdown and audio together. See [README.md](README.md#pilot-feedback) for server setup.
 
+## Remote-session migration (MOB-P3d)
+
+`PREDECESSOR_ORIGINS` is a build setting containing a JSON array of canonical https origins,
+for example `'["https://solid-suite.vercel.app","https://old-suite.example:8443"]'`.
+It defaults to the origin of the public suite URL above (the deployed remote-mode suite), and
+`[]` explicitly disables predecessor deletion. The export bakes the deduplicated list into
+`build-info.json` as `predecessorOrigins`. At most 32 entries are accepted. Entries must be
+bare canonical origins: no trailing slash, path, userinfo, query, fragment, default-port spelling,
+port zero, or local `localhost` / `.localhost` host. `prepare-www` validates the baked list
+before copying the bundle; changing the environment at sync time cannot change the plan.
+
+Before starting the bridge, each bundled native shell validates the whole signed plan and
+removes only the listed origins' secure-store files and Keystore/Keychain entries. It checks
+artifacts on every startup, even after writing completion markers, and journals a pending
+notice before deletion so interruption can resume. Current-origin sessions, unlisted origins
+and native share-inbox batches are retained. Invalid plans or failed deletions stop startup.
+Remote builds never migrate. The native sign-in page consumes the plugin's one-shot boolean
+and shows “Sign in again to continue” only when predecessor session material was found.
+No migration API, namespace or stored value is available to JavaScript.
+
 ## Cached pod reads (MOB-P3e)
 
 The bundled app opens without a network. A first launch without a restored account still

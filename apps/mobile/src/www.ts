@@ -1,6 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY GPT-5.6 Codex
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { validatePredecessorOrigins } from "@jeswr/suite-native";
 import { type MobileEnv, suiteMode, suiteOrigin } from "./config.ts";
 
 const escapeXml = (value: string) =>
@@ -77,9 +79,13 @@ export function checkBundle(exportDir: URL): void {
   if (info.target !== "native")
     throw new Error("The suite export was not built for the native target");
   const clientId = typeof info.clientIdUrl === "string" ? URL.parse(info.clientIdUrl) : null;
-  if (!clientId || clientId.protocol !== "https:" || clientId.username || clientId.password) {
+  if (clientId?.protocol !== "https:" || clientId.username || clientId.password) {
     throw new Error("The suite export's Client ID URL must be https");
   }
+  const predecessors = validatePredecessorOrigins(info.predecessorOrigins);
+  if (!predecessors.valid) throw new Error("Invalid predecessorOrigins");
+  if (new Set(predecessors.origins).size !== predecessors.origins.length)
+    throw new Error("Duplicate predecessorOrigins");
   for (const name of ["route-manifest.json", "404.html", "index.html"]) {
     if (!existsSync(file(name))) throw new Error(`The suite export has no ${name}`);
   }
