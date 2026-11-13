@@ -1,0 +1,548 @@
+[
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "mandate",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "recipient",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "disclosure",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "data-terms",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "limits-approval",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "evidence",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "transport",
+    "kind": "message-out"
+  },
+  {
+    "agent": "lender",
+    "part": "transport",
+    "kind": "message-in"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "integrity",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "source",
+    "verdict": "not-applicable",
+    "reason": "no-claims"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "authority",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "terms",
+    "verdict": "not-applicable",
+    "reason": "not-yet-agreed"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "fitness",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "mandate",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "recipient",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "disclosure",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "data-terms",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "limits-approval",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "evidence",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "transport",
+    "kind": "message-out"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "transport",
+    "kind": "message-in"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "integrity",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "source",
+    "verdict": "not-applicable",
+    "reason": "no-claims"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "authority",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "terms",
+    "verdict": "not-applicable",
+    "reason": "not-yet-agreed"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "fitness",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "mandate",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "recipient",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "disclosure",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "data-terms",
+    "verdict": "not-applicable",
+    "reason": "no-personal-data"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "limits-approval",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "evidence",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "transport",
+    "kind": "message-out"
+  },
+  {
+    "agent": "lender",
+    "part": "transport",
+    "kind": "message-in"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "integrity",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "source",
+    "verdict": "not-applicable",
+    "reason": "no-claims"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "authority",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "terms",
+    "verdict": "not-applicable",
+    "reason": "not-yet-agreed"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "fitness",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "mandate",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "recipient",
+    "verdict": "not-applicable",
+    "reason": "no-register-for-party"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "disclosure",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "data-terms",
+    "verdict": "not-applicable",
+    "reason": "no-personal-data"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "limits-approval",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "evidence",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "transport",
+    "kind": "message-out"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "transport",
+    "kind": "message-in"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "integrity",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "source",
+    "verdict": "not-applicable",
+    "reason": "no-claims"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "authority",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "terms",
+    "verdict": "not-applicable",
+    "reason": "not-yet-agreed"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "fitness",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "inbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "mandate",
+    "verdict": "fail",
+    "reason": "not-authorised"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "decision",
+    "verdict": "fail",
+    "reason": "not-authorised"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "mandate",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "recipient",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "disclosure",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "data-terms",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "limits-approval",
+    "verdict": "not-applicable",
+    "reason": "no-action-intent"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "evidence",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "transport",
+    "kind": "message-out"
+  },
+  {
+    "agent": "lender",
+    "part": "transport",
+    "kind": "message-in"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "integrity",
+    "verdict": "pass"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "source",
+    "verdict": "not-applicable",
+    "reason": "no-claims"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "authority",
+    "verdict": "not-applicable",
+    "reason": "conversation-bound"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "terms",
+    "verdict": "not-applicable",
+    "reason": "not-yet-agreed"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "check",
+    "check": "fitness",
+    "verdict": "not-applicable",
+    "reason": "not-in-configuration"
+  },
+  {
+    "agent": "lender",
+    "part": "inbound-gate",
+    "kind": "decision",
+    "verdict": "pass"
+  }
+]
