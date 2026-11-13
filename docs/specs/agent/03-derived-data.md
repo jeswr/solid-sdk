@@ -123,6 +123,17 @@ rely on besides the sources and the rule.
   that each input's terms permit the derivation (DER-22). The receiver MUST verify the proof
   against the rule digest in the record. Showing some claims of a statement and
   withholding others is the simplest case: the rule is a projection.
+- **DER-13a. A proof that binds less.** Some proofs establish that the output is the
+  rule's result on some inputs, and do not establish that every input carries a valid
+  proof from a named issuer, or that the inputs are about the subject named. Such a proof
+  is not `proved`. The record MUST state the assurance `attested`, with the holder as the
+  deriver, and MAY carry the proof with a `proofBinds` list that names what it does
+  establish: `rule`, `issuers`, `subject`, `fresh`, `complete`. A record that states
+  `proved` MUST list at least `rule`, `issuers` and `subject`. The receiver treats the
+  weaker record under DER-15: unless the holder is accepted to attest derivations of this
+  kind, the claim has the method `reported-by-subject`. A profile MAY accept `attested`
+  with a stated `proofBinds` for a purpose. It MUST NOT count it as `proved`, and a request
+  that accepts only `proved` (DER-16) is answered by disclosing the inputs or not at all.
 - **DER-14. `joint`.** Each holder MUST sign an input attestation as the data access layer
   defines. The record names the computing parties and the assumption. The receiver MUST
   verify every attestation and MUST treat a missing one as a failed derivation, never as a
