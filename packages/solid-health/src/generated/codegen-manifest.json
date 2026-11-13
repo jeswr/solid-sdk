@@ -14,7 +14,7 @@
     "codegen.config.json": "3166197442c9b4d81d4e3edbfddff67214eda3a8f5e50db917fea34876a700db"
   },
   "outputs": {
-    "model.d.ts": "274cec1a6f95cfd3a5eeee868240f1c7b05d3aadc2d86928df66623a09737152",
+    "model.d.ts": "be105fa832979302950196e3a21fa76fd297d0d5032f0eae330cd299723f2b8a",
     "model.js": "efba83d1878fd566a44efa685d5e21fa5ec6aba4cd79c21429bd4599e08396dd",
     "model.json": "bea87e7b02c099d443a759ec0554bd136fc10aa3c7d92771799c58e94594fedb",
     "shapes.ttl": "0678304a0ad4189e85ba9a6ed37b365ab57c4336d8b9baf5b2ba5ecf6e3a988b"
