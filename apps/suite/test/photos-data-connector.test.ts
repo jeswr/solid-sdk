@@ -59,21 +59,23 @@ describe("Google Photos read-only source", () => {
     expect(library.failures).toEqual([]);
     expect(library.items.map((photo) => photo.name)).toEqual([
       "Native photo",
+      "VID_1003.mp4",
       "IMG_4822.heic",
       "IMG_4821.jpg",
     ]);
     expect(library.groups.map((group) => group.key)).toEqual([
       "2026-11-01",
+      "2026-05-22",
       "2026-05-21",
       "2026-05-20",
     ]);
     const imported = library.items.filter((photo) => photo.source === "google-photos");
-    expect(imported).toHaveLength(2);
+    expect(imported).toHaveLength(3);
     for (const photo of imported) {
       expect(photo).toMatchObject({ url: DOCUMENT, readOnly: true });
       await expect(saveKeywords(s.io, photo, ["unchanged"])).rejects.toThrow("read-only");
     }
-    expect(imported[1]?.exif).toMatchObject({ pixelWidth: 4032, pixelHeight: 3024 });
+    expect(imported[2]?.exif).toMatchObject({ pixelWidth: 4032, pixelHeight: 3024 });
     expect(
       s.requests.every(
         (request) =>
@@ -90,7 +92,7 @@ describe("Google Photos read-only source", () => {
       body: "invalid RDF",
     });
     const partial = await listLibrary(s.io);
-    expect(partial.items).toHaveLength(2);
+    expect(partial.items).toHaveLength(3);
     expect(partial.failures.map((failure) => failure.url)).toEqual([`${SOURCE}broken.ttl`]);
     s.intercept((url) => (url === SOURCE ? new Response(null, { status: 403 }) : undefined));
     expect((await listLibrary(s.io)).failures).toMatchObject([

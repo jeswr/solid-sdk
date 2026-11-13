@@ -11,7 +11,7 @@ export interface TakeoutItem {
   key: string;
   name: string;
   path: string;
-  /** The image, typed from its extension when the browser gave no type. */
+  /** The media, with MP4/MOV/WebM types inferred from their extension. */
   file: Blob;
   metadata?: CaptureMetadata | undefined;
 }
@@ -22,9 +22,9 @@ export interface TakeoutAlbum {
 export interface TakeoutPlan {
   items: TakeoutItem[];
   albums: TakeoutAlbum[];
-  /** Photos whose date, place or caption came from a Takeout sidecar. */
+  /** Items whose date, place or caption came from a Takeout sidecar. */
   withDetails: number;
-  /** Videos are not supported by Photos yet. */
+  /** Unique supported videos included in items. */
   videos: number;
   /** Files that are neither photos, videos nor Takeout metadata. */
   unsupported: number;
@@ -43,6 +43,11 @@ const IMAGE_TYPES: Record<string, string> = {
   tif: "image/tiff",
   tiff: "image/tiff",
   avif: "image/avif",
+};
+const VIDEO_TYPES: Record<string, string> = {
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
 };
 const VIDEO = /\.(mp4|m4v|mov|3gp|webm|avi|mkv|mpg|mpeg|wmv)$/iu;
 const SUPPLEMENTAL = ".supplemental-metadata";
@@ -172,7 +177,6 @@ export async function planTakeout(
   { timeZone = "UTC" }: PlanOptions = {},
 ): Promise<TakeoutPlan> {
   const folders = new Map<string, { media: TakeoutEntry[]; json: TakeoutEntry[] }>();
-  let videos = 0;
   let unsupported = 0;
   let trashed = 0;
   for (const entry of entries) {
@@ -184,8 +188,7 @@ export async function planTakeout(
     const group = folders.get(folder) ?? { media: [], json: [] };
     folders.set(folder, group);
     if (/\.json$/iu.test(name)) group.json.push(entry);
-    else if (IMAGE_TYPES[extension(name)]) group.media.push(entry);
-    else if (VIDEO.test(name)) videos += 1;
+    else if (IMAGE_TYPES[extension(name)] || VIDEO_TYPES[extension(name)]) group.media.push(entry);
     else unsupported += 1;
   }
   const items = new Map<string, TakeoutItem>();
@@ -247,12 +250,14 @@ export async function planTakeout(
           withDetails += 1;
         }
       } else {
-        const type = entry.file.type || (IMAGE_TYPES[extension(name)] as string);
+        const type =
+          VIDEO_TYPES[extension(name)] ??
+          (entry.file.type || (IMAGE_TYPES[extension(name)] as string));
         items.set(key, {
           key,
           name,
           path: entry.path,
-          file: entry.file.type ? entry.file : entry.file.slice(0, entry.file.size, type),
+          file: entry.file.type === type ? entry.file : entry.file.slice(0, entry.file.size, type),
           metadata,
         });
         if (detailed(metadata)) withDetails += 1;
@@ -266,7 +271,7 @@ export async function planTakeout(
       .filter((album) => album.keys.size)
       .map((album) => ({ title: album.title, keys: [...album.keys] })),
     withDetails,
-    videos,
+    videos: [...items.values()].filter((item) => item.file.type.startsWith("video/")).length,
     unsupported,
     duplicates,
     trashed,

@@ -129,6 +129,7 @@ describe("planning a Takeout import", () => {
         "IMG_5.jpg",
         "IMG_6.jpg",
         "IMG_7.jpg",
+        "VID_1.MP4",
         long,
       ].sort(),
     );
@@ -146,6 +147,7 @@ describe("planning a Takeout import", () => {
         keys: [
           byName.get("IMG_1.jpg")?.key,
           byName.get("IMG_5.jpg")?.key,
+          byName.get("VID_1.MP4")?.key,
           byName.get("IMG_6.jpg")?.key,
         ],
       },

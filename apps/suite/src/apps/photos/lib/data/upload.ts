@@ -60,6 +60,7 @@ export async function uploadFiles(
         dimensions: async () => ({
           width: ready.photo.exif.pixelWidth as number,
           height: ready.photo.exif.pixelHeight as number,
+          durationSeconds: ready.photo.durationSeconds,
         }),
         stripLocation: async () => ready.original,
         thumbnail: async () => ready.thumbnail,

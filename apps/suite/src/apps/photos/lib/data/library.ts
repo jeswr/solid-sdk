@@ -67,7 +67,15 @@ export function searchPhotos(
     const albumNames = albums
       .filter((album) => album.members.includes(photo.ref))
       .map((album) => album.name);
-    const text = [photo.name, photo.description, ...photo.keywords, date, dateText, ...albumNames]
+    const text = [
+      photo.kind === "video" ? "video" : "photo",
+      photo.name,
+      photo.description,
+      ...photo.keywords,
+      date,
+      dateText,
+      ...albumNames,
+    ]
       .join(" ")
       .toLocaleLowerCase();
     return terms.every((term) => text.includes(term));
