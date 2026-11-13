@@ -5,6 +5,44 @@ import type { DataFactory, DatasetCore, Term } from "@rdfjs/types";
 import type { EntityWrapper, ModelManifest, ParseOptions } from "@jeswr/model-runtime";
 import type { Store } from "n3";
 
+export interface ActionOutcomeData {
+  "effect": "https://jeswr.org/ns/site-action#ReversibleWrite" | "https://jeswr.org/ns/site-action#IrreversibleWrite" | "https://jeswr.org/ns/site-action#Payment";
+  "status": "https://jeswr.org/ns/site-action#Completed" | "https://jeswr.org/ns/site-action#Failed";
+  "target": string;
+  "amount"?: number;
+  "currency"?: string;
+  "result"?: string;
+}
+
+export interface ActionOutcomeWrapper extends EntityWrapper {
+  "effect"?: "https://jeswr.org/ns/site-action#ReversibleWrite" | "https://jeswr.org/ns/site-action#IrreversibleWrite" | "https://jeswr.org/ns/site-action#Payment";
+  "status"?: "https://jeswr.org/ns/site-action#Completed" | "https://jeswr.org/ns/site-action#Failed";
+  "target"?: string;
+  "amount"?: number;
+  "currency"?: string;
+  "result"?: string;
+}
+
+export interface ActionOutcomeEntity {
+  readonly name: "ActionOutcome";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => ActionOutcomeWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: ActionOutcomeData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): ActionOutcomeData | undefined;
+  serialize(resourceUrl: string, data: ActionOutcomeData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<ActionOutcomeData | undefined>;
+}
+
 export interface CsrfRuleData {
   "source": string;
   "target": string;
@@ -547,6 +585,7 @@ export interface GeneratedModel {
   readonly manifest: ModelManifest;
   readonly prefixes: Record<string, string>;
   readonly entities: {
+  readonly ActionOutcome: ActionOutcomeEntity;
   readonly CsrfRule: CsrfRuleEntity;
   readonly CsrfSource: CsrfSourceEntity;
   readonly CsrfTarget: CsrfTargetEntity;

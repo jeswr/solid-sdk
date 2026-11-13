@@ -30,7 +30,7 @@ while (result.status === "needs-approval") {
 ```
 
 - `createExecutor({ model, sessions, gate?, fetch?, now?, persona?, maxRequests?, maxRedirects?, maxResponseBytes?, maxExecutionMs? })`
-- `execute(request, { approvalId? })` returns `{ status, target?, observations, approval?, error?,
+- `execute(request, { approvalId? })` returns `{ status, target?, outcome?, observations, approval?, error?,
   errorKind?, candidates?, requests }`. `status` is one of `done`, `needs-approval`, `denied`,
   `refused` (unsafe or unverifiable money; see `error`), `no-path` (the host should use the
   fallback browser), `ambiguous` (see `candidates`) or `error`.
@@ -50,6 +50,18 @@ while (result.status === "needs-approval") {
   includes payments already sent in the same flow, so the host enforces the authorized total.
   The exported `moneyFields(request)` helper reads planner claims only; conflicting claims throw
   `BindingError`. It is not sufficient to authorize a payment.
+
+Every completed effectful operation or flow returns an `outcome` (`ActionOutcome` from
+site-model): `{ status: "completed", target: <label>, effect, amount?, currency?, result? }`.
+Terminal errors, refusals and denials return `status: "failed"`; reads and approval pauses
+have no outcome. A failed flow may have completed earlier writes.
+The first observation is an executor-authored receipt: `a sab:ActionOutcome`,
+`sab:status sab:Completed` (or `sab:Failed`), `sab:target` (the label) and `sab:effect`.
+Payments carry the authorized total as `schema:price` / `schema:priceCurrency`, rather
+than the planner's spending cap. When the final extraction or a write's 303 Location
+identifies a created item, `schema:result` points to its on-origin IRI and the receipt
+includes that item's trusted facts. Secret identities and URLs containing queries are
+excluded. The remaining observations retain their original step order and untrusted wrappers.
 
 ## Behaviour
 

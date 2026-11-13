@@ -155,7 +155,7 @@ describe("money from trusted reads in the same flow", () => {
     }).execute(request());
     expect(result.status).toBe("refused");
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.observations[0]?.turtle).toContain("sab:UntrustedText");
+    expect(result.observations.some((o) => o.turtle.includes("sab:UntrustedText"))).toBe(true);
   });
 
   it("ignores off-origin items and unrelated products, then takes the first matching item", async () => {

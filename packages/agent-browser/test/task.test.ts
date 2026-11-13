@@ -301,4 +301,128 @@ describe("runTask", () => {
     expect(trace.steps[0]?.status).toBe("denied");
     expect(execute).toHaveBeenCalledTimes(1);
   });
+
+  it("blocks a resolved repeat before executing or asking approval, and allows a different product", async () => {
+    const execute = vi.fn<Executor["execute"]>().mockResolvedValue(done);
+    const executor = executorFor(execute);
+    const approver = vi.fn(() => "approve" as const);
+    const trace = await runTask({
+      goal: "Buy",
+      model,
+      executor,
+      approver,
+      observationBudget: 0,
+      planner: scriptedPlanner([
+        { kind: "act", turtle: buy },
+        // Same bound id/name, different RDF identity, spelling and price cap.
+        {
+          kind: "act",
+          turtle:
+            '[] a schema:BuyAction; schema:object [schema:sku "104"; schema:name "Trail Runner sneakers"]; schema:price "25".',
+        },
+        (input) => {
+          expect(input.history.at(-1)).toMatchObject({
+            status: "repeat-blocked",
+            error: expect.stringContaining("already done in this task:"),
+          });
+          expect(input.history.at(-1)?.error).toContain(
+            "ask the person if they really want another",
+          );
+          return {
+            kind: "act",
+            turtle: buy
+              .replaceAll("104", "105")
+              .replaceAll("Trail Runner sneakers", "Road Runner sneakers"),
+          };
+        },
+        { kind: "answer", text: "Done" },
+      ]),
+    });
+    expect(trace.steps.map((s) => s.status)).toEqual(["done", "repeat-blocked", "done", "answer"]);
+    expect(trace.steps[1]?.statuses).toEqual(["repeat-blocked"]);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(approver).not.toHaveBeenCalled();
+  });
+
+  it("resolves defaults, permits changed quantity and permits repeated reads", async () => {
+    const quantityModel = modelFixture();
+    quantityModel.flows = [];
+    const pay = quantityModel.operations[2];
+    if (!pay) throw new Error("Missing checkout");
+    pay.request.bodyTemplate = '{"id":{id},"qty":{qty}}';
+    pay.inputs.push({
+      name: "qty",
+      path: ["https://schema.org/orderQuantity"],
+      range: "http://www.w3.org/2001/XMLSchema#integer",
+      required: false,
+      location: "body",
+      default: "1",
+    });
+    const execute = vi.fn<Executor["execute"]>().mockResolvedValue(done);
+    const executor = { ...executorFor(execute), model: quantityModel };
+    const trace = await runTask({
+      goal: "Buy",
+      model: quantityModel,
+      executor,
+      approver: () => "approve",
+      planner: scriptedPlanner([
+        { kind: "act", turtle: buy },
+        {
+          kind: "act",
+          turtle: buy.replace("a schema:BuyAction;", "a schema:BuyAction; schema:orderQuantity 1;"),
+        },
+        {
+          kind: "act",
+          turtle: buy.replace("a schema:BuyAction;", "a schema:BuyAction; schema:orderQuantity 2;"),
+        },
+        { kind: "act", turtle: search },
+        { kind: "act", turtle: search },
+        { kind: "answer", text: "Done" },
+      ]),
+    });
+    expect(trace.steps.map((s) => s.status)).toEqual([
+      "done",
+      "repeat-blocked",
+      "done",
+      "done",
+      "done",
+      "answer",
+    ]);
+    expect(execute).toHaveBeenCalledTimes(4);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("allows retries after failure, resets the guard per task, and allowRepeats=%s", async (allowRepeats) => {
+    const execute = vi
+      .fn<Executor["execute"]>()
+      .mockResolvedValueOnce({ ...done, status: "error" })
+      .mockResolvedValue(done);
+    const executor = executorFor(execute);
+    const run = () =>
+      runTask({
+        goal: "Buy",
+        model,
+        executor,
+        allowRepeats,
+        approver: () => "approve",
+        planner: scriptedPlanner([
+          { kind: "act", turtle: buy },
+          { kind: "act", turtle: buy },
+          { kind: "act", turtle: buy },
+          { kind: "answer", text: "Done" },
+        ]),
+      });
+    const first = await run();
+    expect(first.steps.map((s) => s.status)).toEqual([
+      "error",
+      "done",
+      allowRepeats ? "done" : "repeat-blocked",
+      "answer",
+    ]);
+    const second = await run();
+    expect(second.steps[0]?.status).toBe("done");
+    expect(execute).toHaveBeenCalledTimes(allowRepeats ? 6 : 3);
+  });
 });

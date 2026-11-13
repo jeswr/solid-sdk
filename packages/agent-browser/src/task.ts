@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { ExecutionResult } from "@jeswr/site-executor";
+import { approvalDigest, effectiveEffect, matchRequest, summarise } from "@jeswr/site-executor";
 import { parseActionRequest, renderCatalogue } from "@jeswr/site-model";
 import { budgetHistory, plainText, promptFor } from "./planner.js";
-import { readQuads, writeQuads } from "./rdf.js";
+import { orderObservations, readQuads, writeQuads } from "./rdf.js";
 import type {
   ApprovalDecision,
   PlannerHistory,
@@ -50,6 +51,7 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
     throw new Error("Invalid task bounds.");
   const redact = (text: string) => executor.redact?.(text) ?? text;
   const history: PlannerHistory[] = [];
+  const completed = new Map<string, string>();
   const start = performance.now();
   const trace: TaskTrace = {
     format: "agent-browser-trace/0.1",
@@ -116,6 +118,49 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
         });
         continue;
       }
+      // Resolve with the executor's matching rules: RDF node labels, property order,
+      // omitted defaults and an item's SKU/IRI spelling do not change the action.
+      let action: { digest: string; summary: string } | undefined;
+      try {
+        const match = matchRequest(executor.model, request);
+        if (match.kind === "match") {
+          const effect = effectiveEffect(executor.model, match.flow, match.operation);
+          if (effect !== "read")
+            action = {
+              digest: approvalDigest({
+                site: executor.model.site,
+                modelVersion: executor.model.version,
+                target: match.target,
+                effect,
+                inputs: match.inputs,
+              }),
+              summary: `${summarise(request, match.target, executor.model.site, {})} (${Object.entries(
+                match.inputs,
+              )
+                .map(([name, value]) => `${name}=${value}`)
+                .join(", ")})`,
+            };
+        }
+      } catch {
+        // Invalid/unmatched actions still go to the executor for its normal safe error.
+      }
+      const previous = action && completed.get(action.digest);
+      if (!options.allowRepeats && previous !== undefined) {
+        step.status = "repeat-blocked";
+        step.statuses.push(step.status);
+        step.error = plainText(
+          redact(
+            `already done in this task: ${previous}; ask the person if they really want another`,
+          ),
+        );
+        history.push({
+          request: step.request,
+          status: step.status,
+          observations: "",
+          error: step.error,
+        });
+        continue;
+      }
       try {
         result = await executor.execute(request);
       } catch {
@@ -171,15 +216,8 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
         step.statuses.push(result.status);
       }
       step.status = result.status;
-      // Reparse each graph to give its blank nodes their own scope before combining observations.
-      const quads = result.observations.flatMap((o) => {
-        try {
-          return readQuads(redact(o.turtle));
-        } catch {
-          return [];
-        }
-      });
-      step.observations = quads.length ? writeQuads(quads) : "";
+      if (result.status === "done" && action) completed.set(action.digest, action.summary);
+      step.observations = orderObservations(result.observations.map((o) => redact(o.turtle)));
       if (result.error) step.error = plainText(redact(result.error));
       if (result.candidates?.length)
         step.error = `Ambiguous action: ${plainText(redact(result.candidates.join(", ")))}`;

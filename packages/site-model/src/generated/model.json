@@ -15,6 +15,85 @@
   },
   "entities": [
     {
+      "name": "ActionOutcome",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#ActionOutcome"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "effect",
+          "predicate": "https://jeswr.org/ns/site-action#effect",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://jeswr.org/ns/site-action#ReversibleWrite",
+            "https://jeswr.org/ns/site-action#IrreversibleWrite",
+            "https://jeswr.org/ns/site-action#Payment"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "status",
+          "predicate": "https://jeswr.org/ns/site-action#status",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://jeswr.org/ns/site-action#Completed",
+            "https://jeswr.org/ns/site-action#Failed"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "target",
+          "predicate": "https://jeswr.org/ns/site-action#target",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "amount",
+          "predicate": "https://schema.org/price",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        },
+        {
+          "name": "currency",
+          "predicate": "https://schema.org/priceCurrency",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "result",
+          "predicate": "https://schema.org/result",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        }
+      ]
+    },
+    {
       "name": "CsrfRule",
       "typeIris": [
         "https://jeswr.org/ns/site-action#CsrfRule"

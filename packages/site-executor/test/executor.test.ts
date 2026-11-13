@@ -47,6 +47,7 @@ describe("reads", () => {
       actionRequest(`[] a schema:SearchAction ; schema:query "sneakers" .`),
     );
     expect(result.status).toBe("done");
+    expect(result.outcome).toBeUndefined();
     expect(result.requests).toBe(1);
     expect(result.target?.id).toBe("urn:op:search");
     const obs = result.observations[0];
@@ -114,6 +115,7 @@ describe("approval gate", () => {
     const executor = createExecutor({ model: shopModel(shop.url), sessions, gate });
     const first = await executor.execute(addToCart());
     expect(first.status).toBe("needs-approval");
+    expect(first.outcome).toBeUndefined();
     expect(first.requests).toBe(0);
     expect(shop.requests).toHaveLength(0);
     const approval = first.approval;
@@ -416,6 +418,7 @@ describe("flows", () => {
     const r = await executor.execute(buy(), { approvalId: checkout.approval?.id as string });
     expect(r.status).toBe("done");
     expect(r.observations.map((o) => o.operation)).toEqual([
+      "urn:flow:buy",
       "urn:op:search",
       "urn:op:add-to-cart",
       "urn:op:checkout",
@@ -438,7 +441,22 @@ describe("flows", () => {
     expect(shop.requests[5]?.body).toBe(
       `delivery=express&amount=20&currency=GBP&csrf_token=${CSRF}`,
     );
-    const order = new Store(new Parser().parse(r.observations[2]?.turtle ?? ""));
+    expect(r.outcome).toEqual({
+      status: "completed",
+      target: "Buy a product",
+      effect: "payment",
+      amount: "20",
+      currency: "GBP",
+      result: `${shop.url}/orders/1000`,
+    });
+    const receipt = new Store(new Parser().parse(r.observations[0]?.turtle ?? ""));
+    expect(receipt.getQuads(null, `${RDF}type`, `${SAB}ActionOutcome`, null)).toHaveLength(1);
+    expect(receipt.getQuads(null, `${SAB}status`, `${SAB}Completed`, null)).toHaveLength(1);
+    expect(receipt.getQuads(null, `${S}result`, `${shop.url}/orders/1000`, null)).toHaveLength(1);
+    expect(
+      receipt.getQuads(`${shop.url}/orders/1000`, `${S}orderNumber`, null, null)[0]?.object.value,
+    ).toBe("1000");
+    const order = new Store(new Parser().parse(r.observations.at(-1)?.turtle ?? ""));
     expect(order.getQuads(null, `${S}orderNumber`, null, null)[0]?.object.value).toBe("1000");
     noSecrets(r);
   });
@@ -453,7 +471,8 @@ describe("flows", () => {
     expect(r.status).toBe("error");
     expect(r.errorKind).toBe("binding");
     expect(r.error).toContain("step 1 (Add to cart) failed");
-    expect(r.observations).toHaveLength(1);
+    expect(r.observations).toHaveLength(2);
+    expect(r.outcome).toMatchObject({ status: "failed", effect: "payment" });
     expect(shop.requests).toHaveLength(1);
   });
 

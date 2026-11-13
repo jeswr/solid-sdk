@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Semantic agent browser: the in-memory contract shared by @jeswr/site-model,
 // @jeswr/site-profiler and @jeswr/site-executor. Design of record:
 // https://claude.ai/artifact/HPiNzsDzndQ1aGJFgqHeyJ
@@ -187,4 +188,17 @@ export interface Observation {
   /** Turtle of the extracted graph (prefixed), untrusted literals marked per FieldRule.untrusted. */
   turtle: string;
   itemCount: number;
+}
+
+/** Executor-authored receipt for a terminal effectful execution, never a planner claim. */
+export interface ActionOutcome {
+  status: 'completed' | 'failed';
+  /** Operation or flow label. */
+  target: string;
+  effect: Exclude<EffectClass, 'read'>;
+  /** Authorized total, rather than the planner's spending cap. */
+  amount?: string;
+  currency?: string;
+  /** Created item's trusted, on-origin IRI, when identified. */
+  result?: string;
 }

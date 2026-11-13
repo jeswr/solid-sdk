@@ -3,9 +3,11 @@
 import type { ApprovalRequest, ExecutionStatus, Executor } from "@jeswr/site-executor";
 import type { SiteModel } from "@jeswr/site-model";
 
+export type TaskStatus = ExecutionStatus | "repeat-blocked";
+
 export interface PlannerHistory {
   request: string;
-  status: ExecutionStatus;
+  status: TaskStatus;
   observations: string;
   error?: string;
 }
@@ -49,6 +51,8 @@ export interface RunTaskOptions {
   persona?: string;
   /** Total observation characters across planner history, newest first. */
   observationBudget?: number;
+  /** Permit identical completed effectful actions in this task. Default false. */
+  allowRepeats?: boolean;
 }
 
 export interface TraceStep {
@@ -56,7 +60,7 @@ export interface TraceStep {
   kind: PlannerOutput["kind"] | "error";
   promptTokensEstimate: number;
   request?: string;
-  status: ExecutionStatus | "answer" | "ask";
+  status: TaskStatus | "answer" | "ask";
   statuses: string[];
   approval?: {
     summary: string;
