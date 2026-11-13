@@ -35,7 +35,12 @@ import type { Approver, TraceStep } from "../types.js";
 import { browserWriteFingerprint } from "./fingerprint.js";
 import { candidatesFromTrace } from "./learn.js";
 import type { BrowserAction, BrowserSnapshot } from "./planner.js";
-import { fallbackRedactor, redactSnapshot } from "./redact.js";
+import {
+  escapeControls,
+  fallbackRedactor,
+  redactSnapshot,
+  rememberSessionHeader,
+} from "./redact.js";
 
 const sensitive =
   /pass(word|wd)?|pwd|secret|token|csrf|xsrf|authenticity|antiforgery|nonce|requestverification|authorization|session|api.?key|cvv|card.?number|form.?key/i;
@@ -114,6 +119,7 @@ export class BrowserDriver {
   private forms: FormInfo[] = [];
   private initialCookies = "[]";
   private learnedCandidates: EndpointCandidate[] | undefined;
+  private learningCookies: { name: string; value: string }[] = [];
   requests = 0;
   refreshError: string | undefined;
 
@@ -148,10 +154,8 @@ export class BrowserDriver {
   private async open(): Promise<void> {
     this.session = await this.options.sessions.get(this.origin, this.options.persona);
     for (const c of this.session?.cookies ?? []) this.secrets.add(c.value);
-    for (const value of Object.values(this.session?.headers ?? {})) {
-      this.secrets.add(value);
-      this.secrets.add(value.split(/\s+/).at(-1) ?? "");
-    }
+    for (const value of Object.values(this.session?.headers ?? {}))
+      rememberSessionHeader(this.secrets, value);
     this.browser = await (this.options.launch ?? launchChromium)();
     this.context = await this.browser.newContext({
       serviceWorkers: "block",
@@ -255,7 +259,7 @@ export class BrowserDriver {
   }
 
   redact(text: string): string {
-    return fallbackRedactor(this.secrets)(text);
+    return redactSnapshot(text, fallbackRedactor(this.secrets), this.secrets);
   }
 
   get writesCompleted(): boolean {
@@ -277,9 +281,8 @@ export class BrowserDriver {
 
   private quote(value: string, max = 120): string {
     const clean = this.redact(value);
-    return JSON.stringify(clean.slice(0, max) + (clean.length > max ? " (truncated)" : "")).replace(
-      /[\u007f-\u009f\u2028\u2029]/g,
-      (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    return escapeControls(
+      JSON.stringify(clean.slice(0, max) + (clean.length > max ? " (truncated)" : "")),
     );
   }
 
@@ -339,7 +342,7 @@ export class BrowserDriver {
       // An explicit Cookie header prevents the API context from forwarding its jar itself.
       headers.cookie = cookieHeader(await this.context.cookies(url));
       for (const [key, value] of Object.entries(this.session?.headers ?? {}))
-        headers[key.toLowerCase()] = value;
+        headers[key.toLowerCase()] = rememberSessionHeader(this.secrets, value);
       for (const c of await this.context.cookies()) this.secrets.add(c.value);
       this.rememberPageSecrets();
       const wire: Omit<RecordedRequest, "seq" | "phase"> = {
@@ -427,7 +430,7 @@ export class BrowserDriver {
           .filter((r) => r.bodySample && /html/i.test(r.contentType ?? ""))
           .map((r) => ({ url: r.url, html: r.bodySample as string }));
         const cookies = await this.context.cookies();
-        const credentials = discoverCredentialSources(pages, cookies);
+        const credentials = discoverCredentialSources(pages, cookies, this.recorder.trace);
         const tokens = new Map([
           ...discoverSessionTokens(pages, cookies, this.recorder.trace),
           ...credentials.tokens,
@@ -549,6 +552,26 @@ export class BrowserDriver {
         if (entry) this.approved.delete(entry.seq);
       } else if (write && status >= 200 && status < 400) this.cleanWrites.add(write);
       if (status >= 400) this.fail("browser", "The site rejected a browser request.");
+      const body = await response.body();
+      // Scan the full same-origin response before Chromium loads it, even when the trace is bounded.
+      const credentials = discoverCredentialSources(
+        [],
+        [],
+        [
+          {
+            ...wire,
+            seq: -1,
+            phase: "demonstration",
+            contentType: responseHeaders["content-type"],
+            bodySample: body.toString("utf8"),
+          },
+        ],
+      );
+      for (const value of credentials.secrets) this.secrets.add(value);
+      if (entry && /text\/|json|javascript|xml/i.test(entry.contentType ?? "")) {
+        entry.bodySample = body.toString("utf8", 0, BODY_LIMIT);
+        if (body.length > BODY_LIMIT) entry.bodyTruncated = true;
+      }
       if (status >= 300 && status < 400 && responseHeaders.location) {
         let next: string;
         try {
@@ -580,11 +603,6 @@ export class BrowserDriver {
         redirected = true;
         continue;
       }
-      const body = await response.body();
-      if (entry && /text\/|json|javascript|xml/i.test(entry.contentType ?? "")) {
-        entry.bodySample = body.toString("utf8", 0, BODY_LIMIT);
-        if (body.length > BODY_LIMIT) entry.bodyTruncated = true;
-      }
       // A final response only: Chromium never follows redirects or forwards session headers.
       await route.fulfill({ response });
       await response.dispose();
@@ -596,7 +614,8 @@ export class BrowserDriver {
     const pages = this.recorder.trace
       .filter((r) => r.bodySample && /html/i.test(r.contentType ?? ""))
       .map((r) => ({ url: r.url, html: r.bodySample as string }));
-    for (const value of discoverCredentialSources(pages, []).secrets) this.secrets.add(value);
+    for (const value of discoverCredentialSources(pages, [], this.recorder.trace).secrets)
+      this.secrets.add(value);
     for (const entry of this.recorder.trace) {
       for (const [name, value] of new URL(entry.url).searchParams)
         if (sensitive.test(name)) this.secrets.add(value);
@@ -658,19 +677,24 @@ export class BrowserDriver {
       let value =
         node.value?.value === undefined
           ? undefined
-          : redactSnapshot(String(node.value.value), (v) => this.redact(v));
+          : escapeControls(this.redact(String(node.value.value)));
       if (role === "textbox" || role === "searchbox") {
         const { node: dom } = await this.cdp.send("DOM.describeNode", {
           backendNodeId: node.backendDOMNodeId,
         });
         const attrs = dom.attributes ?? [];
-        if (attrs.some((a) => sensitive.test(a)) || attrs.includes("password"))
+        if (
+          attrs.some(
+            (name, i) =>
+              i % 2 === 0 &&
+              ["name", "id", "autocomplete", "aria-label"].includes(name) &&
+              sensitive.test(attrs[i + 1] ?? ""),
+          ) ||
+          attrs.some((name, i) => i % 2 === 0 && name === "type" && attrs[i + 1] === "password")
+        )
           value = "[redacted]";
       }
-      const name = redactSnapshot(String(node.name?.value ?? ""), (v) => this.redact(v)).slice(
-        0,
-        300,
-      );
+      const name = escapeControls(this.redact(String(node.name?.value ?? ""))).slice(0, 300);
       const ref = isInteractive ? `r${this.epoch}-${node.backendDOMNodeId}` : undefined;
       const item = {
         role,
@@ -750,7 +774,10 @@ export class BrowserDriver {
     if (wait > 0) await this.clock.sleep(wait);
     this.lastAction = this.clock.now();
     try {
-      this.forms = parseForms(await this.page.content(), this.page.url());
+      const html = await this.page.content();
+      for (const value of discoverCredentialSources([{ url: this.page.url(), html }], []).secrets)
+        this.secrets.add(value);
+      this.forms = parseForms(html, this.page.url());
       this.rememberPageSecrets();
       this.submitter = undefined;
       if (action.kind === "goto") {
@@ -828,13 +855,26 @@ export class BrowserDriver {
   /** Template and redact inside the host boundary, before returning any learning evidence. */
   async candidates(): Promise<EndpointCandidate[]> {
     this.rememberPageSecrets();
-    if (this.learnedCandidates) return structuredClone(this.learnedCandidates);
+    if (this.learnedCandidates)
+      return candidatesFromTrace(
+        this.recorder.trace,
+        this.origin,
+        this.learningCookies,
+        this.approved,
+        (value) => this.redact(value),
+      );
     if (this.closed) throw new Error("Learning evidence was not finalized before closing.");
     await this.recorder.flush();
+    const credentials = discoverCredentialSources(
+      [{ url: this.page.url(), html: await this.page.content() }],
+      [],
+    );
+    for (const value of credentials.secrets) this.secrets.add(value);
+    this.learningCookies = await this.context.cookies();
     this.learnedCandidates = candidatesFromTrace(
       this.recorder.trace,
       this.origin,
-      await this.context.cookies(),
+      this.learningCookies,
       this.approved,
       (value) => this.redact(value),
     );
@@ -847,6 +887,7 @@ export class BrowserDriver {
     if (this.context) {
       try {
         const cookies = await this.context.cookies();
+        this.learningCookies = cookies;
         for (const c of cookies) this.secrets.add(c.value);
         if (JSON.stringify(cookies) !== this.initialCookies)
           await this.options.sessions.update(this.origin, this.options.persona, {
@@ -866,7 +907,8 @@ export class BrowserDriver {
     }
     if (this.browser) await this.browser.close().catch(() => undefined);
     this.rememberPageSecrets();
-    for (const approval of this.approvals) approval.summary = this.redact(approval.summary);
+    for (const approval of this.approvals)
+      approval.summary = escapeControls(this.redact(approval.summary));
     for (const write of this.committed) write.target.label = this.redact(write.target.label);
   }
 }

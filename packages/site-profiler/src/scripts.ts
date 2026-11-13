@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // Step 4: static script analysis. Parses same-origin JavaScript with acorn and finds the HTTP calls
 // it would make (fetch, fetch wrappers, XMLHttpRequest, axios, jQuery) whose URL starts with a string
@@ -438,19 +439,56 @@ export interface ScriptAnalysis {
 /** Analyse one script. `scriptUrl` resolves relative URLs; only calls on its origin are kept. */
 export const SCRIPT_SIZE_LIMIT = 512 * 1024;
 
+function parseScript(source: string): N {
+  const opts = { ecmaVersion: "latest" as const, locations: true, allowHashBang: true };
+  try {
+    return parse(source, { ...opts, sourceType: "script" }) as unknown as N;
+  } catch {
+    return parse(source, { ...opts, sourceType: "module" }) as unknown as N;
+  }
+}
+
+/** Credential literals are evidence only: the contract cannot replay script variables. */
+export function scriptCredentialSecrets(source: string): Set<string> {
+  const secrets = new Set<string>();
+  const sensitive = /csrf|xsrf|token|secret|session|auth|password|api.?key|form.?key/i;
+  try {
+    if (Buffer.byteLength(source, "utf8") > SCRIPT_SIZE_LIMIT) throw new Error("large script");
+    const program = parseScript(source);
+    const env = collectEnv(program);
+    const remember = (node: N | undefined) => {
+      if (!node) return;
+      const parts = evalString(node, env);
+      if (parts?.every((p) => "lit" in p))
+        secrets.add(parts.map((p) => ("lit" in p ? p.lit : "")).join(""));
+      // Only value fragments belong to this assignment. Literals inside arbitrary calls or
+      // function bodies may be cookie names, selectors, HTTP methods or storage keys.
+      for (const part of parts ?? []) if ("lit" in part && part.lit) secrets.add(part.lit);
+    };
+    walk(program, (node) => {
+      const left = prop(node, "left");
+      const key = prop(node, "id") ?? prop(node, "key") ?? left;
+      const name = ident(key) ?? memberName(key) ?? stringLiteral(key);
+      if (name && sensitive.test(name))
+        remember(prop(node, "init") ?? prop(node, "right") ?? prop(node, "value"));
+    });
+  } catch {
+    // Parse/size failures must not silently turn obvious credential assignments into constants.
+    for (const match of source.matchAll(/([\w$]+)["']?\s*[:=]\s*["']([^"'\r\n]+)["']/g))
+      if (sensitive.test(match[1] ?? "")) secrets.add(match[2] ?? "");
+  }
+  secrets.delete("");
+  return secrets;
+}
+
 export function analyseScript(source: string, scriptUrl: string): ScriptAnalysis {
   if (source.length > SCRIPT_SIZE_LIMIT || Buffer.byteLength(source, "utf8") > SCRIPT_SIZE_LIMIT)
     return { calls: [], error: "script exceeds analysis size limit" };
   let program: N;
-  const opts = { ecmaVersion: "latest" as const, locations: true, allowHashBang: true };
   try {
-    program = parse(source, { ...opts, sourceType: "script" }) as unknown as N;
-  } catch {
-    try {
-      program = parse(source, { ...opts, sourceType: "module" }) as unknown as N;
-    } catch (err) {
-      return { calls: [], error: `could not parse ${scriptUrl}: ${(err as Error).message}` };
-    }
+    program = parseScript(source);
+  } catch (err) {
+    return { calls: [], error: `could not parse ${scriptUrl}: ${(err as Error).message}` };
   }
   try {
     const origin = new URL(scriptUrl).origin;

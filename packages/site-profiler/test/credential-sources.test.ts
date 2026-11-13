@@ -40,7 +40,7 @@ describe("explicit credential sources", () => {
     );
     expect(result.tokens.size).toBe(0);
     expect(result.secrets).toEqual(
-      new Set(["one", "two", "three", "four", "five", "six", "seven"]),
+      new Set(["one", "two", "three", "four", "five", "six", "seven", "sixseven"]),
     );
   });
   it("keeps ordinary opaque-value discovery dependent on repetition", () => {
@@ -51,5 +51,64 @@ describe("explicit credential sources", () => {
         [],
       ),
     ).toEqual(new Map());
+  });
+  it("scans external script variables, global assignments, aliases and nested JSON credentials", () => {
+    const sources = [
+      [
+        "script",
+        "application/javascript",
+        'const opaque="alias-secret";window.csrfToken=opaque;self["accessToken"]="self-secret";globalThis.sessionToken="global-secret";window.config={csrfToken:"nested-secret"};',
+      ],
+      [
+        "xhr",
+        "application/json",
+        '{"config":{"accessToken":"json-secret"},"tokens":["array-secret"],"ordinary":"public"}',
+      ],
+      ["script", "text/plain", 'export const csrfToken="module-secret";'],
+      ["script", "application/javascript", 'with(x){window.csrfToken="classic-secret"}'],
+      ["script", "application/javascript", 'broken( window.csrfToken="broken-script-secret";'],
+    ];
+    const result = discoverCredentialSources(
+      [],
+      [],
+      sources.map(([resourceType, contentType, bodySample], seq) => ({
+        seq,
+        phase: "demonstration",
+        method: "POST",
+        url,
+        resourceType: resourceType as string,
+        requestHeaders: {},
+        cookieNames: [],
+        status: 400,
+        contentType,
+        bodySample,
+      })),
+    );
+    expect(result.tokens.size).toBe(0);
+    expect(result.secrets).toEqual(
+      new Set([
+        "alias-secret",
+        "self-secret",
+        "global-secret",
+        "nested-secret",
+        "json-secret",
+        "array-secret",
+        "module-secret",
+        "classic-secret",
+        "broken-script-secret",
+      ]),
+    );
+  });
+  it("does not mistake cookie names, storage keys or token helper method literals for credentials", () => {
+    const result = discoverCredentialSources(
+      [
+        {
+          url,
+          html: '<script>const csrfToken=readCookie("csrf");const accessToken=localStorage.getItem("storage-key");window.api={token:()=>transport("/token",{method:"POST"})};window.csrfToken="actual-secret";</script>',
+        },
+      ],
+      [],
+    );
+    expect(result.secrets).toEqual(new Set(["actual-secret"]));
   });
 });
