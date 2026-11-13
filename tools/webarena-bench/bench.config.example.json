@@ -1,0 +1,29 @@
+{
+  "x-authored-by": "Claude Opus 5.5",
+  "dataset": "../../.webarena-verified-ref/webarena_verified/assets/dataset/webarena-verified.json",
+  "modelsDir": "models",
+  "maxSteps": 30,
+  "taskTimeoutMs": 300000,
+  "maxPages": 40,
+  "sites": {
+    "shopping": {
+      "baseUrl": "http://127.0.0.1:7770",
+      "login": { "usernameEnv": "WA_SHOPPING_USERNAME", "passwordEnv": "WA_SHOPPING_PASSWORD" }
+    },
+    "shopping_admin": {
+      "baseUrl": "http://127.0.0.1:7780/admin",
+      "login": {
+        "usernameEnv": "WA_SHOPPING_ADMIN_USERNAME",
+        "passwordEnv": "WA_SHOPPING_ADMIN_PASSWORD"
+      }
+    },
+    "reddit": {
+      "baseUrl": "http://127.0.0.1:9999",
+      "login": { "usernameEnv": "WA_REDDIT_USERNAME", "passwordEnv": "WA_REDDIT_PASSWORD" }
+    },
+    "gitlab": {
+      "baseUrl": "http://127.0.0.1:8023",
+      "login": { "usernameEnv": "WA_GITLAB_USERNAME", "passwordEnv": "WA_GITLAB_PASSWORD" }
+    }
+  }
+}

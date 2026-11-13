@@ -1,0 +1,17 @@
+{
+  "x-authored-by": "Claude Opus 5.5",
+  "source": "webarena-verified 1.2.3: types/tracing.py NetworkEvent and core/utils/network_event_utils.py",
+  "entryFields": [
+    "request.url",
+    "request.method",
+    "request.headers",
+    "response.status",
+    "response.redirectURL",
+    "response.headers",
+    "response.cookies",
+    "response.content.mimeType",
+    "response.content.text"
+  ],
+  "postFields": ["request.postData.mimeType", "request.postData.text"],
+  "navigation": { "method": "GET", "acceptStartsWith": "text/html" }
+}

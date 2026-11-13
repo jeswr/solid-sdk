@@ -1,0 +1,45 @@
+{
+  "x-authored-by": "Claude Opus 5.5",
+  "tasks": [
+    {
+      "task_id": 0,
+      "sites": ["shopping"],
+      "intent": "Find a fictional item at __SHOPPING__/search",
+      "start_urls": ["__SHOPPING__/"],
+      "eval": [
+        {
+          "evaluator": "AgentResponseEvaluator",
+          "expected": { "task_type": "retrieve", "retrieved_data": ["ANSWER_SENTINEL"] }
+        }
+      ]
+    },
+    {
+      "task_id": 1,
+      "sites": ["shopping", "reddit"],
+      "intent": "Share the item from __SHOPPING__ on __REDDIT__",
+      "start_urls": ["__SHOPPING__", "__REDDIT__/new"],
+      "eval": [{ "evaluator": "AgentResponseEvaluator", "expected": { "task_type": "mutate" } }]
+    },
+    {
+      "task_id": 2,
+      "sites": ["shopping", "map"],
+      "intent": "Find directions",
+      "start_urls": ["__MAP__"],
+      "eval": [{ "evaluator": "AgentResponseEvaluator", "expected": { "task_type": "navigate" } }]
+    },
+    {
+      "task_id": 3,
+      "sites": ["shopping", "wikipedia"],
+      "intent": "Research an item",
+      "start_urls": ["__WIKIPEDIA__"],
+      "eval": [{ "evaluator": "AgentResponseEvaluator", "expected": { "task_type": "retrieve" } }]
+    },
+    {
+      "task_id": 4,
+      "sites": ["gitlab"],
+      "intent": "View the scratch project",
+      "start_urls": ["__GITLAB__/example/scratch"],
+      "eval": [{ "evaluator": "AgentResponseEvaluator", "expected": { "task_type": "navigate" } }]
+    }
+  ]
+}

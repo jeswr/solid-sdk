@@ -106,7 +106,8 @@
     "@jeswr/solid-environment",
     "@jeswr/site-executor",
     "@jeswr/test-shop",
-    "@jeswr/site-profiler"
+    "@jeswr/site-profiler",
+    "@jeswr/webarena-bench"
   ],
   "applications": [
     {

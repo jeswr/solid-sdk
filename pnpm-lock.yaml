@@ -6487,6 +6487,31 @@ importers:
 
   tools/test-shop: {}
 
+  tools/webarena-bench:
+    dependencies:
+      '@jeswr/agent-browser':
+        specifier: workspace:*
+        version: link:../../packages/agent-browser
+      '@jeswr/site-executor':
+        specifier: workspace:*
+        version: link:../../packages/site-executor
+      '@jeswr/site-model':
+        specifier: workspace:*
+        version: link:../../packages/site-model
+      '@jeswr/site-profiler':
+        specifier: workspace:*
+        version: link:../../packages/site-profiler
+      n3:
+        specifier: ^2.1.1
+        version: 2.1.1
+    devDependencies:
+      '@jeswr/test-shop':
+        specifier: workspace:*
+        version: link:../test-shop
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+
 packages:
 
   '@a2a-js/sdk@1.3.0':
