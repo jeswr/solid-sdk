@@ -98,9 +98,12 @@ Request only optional `cookies` from the worker-armed popup click. The exclusive
 A second popup receives "Another sharing is in progress" without another request or native
 message. Success, failure, Cancel, timeout and port disconnect all remove cookie access and
 verify absence before releasing the lease. Cancellation invalidates in-flight work immediately
-and terminal views never move backwards. An unresolved prompt fences new captures after the
-lease ends until its result/onAdded grant has been cleaned; a missing outcome blocks sharing
-for that worker lifetime. A delayed armed click after expiry may still request permission in
+and terminal views never move backwards. Request settlement, removal, absence verification
+and marker writes retain the lease and mutex through completion, even after Cancel. Other
+popups show "Finishing the previous sharing" meanwhile. Each lease owns its cleanup result;
+an earlier failure never skips a newer lease's cleanup. An unresolved prompt retains its lease
+until its result settles and cleanup completes; onAdded alone cannot release it. A missing
+outcome blocks sharing for that worker lifetime. A delayed armed click after expiry may still request permission in
 Chrome, but its grant is removed without a current acquiring lease. A replacement worker also
 removes it at start, even with cleared session storage and no marker.
 Required `<all_urls>` stays in place and host grants never change; temporary cookie access

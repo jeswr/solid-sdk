@@ -290,8 +290,9 @@ describe('worker capture lease', () => {
     'cancel',
     'disconnect',
   ])('quarantines a late grant with another lease attempting to start after %s', async (exit) => {
+    vi.useFakeTimers();
     const h = captureHarness();
-    const b = h.popup();
+    let b = h.popup();
     b.load();
     await phase(b, 'ready');
     const a = await reviewing(h);
@@ -301,15 +302,22 @@ describe('worker capture lease', () => {
     await phase(a, 'prompt');
     if (exit === 'cancel') a.cancel();
     else a.client.disconnect();
-    await vi.waitFor(() =>
-      expect(h.browser.permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] }),
-    );
     b.start();
     await phase(b, 'busy');
     h.state.cookies = true;
     h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
     prompt.resolve(true);
     await allowed;
+    if (exit === 'disconnect') {
+      // A closed popup cannot report settlement. onAdded alone must not release
+      // the lease; a replacement worker revokes the grant before another capture.
+      await vi.advanceTimersByTimeAsync(0);
+      b.start();
+      expect(b.view.message).toBe('Finishing the previous sharing.');
+      expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+      h.restart();
+      b = h.popup();
+    }
     await vi.waitFor(() => expect(h.state.cookies).toBe(false));
     b.load();
     await phase(b, 'ready');
@@ -322,23 +330,31 @@ describe('worker capture lease', () => {
     restored(h);
     expect(types(h).filter((t) => t === 'beginLogin')).toHaveLength(1);
   });
-  it('ignores A late permission result after B acquires a new lease', async () => {
+  it('waits for A permission settlement before B acquires and ignores duplicate late results', async () => {
+    vi.useFakeTimers();
     const h = captureHarness();
+    const b = h.popup();
+    b.load();
+    await phase(b, 'ready');
     const a = await reviewing(h);
     const prompt = deferred<boolean>();
     h.browser.permissions.request.mockImplementationOnce(() => prompt.promise);
     const allowed = a.allow();
     await phase(a, 'prompt');
     a.cancel();
-    await vi.waitFor(() =>
-      expect(h.browser.permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] }),
-    );
     h.state.cookies = true;
     h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
-    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1));
-    const b = await confirming(h);
+    b.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(b.view.message).toBe('Finishing the previous sharing.');
+    expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+    const oldLease = a.view.lease!;
     prompt.resolve(true);
     await allowed;
+    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1));
+    await confirming(h, b);
+    a.send({ type: 'permission', lease: oldLease, granted: true });
+    await vi.advanceTimersByTimeAsync(0);
     expect(h.state.cookies).toBe(true);
     expect(b.view.phase).toBe('confirming');
     b.confirm();

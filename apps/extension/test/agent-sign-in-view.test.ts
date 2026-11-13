@@ -300,6 +300,39 @@ it('renders a second popup rejection without requesting permission or contacting
   expect(f.h.native).not.toHaveBeenCalled();
   other.cancel();
 });
+it('shows finishing the previous sharing while cancelled cleanup retains the lease', async () => {
+  const f = fixture();
+  f.mount();
+  await f.choose();
+  const other = f.h.popup();
+  other.load();
+  await phase(other, 'ready');
+  other.start();
+  await phase(other, 'permission');
+  await other.allow();
+  await phase(other, 'confirming');
+  const cleanup = deferred<boolean>();
+  f.h.browser.permissions.remove.mockImplementationOnce(async () => {
+    await cleanup.promise;
+    f.h.state.cookies = false;
+    return true;
+  });
+  other.confirm();
+  await vi.waitFor(() => expect(f.h.browser.permissions.remove).toHaveBeenCalledTimes(1));
+  other.cancel();
+  f.button('review').click();
+  expect(f.text()).toBe('Finishing the previous sharing.');
+  expect(f.button('review').disabled).toBe(true);
+  expect(f.button('confirm').disabled).toBe(true);
+  expect(f.h.browser.permissions.request).toHaveBeenCalledTimes(1);
+  cleanup.resolve(true);
+  f.p.load();
+  await f.choose();
+  await f.review();
+  f.button('confirm').click();
+  await phase(f.p, 'shared');
+  expect(f.h.state).toEqual(f.h.before);
+});
 it('shows cleanup in progress and enables sharing only after automatic removal verifies absence', async () => {
   const f = fixture();
   f.h.state.cookies = true;

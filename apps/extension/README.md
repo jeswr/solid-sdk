@@ -416,10 +416,15 @@ latch when it resumes, and dispatch checks it immediately before sending. Nothin
 Cookie access lasts only for this exclusive review/confirmation lease, which expires after
 two minutes. Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
 cleanup: remove only `cookies`, verify absence, then release the lease. Host grants never
-change. Cancellation is final even if an older async step completes afterward. An unresolved
-permission prompt fences new captures after cancellation/closure until its result or late
-grant is cleaned; an old grant can never become another capture's authority. If Chrome never
-reports a closed prompt's outcome, sharing stays blocked for that worker lifetime.
+change. Cancel marks the lease cancelled immediately; request settlement, permission removal,
+absence verification and marker writes retain the lease and mutex until they finish. Other
+popups show **Finishing the previous sharing** meanwhile. Cancellation is final even if an
+older async step completes afterward. An unresolved permission prompt retains its lease after
+cancellation/closure until its result settles and cleanup finishes; `permissions.onAdded`
+alone does not release it. If a closed popup cannot report the outcome, sharing stays blocked
+for that worker lifetime, and a replacement worker removes any surviving grant at startup.
+Cleanup results belong to each lease: a failed earlier removal never skips a newer lease's
+cleanup. Cancellation can interrupt non-mutating checks; mutating work completes under the mutex.
 Only a small display marker (`agentCaptureCleanup: true`) is stored in `chrome.storage.local`
 while removal is in progress or has failed; it is cleared after verified absence. No ownership
 metadata or session-storage fallback is needed. The marker contains no cookie values and never
