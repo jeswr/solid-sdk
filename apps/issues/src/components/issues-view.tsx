@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useSolidSession } from "@/lib/session-context";
 import { useIssues, type IssueRecord, type ActivityRecord } from "@/lib/use-issues";
 import { Repository } from "@/lib/repository";
-import { setGroupAccess } from "@/lib/sharing";
+import { assignGroupRole } from "@/lib/sharing";
 import { type TrackerLocation } from "@/lib/profile";
 import { ConflictError } from "@/lib/errors";
 import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
@@ -685,7 +685,7 @@ export function IssuesView() {
     onShare: () => setShareResource({ url: issue.url, label: "this issue" }),
     onShareTeam: () =>
       run(
-        () => setGroupAccess(issue.url, profile!.webId, group.iri!, { read: true, write: true, control: false }),
+        () => assignGroupRole(issue.url, profile!.webId, group.iri!, "editor"),
         "Shared with the team",
       ),
     onToggle: () => {
@@ -1638,6 +1638,9 @@ export function IssuesView() {
           onOpenChange={(o) => !o && setShareResource(undefined)}
           resourceUrl={shareResource.url}
           extraResourceUrls={shareResource.extraUrls}
+          memberUrls={
+            shareResource.url === repo.containerUrl ? issues.issues.map((i) => i.url) : []
+          }
           ownerWebId={profile.webId}
           title={`Share ${shareResource.label}`}
           description="Grant another person access by their WebID. They can open it from their own app."

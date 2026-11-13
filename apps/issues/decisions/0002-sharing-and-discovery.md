@@ -2,6 +2,13 @@
 
 **Status:** accepted · **Date:** 2026-06-09
 
+> **Superseded in part (2026-11, bead sst-35ov):** the hand-rolled "rebuild a
+> canonical ACL" editor below was retired. `src/lib/sharing.ts` now delegates all
+> ACL/ACR reads and writes to `@jeswr/pod-access/roles` (`readGrants`,
+> `setGrants`, `addGrant`, `removeGrant`), which preserves unrelated grants,
+> refuses owner lockout, writes conditionally (If-Match / If-None-Match: \*),
+> and handles WAC and ACP natively. Its refusals surface as `SharingError`.
+
 ## Decisions
 
 ### Sharing via Web Access Control, ACP at the edge

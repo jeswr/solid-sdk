@@ -58,6 +58,11 @@ inverse) reads an existing grant back as its named role for the UI; it never
 *promotes* — a malformed grant lacking read maps to no role rather than to a higher
 one. The Share dialog now offers Viewer/Editor/Admin and lists each grant by role.
 
+> **Update (2026-11, bead sst-35ov):** presets now name the `@jeswr/pod-access/roles`
+> role they are stored as (`viewer`, `editor`, `manager`), via `podRoleFor` /
+> `roleForPodRole`; `assignRole`/`assignGroupRole`/`listRoleAssignments` moved to
+> `sharing.ts`, which delegates to pod-access.
+
 Out of scope (per the bead): field-level permissions and server-administered
 enterprise permission schemes.
 
