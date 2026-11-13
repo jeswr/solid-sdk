@@ -35,7 +35,7 @@ it.each([
   await allowed; // Closed ports cannot deliver this report.
   await vi.advanceTimersByTimeAsync(0);
   expect(h.state).toEqual(h.before);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(seconds < 60 ? 2 : 3);
   if (seconds < 60) await vi.advanceTimersByTimeAsync(disconnectedAt + 60000 - Date.now());
   expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
   expect(h.browser.cookies.getAll).not.toHaveBeenCalled();

@@ -319,7 +319,7 @@ it.each([
     f.h.native.mockImplementationOnce(() => reply.promise);
     f.button('confirm').click();
     await phase(f.p, 'sending');
-  } else await vi.waitFor(() => expect(nativeTypes(f)).toContain('beginLogin'));
+  } else await vi.waitFor(() => expect(nativeTypes(f)).toContain('beginLogin'), { timeout: 2500 });
   f.button('cancel').click();
   expect(f.text()).toBe('Sharing cancelled.');
   reply.resolve(

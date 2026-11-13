@@ -29,6 +29,38 @@ const siteAccess =
   "Allow this extension on this site from Chrome's extension menu first, then try again.";
 const busy = 'Another sharing is in progress.';
 const finishing = 'Finishing the previous sharing.';
+const contested = 'Another sharing started. Try again.';
+const cleanupTimeout = 10000;
+const acquisitionQuietPeriod = 1000;
+
+/** A timed-out attempt cannot resume verification or publish a late success. */
+async function bounded<T>(
+  work: (check: () => void) => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  let expired = false;
+  let timer!: ReturnType<typeof setTimeout>;
+  let interrupt!: () => void;
+  const check = () => {
+    if (expired || signal?.aborted) throw new Error(unavailable);
+  };
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    interrupt = () => {
+      expired = true;
+      reject(new Error(unavailable));
+    };
+    timer = setTimeout(interrupt, cleanupTimeout);
+    signal?.addEventListener('abort', interrupt, { once: true });
+  });
+  try {
+    check();
+    return await Promise.race([work(check), interrupted]);
+  } finally {
+    expired = true;
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', interrupt);
+  }
+}
 type Tab = { id: number; site: string; url: string };
 interface Owner {
   port: chrome.runtime.Port;
@@ -45,6 +77,8 @@ interface Lease {
   phase: 'reviewing' | 'acquiring' | 'confirming' | 'sending' | 'cleaning' | 'orphaned';
   expectsCookies: boolean;
   authorizationInvalid: boolean;
+  contested: boolean;
+  quietUntil: number;
   choices: CaptureChoices;
   count?: number;
   persona: string;
@@ -63,12 +97,13 @@ interface Lease {
   timer: ReturnType<typeof setTimeout>;
   token?: string;
 }
+type Cleanup = Pick<Lease, 'id' | 'timer' | 'orphaned'>;
 
 /** One worker, one lease, one mutex for Chrome/native work (including cleanup).
  * Cancellation, authorization and prompt ingress latches run outside the mutex.
  * An orphaned prompt wakes settlement waits and retains a sixty-second fence.
  * Its idempotent revocations bypass the mutex; no reads or sends are allowed.
- * All revocations must finish before that lease can end.
+ * Revocations and verification are bounded; failures retain a recoverable fence.
  */
 export function installAgentCapture(
   browser: typeof chrome,
@@ -87,7 +122,7 @@ export function installAgentCapture(
   let active: Lease | undefined;
   let pendingPrompt: Lease | undefined;
   // Prompt ownership is singular; cleanup ownership survives independently by lease id.
-  const cleanups = new Map<number, Lease>();
+  const cleanups = new Map<number, Cleanup>();
   const occupied = () => active !== undefined || pendingPrompt !== undefined || cleanups.size > 0;
   let nextId = 0;
   // Display only: each lease owns its cleanup result; notices never skip cleanup.
@@ -140,18 +175,14 @@ export function installAgentCapture(
           : {},
       );
   };
-  const cleanupStatus = async (failed: boolean) => {
+  const cleanupStatus = (failed: boolean) => {
     cleanupNotice = failed ? 'failed' : undefined;
-    try {
-      await browser.action.setBadgeText({ text: failed ? '!' : '' });
-    } catch {
-      /* No diagnostics. */
-    }
     warnings();
+    void browser.action.setBadgeText({ text: failed ? '!' : '' }).catch(() => {});
   };
   const cookieAccess = async () => {
     try {
-      return await browser.permissions.contains(capturePermissions());
+      return await bounded(() => browser.permissions.contains(capturePermissions()));
     } catch {
       return undefined;
     } // Unknown authority is neither confirmed absent nor granted.
@@ -162,55 +193,114 @@ export function installAgentCapture(
     !active.authorizationInvalid &&
     ['acquiring', 'confirming', 'sending'].includes(active.phase);
   const orphanedLease = () => [...cleanups.values()].find((lease) => lease.orphaned);
-  const remove = async () => {
-    cleanupNotice = 'cleaning';
+  let cleanupReset = new AbortController();
+  let cleanupVersion = 0;
+  const cleanupAttempt = async (work: (check: () => void) => Promise<void>, drained = false) => {
+    const version = ++cleanupVersion;
+    const signal = cleanupReset.signal;
+    // Recovery remains actionable during retries, including concurrent onAdded
+    // revocations. A new removal cannot hide a fence's elapsed final deadline.
+    if (cleanupNotice !== 'failed') cleanupNotice = 'cleaning';
     warnings();
-    // Persistence helps explain interrupted cleanup, but never controls revocation.
+    let cleaned = false;
+    try {
+      await bounded(work, signal);
+      cleaned = true;
+    } catch {
+      // The notice remains until a subsequent bounded attempt verifies absence.
+    }
+    if (drained && [...cleanups.values()].some((lease) => lease.orphaned?.removals.size))
+      cleaned = false;
+    if (!signal.aborted && (version === cleanupVersion || drained)) {
+      if (version === cleanupVersion) ++cleanupVersion;
+      cleanupStatus(!cleaned);
+    }
+    return cleaned;
+  };
+  const removeWork = async (check: () => void) => {
+    // Persistence explains interrupted cleanup, but never controls revocation.
     try {
       await markCaptureCleanup(browser.storage);
     } catch {
       /* Still remove authority if the display notice cannot be stored. */
     }
-    let failed = false;
-    try {
-      await releaseCapturePermissions(browser.permissions);
-      await clearCaptureCleanup(browser.storage);
-    } catch {
-      failed = true;
-    }
-    await cleanupStatus(failed);
-    return !failed;
+    check();
+    await releaseCapturePermissions({
+      remove: async (input) => {
+        check();
+        const removed = await browser.permissions.remove(input);
+        check();
+        return removed;
+      },
+      contains: async (input) => {
+        check();
+        const present = await browser.permissions.contains(input);
+        check();
+        return present;
+      },
+    });
+    check();
+    await clearCaptureCleanup(browser.storage);
+    check();
   };
-  const recover = async () => {
-    if (cookieWindow()) return true;
+  const remove = () => cleanupAttempt(removeWork);
+  const recoverWork = async (check: () => void) => {
     try {
-      if (await captureCleanupPending(browser.storage)) {
+      const pending = await captureCleanupPending(browser.storage);
+      check();
+      if (pending) {
         cleanupNotice = 'cleaning';
         warnings();
       }
     } catch {
-      /* A missing/unreadable display marker never prevents authority cleanup. */
+      /* An unreadable display marker never prevents authority cleanup. */
     }
-    if (cookieWindow()) return true;
-    const present = await cookieAccess();
-    if (cookieWindow()) return true;
-    if (present !== false) return remove();
+    check();
+    let present: boolean | undefined;
     try {
+      present = await browser.permissions.contains(capturePermissions());
+    } catch {
+      /* Unknown authority must be removed. */
+    }
+    check();
+    if (present !== false) {
+      cleanupNotice = 'cleaning';
+      warnings();
+      await removeWork(check);
+    } else {
       await clearCaptureCleanup(browser.storage);
-      await cleanupStatus(false);
+      check();
+    }
+  };
+  const recover = async () => {
+    if (cookieWindow()) return true;
+    // Avoid a transient cleanup warning on an ordinary idle absence check.
+    const version = ++cleanupVersion;
+    try {
+      await bounded(recoverWork, cleanupReset.signal);
+      if (version === cleanupVersion) cleanupStatus(false);
       return true;
     } catch {
-      await cleanupStatus(true);
+      if (version === cleanupVersion) cleanupStatus(true);
       return false;
     }
   };
-  const removeOrphaned = (lease: Lease) => {
+  const removeOrphaned = (lease: Cleanup) => {
     const orphaned = lease.orphaned!;
+    const recovering = cleanupNotice === 'failed';
     // Never queue behind a settlement wait or another removal. In this state
     // authority can only be revoked, and the fence prevents a new capture.
     const removal = remove();
     orphaned.removals.add(removal);
     void removal.then((cleaned) => {
+      if (cleaned && recovering && !cleanupNotice) {
+        // Verified recovery supersedes older revocations, including their queue
+        // waits. Raw Chrome promises may finish later but cannot resume work.
+        cleanupReset.abort();
+        cleanupReset = new AbortController();
+        for (const other of cleanups.values()) other.orphaned?.removals.clear();
+        releaseVerified();
+      }
       // Retain completed revocations until the drain joins them. A grant and its
       // failed removal can both finish during an older absence check; that older
       // observation must not release the fence without another verification.
@@ -230,11 +320,17 @@ export function installAgentCapture(
     return { id: tab.id, site, url: `${site}${url.pathname}` };
   };
   const host = async (tab: Tab) => {
-    if (!(await browser.permissions.contains(captureOriginPermission(tab.site))))
+    if (!(await bounded(() => browser.permissions.contains(captureOriginPermission(tab.site)))))
       throw new Error(siteAccess);
   };
   const alive = (lease: Lease) => {
-    if (active !== lease || lease.cancelled || lease.authorizationInvalid || lease.owner.closed)
+    if (
+      active !== lease ||
+      lease.cancelled ||
+      lease.contested ||
+      lease.authorizationInvalid ||
+      lease.owner.closed
+    )
       throw new Error(unavailable);
   };
   const wait = async <T>(lease: Lease, work: () => Promise<T>): Promise<T> => {
@@ -262,7 +358,7 @@ export function installAgentCapture(
     if (!result.success || result.data.type !== input.type) throw new Error(unavailable);
     return result.data;
   };
-  const release = (lease: Lease) => {
+  const release = (lease: Cleanup) => {
     clearTimeout(lease.timer);
     cleanups.delete(lease.id);
     if (pendingPrompt === lease) pendingPrompt = undefined;
@@ -277,7 +373,7 @@ export function installAgentCapture(
         }
   };
   const releaseVerified = () => {
-    if (active || pendingPrompt) return;
+    if (active || pendingPrompt || cleanupNotice) return;
     if ([...cleanups.values()].some((lease) => lease.orphaned?.removals.size)) return;
     for (const lease of cleanups.values())
       if (!lease.orphaned || lease.orphaned.expired) release(lease);
@@ -290,17 +386,22 @@ export function installAgentCapture(
       (lease) => lease.orphaned?.expired && !lease.orphaned.checked,
     );
     if (!expired.length) return;
-    let cleaned: boolean;
-    do {
-      const joined = [...cleanups.values()].flatMap((lease) =>
-        lease.orphaned ? [{ state: lease.orphaned, removals: [...lease.orphaned.removals] }] : [],
-      );
-      await Promise.all(joined.flatMap(({ removals }) => removals));
-      for (const { state, removals } of joined)
-        for (const removal of removals) state.removals.delete(removal);
-      for (const lease of expired) lease.orphaned!.checked = true;
-      cleaned = await recover();
-    } while ([...cleanups.values()].some((lease) => lease.orphaned?.removals.size));
+    // Joining pending bounded revocations and the final check share ONE deadline.
+    // Expiry failure cannot enqueue another automatic final attempt indefinitely.
+    for (const lease of expired) lease.orphaned!.checked = true;
+    const cleaned = await cleanupAttempt(async (check) => {
+      do {
+        const joined = [...cleanups.values()].flatMap((lease) =>
+          lease.orphaned ? [{ state: lease.orphaned, removals: [...lease.orphaned.removals] }] : [],
+        );
+        await Promise.all(joined.flatMap(({ removals }) => removals));
+        check();
+        for (const { state, removals } of joined)
+          for (const removal of removals) state.removals.delete(removal);
+        await removeWork(check);
+        check();
+      } while ([...cleanups.values()].some((lease) => lease.orphaned?.removals.size));
+    }, true);
     // One final attempt per expiry. Failure stays visible with the retry button;
     // queued completions cannot silently retry forever or leave a hidden busy state.
     if (cleaned) releaseVerified();
@@ -335,6 +436,12 @@ export function installAgentCapture(
     }
     lease.cleanup = recover();
     const cleaned = await lease.cleanup;
+    // A foreign gesture can move a cleaning lease into a fenced contest while
+    // its original cleanup awaits Chrome. That completion cannot end the fence.
+    if (lease.orphaned) {
+      await drainExpired();
+      return;
+    }
     clearTimeout(lease.timer);
     if (pendingPrompt === lease) pendingPrompt = undefined;
     // Cancel can arrive while removal is pending. Never publish an older completion.
@@ -347,26 +454,40 @@ export function installAgentCapture(
     await drainExpired();
     resume();
   };
+  const abandon = (lease: Lease) => {
+    if (lease.orphaned) return;
+    lease.phase = 'orphaned';
+    lease.orphaned = { expired: false, checked: false, removals: new Set() };
+    cleanups.set(lease.id, lease);
+    if (active === lease) active = undefined;
+    if (pendingPrompt === lease) pendingPrompt = undefined;
+    clearTimeout(lease.timer);
+    lease.timer = setTimeout(() => {
+      lease.orphaned!.expired = true;
+      enqueue(drainExpired);
+    }, 60000);
+    // Undefined is abandonment, never an authorization result. It wakes both
+    // the prompt handler and cleanup even when the popup can never report back.
+    lease.permission?.settle(undefined);
+    removeOrphaned(lease);
+  };
+  const fenceForeignPrompt = () => {
+    const cleanup: Cleanup = {
+      id: ++nextId,
+      orphaned: { expired: false, checked: false, removals: new Set() },
+      timer: setTimeout(() => {
+        cleanup.orphaned!.expired = true;
+        enqueue(drainExpired);
+      }, 60000),
+    };
+    cleanups.set(cleanup.id, cleanup);
+    removeOrphaned(cleanup);
+  };
   const cancel = (lease: Lease, abandoned = false) => {
     if (active !== lease && !(abandoned && pendingPrompt === lease)) return;
     lease.cancelled = true;
     lease.stop();
-    if (abandoned && lease.permission?.pending && !lease.orphaned) {
-      lease.phase = 'orphaned';
-      lease.orphaned = { expired: false, checked: false, removals: new Set() };
-      cleanups.set(lease.id, lease);
-      if (active === lease) active = undefined;
-      if (pendingPrompt === lease) pendingPrompt = undefined;
-      clearTimeout(lease.timer);
-      lease.timer = setTimeout(() => {
-        lease.orphaned!.expired = true;
-        enqueue(drainExpired);
-      }, 60000);
-      // Undefined is abandonment, never an authorization result. It wakes both
-      // the prompt handler and cleanup even when the popup can never report back.
-      lease.permission.settle(undefined);
-      removeOrphaned(lease);
-    }
+    if (abandoned && lease.permission?.pending) abandon(lease);
     emit(lease.owner, { phase: 'cancelled', message: 'Sharing cancelled.', preview: undefined });
     warnings();
     enqueue(() => finish(lease, 'cancelled', 'Sharing cancelled.'));
@@ -379,7 +500,11 @@ export function installAgentCapture(
       await finish(
         lease,
         'failed',
-        error instanceof Error && error.message === siteAccess ? siteAccess : unavailable,
+        lease.contested
+          ? contested
+          : error instanceof Error && error.message === siteAccess
+            ? siteAccess
+            : unavailable,
       );
     }
   };
@@ -453,6 +578,8 @@ export function installAgentCapture(
       phase: 'reviewing',
       expectsCookies: false,
       authorizationInvalid: false,
+      contested: false,
+      quietUntil: 0,
       choices,
       persona,
       profile,
@@ -484,15 +611,32 @@ export function installAgentCapture(
       await finish(lease, 'cancelled', 'Sharing cancelled.');
       return;
     }
-    if (pendingPrompt === lease) pendingPrompt = undefined;
     if (active !== lease) {
       // A stale result cannot claim a newer lease's authority.
       if (!active) await recoverIdle();
       return;
     }
     if (lease.phase !== 'acquiring') return;
-    lease.phase = 'confirming';
     await run(lease, async () => {
+      if (!allowed) throw 0;
+      // onAdded and request settlement each restart the quiet acquisition window.
+      while (Date.now() < lease.quietUntil) {
+        let timer!: ReturnType<typeof setTimeout>;
+        try {
+          await wait(
+            lease,
+            () =>
+              new Promise<void>((resolve) => {
+                timer = setTimeout(resolve, Math.max(0, lease.quietUntil - Date.now()));
+              }),
+          );
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      alive(lease);
+      if (pendingPrompt === lease) pendingPrompt = undefined;
+      lease.phase = 'confirming';
       if (!allowed || (await wait(lease, cookieAccess)) !== true) throw 0;
       await validate(lease); // Access withdrawn DURING the prompt cannot reach beginLogin.
       alive(lease);
@@ -575,6 +719,24 @@ export function installAgentCapture(
         await load(lease.owner);
     });
   };
+  const contest = (owner: Owner) => {
+    const lease = active;
+    if (lease) {
+      lease.contested = true;
+      lease.authorizationInvalid = true;
+      lease.stop();
+      // Foreign gestures may already have dispatched a prompt. Fence and revoke
+      // immediately, without waiting for either popup's settlement report.
+      abandon(lease);
+      emit(lease.owner, { phase: 'failed', message: contested, preview: undefined });
+    } else {
+      const orphaned = orphanedLease();
+      if (orphaned) removeOrphaned(orphaned);
+      else fenceForeignPrompt();
+    }
+    if (owner !== lease?.owner)
+      emit(owner, { phase: 'failed', lease: undefined, message: contested, preview: undefined });
+  };
   browser.tabs.onActivated.addListener(invalidate);
   browser.tabs.onUpdated.addListener((tabId, change) => {
     if (tabId === active?.tab.id && change.url !== undefined) invalidate();
@@ -598,6 +760,7 @@ export function installAgentCapture(
       cookieWindow() &&
       pendingPrompt === active
     ) {
+      active.quietUntil = Date.now() + acquisitionQuietPeriod;
       return;
     }
     invalidate();
@@ -687,15 +850,16 @@ export function installAgentCapture(
       }
       if (!('lease' in intent)) return;
       const lease = owner.lastLease?.id === intent.lease ? owner.lastLease : undefined;
-      if (!lease) return;
+      if (!lease && intent.type !== 'requesting') return;
       if (intent.type === 'cancel') {
-        cancel(lease);
+        cancel(lease!);
         return;
       }
       if (intent.type === 'requesting') {
-        // Refuse before changing any lease or prompt. In particular, an old popup
-        // must never replace or cancel another popup's unsettled prompt.
+        // A popup posts this BEFORE its synchronous Chrome request. Rejection
+        // cannot retract that gesture, so every non-admitted ingress is a contest.
         if (
+          !lease ||
           pendingPrompt ||
           cleanups.size ||
           active !== lease ||
@@ -706,12 +870,7 @@ export function installAgentCapture(
           cleanupNotice ||
           Date.now() >= lease.expiresAt
         ) {
-          emit(owner, {
-            phase: 'busy',
-            lease: undefined,
-            message: cleanupNotice === 'failed' ? busyMessage() : finishing,
-          });
-          if (!occupied()) enqueue(() => load(owner));
+          contest(owner);
           return;
         }
         lease.expectsCookies = false;
@@ -725,6 +884,7 @@ export function installAgentCapture(
           settle: (allowed: boolean | undefined) => {
             if (!permission.pending) return;
             permission.pending = false;
+            lease.quietUntil = Date.now() + acquisitionQuietPeriod;
             settle(allowed);
           },
         };
@@ -742,10 +902,10 @@ export function installAgentCapture(
         return;
       }
       if (intent.type === 'permission') {
-        lease.permission?.settle(intent.granted);
+        lease?.permission?.settle(intent.granted);
         return;
       }
-      if (intent.type === 'confirm' && lease === active && lease.phase === 'confirming')
+      if (intent.type === 'confirm' && lease && lease === active && lease.phase === 'confirming')
         enqueue(() => confirm(lease));
     });
   });
