@@ -59,7 +59,11 @@ function PodNotificationSource({
     };
     const pod =
       ready && account?.webId && account.kind !== "demo"
-        ? createPodNotificationSource({ webId: account.webId, fetch })
+        ? createPodNotificationSource({
+            webId: account.webId,
+            storageUrl: account.storageUrl,
+            fetch,
+          })
         : undefined;
     onSource({ key: sessionKey, source: pod ?? null });
     return () => {

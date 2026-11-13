@@ -113,7 +113,21 @@ it.each([
     "/drive/p/",
     "https://pod.example/file.ttl",
   ],
-  ["http://pod.example/folder/", "Offer", undefined, "/drive/f/", "http://pod.example/folder/"],
+  [
+    "http://pod.example/chat/rooms/team/",
+    "Offer",
+    undefined,
+    "/chat/r/",
+    "http://pod.example/chat/rooms/team/",
+  ],
+  ["http://pod.example/folder/", "Announce", undefined, "/drive/f/", "http://pod.example/folder/"],
+  [
+    "https://pod.example/chat/rooms/team/index.ttl#it",
+    "Offer",
+    undefined,
+    "/chat/r/",
+    "https://pod.example/chat/rooms/team/",
+  ],
   [
     "https://pod.example/tasks.ttl#one",
     "Announce",
@@ -141,8 +155,9 @@ it.each([
   "invalid",
   "urn:task:1",
 ])("omits unsafe or unmappable hrefs: %s", async (object) => {
-  list.mockResolvedValue([item({ object })]);
-  expect((await source().list(signal()))[0]).not.toHaveProperty("href");
+  list.mockResolvedValue([item({ object }), item({ type: "Offer", object })]);
+  for (const notification of await source().list(signal()))
+    expect(notification).not.toHaveProperty("href");
 });
 
 it("passes the authenticated fetch and clock to one reader, and the listing signal on each refresh", async () => {
@@ -235,4 +250,39 @@ it("rejects a pre-aborted listing before discovery", async () => {
   request.abort();
   await expect(source().list(request.signal)).rejects.toMatchObject({ name: "AbortError" });
   expect(inbox).not.toHaveBeenCalled();
+});
+
+it.each([
+  "https://pod.example/file.pdf",
+  "https://pod.example/private/folder/",
+  "https://pod.example/chat/rooms/a/?query=yes",
+  "https://pod.example/chat/rooms/a/index.ttl#other",
+  "https://pod.example/chat/rooms/a/index.ttl?query=yes",
+])("does not link malformed room offers: %s", async (object) => {
+  list.mockResolvedValue([item({ type: "Offer", object })]);
+  expect((await source().list(signal()))[0]).not.toHaveProperty("href");
+});
+
+it("deduplicates invitation containers and canonical subjects with the shared reader", async () => {
+  const room = "https://pod.example/chat/rooms/team/";
+  list.mockResolvedValue([
+    item({ url: `${inboxUrl}new`, type: "Offer", object: `${room}index.ttl#it` }),
+    item({ url: `${inboxUrl}old`, type: "Offer", object: room }),
+  ]);
+  expect((await source().list(signal())).map((notification) => notification.id)).toEqual([
+    `${inboxUrl}new`,
+  ]);
+});
+
+it("uses the account storage root when validating own-pod room paths", async () => {
+  const storageUrl = "https://pod.example/alice/";
+  list.mockResolvedValue([
+    item({ url: `${inboxUrl}one`, type: "Offer", object: `${storageUrl}chat/rooms/team/` }),
+    item({ url: `${inboxUrl}two`, type: "Offer", object: `${storageUrl}nested/chat/rooms/team/` }),
+  ]);
+  const notifications = await createPodNotificationSource({ webId, storageUrl, fetch }).list(
+    signal(),
+  );
+  expect(notifications[0]?.href).toBe(`/chat/r/${encodeRef(`${storageUrl}chat/rooms/team/`)}`);
+  expect(notifications[1]).not.toHaveProperty("href");
 });

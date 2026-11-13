@@ -1,12 +1,22 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
+import { invitationRoomTarget } from "../../../../lib/chat-invitation-room";
 import { ChatModelError, httpIri, isoDate, segment } from "./validation";
 
 export function roomContainer(value: string): string {
   const parsed = new URL(httpIri(value));
   if (parsed.search || parsed.hash) throw new ChatModelError("invalid-input");
   return normalizePodBase(value);
+}
+/** Offers name a Chat room container or its canonical index subject, never arbitrary pod paths. */
+export function invitationRoom(value: string, storage?: string): string {
+  try {
+    return invitationRoomTarget(value, storage);
+  } catch {
+    throw new ChatModelError("invalid-input");
+  }
 }
 export function roomIndex(room: string): string {
   return `${roomContainer(room)}index.ttl`;

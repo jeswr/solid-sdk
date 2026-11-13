@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -20,14 +21,16 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import { useOptionalAccounts } from "@/shell/session/accounts-context";
 import type { Room } from "../lib/client";
 import { useChat, useReadPreferences, useRooms } from "../state/chat-context";
 import { ChatEmpty, useProfile } from "./chat-app";
 import { RoomView } from "./room";
 export function NewRoomPage() {
   const { client, currentRoom, invalidate } = useChat();
+  const accounts = useOptionalAccounts();
   const router = useRouter();
   const preferences = useReadPreferences();
   const rooms = useRooms();
@@ -45,6 +48,14 @@ export function NewRoomPage() {
   const [error, setError] = useState("");
   const [created, setCreated] = useState<Room>();
   const id = useId();
+  const creation = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const close = () => {
     const room = created?.url ?? backgroundRoom;
     if (room) router.replace(`/chat/r/${encodeRef(room)}`);
@@ -78,7 +89,7 @@ export function NewRoomPage() {
               <Label htmlFor={`${id}-link`}>Invite link</Label>
               <Input id={`${id}-link`} value={link} readOnly />
               <p>
-                Invitations use a link on this storage. People need to sign in with an account that
+                Invitations are sent to members’ inboxes when available. People need an account that
                 has access.
               </p>
               <DialogFooter>
@@ -110,30 +121,73 @@ export function NewRoomPage() {
                   return;
                 }
                 setBusy(true);
+                // A creation can outlive sign-out or an account switch; its notice must not
+                // reach the next account. Standalone previews have no shell accounts.
+                const account = accounts?.active?.id;
+                const sessionVersion = accounts?.sessionVersion;
+                const sameAccount = () =>
+                  !accounts || (!!account && accounts.isActiveAccount(account, sessionVersion));
+                creation.current?.abort();
+                const controller = new AbortController();
+                creation.current = controller;
                 void (
                   tab === "dm"
-                    ? client.createDirect(people[0]?.webId as string)
+                    ? client.createDirect(people[0]?.webId as string, { signal: controller.signal })
                     : client.createRoom({
                         name: name.trim(),
                         members: people.map((person) => person.webId),
+                        signal: controller.signal,
                       })
                 )
                   .then(
                     (room) => {
+                      const failedInvitations = room.invitations.filter(
+                        (invitation) => !invitation.delivered,
+                      );
+                      const failed = failedInvitations.length;
+                      // WebIDs do not advertise their storage here. Only offer a fallback for
+                      // accounts within this pod's existing credential boundary.
+                      const canShare = failedInvitations.every((invitation) =>
+                        client.canOpen(invitation.webId),
+                      );
+                      if (failed && sameAccount())
+                        toast(
+                          `Couldn't notify ${failed} member${failed === 1 ? "" : "s"}.${canShare ? " Share the invite link instead." : ""}`,
+                          canShare
+                            ? {
+                                action: {
+                                  label: "Copy link",
+                                  onClick: () => {
+                                    void navigator.clipboard
+                                      .writeText(client.inviteLink(room.url, location.origin))
+                                      .then(
+                                        () => toast.success("Invite link copied"),
+                                        () => toast.error("Couldn't copy invite link"),
+                                      );
+                                  },
+                                },
+                              }
+                            : undefined,
+                        );
+                      invalidate();
+                      if (!mounted.current) return;
                       if (
                         (tab === "room" && people.length === 0) ||
                         (tab === "dm" && rooms.data?.some((joined) => joined.url === room.url))
                       )
                         router.replace(`/chat/r/${encodeRef(room.url)}`);
                       else setCreated(room);
-                      invalidate();
                     },
-                    () =>
-                      setError(
-                        "Couldn't create this conversation. Check the details and try again.",
-                      ),
+                    () => {
+                      if (mounted.current)
+                        setError(
+                          "Couldn't create this conversation. Check the details and try again.",
+                        );
+                    },
                   )
-                  .finally(() => setBusy(false));
+                  .finally(() => {
+                    if (mounted.current) setBusy(false);
+                  });
               }}
             >
               <Tabs
