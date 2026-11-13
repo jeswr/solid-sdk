@@ -1,0 +1,26 @@
+{
+  "name": "@jeswr/site-model",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Semantic agent browser: the RDF site model (actions a website offers, mapped to its own HTTP calls) and its typed projection.",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Claude Opus 5.5",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/site-model/tsconfig.json",
+    "typecheck": "pnpm -w exec tsc -p packages/site-model/tsconfig.json --noEmit",
+    "lint": "pnpm -w exec biome check packages/site-model",
+    "test": "echo 'no tests yet'"
+  }
+}
