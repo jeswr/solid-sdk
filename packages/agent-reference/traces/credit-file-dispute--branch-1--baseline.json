@@ -59,7 +59,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "regulator-claim"
+      "accountability": "regulator-claim",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -83,7 +84,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "b50a701a09fb98bd99098763ef404e5a4c66f72e",
     "core": "scripted"
   },
   "standIns": [
@@ -712,12 +713,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:dfa7cebdea7…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The credit reference agency’s agent; propose; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-branch-1:owner-agent:0002.",
+            "summary": "From The person’s agent to The credit reference agency’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -768,7 +769,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:credit-file-dispute:agreement, with terms (round 1).",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:credit-file-dispute:agreement",
@@ -832,7 +833,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:credit-file-dispute.",
+            "summary": "Terms: purpose Credit file dispute.",
             "raw": {
               "purpose": "urn:purpose:credit-file-dispute",
               "duties": [
@@ -895,12 +896,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:dfa7cebdea7…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The credit reference agency’s agent; propose; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-branch-1:owner-agent:0002.",
+            "summary": "From The person’s agent to The credit reference agency’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -951,7 +952,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:credit-file-dispute:agreement, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:credit-file-dispute:agreement\"; \"urn:purpose:credit-file-dispute\"; \"urn:fictional:credit-file-dispute:owner\"; \"sha-256:ad6766e5150a00f1b5f74cc05a0ba0f489582e0ed3213fac750d0680b04517c9\"",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:credit-file-dispute:agreement",
@@ -1033,7 +1034,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:credit-file-dispute.",
+            "summary": "Terms: purpose Credit file dispute.",
             "raw": {
               "purpose": "urn:purpose:credit-file-dispute",
               "duties": [

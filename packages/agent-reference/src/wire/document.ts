@@ -113,12 +113,17 @@ export async function documentDataset(
   document = readJson(JSON.stringify(document), limits);
   // The workspace streaming parser incorrectly treats repeated protected type-scoped
   // contexts as redefinitions when inherited at nested nodes. Expand with the standard
-  // JSON-LD processor, then use the SDK's parser on the context-free expanded document.
+  // JSON-LD processor. The streaming JSON-LD reader also splits a nested ODRL
+  // constraint's named subject, so feed the SDK context-free N-Quads instead.
   // Original byte/depth/node limits have already run; expansion has separate finite caps.
   const expanded = await jsonld.expand(document as import("jsonld").NodeObject, {
     documentLoader: jsonLdLoader,
   });
-  return parseRdf(JSON.stringify(expanded), "application/ld+json", {
+  const quads = await jsonld.toRDF(expanded, {
+    format: "application/n-quads",
+    documentLoader: jsonLdLoader,
+  });
+  return parseRdf(quads as unknown as string, "application/n-quads", {
     documentLoader,
     maxBytes: limits.maxEnvelopeBytes * 16,
     maxJsonDepth: limits.maxJsonDepth * 2 + 4,

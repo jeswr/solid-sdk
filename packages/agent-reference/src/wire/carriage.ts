@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 /** Temporary legacy serializer boundary. Bindings also accept writeDocument's bytes unchanged. */
 import type { ByteMessage } from "../bindings/bytes.js";
-import { DEFAULT_LIMITS, parseBoundedJson } from "../core/limits.js";
+import { DEFAULT_LIMITS, parseBoundedJson, resolveLimits } from "../core/limits.js";
 export const LEGACY_MEDIA_TYPE = "application/vnd.answerable.signed+json";
 export function carriageBytes(wire: unknown): ByteMessage {
   return { bytes: new TextEncoder().encode(JSON.stringify(wire)), mediaType: LEGACY_MEDIA_TYPE };
@@ -13,6 +13,8 @@ export function carriageWire(message: ByteMessage): unknown {
     );
   return parseBoundedJson(
     new TextDecoder("utf-8", { fatal: true }).decode(message.bytes),
-    DEFAULT_LIMITS,
+    // The wire wrapper contains an encoded envelope, whose own decoded strings are
+    // checked against maxStringLength by the ordinary inbound parser.
+    resolveLimits({ maxStringLength: DEFAULT_LIMITS.maxEnvelopeBytes }),
   );
 }

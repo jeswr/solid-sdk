@@ -10,6 +10,14 @@ import { PILOT_PROFILE } from "../profile/vocabulary.js";
 import { type Configuration, type SuiteConstraint, SuiteRegistry } from "./registry.js";
 
 export const BASELINE_SUITES = {
+  settlement: {
+    layer: "settlement",
+    id: "rdf-order",
+    name: "Described in RDF",
+    partOf: "commitments",
+    status: "run",
+    summary: "A signed RDF order settles an accepted offer on a fictional provider ledger.",
+  },
   transport: {
     layer: "transport",
     id: "direct-http",
@@ -113,6 +121,7 @@ export const BASELINE: Configuration = {
     "usage-control": BASELINE_SUITES["usage-control"].id,
     commitments: BASELINE_SUITES.commitments.id,
     accountability: BASELINE_SUITES.accountability.id,
+    settlement: BASELINE_SUITES.settlement.id,
   },
 };
 

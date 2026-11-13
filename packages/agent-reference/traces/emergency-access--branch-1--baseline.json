@@ -75,7 +75,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "local-ledger"
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -105,7 +106,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "b50a701a09fb98bd99098763ef404e5a4c66f72e",
     "core": "scripted"
   },
   "standIns": [
@@ -904,12 +905,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:8ea08cef3c7…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The clinician’s agent to The patient’s record agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:clinician-agent:0002.",
+            "summary": "From The clinician’s agent to The patient’s record agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1100,12 +1101,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:8ea08cef3c7…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The clinician’s agent to The patient’s record agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:clinician-agent:0002.",
+            "summary": "From The clinician’s agent to The patient’s record agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1153,7 +1154,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:emergency-read\"; \"urn:purpose:emergency-access\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:emergency-read",
@@ -1802,12 +1803,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:2e26c27c103…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The patient’s record agent to The clinician’s agent; deliver; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0001.",
+            "summary": "From The patient’s record agent to The clinician’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1909,12 +1910,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:2e26c27c103…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The patient’s record agent to The clinician’s agent; deliver; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0001.",
+            "summary": "From The patient’s record agent to The clinician’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1945,7 +1946,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-emergency-access-branch-1:clinician-agent:0002\"; \"urn:awp:engine-emergency-access-branch-1:clinician-agent:0002\"; \"urn:op:emergency-read\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002",
               "basis": {
@@ -2302,12 +2303,12 @@
         "kind": "describe",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:0c9205d094b…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The patient’s record agent to The patient’s agent; describe; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0002.",
+            "summary": "From The patient’s record agent to The patient’s agent; describe; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2556,12 +2557,12 @@
         "kind": "describe",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:99c72b1acf3…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The patient’s record agent to The trusted contact’s agent; describe; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0003.",
+            "summary": "From The patient’s record agent to The trusted contact’s agent; describe; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2657,12 +2658,12 @@
         "kind": "describe",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:0c9205d094b…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The patient’s record agent to The patient’s agent; describe; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0002.",
+            "summary": "From The patient’s record agent to The patient’s agent; describe; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2999,12 +3000,12 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:93b5488c656…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The patient’s agent to The patient’s record agent; description; signed (JWS EdDSA, pinned key 0ybVTK_b9JwX…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:patient-agent:0001.",
+            "summary": "From The patient’s agent to The patient’s record agent; description; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3189,7 +3190,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-emergency-access-branch-1:record-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:notification:282e2c0d34e784b444c851fec9b88dda",
               "inReplyTo": "urn:awp:engine-emergency-access-branch-1:record-agent:0002"
@@ -3226,12 +3227,12 @@
         "kind": "describe",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:99c72b1acf3…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The patient’s record agent to The trusted contact’s agent; describe; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0003.",
+            "summary": "From The patient’s record agent to The trusted contact’s agent; describe; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3568,12 +3569,12 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:a6d838e7672…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The trusted contact’s agent to The patient’s record agent; description; signed (JWS EdDSA, pinned key tqRg0qoxdFxS…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:contact-agent:0001.",
+            "summary": "From The trusted contact’s agent to The patient’s record agent; description; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3758,7 +3759,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-emergency-access-branch-1:record-agent:0003.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:notification:bd44fd8b714060b8572f7845aec1dd48",
               "inReplyTo": "urn:awp:engine-emergency-access-branch-1:record-agent:0003"

@@ -18,7 +18,14 @@ import { AsyncLocalStorage } from "async_hooks";
 import { randomBytes } from "crypto";
 import type { JWK } from "jose";
 import { emailEnvelopeSchema, emailPinSchema } from "../bindings/email.js";
-import { derivedUrn, digestBytes, digestContent, digestOf, newUrn } from "../core/canonical.js";
+import {
+  canonicalJson,
+  derivedUrn,
+  digestBytes,
+  digestContent,
+  digestOf,
+  newUrn,
+} from "../core/canonical.js";
 import {
   type ConversationEvent,
   type ConversationState,
@@ -51,7 +58,7 @@ import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates
 import { type GateContext, GateMemory } from "../gates/common.js";
 import { type Admission, InboundGate } from "../gates/inbound.js";
 import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
-import { periodKey } from "../gates/payment.js";
+import { paymentDigest, periodKey, sameAmount } from "../gates/payment.js";
 import { evaluateItemTerms, fitnessOf } from "../gates/quality.js";
 import { jointPayloadSchema } from "../mechanisms/joint.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
@@ -79,6 +86,7 @@ import {
 import { singleUseStatusSchema } from "../mechanisms/single-use.js";
 import { TYP, verifyStatement } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
+import { PaymentAgreementNode, PaymentFacts, type PaymentOfferNode } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
 import { CONFIGURATIONS, configurationById, POLICY_PROFILE } from "../profile/configurations.js";
 import {
@@ -118,6 +126,13 @@ import type {
 import { domainValue } from "../store/state.js";
 import { peekWire } from "../trace/packet.js";
 import { decodeAdapterJson, decodeCompactPayload } from "../wire/inspect.js";
+import {
+  liftPaymentObjects,
+  readPaymentObjects,
+  readPaymentOffer,
+  verifyPaymentProofs,
+  withPaymentOffer,
+} from "../wire/payment.js";
 import { receiveCarriage } from "./carriage-gate.js";
 
 import { DutyExecutor, type DutyRule, deadlineMissed, dutyRuleSchema } from "./duties.js";
@@ -342,6 +357,7 @@ export class AgentRuntime {
   private readonly inbound: InboundGate;
   private readonly outbound: OutboundGate;
   private recordReleaseDigest?: string;
+  private readonly paymentOffers = new Map<string, PaymentOfferNode>();
   /** The admission of the inbound message being processed now (serial executor). */
   private admission: Admission | undefined;
   /** Set while an approved action resumes, so the core is not shown proposing it twice. */
@@ -561,6 +577,34 @@ export class AgentRuntime {
         const purpose = (sent?.body as { purpose?: unknown } | undefined)?.purpose;
         return typeof purpose === "string" ? purpose : undefined;
       },
+      receiptOrder: (receipt) => {
+        const sent = this.state.paymentOrders[receipt.order ?? ""];
+        if (sent) return { order: PaymentFacts.create(sent.data), provider: sent.provider };
+        // A payee holds the same agreement and verifies the provider-signed forwarded order.
+        const agreement = this.heldPaymentAgreement(receipt.agreement ?? "");
+        if (!agreement || receipt.payee !== this.identity.party || !receipt.order) return undefined;
+        const order = new PaymentFacts(receipt.order, receipt.dataset);
+        if (
+          order.agreement !== agreement.digest ||
+          order.payee !== agreement.duty?.payee ||
+          !sameAmount(order.amount, agreement.duty?.constraint?.amount) ||
+          order.currency !== agreement.duty?.constraint?.currency
+        )
+          return undefined;
+        return { order, provider: receipt.provider ?? "" };
+      },
+      recordReceipt: (receipt, document) => {
+        this.state.paymentReceipts[receipt.id] = { document, order: receipt.order ?? "" };
+        this.record({
+          type: "payment-receipt-recorded",
+          agreement: receipt.agreement,
+          receipt: receipt.id,
+          order: receipt.order,
+          ledgerReference: receipt.ledgerReference,
+          at: this.now(),
+        });
+        this.persist();
+      },
       agreementTerms: (id) => {
         const agreement = this.state.conversations[id]?.agreement;
         return agreement ? this.state.agreements[agreement]?.terms : undefined;
@@ -619,6 +663,52 @@ export class AgentRuntime {
             },
           }
         : {}),
+      paymentApprovalMatches: (facts, intent) => {
+        const binding = this.state.approvals[actionDigest(intent)]?.payment;
+        return (
+          binding?.termsDigest === facts.agreement && binding?.orderDigest === paymentDigest(facts)
+        );
+      },
+      paymentRecord: (facts, intent) => {
+        const agreement = Object.values(this.state.agreements).find(
+          (a) => a.termsDigest === facts.agreement,
+        );
+        const offer = agreement && this.state.recordMessages[agreement.offer];
+        const acceptance = agreement && this.state.recordMessages[agreement.acceptance];
+        const sourceOffer = agreement && this.paymentOffers.get(agreement.termsDigest);
+        const node =
+          agreement && offer && acceptance && sourceOffer
+            ? PaymentAgreementNode.fromRecord(agreement, {
+                offer: offer.jws,
+                acceptance: acceptance.jws,
+                offerNode: sourceOffer,
+              })
+            : undefined;
+        const confirmed =
+          !!agreement &&
+          agreement.acceptor.onBehalfOf === this.identity.party &&
+          !["refused", "indeterminate", "unsupported"].includes(
+            this.state.conversations[agreement.conversation]?.phase ?? "",
+          ) &&
+          (agreement.offeror.actor === this.identity.actor ||
+            Object.values(this.state.recordMessages).some((r) => {
+              if (r.direction !== "in" || r.conversation !== agreement.conversation) return false;
+              const m = peekWire({ format: "awp-jws-compact/0.1", jws: r.jws });
+              return (
+                m?.kind === "receipt" &&
+                m.from.onBehalfOf === agreement.offeror.onBehalfOf &&
+                [agreement.acceptance, agreement.id].includes(m.body.ref)
+              );
+            }));
+        return {
+          agreement: node,
+          proofsVerified: !!offer && !!acceptance,
+          inEffect: confirmed,
+          ordered: (key) =>
+            !!this.state.paymentOrderKeys[key] &&
+            !(this.reauthorising && this.state.paymentOrderKeys[key] === actionDigest(intent)),
+        };
+      },
       paymentSpent: (rule, currency, intent) => {
         const key = periodKey(rule, currency, this.now());
         const reservation = this.reauthorising
@@ -656,6 +746,22 @@ export class AgentRuntime {
         const key = periodKey(rule.id, String(intent.parameters.currency), this.now());
         this.state.paymentTotals[key] =
           (this.state.paymentTotals[key] ?? 0) + Math.round(Number(intent.parameters.amount) * 100);
+        const facts = PaymentFacts.fromIntent(
+          intent,
+          this.identity.party ?? this.identity.actor,
+          this.now(),
+        );
+        if (facts.onceKey) {
+          const used = this.state.paymentOrderKeys[facts.onceKey];
+          if (used && used !== actionDigest(intent))
+            throw new Error("Payment instalment already ordered");
+          this.state.paymentOrderKeys[facts.onceKey] = actionDigest(intent);
+        }
+        this.state.paymentOrders[facts.id] = {
+          data: facts.data(),
+          provider: intent.recipient ?? "",
+          intentDigest: actionDigest(intent),
+        };
         this.state.paymentReleases[releaseId] = true;
         this.state.paymentReservations[releaseId] = {
           digest: actionDigest(intent),
@@ -765,6 +871,14 @@ export class AgentRuntime {
       : options.trust;
     const rt = new AgentRuntime({ ...options, trust });
     await rt.loadMandateInto();
+    for (const agreement of Object.values(rt.state.agreements)) {
+      if (!agreement.terms.compensation) continue;
+      try {
+        rt.paymentOffers.set(agreement.termsDigest, await readPaymentOffer(agreement.terms));
+      } catch {
+        /* Without its admitted RDF offer this record cannot authorize a payment. */
+      }
+    }
     rt.notificationDuties();
     return rt;
   }
@@ -949,6 +1063,78 @@ export class AgentRuntime {
 
   conversations(): readonly ConversationState[] {
     return Object.values(this.state.conversations);
+  }
+
+  reportPrice(statement: string): Promise<string> {
+    return this.exclusive(async () => {
+      const fact = this.gateMemory.facts.get(statement);
+      if (!fact?.statement?.payment || fact.claimType !== "invoice")
+        throw new TypeError("No admitted price to report");
+      const facts = liftPaymentObjects(await readPaymentObjects(fact.statement.payment));
+      const text = `The cheapest available price is ${facts.amount} ${facts.currency}.`;
+      this.options.gates?.sink?.emit({
+        part: "core",
+        kind: "propose",
+        caption: "The agent answers the price question from the admitted quote.",
+        chat: { who: "agent", text },
+        settlementFacts: facts,
+      });
+      return text;
+    });
+  }
+
+  paymentApprovalBinding(
+    digest: string,
+  ): import("../settlement/types.js").PaymentApprovalBinding | undefined {
+    const pending = this.state.pending[digest];
+    if (pending?.intent.action !== "pay") return undefined;
+    const facts = PaymentFacts.fromIntent(
+      pending.intent,
+      this.identity.party ?? this.identity.actor,
+      this.now(),
+    );
+    if (!facts.agreement) return undefined;
+    return { termsDigest: facts.agreement, orderDigest: paymentDigest(facts) };
+  }
+
+  heldPaymentAgreement(digest: string): PaymentAgreementNode | undefined {
+    const agreement = Object.values(this.state.agreements).find((a) => a.termsDigest === digest);
+    const offer = agreement && this.state.recordMessages[agreement.offer];
+    const acceptance = agreement && this.state.recordMessages[agreement.acceptance];
+    const sourceOffer = agreement && this.paymentOffers.get(agreement.termsDigest);
+    return agreement && offer && acceptance && sourceOffer
+      ? PaymentAgreementNode.fromRecord(agreement, {
+          offer: offer.jws,
+          acceptance: acceptance.jws,
+          offerNode: sourceOffer,
+        })
+      : undefined;
+  }
+
+  async receivedPaymentOrder(id: string): Promise<{ facts: PaymentFacts; payer: string }> {
+    const retained = this.state.recordMessages[id];
+    if (!retained || retained.direction !== "in" || this.state.seen[id]?.disposition !== "accepted")
+      throw new TypeError("No admitted provider order");
+    const message = peekWire({ format: "awp-jws-compact/0.1", jws: retained.jws });
+    if (
+      message?.kind !== "invoke" ||
+      message.body.operation.id !== "urn:op:payment" ||
+      message.to?.party !== this.identity.party
+    )
+      throw new TypeError("Order is not addressed to this provider");
+    const objects = await readPaymentObjects(message.body.input);
+    const facts = liftPaymentObjects(objects);
+    if (!facts.payer || facts.payer !== message.from.onBehalfOf)
+      throw new TypeError("Order payer is not the authenticated principal");
+    if (!(await verifyPaymentProofs(facts, this.trust, this.now())))
+      throw new TypeError("Payment agreement proofs or acceptance authority do not verify");
+    this.record({
+      type: "payment-agreement-proofs-verified",
+      agreement: facts.agreement,
+      order: facts.id,
+      at: this.now(),
+    });
+    return { facts, payer: facts.payer };
   }
 
   agreements(): readonly Agreement[] {
@@ -2237,13 +2423,16 @@ export class AgentRuntime {
      */
     conversation?: Iri;
   }): Promise<StepResult> {
-    return this.exclusive(() => {
+    return this.exclusive(async () => {
+      const terms = input.terms.compensation
+        ? await withPaymentOffer(input.terms, input.peer.party)
+        : input.terms;
       return this.start({
         ...input,
         plan: {
           type: "propose",
           operation: input.operation,
-          terms: input.terms,
+          terms,
           models: input.models,
           ...(input.evidence ? { evidence: input.evidence } : {}),
           ...(input.content ? { content: input.content } : {}),
@@ -2505,6 +2694,7 @@ export class AgentRuntime {
    * under an agreement). The intent is authorised before sending.
    */
   async invokeUnderAgreement(input: {
+    evidence?: readonly EvidenceItem[];
     conversation: Iri;
     operation: OperationRef;
     input: JsonObject;
@@ -2534,7 +2724,7 @@ export class AgentRuntime {
         ...(input.purpose ? { purpose: input.purpose } : {}),
       };
       const out = await this.emit(conv.id, "invoke", body, {
-        evidence: this.ownEvidence(),
+        evidence: [...this.ownEvidence(), ...(input.evidence ?? [])],
         ...(intent ? { intent } : {}),
       });
       this.persist();
@@ -3115,6 +3305,19 @@ export class AgentRuntime {
         "termsDigest does not match terms",
       );
     }
+    if (msg.body.terms.compensation) {
+      try {
+        this.paymentOffers.set(msg.body.termsDigest, await readPaymentOffer(msg.body.terms));
+      } catch {
+        return this.replyClose(
+          conv,
+          msg,
+          "refuse",
+          "protocol-violation",
+          "The RDF offer does not match its stated service terms.",
+        );
+      }
+    }
     this.setDomain(`_offer:${msg.id}`, msg.body.terms as Json, conv.id);
     if (handler.termsSchema) {
       const parsed = handler.termsSchema.safeParse(msg.body.terms);
@@ -3594,12 +3797,33 @@ export class AgentRuntime {
           ...(reply.selection ? { selection: reply.selection } : {}),
           agreement: agreementId,
         };
+        const terms = this.getDomain(`_offer:${open.id}`) as JsonObject;
+        const acceptanceApproval = intent ? this.state.approvals[actionDigest(intent)] : undefined;
+        const paymentEvidence: EvidenceItem[] =
+          terms.compensation && this.options.mandateJws && intent
+            ? [
+                { role: "authorisation", format: "jws-compact", value: this.options.mandateJws },
+                {
+                  role: "authorisation",
+                  format: "awp-action-intent/0.1",
+                  value: canonicalJson(intent),
+                },
+                ...(acceptanceApproval
+                  ? [
+                      {
+                        role: "approval" as const,
+                        format: "jws-compact",
+                        value: acceptanceApproval.jws,
+                      },
+                    ]
+                  : []),
+              ]
+            : [];
         const out = await this.emit(conv.id, "accept", body, {
           inReplyTo,
-          evidence: [...this.ownEvidence(), ...(reply.evidence ?? [])],
+          evidence: [...this.ownEvidence(), ...paymentEvidence, ...(reply.evidence ?? [])],
           ...authorised,
         });
-        const terms = this.getDomain(`_offer:${open.id}`) as JsonObject;
         const agreement: Agreement = {
           type: "agreement",
           id: agreementId,
@@ -5452,11 +5676,25 @@ export class AgentRuntime {
         detail: "approval names another conversation",
         outbound: [],
       });
+    if (waiting.intent.action === "pay") {
+      const expected = this.paymentApprovalBinding(a.actionDigest);
+      if (
+        !expected ||
+        a.payment?.termsDigest !== expected.termsDigest ||
+        a.payment?.orderDigest !== expected.orderDigest
+      )
+        return this.result("rejected", {
+          reason: "approval-denied",
+          detail: "Payment approval must cover the agreed terms and exact order.",
+          outbound: [],
+        });
+    }
     this.state.approvals[a.actionDigest] = {
       id: a.id,
       decision: a.decision,
       validUntil: a.validUntil,
       jws,
+      ...(a.payment ? { payment: a.payment } : {}),
     };
     this.record({
       type: "approval",
@@ -5871,6 +6109,49 @@ export class AgentRuntime {
       });
       if (reference.digest)
         vocabulary[`${path}.digest`] = { type: "code", values: [reference.digest] };
+    }
+    if (kind === "propose" && proposedTerms?.compensation) {
+      const offer = await readPaymentOffer(proposedTerms);
+      this.paymentOffers.set(String((body as JsonObject).termsDigest), offer);
+      const classifyOffer = (value: unknown, path: string): void => {
+        if (Array.isArray(value)) {
+          value.forEach((v, i) => {
+            classifyOffer(v, `${path}.${i}`);
+          });
+          return;
+        }
+        if (value && typeof value === "object") {
+          for (const [key, child] of Object.entries(value)) classifyOffer(child, `${path}.${key}`);
+          return;
+        }
+        if (typeof value === "string") {
+          vocabulary[path] = { type: "term", values: [value] };
+          known.terms.add(value);
+        }
+      };
+      classifyOffer(proposedTerms.payment, "terms.payment");
+    }
+    if (!opts.resume && opts.intent?.action === "pay" && kind === "invoke") {
+      const document = await this.outbound.paymentOrder(opts.intent);
+      body = { ...body, input: document };
+      const classify = (value: unknown, path: string): void => {
+        if (Array.isArray(value)) {
+          value.forEach((v, i) => {
+            classify(v, `${path}.${i}`);
+          });
+          return;
+        }
+        if (value && typeof value === "object") {
+          for (const [key, child] of Object.entries(value)) classify(child, `${path}.${key}`);
+          return;
+        }
+        if (typeof value === "string") {
+          vocabulary[path] = { type: "term", values: [value] };
+          known.terms.add(value);
+        } else if (typeof value === "number")
+          vocabulary[path] = { type: "number", values: [value] };
+      };
+      classify(document, "input");
     }
     const free = freeStrings(body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary }, known);
     let message =

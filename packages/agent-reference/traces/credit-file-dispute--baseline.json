@@ -56,7 +56,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "regulator-claim"
+      "accountability": "regulator-claim",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -80,7 +81,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "b50a701a09fb98bd99098763ef404e5a4c66f72e",
     "core": "scripted"
   },
   "standIns": [
@@ -709,12 +710,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:99d4e111862…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The credit reference agency’s agent; propose; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-main:owner-agent:0002.",
+            "summary": "From The person’s agent to The credit reference agency’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -765,7 +766,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:credit-file-dispute:agreement, with terms (round 1).",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:credit-file-dispute:agreement",
@@ -829,7 +830,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:credit-file-dispute.",
+            "summary": "Terms: purpose Credit file dispute.",
             "raw": {
               "purpose": "urn:purpose:credit-file-dispute",
               "duties": [
@@ -892,12 +893,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:99d4e111862…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The credit reference agency’s agent; propose; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-main:owner-agent:0002.",
+            "summary": "From The person’s agent to The credit reference agency’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -948,7 +949,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:credit-file-dispute:agreement, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:credit-file-dispute:agreement\"; \"urn:purpose:credit-file-dispute\"; \"urn:fictional:credit-file-dispute:owner\"; \"sha-256:ad6766e5150a00f1b5f74cc05a0ba0f489582e0ed3213fac750d0680b04517c9\"",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:credit-file-dispute:agreement",
@@ -1030,7 +1031,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:credit-file-dispute.",
+            "summary": "Terms: purpose Credit file dispute.",
             "raw": {
               "purpose": "urn:purpose:credit-file-dispute",
               "duties": [
@@ -1432,12 +1433,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:4fbefb0a00c…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The credit reference agency’s agent to The person’s agent; accept; signed (JWS EdDSA, pinned key hfNgerql19Qt…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-main:agency-agent:0001.",
+            "summary": "From The credit reference agency’s agent to The person’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -1511,7 +1512,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-credit-file-dispute-main:owner-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-credit-file-dispute-main:owner-agent:0001",
               "inReplyTo": "urn:awp:engine-credit-file-dispute-main:owner-agent:0002"
@@ -1548,12 +1549,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:4fbefb0a00c…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The credit reference agency’s agent to The person’s agent; accept; signed (JWS EdDSA, pinned key hfNgerql19Qt…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-main:agency-agent:0001.",
+            "summary": "From The credit reference agency’s agent to The person’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -1605,7 +1606,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-credit-file-dispute-main:owner-agent:0002\"; \"sha-256:ad6766e5150a00f1b5f74cc05a0ba0f489582e0ed3213fac750d0680b04517c9\"; \"urn:awp:agreement:42a9064169a21afb9c2d6916857ed8eb\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-credit-file-dispute-main:owner-agent:0002",
               "termsDigest": "sha-256:ad6766e5150a00f1b5f74cc05a0ba0f489582e0ed3213fac750d0680b04517c9",
@@ -1641,7 +1642,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-credit-file-dispute-main:owner-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-credit-file-dispute-main:owner-agent:0001",
               "inReplyTo": "urn:awp:engine-credit-file-dispute-main:owner-agent:0002"
@@ -2025,12 +2026,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:83e92435f71…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The credit reference agency’s agent to The person’s agent; invoke; signed (JWS EdDSA, pinned key hfNgerql19Qt…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-main:agency-agent:0002.",
+            "summary": "From The credit reference agency’s agent to The person’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -2148,12 +2149,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:83e92435f71…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The credit reference agency’s agent to The person’s agent; invoke; signed (JWS EdDSA, pinned key hfNgerql19Qt…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-main:agency-agent:0002.",
+            "summary": "From The credit reference agency’s agent to The person’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -2204,7 +2205,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:general-notice\"; \"sha-256:b2f0adc14ede9b029b0928724402eb95da074add1f7f3ae1df97e076ee55b3ce\"; \"urn:purpose:duties\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:general-notice",
@@ -2556,12 +2557,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:a9999dca415…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The credit reference agency’s agent; deliver; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-main:owner-agent:0003.",
+            "summary": "From The person’s agent to The credit reference agency’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -2625,7 +2626,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-credit-file-dispute-main:agency-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:general-duty:d17af5bf0e30a18ad4395e83b312462c",
               "inReplyTo": "urn:awp:engine-credit-file-dispute-main:agency-agent:0002"
@@ -2662,12 +2663,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:a9999dca415…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The credit reference agency’s agent; deliver; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-credit-file-dispute-main:owner-agent:0003.",
+            "summary": "From The person’s agent to The credit reference agency’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -2699,7 +2700,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-credit-file-dispute-main:agency-agent:0002\"; \"urn:awp:engine-credit-file-dispute-main:agency-agent:0002\"; \"urn:op:general-notice\"; \"sha-256:b2f0adc14ede9b029b0928724402eb95da074add1f7f3ae1df97e076ee55b3ce\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-credit-file-dispute-main:agency-agent:0002",
               "basis": {
@@ -2749,7 +2750,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-credit-file-dispute-main:agency-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:general-duty:d17af5bf0e30a18ad4395e83b312462c",
               "inReplyTo": "urn:awp:engine-credit-file-dispute-main:agency-agent:0002"

@@ -44,14 +44,20 @@ export function scenarioRegistry() {
     summary:
       "Every required party signs one digest; durable local holds, conditional completion and fresh signed status.",
   });
-  registry.register({
-    layer: "commitments",
-    id: "payment",
-    name: "Local structured payments",
-    agreement: "signed-offer-acceptance",
-    summary:
-      "The local extension releases a structured payment instruction under a signed mandate, reserves cumulative limits before release, and records a signed stand-in bank submission; no settlement claim.",
-  });
+  for (const [id, name] of [
+    ["ap2", "Agent Payments Protocol 0.2"],
+    ["acp", "Agentic Commerce Protocol 2026-04-17"],
+    ["x402", "x402 version 2"],
+    ["mpp", 'Machine Payments Protocol (the "Payment" HTTP authentication scheme, draft 01)'],
+  ] as const)
+    registry.register({
+      layer: "settlement",
+      id,
+      name,
+      partOf: "commitments",
+      status: "not-run",
+      summary: "Protocol objects exist; runtime wiring belongs to Brief 25.",
+    });
   registry.register({
     layer: "reliance",
     id: "corroboration",

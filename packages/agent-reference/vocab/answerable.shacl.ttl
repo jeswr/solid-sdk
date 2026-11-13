@@ -2308,3 +2308,58 @@ awp:StatementPeriodShape a sh:NodeShape;
         sh:name "end"; sh:path <https://schema.org/endDate>;
         sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string
     ].
+
+
+_:b1_b1_b0_n3-587 sh:minCount 1; sh:pattern "^[A-Z]{3}$".
+_:b1_b1_b0_n3-589 sh:minCount 1; sh:pattern "^[A-Z]{3}$".
+
+# AUTHORED-BY Codex GPT-6 — settlement document profile
+awp:PayActionShape sh:closed true; sh:ignoredProperties (rdf:type);
+  sh:property [ sh:path <https://schema.org/agent>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ];
+  sh:property [ sh:path <https://schema.org/recipient>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ];
+  sh:property [ sh:path <https://schema.org/price>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#decimal>; sh:minCount 1; sh:minExclusive 0 ];
+  sh:property [ sh:path <https://schema.org/object>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#settles>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#payeeAccount>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#onceKey>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#instalment>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1; sh:pattern "^[1-9][0-9]*$" ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#validUntil>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#agreement>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:node awp:AgreementShape ] .
+awp:InvoiceShape sh:closed true; sh:ignoredProperties (rdf:type);
+  sh:property [ sh:path <https://schema.org/totalPaymentDue>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#decimal>; sh:minCount 1; sh:minExclusive 0 ];
+  sh:property [ sh:path <https://schema.org/paymentDueDate>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>; sh:minCount 1 ];
+  sh:property [ sh:path <https://schema.org/referencesOrder>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#settles>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1 ];
+  sh:property [ sh:path <https://schema.org/recipient>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#payeeAccount>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ] .
+awp:PaymentReceiptShape a sh:NodeShape; sh:targetClass <https://w3id.org/jeswr/awp#PaymentReceipt>; sh:name "PaymentReceipt"; sh:closed true; sh:ignoredProperties (rdf:type);
+  sh:property [ sh:path <https://schema.org/about>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:node awp:PayActionShape ];
+  sh:property [ sh:path <https://schema.org/recipient>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ];
+  sh:property [ sh:path <https://schema.org/price>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#decimal>; sh:minCount 1; sh:minExclusive 0 ];
+  sh:property [ sh:path <https://schema.org/priceCurrency>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1; sh:pattern "^[A-Z]{3}$" ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#settles>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#claimType>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1; sh:hasValue "payment-receipt" ];
+  sh:property [ sh:path <https://schema.org/actionStatus>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:hasValue <https://schema.org/CompletedActionStatus> ];
+  sh:property [ sh:path <https://schema.org/confirmationNumber>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1 ];
+  sh:property [ sh:path <http://www.w3.org/ns/prov#wasAttributedTo>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ] .
+awp:CompensationOfferShape a sh:NodeShape; sh:targetClass <http://www.w3.org/ns/odrl/2/Offer>; sh:name "CompensationOffer"; sh:closed true; sh:ignoredProperties (rdf:type);
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/permission>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:node awp:ServicePermissionShape ];
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/duty>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:node awp:CompensationDutyShape ];
+  sh:property [ sh:path <https://schema.org/name>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1 ];
+  sh:property [ sh:path <https://schema.org/agent>; sh:maxCount 1; sh:nodeKind sh:IRI ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#validFrom>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#validUntil>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>; sh:minCount 1 ];
+  sh:property [ sh:path <https://w3id.org/jeswr/awp#instalment>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1; sh:pattern "^[1-9][0-9]*$" ];
+  sh:property [ sh:path <https://w3id.org/dpv#hasPurpose>; sh:maxCount 1; sh:nodeKind sh:IRI ] .
+awp:CompensationDutyShape a sh:NodeShape; sh:targetClass <http://www.w3.org/ns/odrl/2/Duty>; sh:name "CompensationDuty"; sh:closed true; sh:ignoredProperties (rdf:type);
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/action>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:hasValue <http://www.w3.org/ns/odrl/2/compensate> ];
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/compensatedParty>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ];
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/constraint>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:node awp:CompensationConstraintShape ] .
+awp:CompensationConstraintShape a sh:NodeShape; sh:targetClass <http://www.w3.org/ns/odrl/2/Constraint>; sh:name "CompensationConstraint"; sh:closed true; sh:ignoredProperties (rdf:type);
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/leftOperand>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:hasValue <http://www.w3.org/ns/odrl/2/payAmount> ];
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/operator>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:hasValue <http://www.w3.org/ns/odrl/2/eq> ];
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/rightOperand>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#decimal>; sh:minCount 1; sh:minExclusive 0 ];
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/unit>; sh:maxCount 1; sh:datatype <http://www.w3.org/2001/XMLSchema#string>; sh:minCount 1; sh:pattern "^[A-Z]{3}$" ] .
+awp:ServicePermissionShape a sh:NodeShape; sh:targetClass <http://www.w3.org/ns/odrl/2/Permission>; sh:name "ServicePermission"; sh:closed true; sh:ignoredProperties (rdf:type);
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/action>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:hasValue <http://www.w3.org/ns/odrl/2/use> ];
+  sh:property [ sh:path <http://www.w3.org/ns/odrl/2/target>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ] .

@@ -54,6 +54,9 @@ export const approvalSchema = z
     issuer: iri,
     actor: iri,
     actionDigest: z.string().max(128),
+    payment: z
+      .strictObject({ termsDigest: z.string().max(128), orderDigest: z.string().max(128) })
+      .optional(),
     conversation: iri,
     decision: z.enum(["approve", "deny"]),
     issuedAt: instant,

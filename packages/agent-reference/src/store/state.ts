@@ -155,7 +155,13 @@ export interface RuntimeState {
   pending: Record<string, PendingAction>;
   approvals: Record<
     string,
-    { id: Iri; decision: "approve" | "deny"; validUntil: string; jws: string }
+    {
+      id: Iri;
+      decision: "approve" | "deny";
+      validUntil: string;
+      jws: string;
+      payment?: import("../settlement/types.js").PaymentApprovalBinding;
+    }
   >;
   agreements: Record<Iri, Agreement>;
   /** Operation-scoped state; owned entries wrap their JSON as { owner, value }. Legacy/shared entries stay unowned. */
@@ -202,6 +208,12 @@ export interface RuntimeState {
   /** Gate records only, excluded from facts, domain memory and core context. */
   relianceHolds: Record<string, import("../gates/common.js").RelianceHold>;
   relianceBindings: Record<string, string>;
+  paymentOrders: Record<
+    string,
+    { data: import("../model/payment.js").PaymentData; provider: string; intentDigest: string }
+  >;
+  paymentOrderKeys: Record<string, string>;
+  paymentReceipts: Record<string, { document: unknown; order: string }>;
   paymentTotals: Record<string, number>;
   paymentReleases: Record<string, true>;
   paymentReservations: Record<string, { digest: string; period: string; amountMinor: number }>;
@@ -245,6 +257,9 @@ export function emptyState(): RuntimeState {
     usedApprovals: {},
     notificationDuties: {},
     organisationApprovals: {},
+    paymentOrders: {},
+    paymentOrderKeys: {},
+    paymentReceipts: {},
     paymentTotals: {},
     statementRefusals: {},
     relianceHolds: {},

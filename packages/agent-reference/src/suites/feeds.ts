@@ -5,6 +5,7 @@ import type { Check } from "../trace/types.js";
 import type { LayerId } from "./registry.js";
 export const LAYER_FEEDS: Readonly<Record<LayerId, readonly Check[]>> = {
   transport: [],
+  settlement: ["P2", "P3", "P4", "P7", "P8", "receipt"],
   "data-access": ["disclosure", "data-terms", "source", "fitness"],
   identity: ["integrity", "recipient", "authority"],
   meaning: ["terms", "fitness", "disclosure"],

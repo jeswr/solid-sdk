@@ -1451,3 +1451,235 @@ No evaluation run, network access, dependency installation, scenario/manifest ch
 commit was made. The HTTP stand-in for the second half is: requests and responses pass
 in process with their method, path, headers and body; the fictional provider keeps the
 ledger and no real money moves. ACP delegation must be wrapped as a 201 response.
+
+
+## Brief 24
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Implementation is offline, under Node 24, without commits. The merged Briefs 22, 22b,
+26a and 25p were read before implementation. Payment model reads are real dataset
+wrappers; legacy message bodies remain the explicitly supplied integration boundary.
+The existing provider ledger is reused. Checkpoints and final results follow below.
+
+**Parts 1–4 checkpoint.** The twelfth choice is registered, all previous configurations
+select `rdf-order`, and four protocol choices are explicitly not run. `payment` is no
+longer a commitments suite. Payment and receipt checks read `src/model/payment.ts`
+wrappers; RDF documents and trace facts are written from those datasets by `src/wire/payment.ts`.
+The existing ledger is reused. The invoice and shopping paths now exchange signed offers,
+authorised acceptances, invoices, orders, provider receipts, forwarded receipts and
+acknowledgements. The new mortgage stretch runs with separately keyed fictional valuer,
+register and provider agents. All **333** earlier mortgage-main decision records remain
+identical and in position. The three mortgage failures stop at P2/P3/P1; the price-only
+shopping branch stops at P5. Focused checks initially passed **21** new payment tests.
+The pipeline guard still reports **15 hard failures and 213 exact allowances**.
+
+**An input-contract conflict, stopped rather than bypassed.** `scenarios/expenses.json`
+also contains `pay` without an agreement (and names the removed payment suite). It is
+not among the scenarios the oracle instruction explicitly authorizes changing. The
+mandatory universal P1 refusal changes that path. Its existing signed exchange cannot
+remain decision-identical while also forming the missing agreement through real gates.
+P1 is retained; expense trace/oracle recording is stopped pending that scope decision.
+This prevents claiming a passing global oracle/scenario gate. No expense agreement is
+fabricated and no old decision snapshot is silently accepted as a new real run.
+
+**RDF/proof and trace checkpoint.** The source now signs an actual ODRL Offer document
+inside its retained message body; scalar service-term mirrors remain for the existing
+negotiator and are checked against that RDF at the wire boundary. The payment gate reads
+the admitted offer's duty nodes. The order carries the agreement and both original
+message proofs. The provider independently verifies those proofs, the acceptance's
+party-signed mandate, its exact intent and any required owner approval before its ledger
+transfer. Owner payment approval additionally signs explicit terms/order digest bindings.
+The receipt contains the bounded order scope, rather than recursively copying the
+agreement proofs into another credential. Both payer and payee run the receipt check.
+Every P1–P8 verdict carries a snapshot of the very dataset it read; the recorder resolves
+those snapshots through `writeDocument` before publishing. Requests, orders and receipts
+also retain the native-document inspector view. The RDF object and its lifted facts are
+identified as the same document instead of duplicated. The successful mortgage stretch
+is marked from its register lookup through the payee acknowledgement.
+
+A wire round-trip exposed a concrete SDK JSON-LD streaming-reader problem: the four
+amount-constraint properties were moved from their named subject to a new blank node.
+`src/wire/document.ts` now uses the pinned standard JSON-LD processor to produce
+context-free N-Quads, then the existing bounded SDK parser. Graph equality remains
+mandatory. `src/wire/carriage.ts` also distinguishes the encoded envelope string's bound
+from decoded payload-string bounds: a valid larger signed order fits the existing
+64 KiB envelope limit, while its decoded fields retain the existing 16 KiB string limit.
+No context admission, signature check or resource bound is disabled.
+
+**Compatibility audit checkpoint.** `/tmp/brief24-oracle-audit.json` records **148 unchanged
+existing paths**, exactly **seven changed paths in named scenarios**, **four new paths**,
+and **zero unexpected differences** outside the two expense conflicts. Mortgage-main's
+original 333-record prefix remains identical. `mortgage-injected-fee` still stops for its
+old `not-authorised` reason: its original action is `compensate`, with an unpermitted
+recipient, not a `pay` intent. `trip-booking` currently reserves through a multi-party
+agreement and never sends `pay`; `invoice-finance` redeems an invoice capability with
+`use` and never sends `pay`. There is no cash-payment path to migrate in those two files,
+and no new fee, payee or payment authority was invented for them. `mortgage-core` remains
+unchanged: adding the register, provider and valuation operations/world would have a
+nonzero implementation and recording cost, so the brief's optional addition was omitted.
+
+The current engine binds one owner approval to one action. Mortgage-main therefore asks
+once before accepting the valuation and once for the subsequently created exact order.
+Both questions show the service, registered valuer label, 450 USD and the 600 USD limit.
+The second signature explicitly covers the terms digest and order digest. An earlier
+acceptance signature is never silently reused for the later payment.
+
+**Final implementation by part.** Part 1 registers settlement as the twelfth selection,
+with `partOf: "commitments"`; `rdf-order` is executable and AP2 0.2, ACP 2026-04-17,
+x402 v2 and MPP draft 01 are explicitly not run. Every configuration inherits
+`rdf-order`. No settlement alternative configuration is declared. The old commitments
+`payment` selection is removed, including its scenario references. Part 2 adds the
+single ordered P1–P8 checker and receipt checker, three reason individuals and their
+public reason codes, explicit signed payment approval bindings, persistent once keys,
+recorded orders and receipts. The existing account-binding logic, `PaymentLimit`,
+calendar-month reservations and approval exceptions remain. A limit attached to the
+with-approval payment rule itself remains a cap; it is not authority to approve a
+larger payment. P3 also checks accepted account ownership, even when an invoice falsely
+retains the agreed payee's name. An instalment cannot be invented to evade replay: it
+must be the instalment in the signed amount due.
+
+Part 3 implements the four-method RDF suite over the existing provider-owned ledger.
+The provider admits an authenticated order, independently verifies the carried contract
+proofs and acceptance authority, authorizes its own ledger effect, signs the receipt,
+and returns it through ordinary message gates. The payer admits and forwards that
+provider-signed statement under the agreement; the payee admits it and acknowledges.
+No private signing material or reusable payment credential is given to a core. Part 4
+adds the paid mortgage valuation and its three refusal branches, plus the shopping
+price-only refusal and an actual agent answer with the admitted price. Part 5 records
+native objects and same-dataset lifted JSON-LD, individual payment verdicts, settlement
+on every manifest row and payment segment boundaries. Packet summaries keep original
+identifiers and bytes in inspector fields rather than copying them into sentences.
+The recorder caches serialization by the exact graph/document fingerprint; a changed
+live dataset gets a new snapshot. The stopped compatibility work is the expense conflict
+already described, not an exception to P1.
+
+**Recorded decision changes, exhaustive relative to the original oracle.**
+
+| Existing path | Change and outcome |
+|---|---|
+| `mortgage-main/main` | The original 333 records are unchanged; registered lookup, authorized valuation agreement, invoice, approved 450 USD order, ledger receipt and payee acknowledgement are appended. |
+| `pay-an-invoice/main` | A real supplier offer/acceptance replaces the missing contract; the provider now settles on its ledger and both sides admit its receipt. |
+| `pay-an-invoice/branch-1` | Signed offer/acceptance precede the original rejected account-source path. It still stops for `source-not-authoritative`; no provider order leaves. |
+| `pay-an-invoice/branch-2` | The signed offer and invoice both specify 700 GBP. The original limit exception is still held for the principal, now at P5 with `limit-exceeded`. |
+| `shopping-agent/main` | A real merchant agreement precedes the payment and signed ledger receipts. |
+| `shopping-agent/branch-1` | The signed offer and invoice both specify 600 GBP. The original budget/limit exception still asks the principal at P5, `limit-exceeded`. |
+| `shopping-agent/branch-2` | The contract is formed first; the redirected account still stops for `not-authorised`, at the retained account-binding check P4. |
+
+| New path | Actual outcome |
+|---|---|
+| `mortgage-main/fee-amount-differs` | Stop at P2, `amount-differs`. The agent tells Sam that the agreement says 450 USD and the invoice asks for 495 USD. No provider order is sent. |
+| `mortgage-main/fee-payee-differs` | Stop at P3, `payee-differs`. The invoice's account is accepted as belonging to another party, even though the invoice retains the valuer as its claimed payee. No provider order is sent. |
+| `mortgage-main/fee-no-offer` | Stop at P1, `no-agreement`, despite the ordinary text asking for immediate payment. |
+| `shopping-agent/asked-to-look-not-to-buy` | Stop at P5, `not-authorised`; no payment reaches the provider. The agent answers: “The cheapest available price is 300.00 GBP.” |
+
+**Manifest and oracle accounting.** The manifest has **178 rows: 158 `runs`, 11
+`disagrees`, 9 `blocked`**, including eight existing transport-configuration rows.
+Every row has `settlement: "rdf-order"`. These are artifact inventory totals: the two
+expense `runs` rows and their traces are retained historical records, **not successful
+runs under the new gate**. Current validation refuses those two paths at P1; their
+recording was stopped to preserve the forbidden-to-change oracle scope. Therefore a
+claim that all 169 recorded executable rows currently run would be false. The named
+scenario recording commands execute 19 paths (three invoice, four shopping, twelve
+mortgage including existing transport cells). No protocol stand-in is called a run.
+
+The snapshot command was run **once**, after those recordings. Its filter now excludes
+configuration alternatives, matching the baseline-only oracle test rather than
+silently overwriting a baseline key with a transport alternative. It records **161
+baseline paths**; exactly the seven existing paths above differ and exactly the four
+new paths above are added. All other existing snapshot entries are unchanged. The
+new SHA-256 is `b746fb3e085851de674c3cc05d47d9373f02df397f00f04bf687d367a34e799e`.
+The two protected expense entries remain historical. The global live oracle is not
+reported as passing. The independent live compatibility audit checks all other paths
+and records the two actual P1 expense refusals separately.
+
+**Brief 25 adapter handover.** `SettlementSuite` lives in `src/settlement/types.ts`.
+`ProtocolObjects.objects` contains the actual native object/HTTP form for inspection;
+`native` is a host-side association, never core authority. Adapters can retain their
+configured protocol server, signing functions, key handles and profile in their
+constructor, so the existing protocol functions do not need changed signatures.
+`CheckedPayment.digest` binds the exact normalized order scope; the terms digest binds
+the signed offer. The host must verify and pin the original protocol envelopes before
+lifting, retain request/checkout/challenge-to-agreement associations, and supply the
+selected adapter's closed-instruction guarantee for P8. A registered but unimplemented
+settlement choice cannot release an RDF order as a silent fallback. Provider account
+ownership comes from authenticated host configuration, never a core parameter. The
+provider and payer must retain their replay state across exchanges. RDF lifting checks
+that native objects were not changed after admission.
+
+| Protocol | Mapping onto request / order / settle / lift |
+|---|---|
+| x402 | `paymentRequiredExchange` / `signAuthorization` + `encodePaymentSignature` / `X402Facilitator.verify` and `settle`, then `encodePaymentResponse` / requirements `payTo` and `amount`, authorization `to/value`, configured asset/network/currency/precision, and the agreement/once-key association. The provider signs the otherwise unsigned receipt separately. |
+| MPP | `createChallenge` + `challengeExchange` / `createCredential` + `buildCredential` / `MppServer.verify` and `settle` + `encodeReceipt` / challenge charge fields and credential `to/value`, with `externalId` carrying the agreement digest and the challenge/nonce association. Preserve the shared EIP-3009 replay scope and authenticate the receipt in an ordinary provider statement. |
+| AP2 | `signCheckout` / the two `issue*Mandate` functions plus `presentSdJwt` / `checkCheckoutMandate` and `checkPaymentMandate`, followed by the existing ledger transfer and a locally specified signed receipt / checkout and mandate money/payee, `checkout_hash`, audience, nonce and open-constraint associations. Brief 25p supplies no AP2 settlement/receipt producer; the receipt claim profile must be stated, not attributed to a missing specification. |
+| ACP | `createSessionSchema` + `checkoutSessionSchema` / `delegatePaymentSchema`, `AcpPaymentProvider.delegate`, then `completeSchema` with the delegated token / `redeem`, a completed-session order and separately signed provider receipt / session/allowance totals, merchant, currency, session id and one-use allowance. Keep `signAcpExchange`/`verifyAcpExchange`, header checks and endpoint-scoped `IdempotencyStore.execute` around POSTs. |
+
+Currency precision is explicit profile data; no live registry is inferred. Native
+minor-unit amounts are converted to decimal strings in the protocol lift before gate
+checks, using the existing money helpers. One literal requirement needs clarification
+for Brief 25: `lift(objects): PaymentFacts` is a pure, one-way interface, so it cannot
+also accept decimal model money and return a protocol order. A builder can reuse the
+checked native units from its original request; if it must manufacture minor units
+from a new model amount, the “to and from minor units inside lift and nowhere else”
+wording needs a bidirectional conversion API. RDF order has no minor-unit conversion;
+its JPY test and the unchanged protocol conversion tests cover zero-decimal currency.
+
+**Model/generator boundary.** `src/model/payment.ts` contains live views for the
+closed payment document shapes: `PaymentOfferNode`, `PaymentAgreementNode`,
+`CompensationNode`, `PaymentConstraintNode`, `PaymentFacts`, and the accepted-account
+projection `PaymentAccountNode`; `PaymentNode` supplies typed literal infrastructure.
+The generator is still unable to project the complete engine model. The full diagnostic
+file retains the exact admissions; the final generation has **158 errors** (and 18
+warnings), including the payment shapes' unsupported closed/ignored-property and
+constant-value constraints. No generator source or admission rule was weakened; the
+one admitted `GrantRecord` continues to be generated, with byte drift checked. The
+RDF pipeline guard remains exactly **15 hard core-model failures plus 213 bounded
+allowances**. Neither protected guard file was edited. Complete message-body RDF
+carriage remains the merged branch's separate, pre-existing boundary; the new payment
+objects themselves are real RDF, signed inside the existing verifiable messages.
+
+**Adversarial checks.** A temporary AST harness removed P1–P8 and the receipt guard,
+one at a time. All **9/9** removals caused their targeted tests to fail, with source
+restored after every attempt and in `finally`. Results and failing assertion names are
+in `/tmp/brief24-mutations.json`; this is selected-guard evidence, not a claim of full
+coverage. Additional real-message tests cover native offer carriage, ledger settlement,
+both receipt admissions, all four new refusal paths, no provider order on failure,
+readable approval questions, and a genuinely provider-signed wrong-amount receipt
+refused only after the ordinary five inbound checks. Durable tests retain monthly
+limits, new-month behavior, file-store restart and single-use approvals while adding
+real signed agreements, explicit approval-binding attacks, denial and once-key replay.
+All pre-existing protocol source files, ledger/money code and protocol tests are intact.
+
+**Final commands and results.** `/opt/node24/bin` was first on PATH (Node 24.22.3).
+All commands were offline; no dependencies were installed, no commits were made, and
+no changes outside `packages/agent-reference` remain. The stopped portions above are
+reported as incomplete rather than waived.
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @jeswr/agent-reference run codegen` | Generated the admitted model and refreshed input hashes; full admission diagnostics retained, as described above. |
+| `pnpm --filter @jeswr/agent-reference exec tsc -p tsconfig.build.json`, then `node scripts/copy-generated.mjs` in the package | Passed. This is compilation, not a claim that the package's combined build/scenario script passes. |
+| `node scripts/export-schemas.mjs --check` in the package | Passed; checked-in schema matches the scenario schema. |
+| `node packages/agent-reference/scripts/run-scenarios.mjs --scenario=pay-an-invoice` | Passed: three signed, gated paths recorded. |
+| `node packages/agent-reference/scripts/run-scenarios.mjs --scenario=shopping-agent` | Passed: four signed, gated paths recorded. |
+| `node packages/agent-reference/scripts/run-scenarios.mjs --scenario=mortgage-main` | Passed: twelve paths including the existing transport configurations. |
+| `node packages/agent-reference/scripts/oracle-snapshot.mjs` | Run once; 161 baseline entries, seven changed existing entries and four additions. |
+| `node /tmp/brief24-oracle-audit.mjs` | Passed its compatibility assertions: 148 unchanged live existing paths, seven named changes, four additions, no unexpected difference, original mortgage prefix identical. The two expense refusals are separately reported, not counted as unchanged live runs. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run` | **619 passed, 2 failed, 621 total; 59 passing files and 2 failing files.** Both failures are the documented expense conflict: `engine.test.ts` and `oracle.test.ts` reach `bank-receives`, but P1 correctly sent no payment. All protocol tests and all new payment/journey/durability tests pass. Final log: `/tmp/brief24-tests-final2.log`. |
+| Temporary guard-removal harness `node /tmp/brief24-mutate.mjs` | Detected **9/9** removed guards through assertion failures; production source restored. |
+| `pnpm --filter @jeswr/agent-reference run scenarios` | **Stopped** at `expenses` / `bank-receives`, with last decision `no-agreement`. Unrelated trace churn from the partial recording was restored; no incomplete global recording is called successful. |
+| `pnpm --filter @jeswr/agent-reference run typecheck` | Passed after final source changes. |
+| `pnpm --filter @jeswr/agent-reference run lint` | Passed: no errors, seven warnings and 292 informational diagnostics; no broad formatting rewrite. |
+| `node packages/agent-reference/scripts/check-rdf-pipeline.mjs` | Expected nonzero baseline: exactly **15 failures and 213 explicit remaining violations**. Both protected guard files have no diff. |
+| `pnpm run check:codegen` | Passed: eight generated projects. |
+| `pnpm run check:sdk-layers` | Passed: 116 manifests. |
+| `pnpm run check:rdf-discipline` | Passed its ratchet: 104 existing violations in 25 baseline files, zero allow comments. |
+| `pnpm run check:app-duplication` | Passed its ratchet: 396 clusters across 4,029 scanned files. |
+| `pnpm run gate:full` | **Blocked outside this package** by missing installed `oauth4webapi` in `packages/solid-session-restore/src/authenticated-fetch.ts:42` and `src/restore-session.ts:39`, with downstream implicit-any errors. Eight tasks succeeded before the build failed; no network/install workaround was attempted. Log: `/tmp/brief24-gate-full.log`. |
+| `git diff --check` | Passed. |
+
+The combined package build and full-workspace gate are therefore **not green**. The
+expense scripts and historical artifacts require an explicit scope change to migrate
+their missing contract; the workspace dependency failure requires the pre-existing
+installation to be repaired outside this offline brief. Neither is concealed by the
+passing focused checks or the updated inventory totals.

@@ -12,11 +12,17 @@ import { TrustStore } from "../src/mechanisms/trust.js";
 import { CONFIG_ED25519 } from "../src/profile/configurations.js";
 import { testKey } from "../src/reference/keys.js";
 import { AgentRuntime } from "../src/runtime/agent.js";
+import type { OperationHandler } from "../src/runtime/operations.js";
 import { Cast, mandateOf, signClaim } from "../src/scenarios/common.js";
 import { MemoryLedger } from "../src/store/ledger.js";
 import { FileStateStore, MemoryStateStore, type StateStore } from "../src/store/state.js";
 import { BASELINE } from "../src/suites/baseline.js";
 import { TraceRecorder } from "../src/trace/recorder.js";
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Missing payment fixture value");
+  return value;
+}
 
 const task = "urn:task:pay",
   purpose = "urn:purpose:pay",
@@ -38,7 +44,19 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
     { name: "payer", actor: "urn:payer:agent", party: "urn:payer" },
     mandateOf(
       "pay",
-      [r],
+      [
+        r,
+        ...(action === "pay"
+          ? [
+              {
+                id: "urn:rule:agree",
+                type: "permission",
+                action: "use",
+                target: "urn:op:paid-service",
+              } as OdrlRule,
+            ]
+          : []),
+      ],
       canApprove
         ? [
             {
@@ -50,8 +68,86 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
           ]
         : [],
     ),
-    [op],
+    [op, "urn:op:paid-service"],
   );
+  const service = "urn:op:paid-service";
+  const serviceHandler: OperationHandler = {
+    description: {
+      id: service,
+      version: "0.1",
+      label: "Agree the payment test service",
+      pattern: "negotiate",
+      access: "represented",
+      roles: ["initiator", "responder"],
+      models: [],
+      effects: [],
+      outcomes: [],
+    },
+    requiresRepresentation: true,
+    contentProfile: {
+      identifiers: [purpose],
+      vocabulary: {
+        "terms.service": { type: "term", values: ["Test service"] },
+        "terms.compensation.amount": { type: "term", values: ["500", "501", "600"] },
+        "terms.compensation.currency": { type: "code", values: ["GBP"] },
+        "terms.compensation.payee": { type: "identifier" },
+        "terms.invoice": { type: "identifier" },
+        "terms.validFrom": { type: "date" },
+        "terms.validUntil": { type: "date" },
+        "terms.purpose": { type: "identifier" },
+      },
+    },
+    intentForProposal: (ctx) => ({
+      action: "use",
+      operation: service,
+      target: service,
+      recipient: ctx.peer.party,
+      purpose,
+      conversation: ctx.conversation.id,
+      parameters: {},
+    }),
+    onProposal: (ctx) => ({
+      type: "accept",
+      intent: {
+        action: "use",
+        operation: service,
+        target: service,
+        recipient: ctx.peer.party,
+        purpose,
+        conversation: ctx.conversation.id,
+        parameters: {},
+      },
+    }),
+    onAgreement: (ctx, agreement, role) => ({
+      requiredOutcomes: [],
+      ...(role === "offeror"
+        ? {
+            messages: [
+              {
+                kind: "receipt",
+                body: {
+                  ref: required(ctx.message).id,
+                  activity: agreement.id,
+                  outcome: "completed",
+                  final: false,
+                },
+              },
+            ],
+          }
+        : {}),
+    }),
+    onReceipt: () => ({ type: "none" }),
+  };
+  if (action === "pay") {
+    await cast.add(
+      { name: "payee", actor: "urn:payee:agent", party: "urn:payee" },
+      mandateOf("payee", [
+        { id: "urn:rule:offer", type: "permission", action: "use", target: service },
+      ]),
+      [service],
+    );
+    cast.introduce("payer", "payee");
+  }
   const issuer = await testKey("durable/bank");
   cast.pinIssuer("payer", "urn:bank", issuer);
   cast.rule("payer", {
@@ -93,7 +189,7 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
       mandateJws: p.mandateJws,
       representationJws: p.representationJws,
       accepted: [CONFIG_ED25519],
-      handlers: [],
+      handlers: action === "pay" ? [serviceHandler] : [],
       store,
       ledger,
       now,
@@ -143,8 +239,38 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
     ],
     { task, taskId: task, purpose },
   );
-  const pay = (runtime: AgentRuntime, key: string, amount = 500) =>
-    runtime.runTask({
+  const supplier =
+    action === "pay" ? (await cast.runtime("payee", [serviceHandler])).runtime : undefined;
+  const agreements = new Map<string, { digest: string; invoice: string }>();
+  const pay = async (runtime: AgentRuntime, key: string, amount = 500, reuse?: string) => {
+    let held = agreements.get(reuse ?? key);
+    if (action === "pay" && !held) {
+      const invoice = await required(supplier).mintIdentifier();
+      const sent = await required(supplier).startNegotiation({
+        peer: { actor: p.identity.actor, party: p.identity.party },
+        operation: { id: service, version: "0.1" },
+        models: [],
+        discover: false,
+        configuration: CONFIG_ED25519,
+        terms: {
+          service: "Test service",
+          compensation: { amount: String(amount), currency: "GBP", payee: "urn:payee" },
+          invoice,
+          purpose,
+          validFrom: now().toISOString(),
+          validUntil: "2027-01-01T00:00:00.000Z",
+        },
+      });
+      expect(sent.outbound, JSON.stringify(sent)).toHaveLength(1);
+      const accepted = await runtime.receive(required(sent.outbound[0]).wire);
+      expect(accepted).toMatchObject({ disposition: "accepted" });
+      expect(accepted.outbound[0]?.message.kind).toBe("accept");
+      const confirmed = await required(supplier).receive(required(accepted.outbound[0]).wire);
+      await runtime.receive(required(confirmed.outbound[0]).wire);
+      held = { digest: required(runtime.agreements().at(-1)).termsDigest, invoice };
+      agreements.set(key, held);
+    }
+    return runtime.runTask({
       taskId: `urn:task:${key}`,
       kind: "payment",
       plan: {
@@ -165,7 +291,10 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
                   account: "urn:account:payee",
                   amount,
                   currency: "GBP",
-                  reference: "urn:invoice",
+                  reference: required(held).invoice,
+                  agreement: required(held).digest,
+                  instalment: 1,
+                  validUntil: "2026-12-31T09:00:00.000Z",
                 }
               : {},
         },
@@ -176,11 +305,15 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
                 account: "urn:account:payee",
                 amount,
                 currency: "GBP",
-                reference: "urn:invoice",
+                reference: required(held).invoice,
+                agreement: required(held).digest,
+                instalment: 1,
+                validUntil: "2026-12-31T09:00:00.000Z",
               }
             : {},
       },
     });
+  };
   return {
     rt,
     make,
@@ -270,10 +403,83 @@ it("approving an over-limit payment releases it once and cannot approve a second
   expect(held.pendingApproval).toBeDefined();
   const pending = f.rt.pendingApprovals()[0];
   if (!pending) throw new Error("pending");
-  const jws = await f.cast.approval("payer", pending.actionDigest, pending.conversation);
+  const jws = await f.cast.approval(
+    "payer",
+    pending.actionDigest,
+    pending.conversation,
+    "approve",
+    "Approve this exact payment.",
+    f.rt.paymentApprovalBinding(pending.actionDigest),
+  );
   await f.rt.submitApproval(jws);
   expect(f.effects()).toBe(1);
-  await f.pay(f.rt, "second-exception", 600);
+  await f.pay(f.rt, "second-exception", 600, "exception");
   expect(f.effects()).toBe(1);
   expect((await f.rt.submitApproval(jws)).disposition).toBe("rejected");
+});
+
+it("payment approval must explicitly bind both the terms and the exact order", async () => {
+  const f = await fixture();
+  await f.pay(f.rt, "bound-approval", 600);
+  const pending = required(f.rt.pendingApprovals()[0]);
+  const binding = required(f.rt.paymentApprovalBinding(pending.actionDigest));
+  for (const payment of [
+    undefined,
+    { ...binding, termsDigest: "other" },
+    { ...binding, orderDigest: "other" },
+  ]) {
+    const signed = await f.cast.approval(
+      "payer",
+      pending.actionDigest,
+      pending.conversation,
+      "approve",
+      "Approve these exact terms.",
+      payment,
+    );
+    expect((await f.rt.submitApproval(signed)).reason).toBe("approval-denied");
+    expect(f.effects()).toBe(0);
+  }
+  await f.rt.submitApproval(
+    await f.cast.approval(
+      "payer",
+      pending.actionDigest,
+      pending.conversation,
+      "approve",
+      "Approve this payment.",
+      binding,
+    ),
+  );
+  expect(f.effects()).toBe(1);
+});
+it("payment once keys survive restart and cannot be bypassed by a new effect key", async () => {
+  const f = await fixture();
+  await f.pay(f.rt, "once");
+  f.rt.close();
+  const rt = await f.make();
+  await f.pay(rt, "again", 500, "once");
+  expect(f.effects()).toBe(1);
+  expect(f.recorder.events().findLast((e) => e.check === "P7")).toMatchObject({
+    verdict: "fail",
+    reason: "replay-conflict",
+  });
+});
+it("a signed principal denial is recorded as a P6 refusal and never executes", async () => {
+  const f = await fixture();
+  await f.pay(f.rt, "decline", 600);
+  const pending = required(f.rt.pendingApprovals()[0]);
+  await f.rt.submitApproval(
+    await f.cast.approval(
+      "payer",
+      pending.actionDigest,
+      pending.conversation,
+      "deny",
+      "No, do not pay.",
+      f.rt.paymentApprovalBinding(pending.actionDigest),
+    ),
+  );
+  expect(f.effects()).toBe(0);
+  expect(f.recorder.events().findLast((e) => e.check === "P6")).toMatchObject({
+    verdict: "fail",
+    reason: "approval-denied",
+  });
 });

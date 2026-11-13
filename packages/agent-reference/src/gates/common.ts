@@ -49,6 +49,15 @@ export const NOT_APPLICABLE = {
 
 /** The code a passing check carries when it gives none of its own (registry Pass group). */
 export const PASS_CODE: Readonly<Record<Check, string>> = {
+  P1: "terms-acceptable",
+  P2: "terms-acceptable",
+  P3: "recipient-established",
+  P4: "source-accepted",
+  P5: "within-mandate",
+  P6: "within-limits",
+  P7: "evidence-complete",
+  P8: "within-limits",
+  receipt: "evidence-complete",
   integrity: "intact",
   source: "source-accepted",
   authority: "authority-valid",
@@ -345,6 +354,15 @@ export interface GateContext {
 
 /** The core clause each check applies (01-core). */
 export const CHECK_CLAUSE: Readonly<Record<Check, string>> = {
+  P1: "CM-10",
+  P2: "CM-11",
+  P3: "CM-11",
+  P4: "CM-11",
+  P5: "CM-12",
+  P6: "CM-12",
+  P7: "CM-13",
+  P8: "CM-14",
+  receipt: "CM-15",
   integrity: "CORE-IN-1",
   source: "CORE-IN-4",
   authority: "CORE-IN-7",
@@ -360,6 +378,15 @@ export const CHECK_CLAUSE: Readonly<Record<Check, string>> = {
 
 /** The layers each check reads, for trace references into the configuration. */
 export const CHECK_LAYERS: Readonly<Record<Check, readonly LayerId[]>> = {
+  P1: ["commitments"],
+  P2: ["commitments", "settlement"],
+  P3: ["commitments", "settlement"],
+  P4: ["trust", "settlement"],
+  P5: ["authority"],
+  P6: ["authority", "commitments"],
+  P7: ["commitments", "settlement"],
+  P8: ["settlement"],
+  receipt: ["settlement", "accountability"],
   integrity: ["authenticity", "identity"],
   source: ["trust", "authenticity"],
   authority: ["authority"],

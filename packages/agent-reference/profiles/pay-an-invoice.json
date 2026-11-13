@@ -5,32 +5,27 @@
   "claims": [
     {
       "kind": "payee-account",
-      "sources": [
-        "urn:fictional:bank"
-      ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "sources": ["urn:fictional:bank"],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
       "kind": "invoice",
-      "sources": [
-        "urn:fictional:supplier"
-      ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "sources": ["urn:fictional:supplier"],
+      "methods": ["recorded-by-authority"],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "payment-receipt",
+      "sources": ["urn:fictional:bank"],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:pay-an-invoice",
-      "claims": [
-        "payee-account",
-        "invoice"
-      ]
+      "claims": ["payee-account", "invoice", "payment-receipt"]
     }
   ],
   "rules": [],
@@ -52,24 +47,57 @@
     },
     "input.currency": {
       "type": "code",
-      "values": [
-        "GBP"
-      ]
+      "values": ["GBP"]
     },
     "output.status": {
       "type": "code",
-      "values": [
-        "submitted"
-      ]
+      "values": ["submitted", "settled"]
     },
     "output.reference": {
       "type": "identifier"
     },
     "observed.status": {
       "type": "code",
-      "values": [
-        "submitted"
-      ]
+      "values": ["settled"]
+    },
+    "terms.service": {
+      "type": "term",
+      "values": ["The invoiced service", "The agreed purchase", "Home valuation"]
+    },
+    "terms.compensation.amount": {
+      "type": "term",
+      "values": ["300.00", "450.00", "600.00", "700.00"]
+    },
+    "terms.compensation.currency": {
+      "type": "code",
+      "values": ["GBP", "USD"]
+    },
+    "terms.compensation.payee": {
+      "type": "identifier"
+    },
+    "terms.validFrom": {
+      "type": "term",
+      "values": ["2026-11-13T09:00:00.000Z"]
+    },
+    "terms.validUntil": {
+      "type": "term",
+      "values": ["2026-11-20T09:00:00.000Z"]
+    },
+    "input.invoice": {
+      "type": "identifier"
+    },
+    "input.agreement": {
+      "type": "code"
+    },
+    "input.instalment": {
+      "type": "number"
+    },
+    "input.validUntil": {
+      "type": "term",
+      "values": ["2026-11-13T10:00:00.000Z"]
+    },
+    "terms.purpose": {
+      "type": "identifier"
     }
   },
   "operations": [
@@ -80,9 +108,37 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": [
-        "urn:purpose:pay-an-invoice"
-      ],
+      "purposes": ["urn:purpose:pay-an-invoice"],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:paid-service",
+      "version": "0.1",
+      "label": "Agree the service",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:pay-an-invoice"],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:payment-request",
+      "version": "0.1",
+      "label": "Request payment",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:pay-an-invoice"],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:payment-provider",
+      "version": "0.1",
+      "label": "Settle the checked payment",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:pay-an-invoice"],
       "requiresRepresentation": true
     }
   ],
@@ -90,6 +146,10 @@
     {
       "what": "Payment bank and account directory",
       "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
+    },
+    {
+      "what": "Payment settlement",
+      "replacedBy": "No money moves. The payment provider is a fictional party with its own keys that keeps a ledger."
     }
   ],
   "parties": {

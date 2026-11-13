@@ -27,6 +27,15 @@ export const OUTBOUND_CHECKS = [
   "data-terms",
   "limits-approval",
   "evidence",
+  "P1",
+  "P2",
+  "P3",
+  "P4",
+  "P5",
+  "P6",
+  "P7",
+  "P8",
+  "receipt",
 ] as const;
 export type InboundCheck = (typeof INBOUND_CHECKS)[number];
 export type OutboundCheck = (typeof OUTBOUND_CHECKS)[number];
@@ -111,6 +120,9 @@ export interface TraceEvent {
   readonly reason?: string;
   readonly rule?: { readonly id: string; readonly text: string };
   readonly packet?: PacketView;
+  readonly settlement?: import("../settlement/types.js").SettlementTrace;
+  readonly segment?: "payment";
+  readonly segmentEnd?: "payment";
   readonly refs?: readonly TraceRef[];
   readonly chat?: { readonly who: "principal" | "agent"; readonly text: string };
   /** How a trust question was answered: the sources consulted, in order. */
@@ -129,7 +141,11 @@ export interface TraceEvent {
 }
 
 /** What a gate or runtime hands to its trace sink; the recorder adds seq, step and agent. */
-export type TraceEventInput = Omit<TraceEvent, "seq" | "step" | "agent">;
+export type TraceEventInput = Omit<TraceEvent, "seq" | "step" | "agent"> & {
+  /** Recorder-only inputs; resolved through the wire writer before publishing a trace. */
+  readonly settlementFacts?: import("../model/payment.js").PaymentFacts;
+  readonly settlementDocument?: unknown;
+};
 
 export interface TraceAgent {
   readonly id: string;

@@ -163,6 +163,42 @@
       "short": "Sign; add terms and origin",
       "question": "Is the message signed, with its terms and provenance attached, and is the decision recorded?",
       "detail": "The last step before anything leaves. It is what makes the action checkable later."
+    },
+    {
+      "id": "P1",
+      "name": "Agreement"
+    },
+    {
+      "id": "P2",
+      "name": "Amount due"
+    },
+    {
+      "id": "P3",
+      "name": "Payee"
+    },
+    {
+      "id": "P4",
+      "name": "Payee account"
+    },
+    {
+      "id": "P5",
+      "name": "Payment authority"
+    },
+    {
+      "id": "P6",
+      "name": "Payment approval"
+    },
+    {
+      "id": "P7",
+      "name": "Once only"
+    },
+    {
+      "id": "P8",
+      "name": "Payment scope"
+    },
+    {
+      "id": "receipt",
+      "name": "Receipt match"
     }
   ],
   "outboundOutcomes": [
@@ -699,6 +735,19 @@
         }
       ],
       "label": "7"
+    },
+    {
+      "id": "settlement",
+      "name": "Settlement",
+      "partOf": "commitments",
+      "suites": [
+        {
+          "id": "rdf-order",
+          "name": "Described in RDF",
+          "status": "baseline",
+          "baseline": true
+        }
+      ]
     }
   ],
   "parties": [
@@ -762,6 +811,24 @@
       "name": "Identity provider",
       "kind": "service",
       "role": "Attests a face check"
+    },
+    {
+      "id": "valuer-agent",
+      "name": "Bracken Lantern Valuations’ agent",
+      "actsFor": "valuer",
+      "role": "agent"
+    },
+    {
+      "id": "payment-provider-agent",
+      "name": "Mossbridge Payment Desk’s agent",
+      "actsFor": "payment-provider",
+      "role": "agent"
+    },
+    {
+      "id": "valuer-register-agent",
+      "name": "The valuation register’s agent",
+      "actsFor": "valuer-register",
+      "role": "agent"
     }
   ],
   "evidenceLevel": "Everyone here is fictional. Both sides of every exchange run the same code base. This shows what the design does, not that independent implementations interoperate.",

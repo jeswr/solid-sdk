@@ -2,8 +2,11 @@
 import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 import { MessageEnvelopeNode } from "../model/envelope.js";
 import { IntentScopeNode } from "../model/intent.js";
+import { PaymentAccountNode, PaymentFacts } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
+import { RdfOrderSuite } from "../settlement/rdf-order.js";
 import { decodeJws } from "../wire/inspect.js";
+import { paymentDocumentIn, paymentTrace } from "../wire/payment.js";
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The outbound gate. Every action and disclosure the core proposes is checked before anything
@@ -57,7 +60,13 @@ import {
   resolutionView,
   ruleText,
 } from "./common.js";
-import { type PaymentLimit, paymentBinding } from "./payment.js";
+import {
+  checkPayment,
+  type PaymentLimit,
+  type PaymentRecord,
+  paymentBinding,
+  paymentDigest,
+} from "./payment.js";
 import { evaluateItemTerms, fitnessOf, termsSummary } from "./quality.js";
 
 /** Where the core took a proposed action from, when it came from a received message. */
@@ -93,6 +102,11 @@ export interface OutboundDeps {
     purpose: string | undefined,
     actor?: string,
   ) => boolean;
+  readonly paymentApprovalMatches?: (facts: PaymentFacts, intent: ActionIntent) => boolean;
+  readonly paymentRecord?: (
+    facts: PaymentFacts,
+    intent: ActionIntent,
+  ) => Pick<PaymentRecord, "agreement" | "proofsVerified" | "inEffect" | "ordered">;
   readonly paymentSpent?: (rule: string, currency: string, intent: ActionIntent) => number;
   readonly consumeApproval?: (intent: ActionIntent) => void;
   readonly reservePayment?: (intent: ActionIntent, releaseId: string) => void;
@@ -142,6 +156,30 @@ function mandateReason(decision: AuthorisationDecision): string {
 export class OutboundGate {
   /** Releases that ended in go, waiting for the message or effect that carries them out. */
   private readonly pendingGo = new Set<string>();
+  private activePayment: PaymentFacts | undefined;
+  private activePaymentDocument: unknown;
+
+  private readonly checkedPayments = new Map<string, PaymentFacts>();
+  private readonly paymentDocuments = new Map<string, unknown>();
+
+  async paymentOrder(intent: ActionIntent): Promise<unknown> {
+    const key = actionDigest(intent);
+    const facts = this.checkedPayments.get(key);
+    if (!facts || !this.pendingGo.has(key)) throw new TypeError("Payment was not checked");
+    const objects = await new RdfOrderSuite().order(
+      { facts, digest: paymentDigest(facts) },
+      { party: this.deps.identity.party ?? this.deps.identity.actor },
+    );
+    const trace = await paymentTrace(facts);
+    this.paymentDocuments.set(key, objects.objects[0]?.shown);
+    this.emit({
+      part: "outbound-gate",
+      kind: "propose",
+      caption: "The gate builds the checked payment order in RDF.",
+      settlement: trace,
+    });
+    return objects.objects[0]?.shown;
+  }
 
   constructor(private readonly deps: OutboundDeps) {}
 
@@ -154,7 +192,14 @@ export class OutboundGate {
   }
 
   private emit(event: TraceEventInput): void {
-    this.deps.gate.sink?.emit(event);
+    this.deps.gate.sink?.emit({
+      ...event,
+      ...(this.activePayment
+        ? { settlementFacts: this.activePayment }
+        : this.activePaymentDocument
+          ? { settlementDocument: this.activePaymentDocument }
+          : {}),
+    });
   }
 
   private verdict(
@@ -422,6 +467,18 @@ export class OutboundGate {
     const scope = IntentScopeNode.fromIntent(intent);
     const p = intent.parameters;
     const who = this.name(scope.recipient);
+    if (typeof p.termsDigest === "string") {
+      const terms = this.deps.offerTerms(p.termsDigest);
+      const due = terms?.compensation;
+      if (due && typeof due === "object" && !Array.isArray(due)) {
+        const rule = this.deps
+          .mandate()
+          ?.withApproval.permissions?.find((r) => r.target === scope.target) as
+          | (OdrlRule & { limit?: PaymentLimit })
+          | undefined;
+        return `May I accept ${String(terms?.service ?? "the service")} from ${this.paymentPayeeLabel(String(due.payee))} for ${String(due.amount)} ${String(due.currency)}?${rule?.limit ? ` Your payment limit is ${rule.limit.perAction} ${rule.limit.currency}.` : ""}`;
+      }
+    }
     if (scope.action === "distribute") {
       const labels = this.labels(intent);
       const uses = [
@@ -438,6 +495,30 @@ export class OutboundGate {
     return `${who} asks me to ${this.describeAction(intent)}${
       scope.purpose ? ` for ${idWords(scope.purpose, this.name)}` : ""
     }.${limitText ? ` ${limitText}` : ""} May I go ahead?`;
+  }
+
+  private paymentPayeeLabel(party: string | undefined): string {
+    const item = this.deps.memory
+      .context(this.deps.gate.taskId ?? "*")
+      .find(
+        (item) =>
+          item.accepted &&
+          item.claimType === "valuer.registration" &&
+          item.subject === party &&
+          this.deps.memory.facts.get(item.id)?.digest === item.digest &&
+          typeof item.statement?.name === "string",
+      );
+    return typeof item?.statement?.name === "string" &&
+      !/https?:\/\/|urn:/.test(item.statement.name)
+      ? item.statement.name
+      : this.name(party);
+  }
+  private paymentApprovalRequest(
+    facts: PaymentFacts,
+    service: string | undefined,
+    limit?: PaymentLimit,
+  ): string {
+    return `May I pay ${facts.amount ?? "the stated amount"} ${facts.currency ?? ""} to ${this.paymentPayeeLabel(facts.payee)} for ${service ?? "the agreed service"}?${limit ? ` Your limit is ${limit.perAction} ${limit.currency} per payment and ${limit.perPeriod} ${limit.currency} per calendar month.` : ""}`;
   }
 
   /** Statements about the principal, or facts it holds, that a message carries. */
@@ -511,6 +592,8 @@ export class OutboundGate {
   /** Checks 1 to 5 for a proposed action, around the pilot's mandate decision. */
   release(intent: ActionIntent, decision: AuthorisationDecision): Release {
     const scope = IntentScopeNode.fromIntent(intent);
+    this.activePayment = undefined;
+    this.activePaymentDocument = undefined;
     const subject = actionDigest(intent);
     const verdicts: CheckVerdict[] = [];
     const ctx = this.deps.gate;
@@ -527,6 +610,141 @@ export class OutboundGate {
           },
         }
       : {};
+
+    if (scope.action === "pay") {
+      const facts = PaymentFacts.fromIntent(
+        intent,
+        this.deps.identity.party ?? this.deps.identity.actor,
+        this.deps.now(),
+      );
+      this.activePayment = facts;
+      const held = this.deps.paymentRecord?.(facts, intent);
+      if (held?.agreement) facts.attachAgreement(held.agreement);
+      const limit = (matched?.rule as (OdrlRule & { limit?: PaymentLimit }) | undefined)?.limit;
+      const amount = Number(facts.amount);
+      const exceeded =
+        !!limit &&
+        (facts.currency !== limit.currency ||
+          Math.round(amount * 100) > Math.round(limit.perAction * 100) ||
+          (this.deps.paymentSpent?.(matched?.rule.id ?? "", limit.currency, intent) ?? Infinity) +
+            Math.round(amount * 100) >
+            Math.round(limit.perPeriod * 100));
+      const mandate = this.deps.mandate();
+      const canAsk =
+        !matched?.withApproval &&
+        !!mandate &&
+        (this.deps.policyEngine ?? solidOdrlEngine).evaluate(mandate.withApproval, {
+          agent: this.deps.identity.actor,
+          action: scope.action,
+          target: scope.target,
+          purpose: scope.purpose,
+          recipient: scope.recipient,
+          at: this.deps.now(),
+        }).effect === "permit";
+      const approved =
+        (this.deps.personApproved?.(intent) === true || decision.basis === "owner-approval") &&
+        this.deps.paymentApprovalMatches?.(facts, intent) === true;
+      const result = checkPayment(facts, {
+        now: this.deps.now(),
+        payer: this.deps.identity.party ?? this.deps.identity.actor,
+        purpose: scope.purpose,
+        agreement: held?.agreement,
+        proofsVerified: held?.proofsVerified ?? false,
+        inEffect: held?.inEffect ?? false,
+        protocolScoped: (ctx.configuration?.layers.settlement ?? "rdf-order") === "rdf-order",
+        ordered: held?.ordered ?? (() => false),
+        accountBindings: this.deps.memory
+          .context(ctx.taskId ?? scope.conversation)
+          .filter(
+            (item) =>
+              item.accepted === true &&
+              item.claimType === "payee-account" &&
+              this.deps.memory.facts.get(item.id)?.digest === item.digest &&
+              item.statement?.account === facts.account &&
+              (!item.statement?.validUntil ||
+                Date.parse(String(item.statement.validUntil)) > Date.parse(this.deps.now())) &&
+              typeof item.statement?.payee === "string",
+          )
+          .map((item) =>
+            PaymentAccountNode.create(
+              String(item.statement?.payee),
+              String(item.statement?.account),
+            ),
+          ),
+        binding: () =>
+          paymentBinding(
+            intent,
+            this.deps.memory,
+            ctx.taskId ?? scope.conversation,
+            this.deps.now(),
+            this.deps.identity.actor,
+            (label) => this.recipientAllows(scope.recipient, scope.operation, label),
+          ),
+        mandate: () =>
+          decision.outcome === "deny" || decision.outcome === "indeterminate"
+            ? { reason: mandateReason(decision) }
+            : exceeded && !approved
+              ? { reason: "limit-exceeded", ask: canAsk }
+              : {},
+        approval: () =>
+          decision.reason === "approval-denied"
+            ? "denied"
+            : approved
+              ? "approved"
+              : decision.outcome === "approval-required" ||
+                  ctx.personDecisions?.some((p) => p.action === "pay")
+                ? "required"
+                : "unneeded",
+      });
+      for (const v of result.verdicts)
+        this.verdict(
+          verdicts,
+          subject,
+          v.check === "receipt" ? "receipt" : v.check,
+          v.ok ? "pass" : v.ask ? "ask-principal" : "fail",
+          v.fact,
+          { reason: v.reason ?? PASS_CODE[v.check] },
+        );
+      if (!result.ok) {
+        const missing = result.reason === "structured-form-required";
+        const outcome = result.ask ? "ask-principal" : missing ? "ask-more" : "stop";
+        this.decide(
+          outcome,
+          result.verdicts.at(-1)?.fact ?? "The payment is stopped.",
+          result.reason,
+        );
+        if (result.reason === "amount-differs")
+          this.emit({
+            part: "principal",
+            kind: "propose",
+            caption: "The gate explains the difference in the requested fee.",
+            chat: {
+              who: "agent",
+              text: `The agreed fee is ${held?.agreement?.duty?.constraint?.amount} ${held?.agreement?.duty?.constraint?.currency}. The invoice asks for ${facts.amount} ${facts.currency}. I have stopped the payment.`,
+            },
+          });
+        if (result.ask)
+          this.emit({
+            part: "principal",
+            kind: "ask-principal",
+            caption: "The gate asks for approval of the agreement and exact order.",
+            chat: {
+              who: "agent",
+              text: this.paymentApprovalRequest(facts, held?.agreement?.service, limit),
+            },
+          });
+        return {
+          outcome,
+          verdicts,
+          decision: {
+            ...decision,
+            outcome: result.ask ? "approval-required" : missing ? "ask-more" : "deny",
+            reason: result.reason ?? "protocol-violation",
+          },
+        };
+      }
+      this.checkedPayments.set(subject, facts);
+    }
 
     // 1. Mandate.
     if (decision.outcome === "deny" || decision.outcome === "indeterminate") {
@@ -708,37 +926,6 @@ export class OutboundGate {
       };
     }
 
-    if (scope.action === "pay") {
-      const reason = paymentBinding(
-        intent,
-        this.deps.memory,
-        ctx.taskId ?? scope.conversation,
-        this.deps.now(),
-        this.deps.identity.actor,
-        (label) => this.recipientAllows(scope.recipient, scope.operation, label),
-      );
-      if (reason) {
-        const missing = reason === "structured-form-required";
-        this.verdict(
-          verdicts,
-          subject,
-          "disclosure",
-          missing ? "ask-more" : "fail",
-          "A structured payment needs an admitted payee-account binding from an accepted source. Required claim: payee-account.",
-          { reason },
-        );
-        this.decide(
-          missing ? "ask-more" : "stop",
-          "The bank account cannot be taken from invoice content. Required claim: payee-account.",
-          reason,
-        );
-        return {
-          outcome: missing ? "ask-more" : "stop",
-          verdicts,
-          decision: { ...decision, outcome: missing ? "ask-more" : "deny", reason },
-        };
-      }
-    }
     // 2. Recipient.
     if (
       !this.recipient(
@@ -1390,6 +1577,21 @@ export class OutboundGate {
 
   /** The principal declined a held action: it stops. */
   declined(intent: ActionIntent): void {
+    if (intent.action === "pay") {
+      this.activePayment = PaymentFacts.fromIntent(
+        intent,
+        this.deps.identity.party ?? this.deps.identity.actor,
+        this.deps.now(),
+      );
+      this.verdict(
+        [],
+        actionDigest(intent),
+        "P6",
+        "fail",
+        `${this.owner} declined this exact payment and its agreement terms.`,
+        { reason: "approval-denied" },
+      );
+    }
     this.pendingGo.delete(actionDigest(intent));
     this.decide("stop", `${this.owner} declined; the action is stopped.`, "approval-denied");
   }
@@ -1410,6 +1612,11 @@ export class OutboundGate {
     digest: string;
     intent: ActionIntent;
   } {
+    this.activePayment =
+      opts.intent?.action === "pay"
+        ? this.checkedPayments.get(actionDigest(opts.intent))
+        : undefined;
+    this.activePaymentDocument = paymentDocumentIn(message);
     const envelope = MessageEnvelopeNode.fromMessage(message);
     const vocabulary = { ...this.deps.gate.vocabulary, ...opts.content?.vocabulary };
     const purposes = { ...opts.content?.purposes, ...this.deps.gate.purposes };
@@ -1453,7 +1660,9 @@ export class OutboundGate {
     if (
       opts.intent?.action === "pay" &&
       (envelope.messageKind !== "invoke" ||
-        digestOf(body.input) !== digestOf(opts.intent.parameters) ||
+        (this.paymentDocuments.has(actionDigest(opts.intent))
+          ? digestOf(body.input) !== digestOf(this.paymentDocuments.get(actionDigest(opts.intent)))
+          : digestOf(body.input) !== digestOf(opts.intent.parameters)) ||
         (body.operation as JsonObject | undefined)?.id !== opts.intent.operation)
     ) {
       this.verdict(

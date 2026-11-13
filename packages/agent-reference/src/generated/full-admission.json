@@ -500,6 +500,42 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#PayActionShape",
+    "message": "http://www.w3.org/ns/shacl#closed: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#PayActionShape",
+    "message": "http://www.w3.org/ns/shacl#ignoredProperties: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8136d32a0d871663bdd114d2a7c49f895664b26a5ef8ad21d1e56ccf0fcb281f-PayAction-priceCurrency",
+    "message": "http://www.w3.org/ns/shacl#pattern: unknown pattern; no reviewed closed guard"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#InvoiceShape",
+    "message": "http://www.w3.org/ns/shacl#closed: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#InvoiceShape",
+    "message": "http://www.w3.org/ns/shacl#ignoredProperties: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#5647f2db87c74325ba3d2ae063bcace882692b5465e5f16397ed5b7c5855a516-Invoice-priceCurrency",
+    "message": "http://www.w3.org/ns/shacl#pattern: unknown pattern; no reviewed closed guard"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
     "subject": "https://w3id.org/jeswr/awp/shapes/v1#fa520d998fa6420bc67616daae08e6b60cb2746d4987de88fcf9828baf30f1b9-Policy-permission",
     "message": "http://www.w3.org/ns/shacl#nodeKind: only IRI and Literal node kinds are projected"
   },
@@ -736,6 +772,180 @@
     "severity": "error",
     "subject": "https://w3id.org/jeswr/awp#StatementPeriodShape",
     "message": "http://www.w3.org/ns/shacl#ignoredProperties: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c733af061e852a81bb3edbc1c3499e0e444ac0f4662a44c96b74eab165cbc169-PayAction-price",
+    "message": "http://www.w3.org/ns/shacl#minExclusive: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#881b52ff5e305bd195696822d2441c4c2e7bc3b9fc6c180308c2e5a91ca6121a-PayAction-instalment",
+    "message": "http://www.w3.org/ns/shacl#pattern: unknown pattern; no reviewed closed guard"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#ddfee968c8045ae34aa0dd197167aa71caf879b72d7acea601eb32329384b4eb-PayAction-agreement",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#84d16926512f90e789f2f54f7278f91093519d065d43da03e6360bc5f1e9e440-Invoice-totalPaymentDue",
+    "message": "http://www.w3.org/ns/shacl#minExclusive: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#PaymentReceiptShape",
+    "message": "http://www.w3.org/ns/shacl#closed: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#PaymentReceiptShape",
+    "message": "http://www.w3.org/ns/shacl#ignoredProperties: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#51942a2bd662f17d433308b9af791efac7298ddef884e36bb4e6359482b84927-PaymentReceipt-about",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8c02e83431af59118dd6b2e8de8d352efdcfe6461e802666acbce63fe878295a-PaymentReceipt-price",
+    "message": "http://www.w3.org/ns/shacl#minExclusive: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#727c49d57b851ab37af1a77a5f53911dad173d49488a726ef7a499c41c16b3c3-PaymentReceipt-priceCurrency",
+    "message": "http://www.w3.org/ns/shacl#pattern: unknown pattern; no reviewed closed guard"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#6a9d5bc974361bf9568a7c772c6f046da511ed611967537213b3b17424938b2b-PaymentReceipt-claimType",
+    "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#51d2009234c0b08cefaaff4bea317fb1c94ed824ebec57f0b263666886370ae8-PaymentReceipt-actionStatus",
+    "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#CompensationOfferShape",
+    "message": "http://www.w3.org/ns/shacl#closed: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#CompensationOfferShape",
+    "message": "http://www.w3.org/ns/shacl#ignoredProperties: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#4f7c6d0755a4f003fc87f278c2cf8cff8422da19f7e823459306c396a8e0d7d5-Offer-permission",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#d8da439d656ad975e1130e0c4c8cbd1130fb876fe140b5315484ae2aa25bdcd5-Offer-duty",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#92adc8d1c3ed308ade72191b0bef759a0332dbb605250e9f0d30648456bfb8d7-Offer-instalment",
+    "message": "http://www.w3.org/ns/shacl#pattern: unknown pattern; no reviewed closed guard"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#CompensationDutyShape",
+    "message": "http://www.w3.org/ns/shacl#closed: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#CompensationDutyShape",
+    "message": "http://www.w3.org/ns/shacl#ignoredProperties: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#523a7a89e5a2d0bca073ea6fab08e53981f60ba000fec1c2f39c0bb843817f6c-Duty-action",
+    "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#7aab3bbc7ae5f29a5b66deb67dfffbbdf06e0411f7e503c2ae5e7af3041ecbe0-Duty-constraint",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#CompensationConstraintShape",
+    "message": "http://www.w3.org/ns/shacl#closed: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#CompensationConstraintShape",
+    "message": "http://www.w3.org/ns/shacl#ignoredProperties: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2070d7da8474bba16db1022b233abef9e67e613c9d4b338f7dedada55b8d023f-Constraint-leftOperand",
+    "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8f625ba944ee7f0790266fa6a29cd3949ae55006f626875baab7fd23729cccc9-Constraint-operator",
+    "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#87805da332b163c6c0d25dbc2dc07d16c3e1ee48de71249694deec768b24a60a-Constraint-rightOperand",
+    "message": "http://www.w3.org/ns/shacl#minExclusive: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2cde535955a27c5bc79b9b8564e8244d402554f0e69c4b788092dabf820d631f-Constraint-unit",
+    "message": "http://www.w3.org/ns/shacl#pattern: unknown pattern; no reviewed closed guard"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ServicePermissionShape",
+    "message": "http://www.w3.org/ns/shacl#closed: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ServicePermissionShape",
+    "message": "http://www.w3.org/ns/shacl#ignoredProperties: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#42032188724521fb84808bcb2e8ca42e362a767c0819b1c3126786df3fb500e3-Permission-action",
+    "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
   },
   {
     "code": "missing-cardinality",

@@ -151,6 +151,16 @@ export {
   type TransmitRequest,
   type TransmitResult,
 } from "./runtime/transmission.js";
+export { RdfOrderSuite } from "./settlement/rdf-order.js";
+export type {
+  AmountDue,
+  CheckedPayment,
+  PayeeContext,
+  PayerContext,
+  ProtocolObjects,
+  ProviderContext,
+  SettlementSuite,
+} from "./settlement/types.js";
 export { type IntroductionCard, introduce, provisionAgent, readAgent, saveAgent } from "./setup.js";
 export { FileLedger, MemoryLedger, verifyLedger } from "./store/ledger.js";
 export { FileStateStore, MemoryStateStore, type WireMessage } from "./store/state.js";

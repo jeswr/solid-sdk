@@ -1591,3 +1591,53 @@ awp:GrantKind a <http://www.w3.org/2002/07/owl#Class>;
     rdfs:comment "The time at which an entity was generated; for a source statement, its issue time.";
     rdfs:domain rdfs:Resource;
     rdfs:range xsd:dateTime.
+
+# AUTHORED-BY Codex GPT-6 — Brief 24 payment terms
+<https://w3id.org/jeswr/awp#PaymentReceipt> a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Payment receipt"; rdfs:comment "Payment receipt used to express an agreed payment.".
+<http://www.w3.org/ns/odrl/2/Offer> a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Binding service offer"; rdfs:comment "Binding service offer used to express an agreed payment.".
+<http://www.w3.org/ns/odrl/2/Duty> a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Compensation duty"; rdfs:comment "Compensation duty used to express an agreed payment.".
+<http://www.w3.org/ns/odrl/2/Constraint> a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Amount constraint"; rdfs:comment "Amount constraint used to express an agreed payment.".
+<http://www.w3.org/ns/odrl/2/Permission> a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Service permission"; rdfs:comment "Service permission used to express an agreed payment.".
+<https://w3id.org/jeswr/awp#settles> a rdf:Property; rdfs:label "Settles agreement"; rdfs:comment "Settles agreement in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#string>.
+<https://w3id.org/jeswr/awp#payeeAccount> a rdf:Property; rdfs:label "Payee account"; rdfs:comment "Payee account in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<https://w3id.org/jeswr/awp#onceKey> a rdf:Property; rdfs:label "Once only key"; rdfs:comment "Once only key in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#string>.
+<https://w3id.org/jeswr/awp#instalment> a rdf:Property; rdfs:label "Instalment number"; rdfs:comment "Instalment number in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#string>.
+<https://w3id.org/jeswr/awp#offerProof> a rdf:Property; rdfs:label "Signed offer proof"; rdfs:comment "Signed offer proof in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#string>.
+<https://w3id.org/jeswr/awp#acceptanceProof> a rdf:Property; rdfs:label "Signed acceptance proof"; rdfs:comment "Signed acceptance proof in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#string>.
+<https://w3id.org/jeswr/awp#validFrom> a rdf:Property; rdfs:label "Effective from"; rdfs:comment "Effective from in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#dateTime>.
+<https://w3id.org/jeswr/awp#validUntil> a rdf:Property; rdfs:label "Valid until"; rdfs:comment "Valid until in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#dateTime>.
+<https://schema.org/totalPaymentDue> a rdf:Property; rdfs:label "Total payment due"; rdfs:comment "Total payment due in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#decimal>.
+<https://schema.org/paymentDueDate> a rdf:Property; rdfs:label "Payment due date"; rdfs:comment "Payment due date in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#dateTime>.
+<https://schema.org/referencesOrder> a rdf:Property; rdfs:label "Agreement invoiced"; rdfs:comment "Agreement invoiced in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<https://schema.org/recipient> a rdf:Property; rdfs:label "Payee"; rdfs:comment "Payee in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<https://schema.org/agent> a rdf:Property; rdfs:label "Payer"; rdfs:comment "Payer in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<https://schema.org/object> a rdf:Property; rdfs:label "Invoice paid"; rdfs:comment "Invoice paid in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<https://schema.org/about> a rdf:Property; rdfs:label "Payment confirmed"; rdfs:comment "Payment confirmed in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<https://schema.org/actionStatus> a rdf:Property; rdfs:label "Payment status"; rdfs:comment "Payment status in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<https://schema.org/confirmationNumber> a rdf:Property; rdfs:label "Ledger reference"; rdfs:comment "Ledger reference in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#string>.
+<http://www.w3.org/ns/odrl/2/compensatedParty> a rdf:Property; rdfs:label "Compensated party"; rdfs:comment "Compensated party in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<http://www.w3.org/ns/odrl/2/constraint> a rdf:Property; rdfs:label "Constraint"; rdfs:comment "Constraint in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<http://www.w3.org/ns/odrl/2/leftOperand> a rdf:Property; rdfs:label "Constrained value"; rdfs:comment "Constrained value in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2000/01/rdf-schema#Resource>.
+<http://www.w3.org/ns/odrl/2/rightOperand> a rdf:Property; rdfs:label "Amount due"; rdfs:comment "Amount due in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#decimal>.
+<http://www.w3.org/ns/odrl/2/unit> a rdf:Property; rdfs:label "Currency unit"; rdfs:comment "Currency unit in a payment settlement document."; rdfs:domain rdfs:Resource; rdfs:range <http://www.w3.org/2001/XMLSchema#string>.
+<https://w3id.org/jeswr/awp#reason/amount-differs> a awp:ReasonCode; rdfs:label "Amount differs"; rdfs:comment "The payment amount differs from the accepted agreement or recorded order.".
+<https://w3id.org/jeswr/awp#reason/payee-differs> a awp:ReasonCode; rdfs:label "Payee differs"; rdfs:comment "The payment payee differs from the accepted agreement or recorded order.".
+<https://w3id.org/jeswr/awp#reason/receipt-mismatch> a awp:ReasonCode; rdfs:label "Receipt mismatch"; rdfs:comment "The payment receipt mismatch from the accepted agreement or recorded order.".
+
+<https://w3id.org/jeswr/awp#check/P1> a awp:CheckName; rdfs:label "Payment agreement"; rdfs:comment "The payment agreement check at settlement.".
+
+<https://w3id.org/jeswr/awp#check/P2> a awp:CheckName; rdfs:label "Payment amount"; rdfs:comment "The payment amount check at settlement.".
+
+<https://w3id.org/jeswr/awp#check/P3> a awp:CheckName; rdfs:label "Payment payee"; rdfs:comment "The payment payee check at settlement.".
+
+<https://w3id.org/jeswr/awp#check/P4> a awp:CheckName; rdfs:label "Payment account binding"; rdfs:comment "The payment account binding check at settlement.".
+
+<https://w3id.org/jeswr/awp#check/P5> a awp:CheckName; rdfs:label "Payment mandate"; rdfs:comment "The payment mandate check at settlement.".
+
+<https://w3id.org/jeswr/awp#check/P6> a awp:CheckName; rdfs:label "Payment approval"; rdfs:comment "The payment approval check at settlement.".
+
+<https://w3id.org/jeswr/awp#check/P7> a awp:CheckName; rdfs:label "Payment once only"; rdfs:comment "The payment once only check at settlement.".
+
+<https://w3id.org/jeswr/awp#check/P8> a awp:CheckName; rdfs:label "Payment protocol scope"; rdfs:comment "The payment protocol scope check at settlement.".
+
+<https://w3id.org/jeswr/awp#check/receipt> a awp:CheckName; rdfs:label "Payment receipt match"; rdfs:comment "The payment receipt match check at settlement.".

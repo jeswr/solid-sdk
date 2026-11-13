@@ -252,6 +252,7 @@ export class Cast {
     conversation: Iri,
     decision: "approve" | "deny" = "approve",
     note = "synthetic owner decision (scripted in the scenario driver)",
+    payment?: import("../settlement/types.js").PaymentApprovalBinding,
   ): Promise<string> {
     const p = this.get(name);
     return signApproval(p.ownerKey, {
@@ -260,6 +261,7 @@ export class Cast {
       issuer: p.identity.party,
       actor: p.identity.actor,
       actionDigest,
+      ...(payment ? { payment } : {}),
       conversation,
       decision,
       issuedAt: this.now().toISOString(),

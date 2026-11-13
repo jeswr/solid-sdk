@@ -1639,7 +1639,8 @@
     "fitness"
   ],
   "suites": {
-    "commitments": "payment"
+    "commitments": "signed-offer-acceptance",
+    "settlement": "rdf-order"
   },
   "assurance": null,
   "blocked": [],

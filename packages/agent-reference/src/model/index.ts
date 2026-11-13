@@ -12,6 +12,15 @@ export {
   RdfNode,
 } from "./nodes.js";
 export {
+  CompensationNode,
+  PaymentAccountNode,
+  PaymentAgreementNode,
+  PaymentConstraintNode,
+  PaymentFacts,
+  PaymentOfferNode,
+  paymentOnceKey,
+} from "./payment.js";
+export {
   type QualityInput,
   QualitySubjectNode,
   StatementPeriodNode,

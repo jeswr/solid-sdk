@@ -21,7 +21,9 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const record = process.argv.includes("--record-outlines");
 const selected = process.argv.find((arg) => arg.startsWith("--scenario="))?.slice(11);
 const status = { "x-authored-by": "Codex GPT-6", schema: "agent-scenario-runs/0.1", paths: [] };
-const previous = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8")).paths;
+const previous = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8")).paths.map(
+  (row) => ({ ...row, settlement: row.settlement ?? "rdf-order" }),
+);
 const index = [];
 let retained = 0;
 let executed = 0;
@@ -74,6 +76,7 @@ for (const file of readdirSync(join(root, "scenarios"))
       useCase: scenario.useCase ?? scenario.id,
       ...(scenario.cataloguePath ? { cataloguePath: scenario.cataloguePath } : {}),
       path: path.path,
+      settlement: path.trace?.configuration.layers.settlement ?? "rdf-order",
       ...(path.configuration ? { configuration: path.configuration } : {}),
       ...(path.path !== "main"
         ? {

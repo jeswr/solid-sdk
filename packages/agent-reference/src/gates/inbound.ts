@@ -2,7 +2,15 @@
 import { mapCodeClaim } from "../mechanisms/code-mapping.js";
 import { isClaimEvidence, verifySelectivePresentation } from "../mechanisms/selective.js";
 import { MessageEnvelopeNode } from "../model/envelope.js";
+import type { PaymentFacts } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
+import {
+  liftPaymentObjects,
+  paymentDocumentIn,
+  paymentTrace,
+  readPaymentObjects,
+} from "../wire/payment.js";
+import { checkReceipt } from "./payment.js";
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The inbound gate. Every message is checked before the core sees it: integrity, source,
@@ -80,6 +88,10 @@ export interface InboundDeps {
   /** The agreed terms in force in a conversation, if an agreement was made. */
   readonly agreementTerms: (conversation: Iri) => JsonObject | undefined;
   /** The purpose this agent named on a request it sent (for data delivered in answer). */
+  readonly receiptOrder?: (
+    receipt: PaymentFacts,
+  ) => { order: PaymentFacts; provider: string } | undefined;
+  readonly recordReceipt?: (receipt: PaymentFacts, document: unknown) => void;
   readonly requestPurpose?: (requestId: Iri) => Iri | undefined;
 }
 
@@ -125,6 +137,7 @@ const OUTCOME_VERDICT: Record<InboundOutcome, Verdict> = {
 };
 
 export class InboundGate {
+  private activePaymentDocument: unknown;
   /** Authority settled per conversation (the representation statement accepted). */
   private corroborationPool: Claim[] = [];
   private claimFailure: { outcome: "refuse" | "ask-more"; reason: string } | undefined;
@@ -157,11 +170,15 @@ export class InboundGate {
 
   /** Emit to the trace sink, if any. */
   emit(event: TraceEventInput): void {
-    this.deps.gate.sink?.emit(event);
+    this.deps.gate.sink?.emit({
+      ...event,
+      ...(this.activePaymentDocument ? { settlementDocument: this.activePaymentDocument } : {}),
+    });
   }
 
   /** A wire unit arrived over the carriage. Opens its admission. */
   arrive(wire: unknown, binding: string | undefined, peek: AnyMessage | undefined): Admission {
+    this.activePaymentDocument = peek ? paymentDocumentIn(peek) : undefined;
     if (this.deps.gate.sink && peek && typeof peek === "object" && peek.kind) {
       const transport = this.deps.gate.configuration?.layers.transport ?? "unknown";
       this.emit({
@@ -1954,6 +1971,56 @@ export class Admission {
     this.admittedClaims = this.admittedClaims.filter((c) =>
       this.deps.memory.facts.has(c.id ?? digestOf(c)),
     );
+    for (const item of this.claims(msg)) {
+      const checked = this.claimCache.get(item.value);
+      if (checked?.claim?.claimType !== "payment-receipt") continue;
+      const id = checked.claim.id ?? digestOf(checked.claim);
+      if (!this.admittedClaims.some((claim) => (claim.id ?? digestOf(claim)) === id)) {
+        const reason = (this.deps.memory.refusals[`statement:${id}`] ??
+          checked.reason ??
+          "source-not-authoritative") as ReasonCode;
+        this.refuse(
+          reason,
+          "A payment receipt must pass every ordinary statement admission check.",
+        );
+        return { ok: false, reason, detail: "The provider receipt failed ordinary admission." };
+      }
+    }
+    for (const claim of this.admittedClaims.filter((c) => c.claimType === "payment-receipt")) {
+      let receipt: PaymentFacts | undefined;
+      try {
+        receipt = liftPaymentObjects(await readPaymentObjects(claim.payment));
+      } catch {
+        /* Fail closed below. */
+      }
+      const sent = receipt && this.deps.receiptOrder?.(receipt);
+      const result =
+        receipt && sent && receipt.provider === claim.issuer
+          ? checkReceipt(receipt, sent.order, sent.provider)
+          : undefined;
+      const ok = result?.ok === true;
+      this.deps.gate.sink?.emit({
+        part: "inbound-gate",
+        kind: "check",
+        check: "receipt",
+        verdict: ok ? "pass" : "fail",
+        reason: ok ? "evidence-complete" : "receipt-mismatch",
+        caption:
+          result?.verdicts[0]?.fact ??
+          "The provider receipt does not match a recorded payment order.",
+        ...(receipt ? { settlement: await paymentTrace(receipt) } : {}),
+        ...checkRefs(this.deps.gate, "receipt"),
+      });
+      if (!ok) {
+        this.refuse("receipt-mismatch", "The provider receipt differs from the recorded order.");
+        return {
+          ok: false,
+          reason: "receipt-mismatch",
+          detail: "The receipt does not match the order.",
+        };
+      }
+      if (receipt) this.deps.recordReceipt?.(receipt, claim.payment);
+    }
     this.outcome = "admit";
     this.gate.decisionEvent(
       "admit",

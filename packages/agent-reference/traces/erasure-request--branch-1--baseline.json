@@ -82,7 +82,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "local-ledger"
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -112,7 +113,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "b50a701a09fb98bd99098763ef404e5a4c66f72e",
     "core": "scripted"
   },
   "standIns": [
@@ -480,12 +481,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:aa72042c9b7…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The data subject’s agent to The company’s agent; propose; signed (JWS EdDSA, pinned key qYWlD3bhyLcp…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:subject-agent:0002.",
+            "summary": "From The data subject’s agent to The company’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -534,7 +535,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:erasure-request:agreement, with terms (round 1).",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request:agreement",
@@ -559,7 +560,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:erasure-request.",
+            "summary": "Terms: purpose Erasure request.",
             "raw": {
               "purpose": "urn:purpose:erasure-request",
               "duties": [
@@ -608,12 +609,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:aa72042c9b7…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The data subject’s agent to The company’s agent; propose; signed (JWS EdDSA, pinned key qYWlD3bhyLcp…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:subject-agent:0002.",
+            "summary": "From The data subject’s agent to The company’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -662,7 +663,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:erasure-request:agreement, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:erasure-request:agreement\"; \"urn:purpose:erasure-request\"; \"sha-256:fdc94ee6150f77b2160b960dc8168d08e9ddab11911def7d9eb399a28ddeedf4\"",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request:agreement",
@@ -701,7 +702,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:erasure-request.",
+            "summary": "Terms: purpose Erasure request.",
             "raw": {
               "purpose": "urn:purpose:erasure-request",
               "duties": [
@@ -1029,12 +1030,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:2c612db0758…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The company’s agent to The data subject’s agent; accept; signed (JWS EdDSA, pinned key 8AHlkSiB54p7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:company-agent:0001.",
+            "summary": "From The company’s agent to The data subject’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1106,7 +1107,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-erasure-request-branch-1:subject-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-erasure-request-branch-1:subject-agent:0001",
               "inReplyTo": "urn:awp:engine-erasure-request-branch-1:subject-agent:0002"
@@ -1143,12 +1144,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:2c612db0758…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The company’s agent to The data subject’s agent; accept; signed (JWS EdDSA, pinned key 8AHlkSiB54p7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:company-agent:0001.",
+            "summary": "From The company’s agent to The data subject’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1198,7 +1199,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-erasure-request-branch-1:subject-agent:0002\"; \"sha-256:fdc94ee6150f77b2160b960dc8168d08e9ddab11911def7d9eb399a28ddeedf4\"; \"urn:awp:agreement:498bfb357cf37813d73b96d1d91fbf50\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-erasure-request-branch-1:subject-agent:0002",
               "termsDigest": "sha-256:fdc94ee6150f77b2160b960dc8168d08e9ddab11911def7d9eb399a28ddeedf4",
@@ -1234,7 +1235,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-erasure-request-branch-1:subject-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-erasure-request-branch-1:subject-agent:0001",
               "inReplyTo": "urn:awp:engine-erasure-request-branch-1:subject-agent:0002"
@@ -1608,12 +1609,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:10809485897…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The data subject’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned key qYWlD3bhyLcp…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:subject-agent:0003.",
+            "summary": "From The data subject’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1716,7 +1717,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Sent under agreement urn:awp:agreement:498bfb357cf37813d73b96d1d91fbf50; its terms bind the data.",
+            "summary": "Sent under the recorded agreement; its terms bind the data.",
             "raw": {
               "kind": "agreement",
               "agreement": "urn:awp:agreement:498bfb357cf37813d73b96d1d91fbf50"
@@ -1769,12 +1770,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:10809485897…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The data subject’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned key qYWlD3bhyLcp…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:subject-agent:0003.",
+            "summary": "From The data subject’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1823,7 +1824,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:erasure-request:agreement\"; \"urn:scenario:erasure-request:data\"; \"urn:purpose:erasure-request\"; \"urn:awp:agreement:498bfb357cf37813d73b96d1d91fbf50\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request:agreement",
@@ -1895,7 +1896,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Sent under agreement urn:awp:agreement:498bfb357cf37813d73b96d1d91fbf50; its terms bind the data.",
+            "summary": "Sent under the recorded agreement; its terms bind the data.",
             "raw": {
               "kind": "agreement",
               "agreement": "urn:awp:agreement:498bfb357cf37813d73b96d1d91fbf50"
@@ -2296,12 +2297,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:751c1d4d771…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The company’s agent to The onward recipient’s agent; propose; signed (JWS EdDSA, pinned key 8AHlkSiB54p7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:company-agent:0003.",
+            "summary": "From The company’s agent to The onward recipient’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2350,7 +2351,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:erasure-request:agreement, with terms (round 1).",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request:agreement",
@@ -2371,7 +2372,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:erasure-request.",
+            "summary": "Terms: purpose Erasure request.",
             "raw": {
               "purpose": "urn:purpose:erasure-request",
               "duties": []
@@ -2416,12 +2417,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:751c1d4d771…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The company’s agent to The onward recipient’s agent; propose; signed (JWS EdDSA, pinned key 8AHlkSiB54p7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:company-agent:0003.",
+            "summary": "From The company’s agent to The onward recipient’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2470,7 +2471,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:erasure-request:agreement, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:erasure-request:agreement\"; \"urn:purpose:erasure-request\"; \"sha-256:68c11ba1b31d7ba52be81eeb9fad9edf41ec0b2c53598794f0e85c73e5597f85\"",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request:agreement",
@@ -2505,7 +2506,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:erasure-request.",
+            "summary": "Terms: purpose Erasure request.",
             "raw": {
               "purpose": "urn:purpose:erasure-request",
               "duties": []
@@ -2829,12 +2830,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:4e80345a114…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The onward recipient’s agent to The company’s agent; accept; signed (JWS EdDSA, pinned key KMh6hDt7TWla…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:partner-agent:0001.",
+            "summary": "From The onward recipient’s agent to The company’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2906,7 +2907,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-erasure-request-branch-1:company-agent:0003.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-erasure-request-branch-1:company-agent:0002",
               "inReplyTo": "urn:awp:engine-erasure-request-branch-1:company-agent:0003"
@@ -2943,12 +2944,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:4e80345a114…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The onward recipient’s agent to The company’s agent; accept; signed (JWS EdDSA, pinned key KMh6hDt7TWla…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:partner-agent:0001.",
+            "summary": "From The onward recipient’s agent to The company’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2998,7 +2999,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-erasure-request-branch-1:company-agent:0003\"; \"sha-256:68c11ba1b31d7ba52be81eeb9fad9edf41ec0b2c53598794f0e85c73e5597f85\"; \"urn:awp:agreement:87ab0a951b07b801fc0540332684f746\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-erasure-request-branch-1:company-agent:0003",
               "termsDigest": "sha-256:68c11ba1b31d7ba52be81eeb9fad9edf41ec0b2c53598794f0e85c73e5597f85",
@@ -3034,7 +3035,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-erasure-request-branch-1:company-agent:0003.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-erasure-request-branch-1:company-agent:0002",
               "inReplyTo": "urn:awp:engine-erasure-request-branch-1:company-agent:0003"
@@ -3408,12 +3409,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:61bc95f45af…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The company’s agent to The onward recipient’s agent; invoke; signed (JWS EdDSA, pinned key 8AHlkSiB54p7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:company-agent:0004.",
+            "summary": "From The company’s agent to The onward recipient’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3516,7 +3517,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Sent under agreement urn:awp:agreement:87ab0a951b07b801fc0540332684f746; its terms bind the data.",
+            "summary": "Sent under the recorded agreement; its terms bind the data.",
             "raw": {
               "kind": "agreement",
               "agreement": "urn:awp:agreement:87ab0a951b07b801fc0540332684f746"
@@ -3569,12 +3570,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:61bc95f45af…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The company’s agent to The onward recipient’s agent; invoke; signed (JWS EdDSA, pinned key 8AHlkSiB54p7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:company-agent:0004.",
+            "summary": "From The company’s agent to The onward recipient’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3623,7 +3624,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:erasure-request:agreement\"; \"urn:scenario:erasure-request:data\"; \"urn:purpose:erasure-request\"; \"urn:awp:agreement:87ab0a951b07b801fc0540332684f746\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request:agreement",
@@ -3695,7 +3696,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Sent under agreement urn:awp:agreement:87ab0a951b07b801fc0540332684f746; its terms bind the data.",
+            "summary": "Sent under the recorded agreement; its terms bind the data.",
             "raw": {
               "kind": "agreement",
               "agreement": "urn:awp:agreement:87ab0a951b07b801fc0540332684f746"
@@ -4096,12 +4097,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:4b30bb583f5…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The onward recipient’s agent to The second onward recipient’s agent; propose; signed (JWS EdDSA, pinned key KMh6hDt7TWla…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:partner-agent:0003.",
+            "summary": "From The onward recipient’s agent to The second onward recipient’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4150,7 +4151,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:erasure-request:agreement, with terms (round 1).",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request:agreement",
@@ -4175,7 +4176,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:erasure-request.",
+            "summary": "Terms: purpose Erasure request.",
             "raw": {
               "purpose": "urn:purpose:erasure-request",
               "duties": [
@@ -4224,12 +4225,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:4b30bb583f5…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The onward recipient’s agent to The second onward recipient’s agent; propose; signed (JWS EdDSA, pinned key KMh6hDt7TWla…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:partner-agent:0003.",
+            "summary": "From The onward recipient’s agent to The second onward recipient’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4278,7 +4279,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:erasure-request:agreement, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:erasure-request:agreement\"; \"urn:purpose:erasure-request\"; \"sha-256:fdc94ee6150f77b2160b960dc8168d08e9ddab11911def7d9eb399a28ddeedf4\"",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request:agreement",
@@ -4317,7 +4318,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:erasure-request.",
+            "summary": "Terms: purpose Erasure request.",
             "raw": {
               "purpose": "urn:purpose:erasure-request",
               "duties": [
@@ -4645,12 +4646,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:da09a0866a7…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The second onward recipient’s agent to The onward recipient’s agent; accept; signed (JWS EdDSA, pinned key mSYMlQhkCRU7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:downstream-agent:0001.",
+            "summary": "From The second onward recipient’s agent to The onward recipient’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4722,7 +4723,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-erasure-request-branch-1:partner-agent:0003.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-erasure-request-branch-1:partner-agent:0002",
               "inReplyTo": "urn:awp:engine-erasure-request-branch-1:partner-agent:0003"
@@ -4759,12 +4760,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:da09a0866a7…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The second onward recipient’s agent to The onward recipient’s agent; accept; signed (JWS EdDSA, pinned key mSYMlQhkCRU7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:downstream-agent:0001.",
+            "summary": "From The second onward recipient’s agent to The onward recipient’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4814,7 +4815,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-erasure-request-branch-1:partner-agent:0003\"; \"sha-256:fdc94ee6150f77b2160b960dc8168d08e9ddab11911def7d9eb399a28ddeedf4\"; \"urn:awp:agreement:fad017a7f9b6c399cca53ca0c761e35a\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-erasure-request-branch-1:partner-agent:0003",
               "termsDigest": "sha-256:fdc94ee6150f77b2160b960dc8168d08e9ddab11911def7d9eb399a28ddeedf4",
@@ -4850,7 +4851,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-erasure-request-branch-1:partner-agent:0003.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-erasure-request-branch-1:partner-agent:0002",
               "inReplyTo": "urn:awp:engine-erasure-request-branch-1:partner-agent:0003"
@@ -5224,12 +5225,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:e155d1f9060…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The onward recipient’s agent to The second onward recipient’s agent; invoke; signed (JWS EdDSA, pinned key KMh6hDt7TWla…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:partner-agent:0004.",
+            "summary": "From The onward recipient’s agent to The second onward recipient’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5332,7 +5333,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Sent under agreement urn:awp:agreement:fad017a7f9b6c399cca53ca0c761e35a; its terms bind the data.",
+            "summary": "Sent under the recorded agreement; its terms bind the data.",
             "raw": {
               "kind": "agreement",
               "agreement": "urn:awp:agreement:fad017a7f9b6c399cca53ca0c761e35a"
@@ -5385,12 +5386,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:e155d1f9060…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The onward recipient’s agent to The second onward recipient’s agent; invoke; signed (JWS EdDSA, pinned key KMh6hDt7TWla…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:partner-agent:0004.",
+            "summary": "From The onward recipient’s agent to The second onward recipient’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5439,7 +5440,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:erasure-request:agreement\"; \"urn:scenario:erasure-request:data\"; \"urn:purpose:erasure-request\"; \"urn:awp:agreement:fad017a7f9b6c399cca53ca0c761e35a\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request:agreement",
@@ -5511,7 +5512,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Sent under agreement urn:awp:agreement:fad017a7f9b6c399cca53ca0c761e35a; its terms bind the data.",
+            "summary": "Sent under the recorded agreement; its terms bind the data.",
             "raw": {
               "kind": "agreement",
               "agreement": "urn:awp:agreement:fad017a7f9b6c399cca53ca0c761e35a"
@@ -5912,12 +5913,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:3e65969ddf0…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The data subject’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned key qYWlD3bhyLcp…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:subject-agent:0005.",
+            "summary": "From The data subject’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6035,12 +6036,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:3e65969ddf0…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The data subject’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned key qYWlD3bhyLcp…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:subject-agent:0005.",
+            "summary": "From The data subject’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6089,7 +6090,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:erasure-request\"; \"urn:fictional:erasure-request:subject\"; \"urn:scenario:erasure-request:data\"; \"urn:purpose:duties\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:erasure-request",
@@ -6462,12 +6463,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:40b51866498…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The company’s agent to The data subject’s agent; deliver; signed (JWS EdDSA, pinned key 8AHlkSiB54p7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:company-agent:0005.",
+            "summary": "From The company’s agent to The data subject’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6543,7 +6544,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-erasure-request-branch-1:subject-agent:0005.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-erasure-request-branch-1:subject-agent:0004",
               "inReplyTo": "urn:awp:engine-erasure-request-branch-1:subject-agent:0005"
@@ -6614,12 +6615,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:40b51866498…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The company’s agent to The data subject’s agent; deliver; signed (JWS EdDSA, pinned key 8AHlkSiB54p7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-erasure-request-branch-1:company-agent:0005.",
+            "summary": "From The company’s agent to The data subject’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6651,7 +6652,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-erasure-request-branch-1:subject-agent:0005\"; \"urn:awp:engine-erasure-request-branch-1:subject-agent:0005\"; \"urn:op:erasure-request\"; \"urn:fictional:erasure-request:subject\"; \"urn:scenario:erasure-request:data\"; \"urn:scenario:erasure-request:data\"; \"urn:fictional:erasure-request:partner\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-erasure-request-branch-1:subject-agent:0005",
               "basis": {
@@ -6725,7 +6726,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-erasure-request-branch-1:subject-agent:0005.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-erasure-request-branch-1:subject-agent:0004",
               "inReplyTo": "urn:awp:engine-erasure-request-branch-1:subject-agent:0005"

@@ -2,7 +2,9 @@
   "x-authored-by": "Codex GPT-6",
   "configuration": {
     "id": "transport-email",
-    "change": { "transport": "email" },
+    "change": {
+      "transport": "email"
+    },
     "world": {
       "script": {
         "confinement-fault": {
@@ -12,9 +14,10 @@
           "params": {},
           "activityType": "urn:test:forbidden-activity",
           "intent": {
-            "action": "pay",
+            "action": "use",
             "operation": "urn:test:forbidden-operation",
-            "parameters": {}
+            "parameters": {},
+            "target": "urn:op:unmandated-confinement-action"
           }
         }
       }

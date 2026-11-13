@@ -25,9 +25,11 @@ export const LAYER_IDS = [
   "usage-control",
   "commitments",
   "accountability",
+  "settlement",
 ] as const;
 export type LayerId = (typeof LAYER_IDS)[number];
 export type SuiteId = string;
+export const SETTLEMENT_LAYER = { id: "settlement", partOf: "commitments" } as const;
 
 interface SuiteBase<L extends LayerId> {
   readonly layer: L;
@@ -89,7 +91,13 @@ export interface AccountabilitySuite extends SuiteBase<"accountability"> {
   readonly record: "hash-chained-local" | "pod-mirror";
 }
 
+export interface SettlementChoice extends SuiteBase<"settlement"> {
+  readonly partOf: "commitments";
+  readonly status: "run" | "not-run";
+}
+
 export interface SuiteByLayer {
+  settlement: SettlementChoice;
   transport: TransportSuite;
   "data-access": DataAccessSuite;
   identity: IdentitySuite;

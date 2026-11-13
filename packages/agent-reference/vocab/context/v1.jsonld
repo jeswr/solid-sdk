@@ -1498,7 +1498,88 @@
       "issuedAt": {
         "@id": "http://www.w3.org/ns/prov#generatedAtTime",
         "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
-      }
+      },
+      "PaymentReceipt": "https://w3id.org/jeswr/awp#PaymentReceipt",
+      "OdrlOffer": "http://www.w3.org/ns/odrl/2/Offer",
+      "CompensationDuty": "http://www.w3.org/ns/odrl/2/Duty",
+      "AmountConstraint": "http://www.w3.org/ns/odrl/2/Constraint",
+      "ServicePermission": "http://www.w3.org/ns/odrl/2/Permission",
+      "settles": "https://w3id.org/jeswr/awp#settles",
+      "payeeAccount": {
+        "@id": "https://w3id.org/jeswr/awp#payeeAccount",
+        "@type": "@id"
+      },
+      "onceKey": "https://w3id.org/jeswr/awp#onceKey",
+      "instalment": "https://w3id.org/jeswr/awp#instalment",
+      "offerProof": "https://w3id.org/jeswr/awp#offerProof",
+      "acceptanceProof": "https://w3id.org/jeswr/awp#acceptanceProof",
+      "paymentValidFrom": {
+        "@id": "https://w3id.org/jeswr/awp#validFrom",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "paymentValidUntil": {
+        "@id": "https://w3id.org/jeswr/awp#validUntil",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "totalPaymentDue": {
+        "@id": "https://schema.org/totalPaymentDue",
+        "@type": "http://www.w3.org/2001/XMLSchema#decimal"
+      },
+      "paymentDueDate": {
+        "@id": "https://schema.org/paymentDueDate",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "referencesOrder": {
+        "@id": "https://schema.org/referencesOrder",
+        "@type": "@id"
+      },
+      "paymentRecipient": {
+        "@id": "https://schema.org/recipient",
+        "@type": "@id"
+      },
+      "paymentAgent": {
+        "@id": "https://schema.org/agent",
+        "@type": "@id"
+      },
+      "paymentObject": {
+        "@id": "https://schema.org/object",
+        "@type": "@id"
+      },
+      "paymentAbout": {
+        "@id": "https://schema.org/about",
+        "@type": "@id"
+      },
+      "paymentStatus": {
+        "@id": "https://schema.org/actionStatus",
+        "@type": "@id"
+      },
+      "ledgerReference": "https://schema.org/confirmationNumber",
+      "compensatedParty": {
+        "@id": "http://www.w3.org/ns/odrl/2/compensatedParty",
+        "@type": "@id"
+      },
+      "amountConstraint": {
+        "@id": "http://www.w3.org/ns/odrl/2/constraint",
+        "@type": "@id"
+      },
+      "paymentOperand": {
+        "@id": "http://www.w3.org/ns/odrl/2/leftOperand",
+        "@type": "@id"
+      },
+      "paymentAmount": {
+        "@id": "http://www.w3.org/ns/odrl/2/rightOperand",
+        "@type": "http://www.w3.org/2001/XMLSchema#decimal"
+      },
+      "paymentUnit": "http://www.w3.org/ns/odrl/2/unit",
+      "paymentAction": {
+        "@id": "http://www.w3.org/ns/odrl/2/action",
+        "@type": "@id"
+      },
+      "paymentOperator": {
+        "@id": "http://www.w3.org/ns/odrl/2/operator",
+        "@type": "@id"
+      },
+      "serviceTarget": "http://www.w3.org/ns/odrl/2/target"
     }
   ]
 }

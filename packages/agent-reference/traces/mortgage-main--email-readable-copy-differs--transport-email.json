@@ -46,6 +46,34 @@
     {
       "id": "harbour-agent",
       "name": "Sam’s fictional bank’s agent"
+    },
+    {
+      "id": "valuer",
+      "name": "Bracken Lantern Valuations"
+    },
+    {
+      "id": "payment-provider",
+      "name": "Mossbridge Payment Desk"
+    },
+    {
+      "id": "valuer-register",
+      "name": "The fictional valuation register"
+    },
+    {
+      "id": "other-valuer",
+      "name": "A different valuation party"
+    },
+    {
+      "id": "valuer-agent",
+      "name": "Bracken Lantern Valuations’ agent"
+    },
+    {
+      "id": "payment-provider-agent",
+      "name": "Mossbridge Payment Desk’s agent"
+    },
+    {
+      "id": "valuer-register-agent",
+      "name": "The valuation register’s agent"
     }
   ],
   "scenario": {
@@ -65,7 +93,32 @@
       "11": "Sam is asked, and the agent shares the evidence.",
       "12": "North Bank's gate checks the evidence.",
       "13": "North Bank returns a signed decision in principle.",
-      "14": "Each side checks its own record."
+      "14": "Each side checks its own record.",
+      "15": "Look up a registered valuer",
+      "16": "Valuation lookup",
+      "17": "Valuation lookup arrives",
+      "18": "Valuation found",
+      "19": "Valuation account admitted",
+      "20": "The valuer offers a valuation",
+      "21": "Sam’s gate checks the offer",
+      "22": "Sam approves the valuation agreement",
+      "23": "Fee accept arrives",
+      "24": "Fee accept confirmed",
+      "25": "The valuer requests the agreed fee",
+      "26": "Fee invoice statement",
+      "27": "Fee invoice send",
+      "28": "Fee invoice arrives",
+      "29": "Sam’s gate checks the payment",
+      "30": "Sam approves the exact payment order",
+      "31": "Provider receives",
+      "32": "Provider settles",
+      "33": "Provider receipt statement",
+      "34": "Provider receipt",
+      "35": "Provider receipt arrives",
+      "36": "Fee agreement state",
+      "37": "Fee forward receipt",
+      "38": "Fee payee receives",
+      "39": "Fee acknowledged"
     }
   },
   "configuration": {
@@ -81,7 +134,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "local-ledger"
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -108,16 +162,38 @@
       "name": "Sam’s fictional bank’s agent",
       "actsFor": "harbour",
       "role": "agent"
+    },
+    {
+      "id": "valuer-agent",
+      "name": "Bracken Lantern Valuations’ agent",
+      "actsFor": "valuer",
+      "role": "agent"
+    },
+    {
+      "id": "payment-provider-agent",
+      "name": "Mossbridge Payment Desk’s agent",
+      "actsFor": "payment-provider",
+      "role": "agent"
+    },
+    {
+      "id": "valuer-register-agent",
+      "name": "The valuation register’s agent",
+      "actsFor": "valuer-register",
+      "role": "agent"
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
     {
       "what": "Lender, bank, payroll, product index, register and identity-provider services",
       "replacedBy": "Fictional separately keyed local parties and issuer-only sources, serving the same checked mortgage protocol"
+    },
+    {
+      "what": "Payment settlement",
+      "replacedBy": "No money moves. The payment provider is a fictional party with its own keys that keeps a ledger."
     },
     {
       "what": "Network transport between Sam’s agent and the lender’s agent",
@@ -137,7 +213,7 @@
       "kind": "record",
       "rule": {
         "id": "urn:awp:mandate:4c52b19e2d73c62fa2ca06b6af81c0df:mortgage-main",
-        "text": "Sam, the fictional applicant's mandate lets the agent use Mortgage decision in principle for Mortgage Application with The fictional lender or the unlabelled resource, on its own. Sam, the fictional applicant's mandate lets the agent use the unlabelled resource for Product Search with The mortgage product index, on its own. Sam, the fictional applicant's mandate lets the agent use the unlabelled resource for Mortgage Application with Sam’s fictional bank, on its own. Sam, the fictional applicant's mandate lets the agent distribute the unlabelled resource for Credit Assessment with The fictional lender or the unlabelled resource, after Sam, the fictional applicant approves. Sam, the fictional applicant's mandate lets the agent compensate the unlabelled resource for Mortgage Application with The fictional lender, after Sam, the fictional applicant approves."
+        "text": "Sam, the fictional applicant's mandate lets the agent use Mortgage decision in principle for Mortgage Application with The fictional lender or the unlabelled resource, on its own. Sam, the fictional applicant's mandate lets the agent use Search mortgage products for Product Search with The mortgage product index, on its own. Sam, the fictional applicant's mandate lets the agent use Request a balance statement for Mortgage Application with Sam’s fictional bank, on its own. Sam, the fictional applicant's mandate lets the agent use Look up a registered valuer, on its own. Sam, the fictional applicant's mandate lets the agent use Request the valuation payment, on its own. Sam, the fictional applicant's mandate lets the agent distribute the unlabelled resource for Credit Assessment with The fictional lender or the unlabelled resource, after Sam, the fictional applicant approves. Sam, the fictional applicant's mandate lets the agent compensate the unlabelled resource for Mortgage Application with The fictional lender, after Sam, the fictional applicant approves. Sam, the fictional applicant's mandate lets the agent use Agree the home valuation for Arrange the home valuation, after Sam, the fictional applicant approves. Sam, the fictional applicant's mandate lets the agent pay Pay the valuation fee for Arrange the home valuation, after Sam, the fictional applicant approves."
       },
       "refs": [
         {
@@ -149,7 +225,7 @@
           "suite": "odrl-rules"
         }
       ],
-      "caption": "Sam, the fictional applicant signed this mandate with their own key; the agent verified it, wrote it to its record, and every check reads it: 5 rules, valid until 2027-01-12."
+      "caption": "Sam, the fictional applicant signed this mandate with their own key; the agent verified it, wrote it to its record, and every check reads it: 9 rules, valid until 2027-01-12."
     },
     {
       "seq": 2,
@@ -311,7 +387,7 @@
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "urn:profile:mortgage:mortgage.product",
+        "id": "urn:profile:mortgage-payment:mortgage.product",
         "text": "Accept mortgage.product from The fictional lender, Sam’s fictional bank by published-by-lender, at most 31 days old."
       },
       "caption": "The fictional lender's mortgage.product statement is fit for A mortgage in principle: published-by-lender, 12 days old."
@@ -503,7 +579,7 @@
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "urn:profile:mortgage:mortgage.product",
+        "id": "urn:profile:mortgage-payment:mortgage.product",
         "text": "Accept mortgage.product from The fictional lender, Sam’s fictional bank by published-by-lender, at most 31 days old."
       },
       "caption": "Sam’s fictional bank's mortgage.product statement is fit for A mortgage in principle: published-by-lender, 12 days old."
@@ -553,7 +629,7 @@
       "agent": "sams-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use the unlabelled resource with The mortgage product index."
+      "caption": "The core proposes to take the next step in Search mortgage products with The mortgage product index."
     },
     {
       "seq": 18,
@@ -596,26 +672,21 @@
           "layer": "identity",
           "suite": "anonymous",
           "clause": "CORE-OUT-3"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
         }
       ],
       "resolution": {
-        "question": "Is The mortgage product index a party I can send https://w3id.org/jeswr/awp#op/mortgage-product-search to?",
+        "question": "Is The mortgage product index a party I can send Search mortgage products to?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
             "kind": "own-list",
-            "says": "The mortgage product index is accepted for https://w3id.org/jeswr/awp#op/mortgage-product-search."
+            "says": "The mortgage product index is accepted for Search mortgage products."
           }
         ],
-        "answer": "Accepted, for https://w3id.org/jeswr/awp#op/mortgage-product-search only."
+        "answer": "Accepted, for Search mortgage products only."
       },
       "reason": "recipient-established",
-      "caption": "The mortgage product index: Accepted, for the unlabelled resource only."
+      "caption": "The mortgage product index: Accepted, for Search mortgage products only."
     },
     {
       "seq": 20,
@@ -744,7 +815,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam, the fictional applicant to The mortgage product index’s agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0002.",
+            "summary": "From Sam, the fictional applicant to The mortgage product index’s agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
@@ -839,7 +910,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam, the fictional applicant to The mortgage product index’s agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0002.",
+            "summary": "From Sam, the fictional applicant to The mortgage product index’s agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
@@ -862,7 +933,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-product-search\"; \"https://w3id.org/jeswr/awp#purpose/product-search\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
@@ -1306,7 +1377,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The mortgage product index’s agent to Sam, the fictional applicant; deliver; signed (JWS EdDSA, pinned key 7mgkYNtR_MwE…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:index-agent:0001.",
+            "summary": "From The mortgage product index’s agent to Sam, the fictional applicant; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
@@ -1484,7 +1555,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0002. The statements were issued by their sources and are relayed, not authored, by The mortgage product index’s agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by The mortgage product index’s agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0001",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0002",
@@ -1540,7 +1611,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The mortgage product index’s agent to Sam, the fictional applicant; deliver; signed (JWS EdDSA, pinned key 7mgkYNtR_MwE…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:index-agent:0001.",
+            "summary": "From The mortgage product index’s agent to Sam, the fictional applicant; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
@@ -1569,7 +1640,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0002\"; \"urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0002\"; \"https://w3id.org/jeswr/awp#op/mortgage-product-search\"; \"urn:awp:product:northbank-fixed-5\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"urn:awp:product:harbourbank-fixed-2\"; \"https://harbourbank.example/#org\"; \"https://harbourbank.example/#org\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0002",
               "basis": {
@@ -1756,7 +1827,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0002. The statements were issued by their sources and are relayed, not authored, by The mortgage product index’s agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by The mortgage product index’s agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0001",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0002",
@@ -2006,11 +2077,6 @@
         {
           "layer": "meaning",
           "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
           "id": "https://northbank.example/#org"
         },
         {
@@ -2021,10 +2087,10 @@
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "urn:profile:mortgage:mortgage.product",
+        "id": "urn:profile:mortgage-payment:mortgage.product",
         "text": "Accept mortgage.product from The fictional lender, Sam’s fictional bank by published-by-lender, at most 31 days old."
       },
-      "caption": "The fictional lender's mortgage.product statement is fit for the unlabelled resource: published-by-lender, 12 days old."
+      "caption": "The fictional lender's mortgage.product statement is fit for Search mortgage products: published-by-lender, 12 days old."
     },
     {
       "seq": 55,
@@ -2043,11 +2109,6 @@
         {
           "layer": "meaning",
           "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
           "id": "https://northbank.example/#org"
         },
         {
@@ -2058,10 +2119,10 @@
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "urn:profile:mortgage:mortgage.product",
+        "id": "urn:profile:mortgage-payment:mortgage.product",
         "text": "Accept mortgage.product from The fictional lender, Sam’s fictional bank by published-by-lender, at most 31 days old."
       },
-      "caption": "Sam’s fictional bank's mortgage.product statement is fit for the unlabelled resource: published-by-lender, 12 days old."
+      "caption": "Sam’s fictional bank's mortgage.product statement is fit for Search mortgage products: published-by-lender, 12 days old."
     },
     {
       "seq": 56,
@@ -2311,7 +2372,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s agent to The fictional lender’s agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0004.",
+            "summary": "From Sam’s agent to The fictional lender’s agent; describe; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
@@ -2398,7 +2459,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s agent to The fictional lender’s agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0004.",
+            "summary": "From Sam’s agent to The fictional lender’s agent; describe; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
@@ -2741,7 +2802,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The fictional lender’s agent to Sam’s agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:north-agent:0001.",
+            "summary": "From The fictional lender’s agent to Sam’s agent; description; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
@@ -2766,7 +2827,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:7775950cd7d2096a7890e984750daf165ef9c1ed32b83c3d5e93657428628483"
+            "digest": "sha-256:03861a31275523f292afd22fd12ce4a5c2b16c0cb24a532293f6323585a14be3"
           },
           "authority": {
             "present": false,
@@ -2891,6 +2952,140 @@
                     "limitations": [
                       "synthetic lender; indicative only; no credit decision or institutional approval"
                     ]
+                  },
+                  {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                    "version": "0.1",
+                    "label": "Search mortgage products",
+                    "pattern": "invoke",
+                    "access": "public",
+                    "models": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#model/mortgage-product-record",
+                        "version": "0.1"
+                      }
+                    ],
+                    "purposes": [
+                      "https://w3id.org/jeswr/awp#purpose/product-search"
+                    ],
+                    "requiresRepresentation": false,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "https://w3id.org/jeswr/awp#op/balance-statement",
+                    "version": "0.1",
+                    "label": "Request a balance statement",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#model/balance-statement",
+                        "version": "0.1"
+                      }
+                    ],
+                    "purposes": [
+                      "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:paid-service",
+                    "version": "0.1",
+                    "label": "Agree the service",
+                    "pattern": "negotiate",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [
+                      "urn:purpose:valuation"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:payment-request",
+                    "version": "0.1",
+                    "label": "Request payment",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [
+                      "urn:purpose:valuation"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:payment-provider",
+                    "version": "0.1",
+                    "label": "Settle the checked payment",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [
+                      "urn:purpose:valuation"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:payment",
+                    "version": "0.1",
+                    "label": "Pay the agreed fee",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [
+                      "urn:purpose:valuation"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:valuer-lookup",
+                    "version": "0.1",
+                    "label": "Look up a registered valuer",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
                   }
                 ],
                 "bindings": [
@@ -2915,7 +3110,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:51d232cd50395e9be4afa5e1eb68b064f74ea214662e4f3a4cea447b489d828e"
+            "digest": "sha-256:1ffb82db05250f90e43487e00482663c307110bf4688d38b6d8ca352987c607e"
           },
           "evidence": {
             "present": false,
@@ -2927,7 +3122,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0004.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0003",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0004"
@@ -2969,7 +3164,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The fictional lender’s agent to Sam’s agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:north-agent:0001.",
+            "summary": "From The fictional lender’s agent to Sam’s agent; description; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
@@ -2994,7 +3189,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:7775950cd7d2096a7890e984750daf165ef9c1ed32b83c3d5e93657428628483"
+            "digest": "sha-256:03861a31275523f292afd22fd12ce4a5c2b16c0cb24a532293f6323585a14be3"
           },
           "authority": {
             "present": false,
@@ -3002,7 +3197,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/transport-email/0.1\"; \"https://w3id.org/jeswr/awp#config/transport-a2a/0.1\"; \"https://w3id.org/jeswr/awp#config/transport-mcp/0.1\"; \"https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1\"; \"https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1\"; \"https://w3id.org/jeswr/awp#config/local-approved-query/0.1\"; \"https://w3id.org/jeswr/awp#config/local-record-forum/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/transport-email/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"email-mime/0.1\"; \"mailto:north-agent@fictional-agent-mail.example\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
+            "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "description": {
                 "type": "ImplementationDescription",
@@ -3119,6 +3314,140 @@
                     "limitations": [
                       "synthetic lender; indicative only; no credit decision or institutional approval"
                     ]
+                  },
+                  {
+                    "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                    "version": "0.1",
+                    "label": "Search mortgage products",
+                    "pattern": "invoke",
+                    "access": "public",
+                    "models": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#model/mortgage-product-record",
+                        "version": "0.1"
+                      }
+                    ],
+                    "purposes": [
+                      "https://w3id.org/jeswr/awp#purpose/product-search"
+                    ],
+                    "requiresRepresentation": false,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "https://w3id.org/jeswr/awp#op/balance-statement",
+                    "version": "0.1",
+                    "label": "Request a balance statement",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#model/balance-statement",
+                        "version": "0.1"
+                      }
+                    ],
+                    "purposes": [
+                      "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:paid-service",
+                    "version": "0.1",
+                    "label": "Agree the service",
+                    "pattern": "negotiate",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [
+                      "urn:purpose:valuation"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:payment-request",
+                    "version": "0.1",
+                    "label": "Request payment",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [
+                      "urn:purpose:valuation"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:payment-provider",
+                    "version": "0.1",
+                    "label": "Settle the checked payment",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [
+                      "urn:purpose:valuation"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:payment",
+                    "version": "0.1",
+                    "label": "Pay the agreed fee",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [
+                      "urn:purpose:valuation"
+                    ],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
+                  },
+                  {
+                    "id": "urn:op:valuer-lookup",
+                    "version": "0.1",
+                    "label": "Look up a registered valuer",
+                    "pattern": "invoke",
+                    "access": "represented",
+                    "models": [],
+                    "purposes": [],
+                    "requiresRepresentation": true,
+                    "roles": [
+                      "initiator",
+                      "responder"
+                    ],
+                    "effects": [],
+                    "outcomes": []
                   }
                 ],
                 "bindings": [
@@ -3143,7 +3472,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:51d232cd50395e9be4afa5e1eb68b064f74ea214662e4f3a4cea447b489d828e",
+            "digest": "sha-256:1ffb82db05250f90e43487e00482663c307110bf4688d38b6d8ca352987c607e",
             "untrusted": [
               {
                 "path": "description.type",
@@ -3394,6 +3723,242 @@
                 "text": "synthetic lender; indicative only; no credit decision or institutional approval"
               },
               {
+                "path": "description.operations.1.id",
+                "text": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+              },
+              {
+                "path": "description.operations.1.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.1.label",
+                "text": "Search mortgage products"
+              },
+              {
+                "path": "description.operations.1.pattern",
+                "text": "invoke"
+              },
+              {
+                "path": "description.operations.1.access",
+                "text": "public"
+              },
+              {
+                "path": "description.operations.1.models.0.id",
+                "text": "https://w3id.org/jeswr/awp#model/mortgage-product-record"
+              },
+              {
+                "path": "description.operations.1.models.0.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.1.purposes.0",
+                "text": "https://w3id.org/jeswr/awp#purpose/product-search"
+              },
+              {
+                "path": "description.operations.1.roles.0",
+                "text": "initiator"
+              },
+              {
+                "path": "description.operations.1.roles.1",
+                "text": "responder"
+              },
+              {
+                "path": "description.operations.2.id",
+                "text": "https://w3id.org/jeswr/awp#op/balance-statement"
+              },
+              {
+                "path": "description.operations.2.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.2.label",
+                "text": "Request a balance statement"
+              },
+              {
+                "path": "description.operations.2.pattern",
+                "text": "invoke"
+              },
+              {
+                "path": "description.operations.2.access",
+                "text": "represented"
+              },
+              {
+                "path": "description.operations.2.models.0.id",
+                "text": "https://w3id.org/jeswr/awp#model/balance-statement"
+              },
+              {
+                "path": "description.operations.2.models.0.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.2.purposes.0",
+                "text": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+              },
+              {
+                "path": "description.operations.2.roles.0",
+                "text": "initiator"
+              },
+              {
+                "path": "description.operations.2.roles.1",
+                "text": "responder"
+              },
+              {
+                "path": "description.operations.3.id",
+                "text": "urn:op:paid-service"
+              },
+              {
+                "path": "description.operations.3.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.3.label",
+                "text": "Agree the service"
+              },
+              {
+                "path": "description.operations.3.pattern",
+                "text": "negotiate"
+              },
+              {
+                "path": "description.operations.3.access",
+                "text": "represented"
+              },
+              {
+                "path": "description.operations.3.purposes.0",
+                "text": "urn:purpose:valuation"
+              },
+              {
+                "path": "description.operations.3.roles.0",
+                "text": "initiator"
+              },
+              {
+                "path": "description.operations.3.roles.1",
+                "text": "responder"
+              },
+              {
+                "path": "description.operations.4.id",
+                "text": "urn:op:payment-request"
+              },
+              {
+                "path": "description.operations.4.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.4.label",
+                "text": "Request payment"
+              },
+              {
+                "path": "description.operations.4.pattern",
+                "text": "invoke"
+              },
+              {
+                "path": "description.operations.4.access",
+                "text": "represented"
+              },
+              {
+                "path": "description.operations.4.purposes.0",
+                "text": "urn:purpose:valuation"
+              },
+              {
+                "path": "description.operations.4.roles.0",
+                "text": "initiator"
+              },
+              {
+                "path": "description.operations.4.roles.1",
+                "text": "responder"
+              },
+              {
+                "path": "description.operations.5.id",
+                "text": "urn:op:payment-provider"
+              },
+              {
+                "path": "description.operations.5.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.5.label",
+                "text": "Settle the checked payment"
+              },
+              {
+                "path": "description.operations.5.pattern",
+                "text": "invoke"
+              },
+              {
+                "path": "description.operations.5.access",
+                "text": "represented"
+              },
+              {
+                "path": "description.operations.5.purposes.0",
+                "text": "urn:purpose:valuation"
+              },
+              {
+                "path": "description.operations.5.roles.0",
+                "text": "initiator"
+              },
+              {
+                "path": "description.operations.5.roles.1",
+                "text": "responder"
+              },
+              {
+                "path": "description.operations.6.id",
+                "text": "urn:op:payment"
+              },
+              {
+                "path": "description.operations.6.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.6.label",
+                "text": "Pay the agreed fee"
+              },
+              {
+                "path": "description.operations.6.pattern",
+                "text": "invoke"
+              },
+              {
+                "path": "description.operations.6.access",
+                "text": "represented"
+              },
+              {
+                "path": "description.operations.6.purposes.0",
+                "text": "urn:purpose:valuation"
+              },
+              {
+                "path": "description.operations.6.roles.0",
+                "text": "initiator"
+              },
+              {
+                "path": "description.operations.6.roles.1",
+                "text": "responder"
+              },
+              {
+                "path": "description.operations.7.id",
+                "text": "urn:op:valuer-lookup"
+              },
+              {
+                "path": "description.operations.7.version",
+                "text": "0.1"
+              },
+              {
+                "path": "description.operations.7.label",
+                "text": "Look up a registered valuer"
+              },
+              {
+                "path": "description.operations.7.pattern",
+                "text": "invoke"
+              },
+              {
+                "path": "description.operations.7.access",
+                "text": "represented"
+              },
+              {
+                "path": "description.operations.7.roles.0",
+                "text": "initiator"
+              },
+              {
+                "path": "description.operations.7.roles.1",
+                "text": "responder"
+              },
+              {
                 "path": "description.bindings.0.id",
                 "text": "email-mime/0.1"
               },
@@ -3441,7 +4006,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0004.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0003",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0004"
@@ -3794,7 +4359,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s agent to The fictional lender’s agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0005.",
+            "summary": "From Sam’s agent to The fictional lender’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
@@ -3818,7 +4383,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:2c2b5eb11b7af66e3cfca6a6e91284211880095331f03d766af4354e3220ed91"
+            "digest": "sha-256:f4e14ae500375403b6c8d0098658b1a7f33e0eb97ef5516092a01b85800c8c45"
           },
           "authority": {
             "present": true,
@@ -3834,18 +4399,23 @@
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                   "https://w3id.org/jeswr/awp#op/mortgage-product-search",
-                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                  "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "urn:op:paid-service",
+                  "urn:op:payment-request",
+                  "urn:op:payment-provider",
+                  "urn:op:payment",
+                  "urn:op:valuer-lookup"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:4b6d028790c211fb0073ed3bbc5f2f804ba45726700578c875cd58a6d95656e9"
+            "digest": "sha-256:d5ed959f2b6982a1077bf54e7e69962e3f5112e503c4a06b56b8720c3fe6a482"
           },
           "content": {
             "present": true,
-            "summary": "An offer to start mortgage-prequalification, with terms (round 1).",
+            "summary": "An offer for Mortgage decision in principle, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -3924,7 +4494,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s agent to The fictional lender’s agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0005.",
+            "summary": "From Sam’s agent to The fictional lender’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
@@ -3948,7 +4518,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:2c2b5eb11b7af66e3cfca6a6e91284211880095331f03d766af4354e3220ed91"
+            "digest": "sha-256:f4e14ae500375403b6c8d0098658b1a7f33e0eb97ef5516092a01b85800c8c45"
           },
           "authority": {
             "present": true,
@@ -3964,18 +4534,23 @@
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                   "https://w3id.org/jeswr/awp#op/mortgage-product-search",
-                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                  "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "urn:op:paid-service",
+                  "urn:op:payment-request",
+                  "urn:op:payment-provider",
+                  "urn:op:payment",
+                  "urn:op:valuer-lookup"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:4b6d028790c211fb0073ed3bbc5f2f804ba45726700578c875cd58a6d95656e9"
+            "digest": "sha-256:d5ed959f2b6982a1077bf54e7e69962e3f5112e503c4a06b56b8720c3fe6a482"
           },
           "content": {
             "present": true,
-            "summary": "An offer to start mortgage-prequalification, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"https://w3id.org/jeswr/awp#model/mortgage-application\"; \"https://sam.example/#me\"; \"sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59\"",
+            "summary": "An offer for Mortgage decision in principle, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -4382,7 +4957,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The fictional lender’s agent to Sam’s agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:north-agent:0002.",
+            "summary": "From The fictional lender’s agent to Sam’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
@@ -4407,7 +4982,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:673a5ab42e8654aa4e305f9f4bb7fa7096e093d5e907f152aa960ea008a50838"
+            "digest": "sha-256:5f85aa698f5fed1a8418752f701a599f887237ca30ddf6715fae46d27e377cb0"
           },
           "authority": {
             "present": true,
@@ -4423,14 +4998,19 @@
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                   "https://w3id.org/jeswr/awp#op/mortgage-product-search",
-                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                  "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "urn:op:paid-service",
+                  "urn:op:payment-request",
+                  "urn:op:payment-provider",
+                  "urn:op:payment",
+                  "urn:op:valuer-lookup"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:6800ac274859c0c2fa86f0ec91f0d392d4ec1224247f02b17e061e796441b719"
+            "digest": "sha-256:d9c9a3027c21af408afa495b14f1dde08b368ff8b1ad644edd21ac633214860e"
           },
           "content": {
             "present": true,
@@ -4499,7 +5079,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose credit-assessment; kept at most 60 days; never for Marketing; passed on only to 1 named recipient(s).",
+            "summary": "Terms: purpose Credit Assessment; kept at most 60 days; never for the unlabelled resource; passed on only to 1 named recipient(s).",
             "raw": {
               "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
               "modelVersion": "0.1",
@@ -4551,7 +5131,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0005.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0003",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0005"
@@ -4581,7 +5161,7 @@
       "agent": "sams-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use the unlabelled resource with Sam’s fictional bank."
+      "caption": "The core proposes to take the next step in Request a balance statement with Sam’s fictional bank."
     },
     {
       "seq": 117,
@@ -4624,26 +5204,21 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/balance-statement"
         }
       ],
       "resolution": {
-        "question": "Is Sam’s fictional bank a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
+        "question": "Is Sam’s fictional bank a party I can send Request a balance statement to?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
             "kind": "own-list",
-            "says": "Sam’s fictional bank is accepted for https://w3id.org/jeswr/awp#op/balance-statement."
+            "says": "Sam’s fictional bank is accepted for Request a balance statement."
           }
         ],
-        "answer": "Accepted, for https://w3id.org/jeswr/awp#op/balance-statement only."
+        "answer": "Accepted, for Request a balance statement only."
       },
       "reason": "recipient-established",
-      "caption": "Sam’s fictional bank: Accepted, for the unlabelled resource only."
+      "caption": "Sam’s fictional bank: Accepted, for Request a balance statement only."
     },
     {
       "seq": 119,
@@ -4772,7 +5347,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s agent to Sam’s fictional bank’s agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0007.",
+            "summary": "From Sam’s agent to Sam’s fictional bank’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4796,7 +5371,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:1a856db26210449600d90180601fe05d4540e7e33bc8a74749b7791219a5acf8"
+            "digest": "sha-256:bf14a0b50ee39f1ea659638bdabd0a5f1b50ebe7eac18db20dfaa3563252a762"
           },
           "authority": {
             "present": true,
@@ -4812,14 +5387,19 @@
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                   "https://w3id.org/jeswr/awp#op/mortgage-product-search",
-                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                  "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "urn:op:paid-service",
+                  "urn:op:payment-request",
+                  "urn:op:payment-provider",
+                  "urn:op:payment",
+                  "urn:op:valuer-lookup"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:4b6d028790c211fb0073ed3bbc5f2f804ba45726700578c875cd58a6d95656e9"
+            "digest": "sha-256:d5ed959f2b6982a1077bf54e7e69962e3f5112e503c4a06b56b8720c3fe6a482"
           },
           "content": {
             "present": true,
@@ -4895,7 +5475,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s agent to Sam’s fictional bank’s agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0007.",
+            "summary": "From Sam’s agent to Sam’s fictional bank’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4919,7 +5499,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:1a856db26210449600d90180601fe05d4540e7e33bc8a74749b7791219a5acf8"
+            "digest": "sha-256:bf14a0b50ee39f1ea659638bdabd0a5f1b50ebe7eac18db20dfaa3563252a762"
           },
           "authority": {
             "present": true,
@@ -4935,18 +5515,23 @@
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                   "https://w3id.org/jeswr/awp#op/mortgage-product-search",
-                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                  "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "urn:op:paid-service",
+                  "urn:op:payment-request",
+                  "urn:op:payment-provider",
+                  "urn:op:payment",
+                  "urn:op:valuer-lookup"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:4b6d028790c211fb0073ed3bbc5f2f804ba45726700578c875cd58a6d95656e9"
+            "digest": "sha-256:d5ed959f2b6982a1077bf54e7e69962e3f5112e503c4a06b56b8720c3fe6a482"
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/balance-statement\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "https://w3id.org/jeswr/awp#op/balance-statement",
@@ -5073,17 +5658,12 @@
           "layer": "authority",
           "suite": "mandate-signed",
           "clause": "CORE-IN-7"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/balance-statement"
         }
       ],
       "reason": "assurance-insufficient",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
-        "text": "Sam’s fictional bank gives the unlabelled resource only on a certified face check, attested by an accepted identity provider."
+        "text": "Sam’s fictional bank gives Request a balance statement only on a certified face check, attested by an accepted identity provider."
       },
       "caption": "Sam, the fictional applicant's mandate is signed with their own key, but this needs a certified face check."
     },
@@ -5142,7 +5722,7 @@
         }
       ],
       "resolution": {
-        "question": "Is Sam, the fictional applicant a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
+        "question": "Is Sam, the fictional applicant a party I can send Request a balance statement to?",
         "path": [
           {
             "at": "Sam’s fictional bank's own list",
@@ -5273,7 +5853,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s fictional bank’s agent to Sam’s agent; challenge; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:harbour-agent:0003.",
+            "summary": "From Sam’s fictional bank’s agent to Sam’s agent; challenge; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5306,7 +5886,7 @@
           },
           "content": {
             "present": true,
-            "summary": "A message. It also carries free text, marked as untrusted content (data, never an instruction): \"needs a certified face check\"; \"https://w3id.org/jeswr/awp#assurance/certified-face-check\"; \"a certified face check\"",
+            "summary": "A message. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0007",
               "reason": "assurance-insufficient",
@@ -5345,7 +5925,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0007.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0006",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0007"
@@ -5387,7 +5967,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s fictional bank’s agent to Sam’s agent; challenge; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:harbour-agent:0003.",
+            "summary": "From Sam’s fictional bank’s agent to Sam’s agent; challenge; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5420,7 +6000,7 @@
           },
           "content": {
             "present": true,
-            "summary": "A message. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0007\"; \"needs a certified face check\"; \"https://w3id.org/jeswr/awp#assurance/certified-face-check\"; \"a certified face check\"; \"urn:awp:engine-mortgage-main-email-readable-copy-differs:harbour-agent:0001\"; \"urn:awp:engine-mortgage-main-email-readable-copy-differs:harbour-agent:0002\"",
+            "summary": "A message. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0007",
               "reason": "assurance-insufficient",
@@ -5471,7 +6051,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0007.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0006",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0007"
@@ -5620,7 +6200,7 @@
       "agent": "sams-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use the unlabelled resource with Sam’s fictional bank."
+      "caption": "The core proposes to take the next step in Request a balance statement with Sam’s fictional bank."
     },
     {
       "seq": 147,
@@ -5663,26 +6243,21 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/balance-statement"
         }
       ],
       "resolution": {
-        "question": "Is Sam’s fictional bank a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
+        "question": "Is Sam’s fictional bank a party I can send Request a balance statement to?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
             "kind": "own-list",
-            "says": "Sam’s fictional bank is accepted for https://w3id.org/jeswr/awp#op/balance-statement."
+            "says": "Sam’s fictional bank is accepted for Request a balance statement."
           }
         ],
-        "answer": "Accepted, for https://w3id.org/jeswr/awp#op/balance-statement only."
+        "answer": "Accepted, for Request a balance statement only."
       },
       "reason": "recipient-established",
-      "caption": "Sam’s fictional bank: Accepted, for the unlabelled resource only."
+      "caption": "Sam’s fictional bank: Accepted, for Request a balance statement only."
     },
     {
       "seq": 149,
@@ -5761,7 +6336,7 @@
       "kind": "ask-principal",
       "chat": {
         "who": "agent",
-        "text": "Before Sam’s fictional bank will go ahead with the unlabelled resource it asks you to approve with a certified face check. May I ask you to do that now?"
+        "text": "Before Sam’s fictional bank will go ahead with Request a balance statement, it asks you to approve with a certified face check. May I ask you to do that now?"
       },
       "caption": "Sam, the fictional applicant is asked to approve this exact action; the approval will be bound to its digest."
     },
@@ -5903,7 +6478,7 @@
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "urn:profile:mortgage:identity.*",
+        "id": "urn:profile:mortgage-payment:identity.*",
         "text": "Accept identity.* from  by certified-face-check, at most 1 days old."
       },
       "caption": "The fictional identity provider's identity.approval statement is fit for A mortgage in principle: certified-face-check, 0 days old."
@@ -5993,26 +6568,21 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/balance-statement"
         }
       ],
       "resolution": {
-        "question": "Is Sam’s fictional bank a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
+        "question": "Is Sam’s fictional bank a party I can send Request a balance statement to?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
             "kind": "own-list",
-            "says": "Sam’s fictional bank is accepted for https://w3id.org/jeswr/awp#op/balance-statement."
+            "says": "Sam’s fictional bank is accepted for Request a balance statement."
           }
         ],
-        "answer": "Accepted, for https://w3id.org/jeswr/awp#op/balance-statement only."
+        "answer": "Accepted, for Request a balance statement only."
       },
       "reason": "recipient-established",
-      "caption": "Sam’s fictional bank: Accepted, for the unlabelled resource only."
+      "caption": "Sam’s fictional bank: Accepted, for Request a balance statement only."
     },
     {
       "seq": 164,
@@ -6185,7 +6755,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s agent to Sam’s fictional bank’s agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0009.",
+            "summary": "From Sam’s agent to Sam’s fictional bank’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6209,7 +6779,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:dfa2345ebb4f6d7598abb64005f1e33a8148cbf86e72486008987455f16661cc"
+            "digest": "sha-256:7480659a92b0af8c17f54c08ef1a7bb0148fac3022b0ae519c7b04cf7214e835"
           },
           "authority": {
             "present": true,
@@ -6225,14 +6795,19 @@
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                   "https://w3id.org/jeswr/awp#op/mortgage-product-search",
-                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                  "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "urn:op:paid-service",
+                  "urn:op:payment-request",
+                  "urn:op:payment-provider",
+                  "urn:op:payment",
+                  "urn:op:valuer-lookup"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:4b6d028790c211fb0073ed3bbc5f2f804ba45726700578c875cd58a6d95656e9"
+            "digest": "sha-256:d5ed959f2b6982a1077bf54e7e69962e3f5112e503c4a06b56b8720c3fe6a482"
           },
           "content": {
             "present": true,
@@ -6380,7 +6955,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s agent to Sam’s fictional bank’s agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0009.",
+            "summary": "From Sam’s agent to Sam’s fictional bank’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6404,7 +6979,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:dfa2345ebb4f6d7598abb64005f1e33a8148cbf86e72486008987455f16661cc"
+            "digest": "sha-256:7480659a92b0af8c17f54c08ef1a7bb0148fac3022b0ae519c7b04cf7214e835"
           },
           "authority": {
             "present": true,
@@ -6420,18 +6995,23 @@
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                   "https://w3id.org/jeswr/awp#op/mortgage-product-search",
-                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                  "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "urn:op:paid-service",
+                  "urn:op:payment-request",
+                  "urn:op:payment-provider",
+                  "urn:op:payment",
+                  "urn:op:valuer-lookup"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:4b6d028790c211fb0073ed3bbc5f2f804ba45726700578c875cd58a6d95656e9"
+            "digest": "sha-256:d5ed959f2b6982a1077bf54e7e69962e3f5112e503c4a06b56b8720c3fe6a482"
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/balance-statement\"; \"urn:awp:engine-mortgage-main-email-readable-copy-differs:harbour-agent:0001\"; \"urn:awp:engine-mortgage-main-email-readable-copy-differs:harbour-agent:0002\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "https://w3id.org/jeswr/awp#op/balance-statement",
@@ -6663,17 +7243,12 @@
           "layer": "authority",
           "suite": "mandate-signed",
           "clause": "CORE-IN-7"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/balance-statement"
         }
       ],
       "reason": "authority-valid",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
-        "text": "Sam’s fictional bank gives the unlabelled resource only on a certified face check, attested by an accepted identity provider."
+        "text": "Sam’s fictional bank gives Request a balance statement only on a certified face check, attested by an accepted identity provider."
       },
       "caption": "Sam, the fictional applicant signed a statement that Sam’s agent acts for them, and approved it with a certified face check, attested by The fictional identity provider."
     },
@@ -6717,19 +7292,14 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/balance-statement"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "urn:profile:mortgage:identity.*",
+        "id": "urn:profile:mortgage-payment:identity.*",
         "text": "Accept identity.* from  by certified-face-check, at most 1 days old."
       },
-      "caption": "The fictional identity provider's identity.approval statement is fit for the unlabelled resource: certified-face-check, 0 days old."
+      "caption": "The fictional identity provider's identity.approval statement is fit for Request a balance statement: certified-face-check, 0 days old."
     },
     {
       "seq": 179,
@@ -6769,7 +7339,7 @@
       "agent": "bank",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share the unlabelled resource with Sam, the fictional applicant."
+      "caption": "The core proposes to share Request a balance statement with Sam, the fictional applicant."
     },
     {
       "seq": 182,
@@ -6815,7 +7385,7 @@
         }
       ],
       "resolution": {
-        "question": "Is Sam, the fictional applicant a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
+        "question": "Is Sam, the fictional applicant a party I can send Request a balance statement to?",
         "path": [
           {
             "at": "Sam’s fictional bank's own list",
@@ -6968,7 +7538,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s fictional bank’s agent to Sam’s agent; deliver; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:harbour-agent:0004.",
+            "summary": "From Sam’s fictional bank’s agent to Sam’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -7132,7 +7702,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0009. The statements were issued by their sources and are relayed, not authored, by Sam’s fictional bank’s agent; as of 2026-10-31T23:59:59Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Sam’s fictional bank’s agent; as of 2026-10-31T23:59:59Z.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0006",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0009",
@@ -7182,7 +7752,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam’s fictional bank’s agent to Sam’s agent; deliver; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:harbour-agent:0004.",
+            "summary": "From Sam’s fictional bank’s agent to Sam’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -7215,7 +7785,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0009\"; \"urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0009\"; \"https://w3id.org/jeswr/awp#op/balance-statement\"; \"urn:awp:evidence:harbourbank-deposit-2026-10\"; \"https://sam.example/#me\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0009",
               "basis": {
@@ -7368,7 +7938,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0009. The statements were issued by their sources and are relayed, not authored, by Sam’s fictional bank’s agent; as of 2026-10-31T23:59:59Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Sam’s fictional bank’s agent; as of 2026-10-31T23:59:59Z.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0006",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0009",
@@ -7523,19 +8093,14 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
-        },
-        {
-          "layer": "meaning",
-          "suite": "fixed-vocabulary",
-          "id": "https://w3id.org/jeswr/awp#op/balance-statement"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "urn:profile:mortgage:deposit.*",
+        "id": "urn:profile:mortgage-payment:deposit.*",
         "text": "Accept deposit.* from  by recorded-by-authority, at most 31 days old."
       },
-      "caption": "Sam’s fictional bank's deposit.balance statement is fit for the unlabelled resource: recorded-by-authority, 12 days old."
+      "caption": "Sam’s fictional bank's deposit.balance statement is fit for Request a balance statement: recorded-by-authority, 12 days old."
     },
     {
       "seq": 197,
@@ -7702,7 +8267,7 @@
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "urn:profile:mortgage:income.*",
+        "id": "urn:profile:mortgage-payment:income.*",
         "text": "Accept income.* from  by recorded-by-authority, at most 92 days old."
       },
       "caption": "The fictional payroll provider's income.gross.monthly-series statement is fit for A mortgage in principle: recorded-by-authority, 12 days old."
@@ -7810,7 +8375,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The fictional lender’s agent to Sam’s agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-email-readable-copy-differs:north-agent:0002.",
+            "summary": "From The fictional lender’s agent to Sam’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
@@ -7835,7 +8400,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:673a5ab42e8654aa4e305f9f4bb7fa7096e093d5e907f152aa960ea008a50838"
+            "digest": "sha-256:5f85aa698f5fed1a8418752f701a599f887237ca30ddf6715fae46d27e377cb0"
           },
           "authority": {
             "present": true,
@@ -7851,18 +8416,23 @@
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                   "https://w3id.org/jeswr/awp#op/mortgage-product-search",
-                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                  "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "urn:op:paid-service",
+                  "urn:op:payment-request",
+                  "urn:op:payment-provider",
+                  "urn:op:payment",
+                  "urn:op:valuer-lookup"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:6800ac274859c0c2fa86f0ec91f0d392d4ec1224247f02b17e061e796441b719"
+            "digest": "sha-256:d9c9a3027c21af408afa495b14f1dde08b368ff8b1ad644edd21ac633214860e"
           },
           "content": {
             "present": true,
-            "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"https://w3id.org/jeswr/awp#model/mortgage-application\"; \"https://sam.example/#me\"; \"urn:awp:domain-item:336fd990ea3fcba0609e76e8ba022a10\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"https://northbank.example/#org\"; \"https://underwriter.example/#org\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"https://w3id.org/dpv#Marketing\"; \"sha-256:a811077da31bfed6784da4a6f9364f20d6f1abcb1f70f22fed6c59dd1736f7b9\"; \"urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0005\"",
+            "summary": "A counter-offer (round 2) with new terms. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -7977,7 +8547,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose credit-assessment; kept at most 60 days; never for Marketing; passed on only to 1 named recipient(s).",
+            "summary": "Terms: purpose Credit Assessment; kept at most 60 days; never for the unlabelled resource; passed on only to 1 named recipient(s).",
             "raw": {
               "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
               "modelVersion": "0.1",
@@ -8029,7 +8599,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0005.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0003",
               "inReplyTo": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0005"

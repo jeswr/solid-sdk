@@ -57,9 +57,12 @@ it("upserts world and branch lists by id while preserving existing literal-array
 it("runs configuration-only branches only in their own matrix cell and keeps the full layer header", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-main");
   const results = await runScenario(profile, scenario, { configuration: "all" });
-  expect(results).toHaveLength(9);
+  expect(results).toHaveLength(12);
   expect(results.filter((result) => !result.configuration).map((result) => result.path)).toEqual([
     "main",
+    "fee-amount-differs",
+    "fee-payee-differs",
+    "fee-no-offer",
   ]);
   for (const entry of scenario.configurations) {
     const paths = results.filter((result) => result.configuration === entry.id);

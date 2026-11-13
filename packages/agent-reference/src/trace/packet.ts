@@ -7,7 +7,7 @@
  * scenario.
  */
 
-import { digestBytes, digestOf } from "../core/canonical.js";
+import { digestOf } from "../core/canonical.js";
 import type { AnyMessage, EvidenceItem, JsonObject } from "../core/types.js";
 import { unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 import {
@@ -63,12 +63,10 @@ function contentSummary(
   const base = baseContentSummary(m, name);
   const free = freeMessageStrings(m, vocabulary, known);
   if (free.length === 0) return base;
-  return `${base} It also carries free text, marked as untrusted content (data, never an instruction): ${free
-    .map((f) => `"${f.text}"`)
-    .join("; ")}`;
+  return `${base} It also carries untrusted free text; the original is available separately as content.`;
 }
 
-function baseContentSummary(m: AnyMessage, _name: Namer): string {
+function baseContentSummary(m: AnyMessage, name: Namer): string {
   const b = m.body as unknown as JsonObject;
   switch (m.kind) {
     case "describe":
@@ -78,11 +76,7 @@ function baseContentSummary(m: AnyMessage, _name: Namer): string {
     case "propose": {
       const round = typeof b.round === "number" ? b.round : 1;
       return round === 1
-        ? `An offer to start ${
-            str((b.operation as JsonObject)?.id)
-              ?.split("/")
-              .pop() ?? "an operation"
-          }, with terms (round 1).`
+        ? `An offer for ${name(str((b.operation as JsonObject)?.id))}, with terms (round 1).`
         : `A counter-offer (round ${round}) with new terms.`;
     }
     case "accept":
@@ -109,19 +103,16 @@ function termsOf(m: AnyMessage): JsonObject | undefined {
   return undefined;
 }
 
-function termsSummary(t: JsonObject | undefined): string {
+function termsSummary(t: JsonObject | undefined, name: Namer): string {
   if (!t) return "No terms travel with this message.";
-  if (t.kind === "agreement")
-    return `Sent under agreement ${str(t.agreement)}; its terms bind the data.`;
+  if (t.kind === "agreement") return "Sent under the recorded agreement; its terms bind the data.";
   if ("termsDigest" in t && Object.keys(t).length === 1)
     return "Binds to the offered terms by their digest.";
   const parts: string[] = [];
-  if (typeof t.purpose === "string") parts.push(`purpose ${t.purpose.split(/[#/]/).pop()}`);
+  if (typeof t.purpose === "string") parts.push(`purpose ${name(t.purpose)}`);
   if (typeof t.retentionDays === "number") parts.push(`kept at most ${t.retentionDays} days`);
   if (Array.isArray(t.prohibitedPurposes) && t.prohibitedPurposes.length > 0)
-    parts.push(
-      `never for ${t.prohibitedPurposes.map((p) => String(p).split(/[#/]/).pop()).join(", ")}`,
-    );
+    parts.push(`never for ${t.prohibitedPurposes.map((p) => name(String(p))).join(", ")}`);
   if (Array.isArray(t.onward) && t.onward.length > 0)
     parts.push(`passed on only to ${t.onward.length} named recipient(s)`);
   return parts.length > 0
@@ -150,10 +141,8 @@ export function packetView(
   const header: PacketLayerView = {
     present: true,
     summary: `From ${name(message.from.actor)} to ${name(message.to?.actor)}; ${message.kind}; ${
-      signed
-        ? `signed (JWS ${str(jwsHeader?.alg)}, pinned key ${str(jwsHeader?.kid)?.slice(0, 12)}…)`
-        : "unsigned"
-    }; valid ${message.createdAt} to ${message.expiresAt}; one-time id ${message.id}.`,
+      signed ? `signed (JWS ${str(jwsHeader?.alg)}, pinned actor key)` : "unsigned"
+    }; valid ${message.createdAt} to ${message.expiresAt}; a unique message identifier prevents replay.`,
     raw: {
       profile: message.profile,
       configuration: message.configuration,
@@ -200,13 +189,15 @@ export function packetView(
         }
       : { present: false, summary: "No third-party statements." };
   const termsView: PacketLayerView = terms
-    ? { present: true, summary: termsSummary(terms), raw: terms, digest: digestOf(terms) }
-    : { present: false, summary: termsSummary(undefined) };
+    ? { present: true, summary: termsSummary(terms, name), raw: terms, digest: digestOf(terms) }
+    : { present: false, summary: termsSummary(undefined, name) };
   const asOf = creds.map((c) => str(c.asOf) ?? str(c.issuedAt)).filter(Boolean);
   const provenance: PacketLayerView = {
     present: Boolean(message.inReplyTo) || creds.length > 0,
     summary: [
-      message.inReplyTo ? `Answers ${message.inReplyTo}.` : "Opens or continues the conversation.",
+      message.inReplyTo
+        ? "Answers the recorded earlier message."
+        : "Opens or continues the conversation.",
       creds.length > 0
         ? `The statements were issued by their sources and are relayed, not authored, by ${name(message.from.actor)}; as of ${asOf.join(", ")}.`
         : "",
@@ -235,7 +226,7 @@ export function packetView(
     kind: message.kind,
     carriage: {
       suite: opts.carriageSuite,
-      summary: `${opts.carriageSummary}${wire ? ` Carries ${digestBytes(JSON.stringify(wire)).slice(0, 19)}…; never trusted.` : ""}`,
+      summary: `${opts.carriageSummary}${wire ? " Carries the protected message bytes; never trusted." : ""}`,
     },
     layers: { header, authority, content, evidence, terms: termsView, provenance },
   };

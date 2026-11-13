@@ -2,6 +2,55 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "paymentProviders": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                },
+                "party": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                },
+                "balances": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "party",
+                "balances"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "agent",
+          "accounts"
+        ],
+        "additionalProperties": false
+      }
+    },
     "configurations": {
       "default": [],
       "type": "array",
@@ -658,18 +707,18 @@
             "properties": {
               "id": {
                 "type": "string",
-                "const": "commitments-payment"
+                "const": "accountability-regulator-claim"
               },
               "change": {
                 "type": "object",
                 "properties": {
-                  "commitments": {
+                  "accountability": {
                     "type": "string",
-                    "const": "payment"
+                    "const": "regulator-claim"
                   }
                 },
                 "required": [
-                  "commitments"
+                  "accountability"
                 ],
                 "additionalProperties": false
               },
@@ -696,18 +745,132 @@
             "properties": {
               "id": {
                 "type": "string",
-                "const": "accountability-regulator-claim"
+                "const": "settlement-ap2"
               },
               "change": {
                 "type": "object",
                 "properties": {
-                  "accountability": {
+                  "settlement": {
                     "type": "string",
-                    "const": "regulator-claim"
+                    "const": "ap2"
                   }
                 },
                 "required": [
-                  "accountability"
+                  "settlement"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "settlement-acp"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "settlement": {
+                    "type": "string",
+                    "const": "acp"
+                  }
+                },
+                "required": [
+                  "settlement"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "settlement-x402"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "settlement": {
+                    "type": "string",
+                    "const": "x402"
+                  }
+                },
+                "required": [
+                  "settlement"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "settlement-mpp"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "settlement": {
+                    "type": "string",
+                    "const": "mpp"
+                  }
+                },
+                "required": [
+                  "settlement"
                 ],
                 "additionalProperties": false
               },
@@ -1001,7 +1164,16 @@
             "disclosure",
             "data-terms",
             "limits-approval",
-            "evidence"
+            "evidence",
+            "P1",
+            "P2",
+            "P3",
+            "P4",
+            "P5",
+            "P6",
+            "P7",
+            "P8",
+            "receipt"
           ]
         },
         "reason": {
@@ -1049,6 +1221,9 @@
             "indeterminate-policy",
             "terms-not-acceptable",
             "no-agreement",
+            "amount-differs",
+            "payee-differs",
+            "receipt-mismatch",
             "stale-data",
             "method-not-accepted",
             "confidence-too-low",
@@ -1160,6 +1335,9 @@
             "indeterminate-policy",
             "terms-not-acceptable",
             "no-agreement",
+            "amount-differs",
+            "payee-differs",
+            "receipt-mismatch",
             "stale-data",
             "method-not-accepted",
             "confidence-too-low",
@@ -1283,9 +1461,13 @@
                 "usage-control-human-approval",
                 "commitments-signed-offer-acceptance",
                 "commitments-agreement-credential",
-                "commitments-payment",
                 "accountability-local-ledger",
-                "accountability-regulator-claim"
+                "accountability-regulator-claim",
+                "settlement-rdf-order",
+                "settlement-ap2",
+                "settlement-acp",
+                "settlement-x402",
+                "settlement-mpp"
               ]
             }
           },
@@ -3660,6 +3842,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "proof-request"
@@ -3716,6 +3906,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -3787,6 +3985,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "joint-action"
@@ -3830,6 +4036,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -3892,6 +4106,118 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
+              "type": {
+                "type": "string",
+                "const": "payment-invoice"
+              },
+              "agreement": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "invoice": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "account": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "dueDate": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              "amount": {
+                "type": "string"
+              },
+              "payee": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "agreement",
+              "invoice",
+              "account",
+              "dueDate"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
+              "type": {
+                "type": "string",
+                "const": "answer-price"
+              },
+              "statement": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "statement"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "facts"
@@ -3919,6 +4245,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -3961,6 +4295,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -4011,6 +4353,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "email-inbox"
@@ -4043,6 +4393,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -4685,6 +5043,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "admit-derived"
@@ -4725,6 +5091,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -4782,6 +5156,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -4870,6 +5252,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "record-segment"
@@ -4909,6 +5299,13 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "forum-claim"
@@ -4923,9 +5320,6 @@
               "respondent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
-              },
-              "segment": {
-                "$ref": "#/$defs/__schema0"
               },
               "allegation": {
                 "type": "string",
@@ -4942,11 +5336,11 @@
             "required": [
               "id",
               "agent",
+              "segment",
               "type",
               "case",
               "conversation",
               "respondent",
-              "segment",
               "allegation"
             ],
             "additionalProperties": false
@@ -4967,6 +5361,13 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "forum-answer"
@@ -4974,17 +5375,14 @@
               "case": {
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
-              },
-              "segment": {
-                "$ref": "#/$defs/__schema0"
               }
             },
             "required": [
               "id",
               "agent",
+              "segment",
               "type",
-              "case",
-              "segment"
+              "case"
             ],
             "additionalProperties": false
           },
@@ -5003,6 +5401,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5031,6 +5437,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5064,6 +5478,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5108,6 +5530,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "general-duties"
@@ -5144,6 +5574,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "instruct"
@@ -5175,6 +5613,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5223,6 +5669,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5370,6 +5824,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "receive"
@@ -5428,6 +5890,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "approve"
@@ -5475,6 +5945,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5543,6 +6021,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5613,6 +6099,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "reading"
@@ -5657,6 +6151,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5711,6 +6213,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "assess"
@@ -5753,6 +6263,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "organisation-approve"
@@ -5785,6 +6303,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5821,6 +6347,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5867,6 +6401,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "request-structured"
@@ -5898,6 +6440,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -5947,6 +6497,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "read-reference"
@@ -5992,6 +6550,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "notifications"
@@ -6019,6 +6585,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -6048,6 +6622,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "show-mandate"
@@ -6075,6 +6657,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -6104,6 +6694,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "mint"
@@ -6132,6 +6730,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "pending"
@@ -6159,6 +6765,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -6192,6 +6806,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "retry-challenge"
@@ -6224,9 +6846,24 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "invoke-agreement"
+              },
+              "evidence": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               },
               "conversation": {
                 "$ref": "#/$defs/__schema0"
@@ -6253,6 +6890,7 @@
               "id",
               "agent",
               "type",
+              "evidence",
               "conversation",
               "operation",
               "input",
@@ -6275,6 +6913,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -6335,6 +6981,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "issue"
@@ -6377,6 +7031,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -6438,6 +7100,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "store-request"
@@ -6480,6 +7150,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -6541,6 +7219,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
               "type": {
                 "type": "string",
                 "const": "record"
@@ -6568,6 +7254,14 @@
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
               },
               "type": {
                 "type": "string",
@@ -6692,7 +7386,16 @@
                   "disclosure",
                   "data-terms",
                   "limits-approval",
-                  "evidence"
+                  "evidence",
+                  "P1",
+                  "P2",
+                  "P3",
+                  "P4",
+                  "P5",
+                  "P6",
+                  "P7",
+                  "P8",
+                  "receipt"
                 ]
               },
               "reason": {
@@ -6740,6 +7443,9 @@
                   "indeterminate-policy",
                   "terms-not-acceptable",
                   "no-agreement",
+                  "amount-differs",
+                  "payee-differs",
+                  "receipt-mismatch",
                   "stale-data",
                   "method-not-accepted",
                   "confidence-too-low",
@@ -6851,6 +7557,9 @@
                   "indeterminate-policy",
                   "terms-not-acceptable",
                   "no-agreement",
+                  "amount-differs",
+                  "payee-differs",
+                  "receipt-mismatch",
                   "stale-data",
                   "method-not-accepted",
                   "confidence-too-low",
@@ -6945,7 +7654,16 @@
                     "disclosure",
                     "data-terms",
                     "limits-approval",
-                    "evidence"
+                    "evidence",
+                    "P1",
+                    "P2",
+                    "P3",
+                    "P4",
+                    "P5",
+                    "P6",
+                    "P7",
+                    "P8",
+                    "receipt"
                   ]
                 },
                 "verdict": {
@@ -7004,6 +7722,9 @@
                     "indeterminate-policy",
                     "terms-not-acceptable",
                     "no-agreement",
+                    "amount-differs",
+                    "payee-differs",
+                    "receipt-mismatch",
                     "stale-data",
                     "method-not-accepted",
                     "confidence-too-low",
@@ -7114,7 +7835,16 @@
               "disclosure",
               "data-terms",
               "limits-approval",
-              "evidence"
+              "evidence",
+              "P1",
+              "P2",
+              "P3",
+              "P4",
+              "P5",
+              "P6",
+              "P7",
+              "P8",
+              "receipt"
             ]
           },
           "verdict": {
@@ -7173,6 +7903,9 @@
               "indeterminate-policy",
               "terms-not-acceptable",
               "no-agreement",
+              "amount-differs",
+              "payee-differs",
+              "receipt-mismatch",
               "stale-data",
               "method-not-accepted",
               "confidence-too-low",
@@ -7241,7 +7974,16 @@
           "disclosure",
           "data-terms",
           "limits-approval",
-          "evidence"
+          "evidence",
+          "P1",
+          "P2",
+          "P3",
+          "P4",
+          "P5",
+          "P6",
+          "P7",
+          "P8",
+          "receipt"
         ]
       }
     },
@@ -7292,6 +8034,7 @@
     }
   },
   "required": [
+    "paymentProviders",
     "configurations",
     "requiredMethods",
     "proofCredentials",

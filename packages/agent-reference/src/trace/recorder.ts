@@ -8,8 +8,10 @@
  * run is, and never writes an agent event.
  */
 
+import { digestOf } from "../core/canonical.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
 import type { LabelIndex } from "../model/labels.js";
+import { liftPaymentObjects, paymentTrace, readPaymentObjects } from "../wire/payment.js";
 import type { TraceEvent, TraceEventInput } from "./types.js";
 
 /** What the runtime and gates write to. */
@@ -21,7 +23,26 @@ export interface TraceSink {
 
 export class TraceRecorder {
   private readonly list: TraceEvent[] = [];
+  private readonly settlementJobs: Promise<void>[] = [];
+  private readonly settlements = new Map<
+    string,
+    Promise<import("../settlement/types.js").SettlementTrace>
+  >();
+  private readonly settlementErrors: unknown[] = [];
+  async complete(): Promise<void> {
+    await Promise.all(this.settlementJobs);
+    if (this.settlementErrors.length) throw this.settlementErrors[0];
+  }
   private current = 0;
+  private nextSegment: "payment" | undefined;
+  segment(value: "payment"): void {
+    this.nextSegment = value;
+  }
+  segmentEnd(value: "payment"): void {
+    const last = this.list.at(-1);
+    if (last) this.list[this.list.length - 1] = { ...last, segmentEnd: value };
+  }
+
   private rule: ((agent: string, event: TraceEventInput, step: number) => number) | undefined;
   private presentation: { labels: LabelIndex; meaningSuite: string } | undefined;
 
@@ -49,11 +70,45 @@ export class TraceRecorder {
       agent,
       emit: (event) => {
         if (this.rule) this.current = this.rule(agent, event, this.current);
-        const view = jointLogView(event);
+        const { settlementFacts, settlementDocument, ...plain } = event;
+        const view = jointLogView(plain);
         const displayed = this.presentation
           ? this.presentation.labels.annotations(view, this.presentation.meaningSuite)
           : view;
-        this.list.push({ seq: this.list.length + 1, step: this.current, agent, ...displayed });
+        this.list.push({
+          seq: this.list.length + 1,
+          step: this.current,
+          agent,
+          ...(this.nextSegment ? { segment: this.nextSegment } : {}),
+          ...displayed,
+        });
+        this.nextSegment = undefined;
+        if (settlementFacts || settlementDocument) {
+          const index = this.list.length - 1;
+          const key = settlementFacts
+            ? `rdf:${settlementFacts.fingerprint()}`
+            : `document:${digestOf(settlementDocument)}`;
+          let promised = this.settlements.get(key);
+          if (!promised) {
+            const snapshot = settlementFacts?.snapshot();
+            const document = snapshot ? undefined : structuredClone(settlementDocument);
+            promised = (async () =>
+              paymentTrace(snapshot ?? liftPaymentObjects(await readPaymentObjects(document))))();
+            // Observe errors immediately; complete() still fails rather than publishing missing facts.
+            promised.catch(() => undefined);
+            this.settlements.set(key, promised);
+          }
+          const job = promised
+            .then((settlement) => {
+              const previous = this.list[index];
+              if (!previous) throw new Error("Payment trace event was removed before completion");
+              this.list[index] = { ...previous, settlement };
+            })
+            .catch((error) => {
+              this.settlementErrors.push(error);
+            });
+          this.settlementJobs.push(job);
+        }
       },
     };
   }

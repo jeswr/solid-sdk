@@ -305,7 +305,13 @@ const root = z.strictObject({
     }),
   ),
 });
-const base = { id: slug, agent: slug, atStep: z.number().int().positive().optional() };
+const base = {
+  id: slug,
+  agent: slug,
+  atStep: z.number().int().positive().optional(),
+  segment: z.literal("payment").optional(),
+  segmentEnd: z.literal("payment").optional(),
+};
 const step = z.discriminatedUnion("type", [
   z.strictObject({
     ...base,
@@ -339,6 +345,17 @@ const step = z.discriminatedUnion("type", [
     payload: object,
     derivedEvidence: z.array(json).default([]),
   }),
+  z.strictObject({
+    ...base,
+    type: z.literal("payment-invoice"),
+    agreement: json,
+    invoice: iri,
+    account: iri,
+    dueDate: z.iso.datetime(),
+    amount: z.string().optional(),
+    payee: iri.optional(),
+  }),
+  z.strictObject({ ...base, type: z.literal("answer-price"), statement: iri }),
   z.strictObject({ ...base, type: z.literal("facts") }),
   z.strictObject({
     ...base,
@@ -555,6 +572,7 @@ const step = z.discriminatedUnion("type", [
   z.strictObject({
     ...base,
     type: z.literal("invoke-agreement"),
+    evidence: strings.default([]),
     conversation: json,
     operation: iri,
     input: object,
@@ -614,6 +632,16 @@ const configurationOptions = LAYER_IDS.flatMap((layer) =>
 );
 export const scenarioConfigurationSchema = z.union(configurationOptions);
 export const scenarioSchema = z.strictObject({
+  paymentProviders: z
+    .array(
+      z.strictObject({
+        agent: slug,
+        accounts: z.array(
+          z.strictObject({ id: iri, party: iri, balances: z.record(z.string(), z.string()) }),
+        ),
+      }),
+    )
+    .default([]),
   configurations: z.array(scenarioConfigurationSchema).default([]),
   carriage: z
     .strictObject({

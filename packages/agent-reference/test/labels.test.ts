@@ -48,8 +48,8 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   }
   const baseline = manifest.paths.filter((path) => !path.configuration);
   const alternatives = manifest.paths.filter((path) => path.configuration);
-  expect(traces).toBe(157 + alternatives.filter((path) => path.trace).length);
-  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(146);
+  expect(traces).toBe(161 + alternatives.filter((path) => path.trace).length);
+  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(150);
   expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(11);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
   expect(alternatives).toHaveLength(8);

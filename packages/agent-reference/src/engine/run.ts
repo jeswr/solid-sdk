@@ -40,6 +40,7 @@ import { LocalSingleUseRegister, type SingleUseItem } from "../mechanisms/single
 import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import { LabelIndex } from "../model/labels.js";
+import { PaymentFacts } from "../model/payment.js";
 import {
   alternativeWireId,
   CONFIG_AGREEMENT,
@@ -67,6 +68,8 @@ import type {
   OutboundPlan,
 } from "../runtime/operations.js";
 import { Cast, mandateOf, signClaim } from "../scenarios/common.js";
+import { Ledger as PaymentLedger } from "../settlement/ledger.js";
+import { RdfOrderSuite } from "../settlement/rdf-order.js";
 import { MemoryLedger } from "../store/ledger.js";
 import { MemoryStateStore } from "../store/state.js";
 import { BASELINE } from "../suites/baseline.js";
@@ -75,6 +78,7 @@ import { scenarioRegistry } from "../suites/scenario.js";
 import { TraceRecorder } from "../trace/recorder.js";
 import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
 import { TrustResolver } from "../trust/resolver.js";
+import { paymentObjects, paymentTrace } from "../wire/payment.js";
 import { ScenarioCarriage } from "./carriage.js";
 import { decisionsOf, firstBranchDivergence } from "./compare.js";
 import { installHandler } from "./handlers.js";
@@ -224,7 +228,7 @@ function unsupported(
       (
         {
           accountability: "regulator-claim",
-          commitments: "payment",
+          commitments: "agreement-credential",
           reliance: "corroboration",
           trust: "pinned-list",
           meaning: "plain-language-upgrade",
@@ -239,7 +243,7 @@ function unsupported(
       !(
         (
           {
-            commitments: ["payment", "agreement-credential"],
+            commitments: ["agreement-credential"],
             "data-access": ["by-query", "by-reference-local-holder"],
             identity: ["organization-document-local", "email-endpoint"],
             meaning: ["plain-language-upgrade", "registry-lookup"],
@@ -535,9 +539,7 @@ async function runPath(
                     ? CONFIG_REFERENCE_LOCAL
                     : scenario.suites.meaning === "plain-language-upgrade"
                       ? CONFIG_PLAIN_LANGUAGE
-                      : ["payment", "agreement-credential"].includes(
-                            scenario.suites.commitments ?? "",
-                          )
+                      : scenario.suites.settlement === "rdf-order"
                         ? CONFIG_PAYMENT
                         : scenario.suites.reliance === "corroboration"
                           ? CONFIG_CORROBORATION
@@ -1229,6 +1231,13 @@ async function runPath(
     current,
     now: now().toISOString(),
   });
+  const paymentLedgers = new Map(
+    scenario.paymentProviders.map((provider) => {
+      const ledger = new PaymentLedger();
+      for (const account of provider.accounts) ledger.createAccount(account.id, account.balances);
+      return [provider.agent, ledger] as const;
+    }),
+  );
   for (const agent of agents) {
     cast.trust.set(agent.id, {
       ...required(cast.trust.get(agent.id)),
@@ -1355,7 +1364,7 @@ async function runPath(
           }
         : {}),
     };
-    const handlers: OperationHandler[] = agent.handlers.length
+    const specialised: OperationHandler[] = agent.handlers.length
       ? agent.handlers.map((id) => {
           const handler = installHandler(
             required(scenario.handlerImplementations[id]),
@@ -1371,7 +1380,17 @@ async function runPath(
               })
             : handler;
         })
-      : profile.operations.map((op) => {
+      : [];
+    const handlers: OperationHandler[] = [
+      ...specialised,
+      ...profile.operations
+        .filter(
+          (op) =>
+            !specialised.some(
+              (h) => h.description.id === op.id && h.description.version === op.version,
+            ),
+        )
+        .map<OperationHandler>((op) => {
           const reply = (ctx: HandlerContext): HandlerReply =>
             resolveTemplate(
               responses.get(agent.id)?.reply ?? { type: "none" },
@@ -1397,6 +1416,16 @@ async function runPath(
                 purpose: "urn:purpose:emergency-notification",
                 parameters: contents,
                 conversation: ctx.conversation.id,
+              };
+            if (op.id === "urn:op:payment-request")
+              return {
+                action: "use",
+                operation: op.id,
+                target: op.id,
+                recipient: ctx.peer.party,
+                purpose: typeof contents.purpose === "string" ? contents.purpose : op.purposes[0],
+                conversation: ctx.conversation.id,
+                parameters: contents,
               };
             const proposed = openings.get(agent.id);
             void contents;
@@ -1445,12 +1474,62 @@ async function runPath(
                 agreement,
               }) as AgreementPlan,
           };
-        });
+        }),
+    ];
     const created = await cast.runtime(
       agent.id,
       handlers,
       [
         new SyntheticPaymentRail(),
+        ...(scenario.paymentProviders.some((p) => p.agent === agent.id)
+          ? [
+              {
+                id: "urn:adapter:rdf-order",
+                bindsParameters: true,
+                execute: async (_key: string, params: JsonObject) => {
+                  const provider = required(
+                    scenario.paymentProviders.find((p) => p.agent === agent.id),
+                  );
+                  const admitted = await required(runtimes.get(agent.id)).receivedPaymentOrder(
+                    String(params.message),
+                  );
+                  const account = required(
+                    provider.accounts.find((a) => a.party === admitted.payer),
+                  );
+                  const suite = new RdfOrderSuite();
+                  const settled = await suite.settle(
+                    await paymentObjects(admitted.facts, "Admitted payment order"),
+                    {
+                      party: cast.get(agent.id).identity.party ?? "",
+                      payerAccount: account.id,
+                      ledger: required(paymentLedgers.get(agent.id)),
+                      now: now().toISOString(),
+                    },
+                  );
+                  const receipt = suite.lift(settled);
+                  const trace = await paymentTrace(receipt);
+                  recorder.sink(agent.traceId ?? agent.id).emit({
+                    part: "record",
+                    kind: "record",
+                    caption: "The fictional provider records the ledger transfer and its receipt.",
+                    settlement: trace,
+                  });
+                  return {
+                    conclusion: "completed" as const,
+                    observed: {
+                      payment: trace.facts,
+                      reference: receipt.ledgerReference ?? "",
+                      status: "settled",
+                    } as JsonObject,
+                  };
+                },
+                reconcile: async () => ({
+                  conclusion: "not-executed" as const,
+                  reason: "No provider order was attempted.",
+                }),
+              },
+            ]
+          : []),
         {
           id: "urn:scenario:email",
           plainTextEmail: true,
@@ -1660,11 +1739,55 @@ async function runPath(
   };
   for (const [index, step] of scenario.script.entries()) {
     recorder.step(step.atStep ?? index + 1);
+    if (step.segment) recorder.segment("payment");
     const runtime = runtimes.get(step.agent);
     if (!runtime) throw new Error(`step ${step.id}: ${step.agent} does not run an agent`);
     const template = <T>(v: unknown) => resolveTemplate(v, variables()) as T;
     let result: unknown;
     switch (step.type) {
+      case "payment-invoice": {
+        const digest = template<string>(step.agreement);
+        const agreement = required(runtime.heldPaymentAgreement(digest));
+        const suite = new RdfOrderSuite();
+        const invoiceId = await runtime.mintIdentifier();
+        let objects = await suite.request(
+          { agreement, invoice: invoiceId, account: step.account, dueDate: step.dueDate },
+          { party: cast.get(step.agent).identity.party ?? "" },
+        );
+        let facts = suite.lift(objects);
+        if (step.amount || step.payee) {
+          facts = PaymentFacts.invoiceFor({
+            id: invoiceId,
+            agreement: digest,
+            account: step.account,
+            amount: step.amount ?? required(facts.amount),
+            currency: required(facts.currency),
+            payee: step.payee ?? required(facts.payee),
+            dueDate: step.dueDate,
+          });
+          objects = await paymentObjects(facts, "Invoice");
+        }
+        const trace = await paymentTrace(facts);
+        recorder.sink(parties.get(step.agent)?.traceId ?? step.agent).emit({
+          part: "core",
+          kind: "propose",
+          caption: "The payee proposes the invoice under the accepted agreement.",
+          settlement: trace,
+        });
+        result = {
+          document: objects.objects[0]?.shown,
+          agreement: digest,
+          amount: facts.amount,
+          currency: facts.currency,
+          payee: facts.payee,
+          account: facts.account,
+          reference: facts.id,
+        };
+        break;
+      }
+      case "answer-price":
+        result = await runtime.reportPrice(step.statement);
+        break;
       case "facts":
         result = runtime.admittedStatements();
         break;
@@ -2178,6 +2301,7 @@ async function runPath(
             pending.conversation,
             step.decision,
             step.note,
+            runtime.paymentApprovalBinding(pending.actionDigest),
           ),
           { evidence: step.evidence.map((id) => required(signed[id]).evidence) },
         );
@@ -2330,6 +2454,7 @@ async function runPath(
           operation: { id: operation.id, version: operation.version },
           input: template<JsonObject>(step.input),
           purpose: step.purpose,
+          evidence: step.evidence.map((id) => required(signed[id]).evidence),
         });
         enqueue(step.agent, result as StepResult);
         break;
@@ -2569,7 +2694,9 @@ async function runPath(
         break;
     }
     outputs[step.id] = result ?? null;
+    if (step.segmentEnd) recorder.segmentEnd("payment");
   }
+  await recorder.complete();
   return {
     schema: TRACE_SCHEMA,
     useCase: scenario.useCase ?? scenario.id,
