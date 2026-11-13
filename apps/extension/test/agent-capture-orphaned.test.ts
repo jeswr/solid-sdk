@@ -157,7 +157,7 @@ it.each([
   b.load();
   expect(b.view.message).toBe('Finishing the previous sharing.');
   await vi.advanceTimersByTimeAsync(120000);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
   h.state.cookies = true;
   h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
   await vi.advanceTimersByTimeAsync(0);

@@ -10,8 +10,8 @@ afterEach(() => {
   vi.useRealTimers();
   document.body.innerHTML = '';
 });
-function fixture() {
-  const h = captureHarness();
+function fixture(startup?: Parameters<typeof captureHarness>[1]) {
+  const h = captureHarness(false, startup);
   document.body.innerHTML = readFileSync(`${import.meta.dirname}/../src/popup/popup.html`, 'utf8');
   const root = document.getElementById('agent-sign-in')!;
   const p = h.popup();
@@ -256,7 +256,12 @@ it.each([
     expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined(),
   );
   expect(f.h.browser.permissions.remove).toHaveBeenCalled();
-  expect(f.h.browser.permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] });
+  const checks = f.h.browser.permissions.contains.mock.calls.flatMap(([input], index) =>
+    input.permissions ? [f.h.browser.permissions.contains.mock.invocationCallOrder[index]] : [],
+  );
+  expect(checks.at(-1)).toBeGreaterThan(
+    f.h.browser.permissions.remove.mock.invocationCallOrder.at(-1)!,
+  );
   expect(f.h.browser.cookies.getAll).not.toHaveBeenCalled();
   expect(f.h.native).not.toHaveBeenCalled();
   expect(f.button('review').disabled).toBe(true);
@@ -544,10 +549,10 @@ it.each([
     f.h.state.cookies = true;
     f.h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
     if (kind === 'replacement worker') {
-      // Stop the old worker before its first cleanup check returns. Its promises
+      // Stop the old worker before its absence verification returns. Its promises
       // remain unresolved, modelling discarded worker tasks rather than onDisconnect.
       await vi.advanceTimersByTimeAsync(0);
-      expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+      expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBe(true);
       f.h.restart();
       const next = f.h.popup();
       mountAgentSignIn(f.root, next.browser);
@@ -568,11 +573,8 @@ it.each([
 });
 
 it('restores the local cleanup notice while the replacement worker is still checking permission', async () => {
-  const f = fixture();
-  f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY] = true;
-  f.h.state.cookies = true;
   const checked = deferred<boolean>();
-  f.h.browser.permissions.contains.mockImplementationOnce(() => checked.promise);
+  const f = fixture({ cookies: true, cleanup: true, contains: checked.promise });
   f.mount();
   await vi.waitFor(() => expect(f.warning().hidden).toBe(false));
   expect(f.warning().textContent).toContain('Cleaning up a previous sharing');

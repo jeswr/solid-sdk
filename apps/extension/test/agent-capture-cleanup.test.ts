@@ -54,7 +54,7 @@ it.each([
   expect(b.view.phase).toBe('busy');
   expect(b.view.message).toBe('Finishing the previous sharing.');
   expect(h.browser.permissions.request).not.toHaveBeenCalled();
-  expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
 
   marker.resolve();
   await vi.advanceTimersByTimeAsync(0);
@@ -136,7 +136,7 @@ it.each([
   b.load();
   await vi.advanceTimersByTimeAsync(0);
   expect(b.view.message).toBe('Finishing the previous sharing.');
-  expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
   reply.resolve(
     stage === 'beginLogin'
       ? { type: 'beginLogin', token: '00000000-0000-4000-8000-000000000001' }
@@ -222,9 +222,7 @@ it.each([
   paused.resolve();
   await phase(b, 'ready');
   verified(h);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(
-    step === 'marker write' ? removals + 1 : removals,
-  );
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals);
   expect(a.view.phase).toBe('cancelled');
   await confirming(h, b);
   expect(h.state.cookies).toBe(true);
@@ -257,8 +255,8 @@ it.each([
   await vi.advanceTimersByTimeAsync(0);
   expect(b.view.phase).toBe('busy');
   expect(b.view.message).toBe('Finishing the previous sharing.');
-  expect(h.browser.permissions.remove).not.toHaveBeenCalled();
-  expect(h.browser.storage.local.set).not.toHaveBeenCalled();
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
+  expect(h.browser.storage.local.set).toHaveBeenCalledTimes(2);
   if (outcome === 'rejection') prompt.reject(new Error('fixture-secret'));
   else prompt.resolve(outcome === 'grant');
   await allowed;

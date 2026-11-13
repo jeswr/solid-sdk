@@ -405,7 +405,10 @@ Every popup posts `requesting` with its lease ID before calling Chrome. A `reque
 from an expired, invalidated, unknown or second acquisition contests the admitted lease:
 the worker immediately revokes cookies, fails sharing with **Another sharing started. Try again.**,
 and runs cleanup with the sixty-second abandoned-prompt fence. A foreign request received
-while idle also starts this fence, so its later grant cannot belong to a new lease. It never reads cookies or
+while idle also starts this fence. Every foreign request gets sixty seconds from when the
+worker observes it, including requests received near the end of an existing fence. Admission
+waits for every deadline and verified cookie absence, so a later request cannot inherit an
+older prompt's nearly expired fence. It never reads cookies or
 dispatches to the native host while contested. A grant is accepted only after one quiet second
 following the latest cookie `onAdded` event or request settlement, without foreign `requesting`.
 The contest latch is checked again immediately before cookie reads and native dispatch.
@@ -438,8 +441,12 @@ older async step completes afterward. A cancelled permission prompt waits for it
 until disconnect or lease timeout. If the popup disconnects or the lease expires while the
 prompt is unsettled, the worker takes over in an orphaned cleanup state: it immediately removes
 `cookies` and verifies absence, then keeps the lease fence for sixty seconds from that event.
-Every cookie grant arriving during this window is removed immediately, bypassing the mutex;
+Every cookie grant arriving during this window is removed immediately, bypassing the queue;
 these idempotent removals cannot read cookies, send native messages or request host access.
+The same independent revocation path handles grants outside an admitted, uncontested lease,
+startup recovery, contests and explicit removal retries. Storage marker writes never delay
+the removal itself. No capture is admitted and no cookies are read or native messages sent
+while revocation is in flight.
 A second popup shows **Finishing the previous sharing**, with the warning and enabled
 **Remove cookie access** retry button if removal fails. Cleanup is tracked in one collection
 keyed by lease ID. Every removal or verification wait is bounded to ten seconds; joining
@@ -455,6 +462,11 @@ arriving after the window are removed by the global startup/onAdded rule.
 Cleanup results belong to each lease: a failed earlier removal never skips a newer lease's
 cleanup. Cancellation can interrupt non-mutating checks; failed or timed-out cleanup keeps
 admission fenced until a successful bounded retry verifies absence.
+Every browser API wait in the queue uses the same ten-second timeout helper, including tab
+and focused-window lookups, permission checks, storage and native host setup/replies. A hung
+operation fails closed and releases the queue with an error or actionable recovery warning.
+Disconnecting a popup cancels its pending queue work. Late results cannot resume a timed-out
+or disconnected operation.
 Only a small display marker (`agentCaptureCleanup: true`) is stored in `chrome.storage.local`
 while removal is in progress or has failed; it is cleared after verified absence. No ownership
 metadata or session-storage fallback is needed. The marker contains no cookie values and never

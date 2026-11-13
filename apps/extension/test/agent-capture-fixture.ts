@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { NativeResult } from '@jeswr/agent-vault/browser';
 import { vi } from 'vitest';
+import { CAPTURE_CLEANUP_KEY } from '../src/background/agent-capture-cleanup';
 import { installNativeVaultBridge } from '../src/background/agent-vault';
 import type { CaptureIntent, CaptureView, VaultRequest } from '../src/shared/agent-capture';
 import { CAPTURE_PERMISSION_PORT } from '../src/shared/agent-capture-permissions';
@@ -52,7 +53,14 @@ export const cookie = (): chrome.cookies.Cookie => ({
   storeId: '0',
   sameSite: 'lax',
 });
-export function captureHarness(asynchronous = false) {
+export function captureHarness(
+  asynchronous = false,
+  startup?: {
+    cookies?: boolean;
+    cleanup?: boolean;
+    contains?: Promise<boolean>;
+  },
+) {
   const state = {
     cookies: false,
     origins: ['https://shop.test:443/*', 'https://other.test:443/*'],
@@ -115,12 +123,19 @@ export function captureHarness(asynchronous = false) {
       onActivated: event<{ tabId: number; windowId: number }>(),
       onUpdated: event<number, [{ url?: string }]>(),
     },
-    windows: { onFocusChanged: event<number>() },
+    windows: {
+      WINDOW_ID_CURRENT: -2,
+      get: vi.fn(async (_id: number) => ({ id: 1, focused: true, incognito: false })),
+      onFocusChanged: event<number>(),
+    },
     storage: { session: storageArea(), local: storageArea() },
     permissions,
     cookies: { getAll: vi.fn(async () => [cookie()]) },
     action: { setBadgeText: vi.fn(async (_input: { text: string }) => {}) },
   };
+  if (startup?.cookies) state.cookies = true;
+  if (startup?.cleanup) browser.storage.local.data[CAPTURE_CLEANUP_KEY] = true;
+  if (startup?.contains) permissions.contains.mockImplementationOnce(() => startup.contains!);
   installNativeVaultBridge(browser as unknown as typeof chrome);
   const terminated: (() => void)[] = [];
   const popup = (sender = { id: runtime.id, url: runtime.getURL('popup/popup.html') }) => {

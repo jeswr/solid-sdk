@@ -323,3 +323,294 @@ it('fences an unknown requesting received while idle so its later grant cannot b
   await vi.advanceTimersByTimeAsync(60000);
   await b.arm();
 });
+
+it.each([
+  'cancel',
+  'focus change',
+])('revokes immediately on %s while native setup is hung in the queue', async (exit) => {
+  const h = captureHarness(true);
+  const a = popup(h);
+  await a.arm();
+  const paused = stall(h.native);
+  a.button('review').click();
+  await vi.waitFor(() => expect(paused.entered).toHaveBeenCalledTimes(1), { timeout: 2500 });
+  expect(h.state.cookies).toBe(true);
+  if (exit === 'cancel') a.button('cancel').click();
+  else h.browser.windows.onFocusChanged.emit(2);
+  await turn();
+  expect(h.state.cookies).toBe(false);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+  expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
+  const b = popup(h);
+  await vi.advanceTimersByTimeAsync(10000);
+  await b.arm();
+  expect(h.native.mock.calls.some(([request]) => request.type === 'capture')).toBe(false);
+});
+
+it.each([
+  1, 30, 59,
+])('extends an existing fence for a foreign request at %s seconds (round-11 grant adoption)', async (seconds) => {
+  const h = captureHarness(true);
+  const a = popup(h);
+  await a.arm();
+  a.port.messages.hold('toPopup');
+  h.browser.windows.onFocusChanged.emit(9);
+  await turn();
+  const b = popup(h);
+  await b.prompt();
+  const abandonedAt = Date.now();
+  b.port.client.disconnect();
+  h.native.mockClear();
+  await vi.advanceTimersByTimeAsync(seconds * 1000);
+  const result = deferred<boolean>();
+  h.browser.permissions.request.mockImplementationOnce(() => result.promise);
+  a.port.messages.hold('toWorker');
+  a.button('review').click();
+  expect(h.browser.permissions.request).toHaveBeenCalledTimes(2);
+  const foreign = a.port.messages.pending.find(
+    (d) => 'type' in d.message && d.message.type === 'requesting',
+  )!;
+  const observedAt = Date.now();
+  foreign.deliver();
+  const c = popup(h);
+  await vi.advanceTimersByTimeAsync(abandonedAt + 60001 - Date.now());
+  expect(c.port.view.phase).toBe('busy');
+  expect(c.button('review').disabled).toBe(true);
+  grant(h, result);
+  await turn();
+  expect(h.state.cookies).toBe(false);
+  expect(h.native).not.toHaveBeenCalled();
+  noCapture(h);
+  await vi.advanceTimersByTimeAsync(observedAt + 59999 - Date.now());
+  expect(c.port.view.phase).toBe('busy');
+  expect(c.button('review').disabled).toBe(true);
+  expect(h.native).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  await c.arm();
+  expect(h.state.cookies).toBe(false);
+  expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
+});
+
+function stall<Args extends unknown[], Result>(mock: {
+  getMockImplementation(): ((...args: Args) => Promise<Result>) | undefined;
+  mockImplementationOnce(implementation: (...args: Args) => Promise<Result>): unknown;
+}) {
+  const release = deferred<void>();
+  const entered = vi.fn();
+  const implementation = mock.getMockImplementation()!;
+  mock.mockImplementationOnce(async (...args) => {
+    entered();
+    await release.promise;
+    return implementation(...args);
+  });
+  return { entered, release: () => release.resolve() };
+}
+const browserWaits = ['tabs.query', 'permissions.contains', 'storage read', 'windows.get'] as const;
+function stallBrowser(h: Harness, api: (typeof browserWaits)[number]) {
+  switch (api) {
+    case 'tabs.query':
+      return stall(h.browser.tabs.query);
+    case 'permissions.contains':
+      return stall(h.browser.permissions.contains);
+    case 'storage read':
+      return stall(h.browser.storage.local.get);
+    case 'windows.get':
+      return stall(h.browser.windows.get);
+  }
+}
+function choose(owner: ReturnType<typeof popup>) {
+  const root = owner.button('review').closest('#agent-sign-in')!;
+  const persona = root.querySelector<HTMLSelectElement>('#agent-persona')!;
+  persona.value = 'alex';
+  persona.dispatchEvent(new Event('change'));
+}
+
+it.each(
+  browserWaits.flatMap((api) => ['load', 'review'].map((stage) => ({ api, stage }))),
+)('bounds hung $api during $stage, advances the queue and immediately revokes a late grant', async ({
+  api,
+  stage,
+}) => {
+  const h = captureHarness(true);
+  await turn(); // Startup absence verification is complete before the injected hang.
+  let a: ReturnType<typeof popup>;
+  let paused: ReturnType<typeof stallBrowser>;
+  if (stage === 'review') {
+    a = popup(h);
+    await phase(a.port, 'ready');
+    choose(a);
+    paused = stallBrowser(h, api);
+    a.button('review').click();
+  } else {
+    paused = stallBrowser(h, api);
+    a = popup(h);
+  }
+  await vi.waitFor(() => expect(paused.entered).toHaveBeenCalledTimes(1));
+  const b = popup(h);
+  await turn();
+  expect(b.button('review').disabled).toBe(true);
+  await vi.advanceTimersByTimeAsync(10000);
+  await phase(b.port, 'ready');
+  expect(['failed', 'cancelled']).toContain(a.port.view.phase);
+  expect(a.button('review').disabled).toBe(true);
+  const messages = h.native.mock.calls.length;
+  const removals = h.browser.permissions.remove.mock.calls.length;
+  const previous = a.port.view.phase;
+  h.state.cookies = true;
+  h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals + 1);
+  expect(h.state.cookies).toBe(false);
+  await turn();
+  paused.release();
+  await turn();
+  expect(a.port.view.phase).toBe(previous);
+  expect(h.native).toHaveBeenCalledTimes(messages);
+  noCapture(h);
+  await b.arm();
+});
+
+it.each(
+  browserWaits,
+)('disconnect cancels popup-load %s without waiting for its deadline', async (api) => {
+  const h = captureHarness(true);
+  await turn();
+  const paused = stallBrowser(h, api);
+  const a = popup(h);
+  await vi.waitFor(() => expect(paused.entered).toHaveBeenCalledTimes(1));
+  const disconnectedAt = Date.now();
+  a.port.client.disconnect();
+  const b = popup(h);
+  await phase(b.port, 'ready');
+  expect(Date.now() - disconnectedAt).toBeLessThan(1000);
+  const calls = h.native.mock.calls.length;
+  paused.release();
+  await turn();
+  expect(h.native).toHaveBeenCalledTimes(calls);
+  noCapture(h);
+});
+
+it('revokes the round-11 late grant while tabs.query holds the serial queue, even with hung marker storage', async () => {
+  const h = captureHarness(true);
+  await turn();
+  const paused = stallBrowser(h, 'tabs.query');
+  const a = popup(h);
+  await vi.waitFor(() => expect(paused.entered).toHaveBeenCalledTimes(1));
+  const marker = stall(h.browser.storage.local.set);
+  const removals = h.browser.permissions.remove.mock.calls.length;
+  h.state.cookies = true;
+  h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
+  expect(marker.entered).toHaveBeenCalledTimes(1);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals + 1);
+  expect(h.state.cookies).toBe(false);
+  a.port.client.disconnect();
+  const b = popup(h);
+  await vi.advanceTimersByTimeAsync(10000);
+  await turn();
+  expect(b.warning().hidden).toBe(false);
+  expect(b.button('remove-cookie-access').disabled).toBe(false);
+  b.button('remove-cookie-access').click();
+  await phase(b.port, 'ready');
+  await vi.advanceTimersByTimeAsync(600000);
+  noCapture(h);
+  expect(h.state.cookies).toBe(false);
+  await b.arm();
+});
+
+it.each([
+  'onStartup',
+  'onInstalled',
+] as const)('runs %s revocation outside a hung load queue', async (event) => {
+  const h = captureHarness(true);
+  await turn();
+  const paused = stallBrowser(h, 'windows.get');
+  const a = popup(h);
+  await vi.waitFor(() => expect(paused.entered).toHaveBeenCalledTimes(1));
+  const marker = stall(h.browser.storage.local.set);
+  h.state.cookies = true;
+  h.browser.runtime[event].emit(undefined);
+  await turn();
+  expect(h.state.cookies).toBe(false);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+  expect(h.native).not.toHaveBeenCalled();
+  marker.release();
+  a.port.client.disconnect();
+  const b = popup(h);
+  await b.arm();
+  noCapture(h);
+});
+
+it('releases a disconnected review’s barrier when its independent removal finishes', async () => {
+  const h = captureHarness(true);
+  const a = popup(h);
+  await phase(a.port, 'ready');
+  choose(a);
+  h.state.cookies = true;
+  const paused = stall(h.browser.permissions.remove);
+  a.button('review').click();
+  await vi.waitFor(() => expect(paused.entered).toHaveBeenCalledTimes(1));
+  a.port.client.disconnect();
+  const b = popup(h);
+  await turn();
+  expect(b.button('review').disabled).toBe(true);
+  paused.release();
+  await b.arm();
+  noCapture(h);
+});
+
+it('does not resume a nested tab lookup after the containing load times out', async () => {
+  const h = captureHarness(true);
+  await turn();
+  const storage = stall(h.browser.storage.local.get);
+  const tab = stall(h.browser.tabs.query);
+  const a = popup(h);
+  await vi.waitFor(() => expect(storage.entered).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(8000);
+  storage.release();
+  await vi.waitFor(() => expect(tab.entered).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(2000);
+  await phase(a.port, 'failed');
+  tab.release();
+  await turn();
+  expect(h.browser.windows.get).not.toHaveBeenCalled();
+  expect(h.native).not.toHaveBeenCalled();
+});
+
+it.each([
+  'list',
+  'beginLogin',
+  'capture',
+] as const)('bounds a hung native %s reply to ten seconds and proceeds with another popup', async (type) => {
+  const h = captureHarness(true);
+  await turn();
+  let a: ReturnType<typeof popup>;
+  let paused: ReturnType<typeof stall>;
+  if (type === 'list') {
+    paused = stall(h.native);
+    a = popup(h);
+  } else {
+    a = popup(h);
+    await a.arm();
+    if (type === 'capture') {
+      a.button('review').click();
+      await phase(a.port, 'confirming');
+    }
+    paused = stall(h.native);
+    a.button(type === 'capture' ? 'confirm' : 'review').click();
+  }
+  await vi.waitFor(() => expect(paused.entered).toHaveBeenCalledTimes(1), { timeout: 2500 });
+  expect(h.native.mock.calls.at(-1)![0].type).toBe(type);
+  const b = popup(h);
+  await vi.advanceTimersByTimeAsync(10000);
+  await phase(b.port, 'ready');
+  expect(a.port.view.phase).toBe('failed');
+  expect(h.state.cookies).toBe(false);
+  const reads = h.browser.cookies.getAll.mock.calls.length;
+  const sent = h.native.mock.calls.length;
+  const pushes = a.port.states.length;
+  paused.release();
+  await turn();
+  expect(a.port.states).toHaveLength(pushes);
+  expect(h.browser.cookies.getAll).toHaveBeenCalledTimes(reads);
+  expect(h.native).toHaveBeenCalledTimes(sent);
+  await b.arm();
+});

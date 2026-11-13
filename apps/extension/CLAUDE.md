@@ -49,7 +49,8 @@ styles to `#login-form`** (the suite CSS-leak guards).
 
 `popup/agent-sign-in-view.ts` is a thin, long-lived-port view of the worker's single
 capture state machine (`background/agent-capture.ts`). The worker owns the exclusive lease,
-all tab/access checks, cookie reads, native requests and bounded cleanup under one async mutex.
+all tab/access checks, cookie reads and native requests through one bounded serial queue;
+permission revocation runs independently and blocks admission and dispatch until it finishes.
 Review validates the CURRENT active tab against the lease's tab/origin and existing host
 access before arming the popup's **Allow cookies and review** click. Only that click requests
 optional `cookies`, synchronously inside its gesture. Review must receive a positive armed
@@ -57,7 +58,9 @@ acknowledgement for its current lease within ten seconds locally; a late acknowl
 re-arm that attempt. Every permission click posts `requesting` with the lease ID before calling
 Chrome. Any foreign, expired, invalidated, unknown or second `requesting` contests the acquisition:
 revoke cookies immediately, fail the admitted lease with "Another sharing started. Try again.",
-and run cleanup with the sixty-second abandoned-prompt fence. Accept a grant only after a quiet
+and run cleanup with the sixty-second abandoned-prompt fence. Every foreign request starts
+its own sixty seconds from observation, even near an existing fence's deadline; admission
+waits for all deadlines and verified absence. Accept a grant only after a quiet
 second after the latest cookie onAdded/request settlement with no foreign `requesting`. The
 contest latch is checked immediately before every cookie read and native dispatch; no reads or
 sends are allowed while contested.
@@ -138,6 +141,12 @@ arrive after grant acceptance. Document this without adding further timing mecha
 global stateless removal rule and confirmation latch remain the backstops.
 Required `<all_urls>` stays in place and host grants never change; temporary cookie access
 is extension-wide, so exact-origin filtering and explicit confirmation still apply.
+All revocations run independently of the serial queue, including onAdded, startup, contests
+and recovery retries. Marker storage cannot delay removal. No capture is admitted and no
+cookies are read or native messages sent while revocation is in flight. Every queued browser
+API wait (tabs, focused windows, permissions, storage and native setup/replies) uses the same
+ten-second helper. Timeouts fail closed with an error or enabled recovery button and release
+the queue. Popup disconnect cancels its pending queue work; late results cannot resume it.
 
 ## Gate
 

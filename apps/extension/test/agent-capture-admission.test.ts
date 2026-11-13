@@ -105,7 +105,7 @@ it('contests another popup click while B’s prompt is unsettled', async () => {
   expect(a.text()).toBe('Another sharing started. Try again.');
   expect(b.port.view.phase).toBe('failed');
   expect(h.browser.permissions.request).toHaveBeenCalledTimes(requests);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals + 1);
   a.port.client.disconnect();
   h.state.cookies = true;
   h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
