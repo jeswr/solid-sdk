@@ -1,0 +1,222 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "recycled-content",
+ "path": {
+  "index": 1,
+  "what": "One tier's input is self-declared"
+ },
+ "parties": [
+  {
+   "id": "owner",
+   "name": "The brand"
+  },
+  {
+   "id": "receiver",
+   "name": "The certifier"
+  },
+  {
+   "id": "tier",
+   "name": "The supplying tier"
+  },
+  {
+   "id": "owner-agent",
+   "name": "The brand's agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The certifier's agent"
+  }
+ ],
+ "scenario": {
+  "id": "recycled-content--branch-1",
+  "title": "Proving recycled content along a supply chain: One tier's input is self-declared",
+  "steps": {
+   "1": "The certifier's agent checks the signed statements."
+  }
+ },
+ "configuration": {
+  "id": "baseline",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "owner-agent",
+   "name": "The brand's agent",
+   "actsFor": "owner",
+   "role": "agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The certifier's agent",
+   "actsFor": "receiver",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Outside organizations and data sources",
+   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+  },
+  {
+   "what": "Proof-free supplier-quality preflight",
+   "replacedBy": "The tier's real signature verifies its self-declaration, but the input profile requires an audited method; no chain proof or 30-percent predicate proof is constructed"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The supplying tier's material.recycled-fraction statement is intact and signed with The supplying tier's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:recycled-content:material.recycled-fraction",
+    "text": "The supplying tier is accepted for material.recycled-fraction claims."
+   },
+   "resolution": {
+    "question": "Is The supplying tier an authority for material.recycled-fraction claims about The brand?",
+    "path": [
+     {
+      "at": "The certifier's own list",
+      "kind": "own-list",
+      "says": "The supplying tier is accepted for material.recycled-fraction."
+     }
+    ],
+    "answer": "Accepted, for material.recycled-fraction claims only."
+   },
+   "caption": "The supplying tier's material.recycled-fraction statement: The supplying tier is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The supplying tier's material.recycled-fraction statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:recycled-content:self-declared-tier",
+    "text": "Its terms allow this: use for urn:purpose:recycled content; share for urn:purpose:recycled content."
+   },
+   "caption": "The supplying tier's material.recycled-fraction statement: its terms allow this: use for urn:purpose:recycled content; share for urn:purpose:recycled content."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "fail",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "method-not-accepted",
+   "rule": {
+    "id": "urn:profile:recycled-content:material.recycled-fraction",
+    "text": "Accept material.recycled-fraction from urn:fictional:recycled-content:tier by audited-by-certifier, at most 30 days old."
+   },
+   "caption": "The supplying tier's material.recycled-fraction statement was not produced in a way urn:scenario:recycled-content:task accepts."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "fail",
+   "outcome": "refuse",
+   "caption": "The supplying tier's material.recycled-fraction statement is refused and kept out of memory."
+  }
+ ]
+}

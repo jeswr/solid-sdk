@@ -1,0 +1,887 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "shopping-agent",
+ "path": {
+  "index": 1,
+  "what": "Fees at checkout take the price above the budget"
+ },
+ "parties": [
+  {
+   "id": "business",
+   "name": "The shopper"
+  },
+  {
+   "id": "business-agent",
+   "name": "The shopper's agent"
+  },
+  {
+   "id": "bank",
+   "name": "The payment provider"
+  },
+  {
+   "id": "bank-agent",
+   "name": "The payment provider's agent"
+  },
+  {
+   "id": "supplier",
+   "name": "The chosen merchant"
+  },
+  {
+   "id": "email",
+   "name": "The unverified account sender"
+  },
+  {
+   "id": "other-merchant",
+   "name": "The other merchant"
+  }
+ ],
+ "scenario": {
+  "id": "shopping-agent--branch-1",
+  "title": "Buying something within a budget: Fees at checkout take the price above the budget",
+  "steps": {
+   "1": "The shopper's agent checks the signed statements.",
+   "2": "The payment provider's agent checks the signed statements.",
+   "3": "The shopper's agent sends the signed request.",
+   "4": "The payment provider's agent checks the message and prepares a response.",
+   "5": "The payment provider's agent proposes the local action.",
+   "6": "The payment provider's agent checks the observed result.",
+   "7": "The payment provider's agent completes the message step.",
+   "8": "The shopper's agent checks the message and prepares a response.",
+   "9": "The shopper's agent checks the durable record.",
+   "10": "The payment provider's agent checks the durable record."
+  }
+ },
+ "configuration": {
+  "id": "shopping-agent-local",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "payment",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "business-agent",
+   "name": "The shopper's agent",
+   "actsFor": "business",
+   "role": "agent"
+  },
+  {
+   "id": "bank-agent",
+   "name": "The payment provider's agent",
+   "actsFor": "bank",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Payment bank and account directory",
+   "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
+  },
+  {
+   "what": "Checkout and payment settlement",
+   "replacedBy": "Two source-signed merchant prices and a gated local payment-provider submission; no live checkout or settlement is claimed"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The payment provider's payee-account statement is intact and signed with The payment provider's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source-rule:bank",
+    "text": "The payment provider is accepted for payee-account claims."
+   },
+   "resolution": {
+    "question": "Is The payment provider an authority for payee-account claims about The chosen merchant?",
+    "path": [
+     {
+      "at": "The shopper's own list",
+      "kind": "own-list",
+      "says": "The payment provider is accepted for payee-account."
+     }
+    ],
+    "answer": "Accepted, for payee-account claims only."
+   },
+   "caption": "The payment provider's payee-account statement: The payment provider is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The payment provider's payee-account statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "payment",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:payee-account",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "The payment provider's payee-account statement: its terms allow this: ."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:shopping-agent:payee-account",
+    "text": "Accept payee-account from urn:fictional:bank by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The payment provider's payee-account statement is fit for urn:scenario:shopping-agent:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The payment provider's payee-account statement is admitted."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:shopping-agent:account",
+    "label": "The payment provider's payee-account statement",
+    "claimType": "payee-account",
+    "subject": "urn:fictional:supplier",
+    "value": null,
+    "source": "urn:fictional:bank",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:payee-account",
+     "summary": ""
+    },
+    "provenance": "signed by The payment provider"
+   },
+   "caption": "The payment provider's payee-account statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 8,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The chosen merchant's invoice statement is intact and signed with The chosen merchant's pinned key."
+  },
+  {
+   "seq": 9,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source-rule:supplier",
+    "text": "The chosen merchant is accepted for invoice claims."
+   },
+   "resolution": {
+    "question": "Is The chosen merchant an authority for invoice claims about The shopper?",
+    "path": [
+     {
+      "at": "The shopper's own list",
+      "kind": "own-list",
+      "says": "The chosen merchant is accepted for invoice."
+     }
+    ],
+    "answer": "Accepted, for invoice claims only."
+   },
+   "caption": "The chosen merchant's invoice statement: The chosen merchant is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 10,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The chosen merchant's invoice statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 11,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "payment",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "default-terms",
+    "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   },
+   "caption": "The chosen merchant's invoice statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+  },
+  {
+   "seq": 12,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:shopping-agent:invoice",
+    "text": "Accept invoice from urn:fictional:supplier by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The chosen merchant's invoice statement is fit for urn:scenario:shopping-agent:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 13,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The chosen merchant's invoice statement is admitted."
+  },
+  {
+   "seq": 14,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:shopping-agent:invoice",
+    "label": "The chosen merchant's invoice statement",
+    "claimType": "invoice",
+    "subject": "urn:fictional:business",
+    "value": null,
+    "source": "urn:fictional:supplier",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "provenance": "signed by The chosen merchant"
+   },
+   "caption": "The chosen merchant's invoice statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 15,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The other merchant's other-offer statement is intact and signed with The other merchant's pinned key."
+  },
+  {
+   "seq": 16,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:other-offer",
+    "text": "The other merchant is accepted for other-offer claims."
+   },
+   "resolution": {
+    "question": "Is The other merchant an authority for other-offer claims about The shopper?",
+    "path": [
+     {
+      "at": "The shopper's own list",
+      "kind": "own-list",
+      "says": "The other merchant is accepted for other-offer."
+     }
+    ],
+    "answer": "Accepted, for other-offer claims only."
+   },
+   "caption": "The other merchant's other-offer statement: The other merchant is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 17,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The other merchant's other-offer statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 18,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "payment",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "default-terms",
+    "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   },
+   "caption": "The other merchant's other-offer statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+  },
+  {
+   "seq": 19,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:shopping-agent:other-offer",
+    "text": "Accept other-offer from urn:fictional:other-merchant by recorded-by-authority, at most 7 days old."
+   },
+   "caption": "The other merchant's other-offer statement is fit for urn:scenario:shopping-agent:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 20,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The other merchant's other-offer statement is admitted."
+  },
+  {
+   "seq": 21,
+   "step": 1,
+   "agent": "business-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:shopping-agent:other-offer",
+    "label": "The other merchant's other-offer statement",
+    "claimType": "other-offer",
+    "subject": "urn:fictional:business",
+    "value": null,
+    "source": "urn:fictional:other-merchant",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "provenance": "signed by The other merchant"
+   },
+   "caption": "The other merchant's other-offer statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 22,
+   "step": 2,
+   "agent": "bank-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The payment provider's payee-account statement is intact and signed with The payment provider's pinned key."
+  },
+  {
+   "seq": 23,
+   "step": 2,
+   "agent": "bank-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:rule:own-accounts",
+    "text": "The payment provider is accepted for payee-account claims."
+   },
+   "resolution": {
+    "question": "Is The payment provider an authority for payee-account claims about The chosen merchant?",
+    "path": [
+     {
+      "at": "The payment provider's own list",
+      "kind": "own-list",
+      "says": "The payment provider is accepted for payee-account."
+     }
+    ],
+    "answer": "Accepted, for payee-account claims only."
+   },
+   "caption": "The payment provider's payee-account statement: The payment provider is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 24,
+   "step": 2,
+   "agent": "bank-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The payment provider's payee-account statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 25,
+   "step": 2,
+   "agent": "bank-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "payment",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:payee-account",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "The payment provider's payee-account statement: its terms allow this: ."
+  },
+  {
+   "seq": 26,
+   "step": 2,
+   "agent": "bank-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:shopping-agent:payee-account",
+    "text": "Accept payee-account from urn:fictional:bank by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The payment provider's payee-account statement is fit for urn:scenario:shopping-agent:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 27,
+   "step": 2,
+   "agent": "bank-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The payment provider's payee-account statement is admitted."
+  },
+  {
+   "seq": 28,
+   "step": 2,
+   "agent": "bank-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:shopping-agent:account",
+    "label": "The payment provider's payee-account statement",
+    "claimType": "payee-account",
+    "subject": "urn:fictional:supplier",
+    "value": null,
+    "source": "urn:fictional:bank",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:payee-account",
+     "summary": ""
+    },
+    "provenance": "signed by The payment provider"
+   },
+   "caption": "The payment provider's payee-account statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 29,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in shopping-agent with The payment provider."
+  },
+  {
+   "seq": 30,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "rule": {
+    "id": "urn:rule:monthly-payments",
+    "text": "The shopper's mandate lets the agent pay urn:op:payment, on its own."
+   },
+   "reason": "within-mandate",
+   "caption": "The shopper's mandate covers this action."
+  },
+  {
+   "seq": 31,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The payment provider a party I can send shopping-agent to?",
+    "path": [
+     {
+      "at": "The shopper's own list",
+      "kind": "own-list",
+      "says": "The payment provider is accepted for shopping-agent."
+     }
+    ],
+    "answer": "Accepted, for shopping-agent only."
+   },
+   "reason": "recipient-established",
+   "caption": "The payment provider: Accepted, for shopping-agent only."
+  },
+  {
+   "seq": 32,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 33,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 34,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "ask-principal",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "limit-exceeded",
+   "rule": {
+    "id": "urn:rule:monthly-payments",
+    "text": "The shopper's mandate lets the agent pay urn:op:payment, on its own. This payment exceeds the mandate's per-action or calendar-month limit."
+   },
+   "caption": "This is outside The shopper's limits, so the gate asks The shopper."
+  },
+  {
+   "seq": 35,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "ask-principal",
+   "outcome": "ask-principal",
+   "reason": "limit-exceeded",
+   "caption": "The gate holds the action and asks The shopper."
+  },
+  {
+   "seq": 36,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "principal",
+   "kind": "ask-principal",
+   "chat": {
+    "who": "agent",
+    "text": "The payment provider asks me to take the next step in shopping-agent with The payment provider for urn:purpose:shopping agent. This payment exceeds the mandate's per-action or calendar-month limit. May I go ahead?"
+   },
+   "caption": "The shopper is asked to approve this exact action; the approval will be bound to its digest."
+  }
+ ]
+}

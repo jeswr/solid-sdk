@@ -28,7 +28,7 @@
   function matches(u, p) {
     return (!p.sector || u.sector === p.sector) && (!p.setting || u.setting === p.setting) && (!p.fit || u.fit === p.fit) &&
       (!p.strain || u.strains.indexOf(p.strain) >= 0) && (!p.bench || u.benchmarks.indexOf(p.bench) >= 0) &&
-      (!p.run || (p.run === 'yes') === isRun(u));
+      (!p.run || p.run === runState(u));
   }
   function fitTag(u) { return '<span class="pill v-' + FIT_CLS[u.fit] + ' fit-pill">' + esc(FIT[u.fit].name) + '</span>'; }
   function traceFor(u) {
@@ -37,11 +37,14 @@
       AX.traces.filter(function (t) { return t.scenario && t.scenario.id === u.trace; })[0] || null;
   }
   function isRun(u) { var t = traceFor(u); return u.status === 'worked' && !!t && !t.isFixture; }
+  function runState(u) { return !isRun(u) ? 'no' : (u.runState === 'some' ? 'part' : 'yes'); }
   function runTag(u) {
-    var t = traceFor(u);
-    if (isRun(u)) return '<span class="tag ok">Real run</span>';
+    var st = runState(u);
+    if (st === 'yes') return '<span class="tag ok">Real run</span>';
+    if (st === 'part') return '<span class="tag ok">Partly run</span>';
     return '<span class="tag">Not run yet</span>';
   }
+  function outcomeText(x) { return (OUT[x.outcome === 'refuse' ? 'stop' : x.outcome] || [x.outcome])[0] + ' (' + x.reason + ')'; }
 
   function useCase(u, open) {
     var h = '<details class="uc" id="uc-' + esc(u.id) + '"' + (open ? ' open' : '') + '><summary>';
@@ -84,12 +87,14 @@
     }
     h += '</dl>';
     var t = traceFor(u);
-    var runs = (u.runs || []).filter(function (r) { return r.status !== 'runs' || AX.baselineTrace(r.scenario); });
+    var runs = (u.runs || []).filter(function (r) { return r.status === 'blocked' || AX.baselineTrace(r.scenario); });
     if (runs.length) {
       h += '<h4>Runs</h4><ul class="run-list">' + runs.map(function (r) {
-        if (r.status !== 'runs') return '<li><span class="tag">Not run</span><span>' + esc(r.label) + '. ' + esc(r.reason) + '</span></li>';
+        if (r.status === 'blocked') return '<li><span class="tag">Not run</span><span>' + esc(r.label) + '. ' + esc(r.reason.charAt(0).toUpperCase() + r.reason.slice(1)) + (/[.!?]$/.test(r.reason) ? '' : '.') + '</span></li>';
         var rt = AX.baselineTrace(r.scenario);
-        return '<li><span class="tag ok">Real run</span><a href="' + AX.buildHash('explore', { scenario: rt.scenario.id, config: rt.configuration.id }) + '">' + esc(r.label) + '</a></li>';
+        var link = '<a href="' + AX.buildHash('explore', { scenario: rt.scenario.id, config: rt.configuration.id }) + '">' + esc(r.label) + '</a>';
+        if (r.status === 'disagrees') return '<li><span class="tag fx">Differs</span><span>' + link + '. The gates gave ' + esc(outcomeText(r.actual)) + '; the catalogue expected ' + esc(outcomeText(r.expected)) + '.</span></li>';
+        return '<li><span class="tag ok">Real run</span><span>' + link + (r.corrected ? '. The catalogue row was corrected after this run.' : '') + '</span></li>';
       }).join('') + '</ul>';
     } else if (t) h += '<p><a class="btn" href="' + AX.buildHash('explore', { scenario: t.scenario.id, config: t.configuration.id }) + '">Step through ' + (t.isFixture ? 'the mock-up' : 'the real run') + '</a></p>';
     h += '</div></details>';
@@ -113,7 +118,7 @@
     h += filterRow('Setting', 'setting', D.settings, p);
     h += filterRow('Sector', 'sector', D.sectors, p);
     h += filterRow('Fit', 'fit', D.fits, p);
-    h += filterRow('Run', 'run', [{ id: 'yes', name: 'Real run' }, { id: 'no', name: 'Not run yet' }], p);
+    h += filterRow('Run', 'run', [{ id: 'yes', name: 'Real run' }, { id: 'part', name: 'Partly run' }, { id: 'no', name: 'Not run yet' }], p);
     h += '</div>';
     var extra = [];
     if (p.strain && STRAIN[p.strain]) extra.push('struggle: ' + STRAIN[p.strain].name);
@@ -177,7 +182,7 @@
     p.tab = tab;
     var nRun = U.filter(isRun).length;
     var h = '<div class="page"><header><p class="eyebrow">Use cases</p><h1>' + U.length + ' situations, one design</h1>';
-    h += '<p class="lede">The mortgage is one example. This catalogue asks the same questions of ' + U.length + ' situations in ' + D.sectors.length + ' sectors, from a hospital referral to two strangers sharing a flat: what makes it hard, what goes wrong, and whether messages in agreed terms are enough. Everyone in it is fictional. ' + nRun + ' of ' + U.length + ' has a real run so far.</p></header>';
+    h += '<p class="lede">The mortgage is one example. This catalogue asks the same questions of ' + U.length + ' situations in ' + D.sectors.length + ' sectors, from a hospital referral to two strangers sharing a flat: what makes it hard, what goes wrong, and whether messages in agreed terms are enough. Everyone in it is fictional. ' + nRun + ' of ' + U.length + ' have at least one path run through the real gates so far.</p></header>';
     h += '<div class="fit-tiles">' + D.fits.map(function (f) {
       var n = U.filter(function (u) { return u.fit === f.id; }).length;
       return '<a class="fit-tile v-' + FIT_CLS[f.id] + (p.fit === f.id ? ' on' : '') + '" href="' + AX.buildHash('usecases', { tab: 'catalogue', fit: p.fit === f.id ? '' : f.id }) + '"><span class="n">' + n + '</span><span class="nm">' + esc(f.name) + '</span><span class="sm">' + esc(f.summary) + '</span></a>';
@@ -257,17 +262,34 @@
       return '<tr><td><strong>' + esc(ph.id) + '</strong> ' + esc(ph.name) + '</td><td>' + esc(ph.summary) + '</td><td><span class="tag' + (done ? ' ok' : '') + '">' + esc(ph.status === 'next' ? 'Next' : ph.status === 'later' ? 'Later' : ph.status.charAt(0).toUpperCase() + ph.status.slice(1)) + '</span></td></tr>';
     }).join('') + '</tbody></table></div>';
     h += '<p style="margin-top:14px"><a href="' + AX.buildHash('specs', { doc: '60-evaluation' }) + '">The full plan</a>, including what would count against the design.</p>';
-    var runList = U.filter(isRun);
-    var nPaths = 0, held = [];
-    runList.forEach(function (u) { (u.runs || []).forEach(function (r) { if (r.status === 'runs') nPaths++; else held.push({ u: u, r: r }); }); });
-    h += '<h2 id="runs">Runs so far</h2><p style="max-width:72ch"><strong>' + nRun + ' of ' + U.length + '</strong> use cases in the catalogue ' + (nRun === 1 ? 'has' : 'have') + ' a real run: ' + nPaths + ' paths in all, each one a main path or a thing that goes wrong, run through the real gates from a profile and a scenario file with a scripted core. Outside systems (a bank, a register, a record store) are local stand-ins, named at the top of each run. <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'no' }) + '">See the ' + (U.length - nRun) + ' not run yet</a>; they are being written as data now.</p>';
-    h += '<div class="table-wrap"><table class="data"><thead><tr><th>Use case</th><th>Paths run</th></tr></thead><tbody>' + runList.map(function (u) {
-      return '<tr><td><a href="' + AX.buildHash('usecases', { tab: 'catalogue', at: 'uc-' + u.id }) + '"><strong>' + esc(u.title) + '</strong></a></td><td>' + (u.runs || []).filter(function (r) { return r.status === 'runs' && AX.baselineTrace(r.scenario); }).map(function (r) {
-        var rt = AX.baselineTrace(r.scenario);
-        return '<a class="chip" href="' + AX.buildHash('explore', { scenario: rt.scenario.id, config: rt.configuration.id }) + '">' + esc(r.label) + '</a>';
-      }).join(' ') + '</td></tr>';
-    }).join('') + '</tbody></table></div>';
-    if (held.length) h += '<p style="max-width:72ch;margin-top:12px"><strong>Written and not run.</strong> ' + held.map(function (x) { return esc(x.u.title) + ', ' + esc(x.r.label.toLowerCase()) + ': ' + esc(x.r.reason); }).join(' ') + '</p>';
+    var allPaths = [];
+    U.forEach(function (u) { (u.runs || []).forEach(function (r) { allPaths.push({ u: u, r: r }); }); });
+    function count(st) { return allPaths.filter(function (x) { return x.r.status === st; }).length; }
+    function ucCount(st) { return U.filter(function (u) { return runState(u) === st; }).length; }
+    function ucLink(u) { return '<a href="' + AX.buildHash('usecases', { tab: 'catalogue', at: 'uc-' + u.id }) + '">' + esc(u.title) + '</a>'; }
+    function pathLink(r) {
+      var rt = r.scenario && AX.baselineTrace(r.scenario);
+      return rt ? '<a href="' + AX.buildHash('explore', { scenario: rt.scenario.id, config: rt.configuration.id }) + '">' + esc(r.label) + '</a>' : esc(r.label);
+    }
+    h += '<h2 id="runs">Runs so far</h2><p style="max-width:72ch">All ' + U.length + ' use cases in the catalogue are written as a profile and a scenario file and put through the real gates with a scripted core. Each has a main path and the things that go wrong: <strong>' + allPaths.length + ' paths</strong>. Outside systems (a bank, a register, a record store) are local stand-ins, named at the top of each run.</p>';
+    h += '<div class="table-wrap"><table class="data results"><thead><tr><th></th><th>Paths</th><th>What it means</th></tr></thead><tbody>';
+    h += '<tr><td><strong>Run, as the catalogue expects</strong></td><td class="num">' + count('runs') + '</td><td>The gates gave the outcome and the reason the catalogue wrote down before the run.</td></tr>';
+    h += '<tr><td><strong>Run, and differ</strong></td><td class="num">' + count('disagrees') + '</td><td>The gates gave another outcome or reason. Each is listed below. Nothing was adjusted to make them agree.</td></tr>';
+    h += '<tr><td><strong>Cannot run yet</strong></td><td class="num">' + count('blocked') + '</td><td>The runtime lacks something the path needs. Each is listed below with what is missing.</td></tr>';
+    h += '</tbody></table></div>';
+    h += '<p style="max-width:72ch;margin-top:10px">By use case: <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'yes' }) + '">' + ucCount('yes') + ' run on every path</a>, <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'part' }) + '">' + ucCount('part') + ' on some</a>, <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'no' }) + '">' + ucCount('no') + ' on none</a>.</p>';
+    var dis = allPaths.filter(function (x) { return x.r.status === 'disagrees'; });
+    if (dis.length) {
+      h += '<h3 class="sub" id="differs">Runs that differ from the catalogue</h3><p class="small muted" style="max-width:72ch">Each one is either an error in the catalogue, a defect in the gates, or a scenario that did not model the situation. They are being ruled on one by one.</p><div class="table-wrap"><table class="data"><thead><tr><th>Use case</th><th>What goes wrong</th><th>The gates gave</th><th>The catalogue expected</th></tr></thead><tbody>' + dis.map(function (x) {
+        return '<tr><td>' + ucLink(x.u) + '</td><td>' + pathLink(x.r) + '</td><td>' + esc(outcomeText(x.r.actual)) + '</td><td>' + esc(outcomeText(x.r.expected)) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    }
+    var blk = allPaths.filter(function (x) { return x.r.status === 'blocked'; });
+    if (blk.length) {
+      h += '<h3 class="sub" id="cannot-run">Paths that cannot run yet, and why</h3><div class="table-wrap"><table class="data"><thead><tr><th>Use case</th><th>Path</th><th>What is missing</th></tr></thead><tbody>' + blk.map(function (x) {
+        return '<tr><td>' + ucLink(x.u) + '</td><td>' + esc(x.r.label) + '</td><td>' + esc(x.r.reason.charAt(0).toUpperCase() + x.r.reason.slice(1)) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    }
     h += '<h3 class="sub">The mortgage example under other configurations</h3><p class="small muted" style="max-width:72ch">One cell per scenario and configuration that has been loaded.</p>';
     page.innerHTML = h + runsHtml;
   };

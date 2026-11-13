@@ -1,0 +1,953 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "telecom-fault",
+ "path": {
+  "index": 1,
+  "what": "The provider's agent asks the customer's agent to change account settings"
+ },
+ "parties": [
+  {
+   "id": "owner",
+   "name": "The customer"
+  },
+  {
+   "id": "receiver",
+   "name": "The broadband provider"
+  },
+  {
+   "id": "owner-agent",
+   "name": "The customer's agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The broadband provider's agent"
+  }
+ ],
+ "scenario": {
+  "id": "telecom-fault--branch-1",
+  "title": "Fixing a broadband fault together: The provider's agent asks the customer's agent to change account settings",
+  "steps": {
+   "1": "The customer's agent completes the instruct step.",
+   "2": "The customer's agent checks the signed statements.",
+   "3": "The broadband provider's agent sends the signed request.",
+   "4": "The customer's agent checks the message and prepares a response.",
+   "5": "The customer's agent proposes the local action.",
+   "6": "The broadband provider's agent checks the message and prepares a response.",
+   "7": "The customer's agent checks the message and prepares a response.",
+   "8": "The broadband provider's agent checks the durable record."
+  }
+ },
+ "configuration": {
+  "id": "baseline",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "owner-agent",
+   "name": "The customer's agent",
+   "actsFor": "owner",
+   "role": "agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The broadband provider's agent",
+   "actsFor": "receiver",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Outside organizations and data sources",
+   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+  },
+  {
+   "what": "Physical router and provider account system",
+   "replacedBy": "A scripted customer reports an observation; no actual router control or account mutation runs. A proposed account change is held for the real runtime's principal approval."
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "principal",
+   "kind": "principal-instruction",
+   "chat": {
+    "who": "principal",
+    "text": "I restarted the router and its light is amber."
+   },
+   "caption": "The customer asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does."
+  },
+  {
+   "seq": 2,
+   "step": 2,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The customer's router.light statement is intact and signed with The customer's pinned key."
+  },
+  {
+   "seq": 3,
+   "step": 2,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:telecom-fault:router.light",
+    "text": "The customer is accepted for router.light claims."
+   },
+   "resolution": {
+    "question": "Is The customer an authority for router.light claims about The customer?",
+    "path": [
+     {
+      "at": "The customer's own list",
+      "kind": "own-list",
+      "says": "The customer is accepted for router.light."
+     }
+    ],
+    "answer": "Accepted, for router.light claims only."
+   },
+   "caption": "The customer's router.light statement: The customer is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 4,
+   "step": 2,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The customer's router.light statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 5,
+   "step": 2,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:telecom-fault:observation",
+    "text": "Its terms allow this: use for urn:purpose:telecom fault; share for urn:purpose:telecom fault."
+   },
+   "caption": "The customer's router.light statement: its terms allow this: use for urn:purpose:telecom fault; share for urn:purpose:telecom fault."
+  },
+  {
+   "seq": 6,
+   "step": 2,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:telecom-fault:router.light",
+    "text": "Accept router.light from urn:fictional:telecom-fault:owner by self-reported, at most 30 days old."
+   },
+   "caption": "The customer's router.light statement is fit for urn:scenario:telecom-fault:task: self-reported, 0 days old."
+  },
+  {
+   "seq": 7,
+   "step": 2,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The customer's router.light statement is admitted."
+  },
+  {
+   "seq": 8,
+   "step": 2,
+   "agent": "owner-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:telecom-fault:observation",
+    "label": "The customer's router.light statement",
+    "claimType": "router.light",
+    "subject": "urn:fictional:telecom-fault:owner",
+    "value": null,
+    "source": "urn:fictional:telecom-fault:owner",
+    "method": "self-reported",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:telecom-fault:observation",
+     "summary": "use for urn:purpose:telecom fault; share for urn:purpose:telecom fault"
+    },
+    "provenance": "signed by The customer"
+   },
+   "caption": "The customer's router.light statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 9,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Request the needed information with The customer."
+  },
+  {
+   "seq": 10,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The broadband provider's mandate covers this action."
+  },
+  {
+   "seq": 11,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The customer a party I can send Request the needed information to?",
+    "path": [
+     {
+      "at": "The broadband provider's own list",
+      "kind": "own-list",
+      "says": "The customer is accepted for Request the needed information."
+     }
+    ],
+    "answer": "Accepted, for Request the needed information only."
+   },
+   "reason": "recipient-established",
+   "caption": "The customer: Accepted, for Request the needed information only."
+  },
+  {
+   "seq": 12,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 13,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 14,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The broadband provider's limits."
+  },
+  {
+   "seq": 15,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 16,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The broadband provider's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 17,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The customer's agent."
+  },
+  {
+   "seq": 18,
+   "step": 3,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0002",
+    "from": "The broadband provider's agent",
+    "to": "The customer's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:0b690abc8f4…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The broadband provider's agent to The customer's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-telecom-fault-branch-1:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0002",
+       "conversation": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:telecom-fault:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:telecom-fault:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:telecom-fault:owner-agent:actor",
+        "party": "urn:fictional:telecom-fault:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:743a3fe98373183229e629d00cb3e9a8ca2ef6ebe49241811a290a770382d636"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The broadband provider says The broadband provider's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:a149a01bbb7075cc21c0db4cc972b498:1794560400000",
+        "party": "urn:fictional:telecom-fault:receiver",
+        "actor": "urn:fictional:telecom-fault:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:telecom-fault",
+         "urn:op:telecom-fault:request",
+         "urn:op:telecom-fault:account-settings"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:d2286f7f158be6e83a4468802c2eefbc03c5f2f9ad8a908b70d8664c65f9d2ed"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:telecom-fault:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "account-settings"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:telecom-fault"
+      },
+      "digest": "sha-256:5d086a42eb12ff52254ed6c8b5f89f215ac93daf66a022d1f68bc76a60ace7c6"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The broadband provider's agent sends an invoke message to The customer's agent."
+  },
+  {
+   "seq": 19,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0002",
+    "from": "The broadband provider's agent",
+    "to": "The customer's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:0b690abc8f4…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The broadband provider's agent to The customer's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-telecom-fault-branch-1:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0002",
+       "conversation": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:telecom-fault:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:telecom-fault:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:telecom-fault:owner-agent:actor",
+        "party": "urn:fictional:telecom-fault:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:743a3fe98373183229e629d00cb3e9a8ca2ef6ebe49241811a290a770382d636"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The broadband provider says The broadband provider's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:a149a01bbb7075cc21c0db4cc972b498:1794560400000",
+        "party": "urn:fictional:telecom-fault:receiver",
+        "actor": "urn:fictional:telecom-fault:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:telecom-fault",
+         "urn:op:telecom-fault:request",
+         "urn:op:telecom-fault:account-settings"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:d2286f7f158be6e83a4468802c2eefbc03c5f2f9ad8a908b70d8664c65f9d2ed"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:telecom-fault:request\"; \"urn:purpose:telecom-fault\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:telecom-fault:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "account-settings"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:telecom-fault"
+      },
+      "digest": "sha-256:5d086a42eb12ff52254ed6c8b5f89f215ac93daf66a022d1f68bc76a60ace7c6",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:telecom-fault:request"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:telecom-fault"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from The broadband provider's agent reaches the inbound gate."
+  },
+  {
+   "seq": 20,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The broadband provider's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 21,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 22,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:a149a01bbb7075cc21c0db4cc972b498:1794560400000",
+    "text": "A representation statement signed with The broadband provider's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The broadband provider signed a statement that The broadband provider's agent acts for them in this operation."
+  },
+  {
+   "seq": 23,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 24,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 25,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 26,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Change broadband account settings with The broadband provider."
+  },
+  {
+   "seq": 27,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The customer's mandate covers this action."
+  },
+  {
+   "seq": 28,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The broadband provider a party I can send Change broadband account settings to?",
+    "path": [
+     {
+      "at": "The customer's own list",
+      "kind": "own-list",
+      "says": "The broadband provider is accepted for Change broadband account settings."
+     }
+    ],
+    "answer": "Accepted, for Change broadband account settings only."
+   },
+   "reason": "recipient-established",
+   "caption": "The broadband provider: Accepted, for Change broadband account settings only."
+  },
+  {
+   "seq": 29,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 30,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 31,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "ask-principal",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "approval-required",
+   "rule": {
+    "id": "urn:awp:mandate:8578009b16286eb5f449c72e5877b7d1:telecom-fault",
+    "text": ""
+   },
+   "caption": "The mandate says to ask The customer first."
+  },
+  {
+   "seq": 32,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "ask-principal",
+   "outcome": "ask-principal",
+   "reason": "approval-required",
+   "caption": "The gate holds the action and asks The customer."
+  },
+  {
+   "seq": 33,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "principal",
+   "kind": "ask-principal",
+   "chat": {
+    "who": "agent",
+    "text": "The broadband provider asks me to take the next step in Change broadband account settings with The broadband provider for urn:purpose:telecom fault. May I go ahead?"
+   },
+   "caption": "The customer is asked to approve this exact action; the approval will be bound to its digest."
+  }
+ ]
+}

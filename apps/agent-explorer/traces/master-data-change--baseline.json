@@ -1,22 +1,66 @@
 {
  "x-authored-by": "Codex GPT-6",
  "schema": "agent-trace/0.1",
+ "useCase": "master-data-change",
+ "path": "main",
+ "parties": [
+  {
+   "id": "business",
+   "name": "The business"
+  },
+  {
+   "id": "finance-agent",
+   "name": "The business's finance agent"
+  },
+  {
+   "id": "supplier-bank",
+   "name": "The supplier's bank"
+  },
+  {
+   "id": "directory",
+   "name": "The staff directory"
+  },
+  {
+   "id": "controller-one",
+   "name": "The first financial controller"
+  },
+  {
+   "id": "controller-two",
+   "name": "The second financial controller"
+  },
+  {
+   "id": "requester",
+   "name": "The requesting staff member"
+  },
+  {
+   "id": "email",
+   "name": "An unverified email sender"
+  },
+  {
+   "id": "erp",
+   "name": "The business's account system"
+  },
+  {
+   "id": "erp-agent",
+   "name": "The account system's agent"
+  }
+ ],
  "scenario": {
   "id": "master-data-change",
   "title": "Changing a supplier's bank details in a business system",
   "steps": {
-   "1": "Admit account role controller one role controller two role requester",
-   "2": "Perform",
-   "3": "First approval",
-   "4": "Second approval",
-   "5": "Erp admits bank confirmation",
-   "6": "Erp receives approved request",
-   "7": "Update",
-   "8": "Updated",
-   "9": "Erp receipt",
-   "10": "Finance receives result",
-   "11": "Record",
-   "12": "Erp record"
+   "1": "The business's finance agent checks and admits the signed statements.",
+   "2": "The business's finance agent sends a signed request.",
+   "3": "The business's finance agent obtains a staff approval.",
+   "4": "The business's finance agent obtains a staff approval.",
+   "5": "The account system's agent checks and admits the signed statements.",
+   "6": "The account system's agent checks the incoming message and prepares a response.",
+   "7": "The account system's agent proposes the local action.",
+   "8": "The account system's agent checks the observed result.",
+   "9": "The account system's agent completes the message step.",
+   "10": "The business's finance agent checks the incoming message and prepares a response.",
+   "11": "The business's finance agent checks the durable record.",
+   "12": "The account system's agent checks the durable record."
   }
  },
  "configuration": {
@@ -38,19 +82,19 @@
  "agents": [
   {
    "id": "finance-agent",
-   "name": "The finance's agent",
+   "name": "The business's finance agent",
    "actsFor": "business",
    "role": "agent"
   },
   {
    "id": "erp-agent",
-   "name": "Fictional ERP agent",
+   "name": "The account system's agent",
    "actsFor": "erp",
    "role": "agent"
   }
  ],
  "generated": {
-  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
   "core": "scripted"
  },
  "standIns": [
@@ -89,7 +133,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "supplier-bank's bank.account-owner statement is intact and signed with supplier-bank's pinned key."
+   "caption": "The supplier's bank's bank.account-owner statement is intact and signed with The supplier's bank's pinned key."
   },
   {
    "seq": 2,
@@ -114,20 +158,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "urn:source-rule:supplier-bank",
-    "text": "supplier-bank is accepted for bank.account-owner claims."
+    "text": "The supplier's bank is accepted for bank.account-owner claims."
    },
    "resolution": {
-    "question": "Is supplier-bank an authority for bank.account-owner claims about urn:fictional:supplier?",
+    "question": "Is The supplier's bank an authority for bank.account-owner claims about urn:fictional:supplier?",
     "path": [
      {
-      "at": "business's own list",
+      "at": "The business's own list",
       "kind": "own-list",
-      "says": "supplier-bank is accepted for bank.account-owner."
+      "says": "The supplier's bank is accepted for bank.account-owner."
      }
     ],
     "answer": "Accepted, for bank.account-owner claims only."
    },
-   "caption": "supplier-bank's bank.account-owner statement: supplier-bank is an accepted source for this kind of claim."
+   "caption": "The supplier's bank's bank.account-owner statement: The supplier's bank is an accepted source for this kind of claim."
   },
   {
    "seq": 3,
@@ -145,7 +189,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "supplier-bank's bank.account-owner statement asks for nothing, so there is no authority to check."
+   "caption": "The supplier's bank's bank.account-owner statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 4,
@@ -172,7 +216,7 @@
     "id": "urn:terms:account-confirmation",
     "text": "Its terms allow this: ."
    },
-   "caption": "supplier-bank's bank.account-owner statement: its terms allow this: ."
+   "caption": "The supplier's bank's bank.account-owner statement: its terms allow this: ."
   },
   {
    "seq": 5,
@@ -194,7 +238,7 @@
     "id": "urn:profile:master-data-change:bank.account-owner",
     "text": "Accept bank.account-owner from urn:fictional:supplier-bank by recorded-by-authority, at most 30 days old."
    },
-   "caption": "supplier-bank's bank.account-owner statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The supplier's bank's bank.account-owner statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -204,7 +248,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "supplier-bank's bank.account-owner statement is admitted."
+   "caption": "The supplier's bank's bank.account-owner statement is admitted."
   },
   {
    "seq": 7,
@@ -214,7 +258,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:scenario:master-data-change:account",
-    "label": "supplier-bank's bank.account-owner statement",
+    "label": "The supplier's bank's bank.account-owner statement",
     "claimType": "bank.account-owner",
     "subject": "urn:fictional:supplier",
     "value": null,
@@ -225,9 +269,9 @@
      "id": "urn:terms:account-confirmation",
      "summary": ""
     },
-    "provenance": "signed by supplier-bank"
+    "provenance": "signed by The supplier's bank"
    },
-   "caption": "supplier-bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The supplier's bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 8,
@@ -250,7 +294,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "directory's organization.role statement is intact and signed with directory's pinned key."
+   "caption": "The staff directory's organization.role statement is intact and signed with The staff directory's pinned key."
   },
   {
    "seq": 9,
@@ -275,20 +319,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "urn:source-rule:directory",
-    "text": "directory is accepted for organization.role claims."
+    "text": "The staff directory is accepted for organization.role claims."
    },
    "resolution": {
-    "question": "Is directory an authority for organization.role claims about controller-one?",
+    "question": "Is The staff directory an authority for organization.role claims about The first financial controller?",
     "path": [
      {
-      "at": "business's own list",
+      "at": "The business's own list",
       "kind": "own-list",
-      "says": "directory is accepted for organization.role."
+      "says": "The staff directory is accepted for organization.role."
      }
     ],
     "answer": "Accepted, for organization.role claims only."
    },
-   "caption": "directory's organization.role statement: directory is an accepted source for this kind of claim."
+   "caption": "The staff directory's organization.role statement: The staff directory is an accepted source for this kind of claim."
   },
   {
    "seq": 10,
@@ -306,7 +350,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "directory's organization.role statement asks for nothing, so there is no authority to check."
+   "caption": "The staff directory's organization.role statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 11,
@@ -333,7 +377,7 @@
     "id": "default-terms",
     "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
    },
-   "caption": "directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   "caption": "The staff directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
   },
   {
    "seq": 12,
@@ -355,7 +399,7 @@
     "id": "urn:profile:master-data-change:organization.role",
     "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
    },
-   "caption": "directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
   },
   {
    "seq": 13,
@@ -365,7 +409,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "directory's organization.role statement is admitted."
+   "caption": "The staff directory's organization.role statement is admitted."
   },
   {
    "seq": 14,
@@ -375,16 +419,16 @@
    "kind": "store",
    "fact": {
     "id": "urn:scenario:master-data-change:role-controller-one",
-    "label": "directory's organization.role statement",
+    "label": "The staff directory's organization.role statement",
     "claimType": "organization.role",
     "subject": "urn:fictional:controller-one",
     "value": null,
     "source": "urn:fictional:directory",
     "method": "recorded-by-authority",
     "asOf": "2026-11-13T09:00:00.000Z",
-    "provenance": "signed by directory"
+    "provenance": "signed by The staff directory"
    },
-   "caption": "directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The staff directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 15,
@@ -407,7 +451,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "directory's organization.role statement is intact and signed with directory's pinned key."
+   "caption": "The staff directory's organization.role statement is intact and signed with The staff directory's pinned key."
   },
   {
    "seq": 16,
@@ -432,20 +476,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "urn:source-rule:directory",
-    "text": "directory is accepted for organization.role claims."
+    "text": "The staff directory is accepted for organization.role claims."
    },
    "resolution": {
-    "question": "Is directory an authority for organization.role claims about controller-two?",
+    "question": "Is The staff directory an authority for organization.role claims about The second financial controller?",
     "path": [
      {
-      "at": "business's own list",
+      "at": "The business's own list",
       "kind": "own-list",
-      "says": "directory is accepted for organization.role."
+      "says": "The staff directory is accepted for organization.role."
      }
     ],
     "answer": "Accepted, for organization.role claims only."
    },
-   "caption": "directory's organization.role statement: directory is an accepted source for this kind of claim."
+   "caption": "The staff directory's organization.role statement: The staff directory is an accepted source for this kind of claim."
   },
   {
    "seq": 17,
@@ -463,7 +507,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "directory's organization.role statement asks for nothing, so there is no authority to check."
+   "caption": "The staff directory's organization.role statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 18,
@@ -490,7 +534,7 @@
     "id": "default-terms",
     "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
    },
-   "caption": "directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   "caption": "The staff directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
   },
   {
    "seq": 19,
@@ -512,7 +556,7 @@
     "id": "urn:profile:master-data-change:organization.role",
     "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
    },
-   "caption": "directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
   },
   {
    "seq": 20,
@@ -522,7 +566,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "directory's organization.role statement is admitted."
+   "caption": "The staff directory's organization.role statement is admitted."
   },
   {
    "seq": 21,
@@ -532,16 +576,16 @@
    "kind": "store",
    "fact": {
     "id": "urn:scenario:master-data-change:role-controller-two",
-    "label": "directory's organization.role statement",
+    "label": "The staff directory's organization.role statement",
     "claimType": "organization.role",
     "subject": "urn:fictional:controller-two",
     "value": null,
     "source": "urn:fictional:directory",
     "method": "recorded-by-authority",
     "asOf": "2026-11-13T09:00:00.000Z",
-    "provenance": "signed by directory"
+    "provenance": "signed by The staff directory"
    },
-   "caption": "directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The staff directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 22,
@@ -564,7 +608,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "directory's organization.role statement is intact and signed with directory's pinned key."
+   "caption": "The staff directory's organization.role statement is intact and signed with The staff directory's pinned key."
   },
   {
    "seq": 23,
@@ -589,20 +633,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "urn:source-rule:directory",
-    "text": "directory is accepted for organization.role claims."
+    "text": "The staff directory is accepted for organization.role claims."
    },
    "resolution": {
-    "question": "Is directory an authority for organization.role claims about requester?",
+    "question": "Is The staff directory an authority for organization.role claims about The requesting staff member?",
     "path": [
      {
-      "at": "business's own list",
+      "at": "The business's own list",
       "kind": "own-list",
-      "says": "directory is accepted for organization.role."
+      "says": "The staff directory is accepted for organization.role."
      }
     ],
     "answer": "Accepted, for organization.role claims only."
    },
-   "caption": "directory's organization.role statement: directory is an accepted source for this kind of claim."
+   "caption": "The staff directory's organization.role statement: The staff directory is an accepted source for this kind of claim."
   },
   {
    "seq": 24,
@@ -620,7 +664,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "directory's organization.role statement asks for nothing, so there is no authority to check."
+   "caption": "The staff directory's organization.role statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 25,
@@ -647,7 +691,7 @@
     "id": "default-terms",
     "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
    },
-   "caption": "directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   "caption": "The staff directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
   },
   {
    "seq": 26,
@@ -669,7 +713,7 @@
     "id": "urn:profile:master-data-change:organization.role",
     "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
    },
-   "caption": "directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
   },
   {
    "seq": 27,
@@ -679,7 +723,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "directory's organization.role statement is admitted."
+   "caption": "The staff directory's organization.role statement is admitted."
   },
   {
    "seq": 28,
@@ -689,16 +733,16 @@
    "kind": "store",
    "fact": {
     "id": "urn:scenario:master-data-change:role-requester",
-    "label": "directory's organization.role statement",
+    "label": "The staff directory's organization.role statement",
     "claimType": "organization.role",
     "subject": "urn:fictional:requester",
     "value": null,
     "source": "urn:fictional:directory",
     "method": "recorded-by-authority",
     "asOf": "2026-11-13T09:00:00.000Z",
-    "provenance": "signed by directory"
+    "provenance": "signed by The staff directory"
    },
-   "caption": "directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The staff directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 29,
@@ -706,7 +750,7 @@
    "agent": "finance-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:op:master data change with erp."
+   "caption": "The core proposes to take the next step in master-data-change with The business's account system."
   },
   {
    "seq": 30,
@@ -730,10 +774,10 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "business's mandate lets the agent use urn:op:master data change, on its own."
+    "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
    },
    "reason": "within-mandate",
-   "caption": "business's mandate covers this action."
+   "caption": "The business's mandate covers this action."
   },
   {
    "seq": 31,
@@ -756,18 +800,18 @@
     }
    ],
    "resolution": {
-    "question": "Is erp a party I can send urn:op:master data change to?",
+    "question": "Is The business's account system a party I can send master-data-change to?",
     "path": [
      {
-      "at": "business's own list",
+      "at": "The business's own list",
       "kind": "own-list",
-      "says": "erp is accepted for urn:op:master data change."
+      "says": "The business's account system is accepted for master-data-change."
      }
     ],
-    "answer": "Accepted, for urn:op:master data change only."
+    "answer": "Accepted, for master-data-change only."
    },
    "reason": "recipient-established",
-   "caption": "erp: Accepted, for urn:op:master data change only."
+   "caption": "The business's account system: Accepted, for master-data-change only."
   },
   {
    "seq": 32,
@@ -847,7 +891,7 @@
    "reason": "approval-required",
    "chat": {
     "who": "agent",
-    "text": "To finance-controller: erp asks me to use urn:op:master data change with erp for urn:purpose:master data change. May I go ahead? Action digest: sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764. Parameters: {\"account\":\"urn:account:confirmed\",\"support\":[\"urn:scenario:master-data-change:account\"]}"
+    "text": "To finance-controller: The business's account system asks me to take the next step in master-data-change with The business's account system for urn:purpose:master data change. May I go ahead? Action digest: sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764. Parameters: {\"account\":\"urn:account:confirmed\",\"support\":[\"urn:scenario:master-data-change:account\"]}"
    },
    "caption": "The gate built this request from the action and the approval rule."
   },
@@ -857,7 +901,7 @@
    "agent": "finance-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:op:master data change with erp."
+   "caption": "The core proposes to take the next step in master-data-change with The business's account system."
   },
   {
    "seq": 38,
@@ -881,10 +925,10 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "business's mandate lets the agent use urn:op:master data change, on its own."
+    "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
    },
    "reason": "within-mandate",
-   "caption": "business's mandate covers this action."
+   "caption": "The business's mandate covers this action."
   },
   {
    "seq": 39,
@@ -907,18 +951,18 @@
     }
    ],
    "resolution": {
-    "question": "Is erp a party I can send urn:op:master data change to?",
+    "question": "Is The business's account system a party I can send master-data-change to?",
     "path": [
      {
-      "at": "business's own list",
+      "at": "The business's own list",
       "kind": "own-list",
-      "says": "erp is accepted for urn:op:master data change."
+      "says": "The business's account system is accepted for master-data-change."
      }
     ],
-    "answer": "Accepted, for urn:op:master data change only."
+    "answer": "Accepted, for master-data-change only."
    },
    "reason": "recipient-established",
-   "caption": "erp: Accepted, for urn:op:master data change only."
+   "caption": "The business's account system: Accepted, for master-data-change only."
   },
   {
    "seq": 40,
@@ -998,7 +1042,7 @@
    "reason": "approval-required",
    "chat": {
     "who": "agent",
-    "text": "To finance-controller: erp asks me to use urn:op:master data change with erp for urn:purpose:master data change. May I go ahead? Action digest: sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764. Parameters: {\"account\":\"urn:account:confirmed\",\"support\":[\"urn:scenario:master-data-change:account\"]}"
+    "text": "To finance-controller: The business's account system asks me to take the next step in master-data-change with The business's account system for urn:purpose:master data change. May I go ahead? Action digest: sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764. Parameters: {\"account\":\"urn:account:confirmed\",\"support\":[\"urn:scenario:master-data-change:account\"]}"
    },
    "caption": "The gate built this request from the action and the approval rule."
   },
@@ -1008,7 +1052,7 @@
    "agent": "finance-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:op:master data change with erp."
+   "caption": "The core proposes to take the next step in master-data-change with The business's account system."
   },
   {
    "seq": 46,
@@ -1032,10 +1076,10 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "business's mandate lets the agent use urn:op:master data change, on its own."
+    "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
    },
    "reason": "within-mandate",
-   "caption": "business's mandate covers this action."
+   "caption": "The business's mandate covers this action."
   },
   {
    "seq": 47,
@@ -1058,18 +1102,18 @@
     }
    ],
    "resolution": {
-    "question": "Is erp a party I can send urn:op:master data change to?",
+    "question": "Is The business's account system a party I can send master-data-change to?",
     "path": [
      {
-      "at": "business's own list",
+      "at": "The business's own list",
       "kind": "own-list",
-      "says": "erp is accepted for urn:op:master data change."
+      "says": "The business's account system is accepted for master-data-change."
      }
     ],
-    "answer": "Accepted, for urn:op:master data change only."
+    "answer": "Accepted, for master-data-change only."
    },
    "reason": "recipient-established",
-   "caption": "erp: Accepted, for urn:op:master data change only."
+   "caption": "The business's account system: Accepted, for master-data-change only."
   },
   {
    "seq": 48,
@@ -1123,7 +1167,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within business's limits."
+   "caption": "Inside what the agent may do on its own, and within The business's limits."
   },
   {
    "seq": 51,
@@ -1147,10 +1191,10 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "business's mandate lets the agent use urn:op:master data change, on its own."
+    "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
    },
    "reason": "within-mandate",
-   "caption": "business's mandate covers this action."
+   "caption": "The business's mandate covers this action."
   },
   {
    "seq": 52,
@@ -1173,18 +1217,18 @@
     }
    ],
    "resolution": {
-    "question": "Is erp a party I can send urn:op:master data change to?",
+    "question": "Is The business's account system a party I can send master-data-change to?",
     "path": [
      {
-      "at": "business's own list",
+      "at": "The business's own list",
       "kind": "own-list",
-      "says": "erp is accepted for urn:op:master data change."
+      "says": "The business's account system is accepted for master-data-change."
      }
     ],
-    "answer": "Accepted, for urn:op:master data change only."
+    "answer": "Accepted, for master-data-change only."
    },
    "reason": "recipient-established",
-   "caption": "erp: Accepted, for urn:op:master data change only."
+   "caption": "The business's account system: Accepted, for master-data-change only."
   },
   {
    "seq": 53,
@@ -1238,7 +1282,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within business's limits."
+   "caption": "Inside what the agent may do on its own, and within The business's limits."
   },
   {
    "seq": 56,
@@ -1256,7 +1300,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "supplier-bank's bank.account-owner statement: Its terms allow this: ."
+   "caption": "The supplier's bank's bank.account-owner statement: Its terms allow this: ."
   },
   {
    "seq": 57,
@@ -1301,7 +1345,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with finance-agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The business's finance agent's pinned key, and written to the record."
   },
   {
    "seq": 59,
@@ -1311,7 +1355,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The invoke message goes to Fictional ERP agent."
+   "caption": "The invoke message goes to The account system's agent."
   },
   {
    "seq": 60,
@@ -1321,8 +1365,8 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-master-data-change-main:finance-agent:0002",
-    "from": "finance-agent",
-    "to": "Fictional ERP agent",
+    "from": "The business's finance agent",
+    "to": "The account system's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -1331,7 +1375,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From finance-agent to Fictional ERP agent; invoke; signed (JWS EdDSA, pinned key RHgh3wKZ1DBv…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-master-data-change-main:finance-agent:0002.",
+      "summary": "From The business's finance agent to The account system's agent; invoke; signed (JWS EdDSA, pinned key RHgh3wKZ1DBv…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-master-data-change-main:finance-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1358,7 +1402,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): business says finance-agent acts for it.",
+      "summary": "1 representation statement(s): The business says The business's finance agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -1432,7 +1476,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "finance-agent sends an invoke message to Fictional ERP agent."
+   "caption": "The business's finance agent sends an invoke message to The account system's agent."
   },
   {
    "seq": 61,
@@ -1455,7 +1499,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "supplier-bank's bank.account-owner statement is intact and signed with supplier-bank's pinned key."
+   "caption": "The supplier's bank's bank.account-owner statement is intact and signed with The supplier's bank's pinned key."
   },
   {
    "seq": 62,
@@ -1480,20 +1524,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "urn:source-rule:supplier-bank",
-    "text": "supplier-bank is accepted for bank.account-owner claims."
+    "text": "The supplier's bank is accepted for bank.account-owner claims."
    },
    "resolution": {
-    "question": "Is supplier-bank an authority for bank.account-owner claims about urn:fictional:supplier?",
+    "question": "Is The supplier's bank an authority for bank.account-owner claims about urn:fictional:supplier?",
     "path": [
      {
-      "at": "erp's own list",
+      "at": "The business's account system's own list",
       "kind": "own-list",
-      "says": "supplier-bank is accepted for bank.account-owner."
+      "says": "The supplier's bank is accepted for bank.account-owner."
      }
     ],
     "answer": "Accepted, for bank.account-owner claims only."
    },
-   "caption": "supplier-bank's bank.account-owner statement: supplier-bank is an accepted source for this kind of claim."
+   "caption": "The supplier's bank's bank.account-owner statement: The supplier's bank is an accepted source for this kind of claim."
   },
   {
    "seq": 63,
@@ -1511,7 +1555,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "supplier-bank's bank.account-owner statement asks for nothing, so there is no authority to check."
+   "caption": "The supplier's bank's bank.account-owner statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 64,
@@ -1538,7 +1582,7 @@
     "id": "urn:terms:account-confirmation",
     "text": "Its terms allow this: ."
    },
-   "caption": "supplier-bank's bank.account-owner statement: its terms allow this: ."
+   "caption": "The supplier's bank's bank.account-owner statement: its terms allow this: ."
   },
   {
    "seq": 65,
@@ -1560,7 +1604,7 @@
     "id": "urn:profile:master-data-change:bank.account-owner",
     "text": "Accept bank.account-owner from urn:fictional:supplier-bank by recorded-by-authority, at most 30 days old."
    },
-   "caption": "supplier-bank's bank.account-owner statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The supplier's bank's bank.account-owner statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
   },
   {
    "seq": 66,
@@ -1570,7 +1614,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "supplier-bank's bank.account-owner statement is admitted."
+   "caption": "The supplier's bank's bank.account-owner statement is admitted."
   },
   {
    "seq": 67,
@@ -1580,7 +1624,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:scenario:master-data-change:account",
-    "label": "supplier-bank's bank.account-owner statement",
+    "label": "The supplier's bank's bank.account-owner statement",
     "claimType": "bank.account-owner",
     "subject": "urn:fictional:supplier",
     "value": null,
@@ -1591,9 +1635,9 @@
      "id": "urn:terms:account-confirmation",
      "summary": ""
     },
-    "provenance": "signed by supplier-bank"
+    "provenance": "signed by The supplier's bank"
    },
-   "caption": "supplier-bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The supplier's bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 68,
@@ -1603,8 +1647,8 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-master-data-change-main:finance-agent:0002",
-    "from": "finance-agent",
-    "to": "Fictional ERP agent",
+    "from": "The business's finance agent",
+    "to": "The account system's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -1613,7 +1657,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From finance-agent to Fictional ERP agent; invoke; signed (JWS EdDSA, pinned key RHgh3wKZ1DBv…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-master-data-change-main:finance-agent:0002.",
+      "summary": "From The business's finance agent to The account system's agent; invoke; signed (JWS EdDSA, pinned key RHgh3wKZ1DBv…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-master-data-change-main:finance-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1640,7 +1684,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): business says finance-agent acts for it.",
+      "summary": "1 representation statement(s): The business says The business's finance agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -1732,7 +1776,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from finance-agent reaches the inbound gate."
+   "caption": "An invoke message from The business's finance agent reaches the inbound gate."
   },
   {
    "seq": 69,
@@ -1759,7 +1803,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with finance-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The business's finance agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 70,
@@ -1802,9 +1846,9 @@
    "reason": "authority-valid",
    "rule": {
     "id": "urn:awp:representation:9837d36437696f155ddced87a99bccd2:1794560400000",
-    "text": "A representation statement signed with business's pinned key must name this agent, this operation and a current validity period."
+    "text": "A representation statement signed with The business's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "business signed a statement that finance-agent acts for them in this operation."
+   "caption": "The business signed a statement that The business's finance agent acts for them in this operation."
   },
   {
    "seq": 72,
@@ -1863,7 +1907,7 @@
    "agent": "erp-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to transfer urn:op:master data change with business."
+   "caption": "The core proposes to take the next step in master-data-change with The business."
   },
   {
    "seq": 76,
@@ -1887,10 +1931,10 @@
    ],
    "rule": {
     "id": "urn:rule:erp-performance",
-    "text": "erp's mandate lets the agent transfer urn:op:master data change, on its own."
+    "text": "The business's account system's mandate lets the agent transfer urn:op:master data change, on its own."
    },
    "reason": "within-mandate",
-   "caption": "erp's mandate covers this action."
+   "caption": "The business's account system's mandate covers this action."
   },
   {
    "seq": 77,
@@ -1913,18 +1957,18 @@
     }
    ],
    "resolution": {
-    "question": "Is business a party I can send urn:op:master data change to?",
+    "question": "Is The business a party I can send master-data-change to?",
     "path": [
      {
-      "at": "erp's own list",
+      "at": "The business's account system's own list",
       "kind": "own-list",
-      "says": "business is accepted for urn:op:master data change."
+      "says": "The business is accepted for master-data-change."
      }
     ],
-    "answer": "Accepted, for urn:op:master data change only."
+    "answer": "Accepted, for master-data-change only."
    },
    "reason": "recipient-established",
-   "caption": "business: Accepted, for urn:op:master data change only."
+   "caption": "The business: Accepted, for master-data-change only."
   },
   {
    "seq": 78,
@@ -1978,7 +2022,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within erp's limits."
+   "caption": "Inside what the agent may do on its own, and within The business's account system's limits."
   },
   {
    "seq": 81,
@@ -2015,7 +2059,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The action goes: transfer urn:op:master data change with business."
+   "caption": "The action goes: take the next step in master-data-change with The business."
   },
   {
    "seq": 83,
@@ -2061,18 +2105,18 @@
     }
    ],
    "resolution": {
-    "question": "Is business a party I can send urn:op:master data change to?",
+    "question": "Is The business a party I can send master-data-change to?",
     "path": [
      {
-      "at": "erp's own list",
+      "at": "The business's account system's own list",
       "kind": "own-list",
-      "says": "business is accepted for urn:op:master data change."
+      "says": "The business is accepted for master-data-change."
      }
     ],
-    "answer": "Accepted, for urn:op:master data change only."
+    "answer": "Accepted, for master-data-change only."
    },
    "reason": "recipient-established",
-   "caption": "business: Accepted, for urn:op:master data change only."
+   "caption": "The business: Accepted, for master-data-change only."
   },
   {
    "seq": 85,
@@ -2090,7 +2134,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "supplier-bank's bank.account-owner statement: Its terms allow this: ."
+   "caption": "The supplier's bank's bank.account-owner statement: Its terms allow this: ."
   },
   {
    "seq": 86,
@@ -2171,7 +2215,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Fictional ERP agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The account system's agent's pinned key, and written to the record."
   },
   {
    "seq": 90,
@@ -2181,7 +2225,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The deliver message goes to finance-agent."
+   "caption": "The deliver message goes to The business's finance agent."
   },
   {
    "seq": 91,
@@ -2191,8 +2235,8 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-master-data-change-main:erp-agent:0002",
-    "from": "Fictional ERP agent",
-    "to": "finance-agent",
+    "from": "The account system's agent",
+    "to": "The business's finance agent",
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
@@ -2201,7 +2245,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Fictional ERP agent to finance-agent; deliver; signed (JWS EdDSA, pinned key hicHd9ozq9_J…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-master-data-change-main:erp-agent:0002.",
+      "summary": "From The account system's agent to The business's finance agent; deliver; signed (JWS EdDSA, pinned key hicHd9ozq9_J…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-master-data-change-main:erp-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2286,7 +2330,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Fictional ERP agent sends a deliver message to finance-agent."
+   "caption": "The account system's agent sends a deliver message to The business's finance agent."
   },
   {
    "seq": 92,
@@ -2296,8 +2340,8 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-master-data-change-main:erp-agent:0002",
-    "from": "Fictional ERP agent",
-    "to": "finance-agent",
+    "from": "The account system's agent",
+    "to": "The business's finance agent",
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
@@ -2306,7 +2350,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Fictional ERP agent to finance-agent; deliver; signed (JWS EdDSA, pinned key hicHd9ozq9_J…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-master-data-change-main:erp-agent:0002.",
+      "summary": "From The account system's agent to The business's finance agent; deliver; signed (JWS EdDSA, pinned key hicHd9ozq9_J…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-master-data-change-main:erp-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2409,7 +2453,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A deliver message from Fictional ERP agent reaches the inbound gate."
+   "caption": "A deliver message from The account system's agent reaches the inbound gate."
   },
   {
    "seq": 93,
@@ -2436,7 +2480,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Fictional ERP agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The account system's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 94,
@@ -2546,6 +2590,5 @@
    "kind": "record",
    "caption": "12 entries in this agent's hash-chained record; the chain verifies."
   }
- ],
- "useCase": "master-data-change"
+ ]
 }

@@ -1,0 +1,2129 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "cancel-subscription",
+ "path": {
+  "index": 1,
+  "what": "The service offers three months free to stay"
+ },
+ "parties": [
+  {
+   "id": "owner",
+   "name": "The subscriber"
+  },
+  {
+   "id": "receiver",
+   "name": "The subscription service"
+  },
+  {
+   "id": "owner-agent",
+   "name": "The subscriber's agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The subscription service's agent"
+  }
+ ],
+ "scenario": {
+  "id": "cancel-subscription--branch-1",
+  "title": "Cancelling a subscription: The service offers three months free to stay",
+  "steps": {
+   "1": "The subscriber's agent checks the signed statements.",
+   "2": "The subscription service's agent sends the signed request.",
+   "3": "The subscriber's agent checks the message and prepares a response.",
+   "4": "The subscriber's agent sends the signed request.",
+   "5": "The subscription service's agent checks the message and prepares a response.",
+   "6": "The subscription service's agent sends the signed request.",
+   "7": "The subscriber's agent checks the message and prepares a response.",
+   "8": "The subscriber's agent proposes the local action."
+  }
+ },
+ "configuration": {
+  "id": "baseline",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "owner-agent",
+   "name": "The subscriber's agent",
+   "actsFor": "owner",
+   "role": "agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The subscription service's agent",
+   "actsFor": "receiver",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Outside organizations and data sources",
+   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+  },
+  {
+   "what": "Subscription cancellation",
+   "replacedBy": "The separately gated service updates a local cancellation record; a signed retention offer cannot authorize renewal under the subscriber's cancellation-only mandate"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The subscription service's subscription.control statement is intact and signed with The subscription service's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:cancel-subscription:subscription.control",
+    "text": "The subscription service is accepted for subscription.control claims."
+   },
+   "resolution": {
+    "question": "Is The subscription service an authority for subscription.control claims about The subscriber?",
+    "path": [
+     {
+      "at": "The subscriber's own list",
+      "kind": "own-list",
+      "says": "The subscription service is accepted for subscription.control."
+     }
+    ],
+    "answer": "Accepted, for subscription.control claims only."
+   },
+   "caption": "The subscription service's subscription.control statement: The subscription service is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The subscription service's subscription.control statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:cancel-subscription:subscription",
+    "text": "Its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+   },
+   "caption": "The subscription service's subscription.control statement: its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:cancel-subscription:subscription.control",
+    "text": "Accept subscription.control from urn:fictional:cancel-subscription:receiver by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The subscription service's subscription.control statement is fit for urn:scenario:cancel-subscription:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The subscription service's subscription.control statement is admitted."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:cancel-subscription:subscription",
+    "label": "The subscription service's subscription.control statement",
+    "claimType": "subscription.control",
+    "subject": "urn:fictional:cancel-subscription:owner",
+    "value": null,
+    "source": "urn:fictional:cancel-subscription:receiver",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:cancel-subscription:subscription",
+     "summary": "use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription"
+    },
+    "provenance": "signed by The subscription service"
+   },
+   "caption": "The subscription service's subscription.control statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 8,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Request the needed information with The subscriber."
+  },
+  {
+   "seq": 9,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The subscription service's mandate covers this action."
+  },
+  {
+   "seq": 10,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The subscriber a party I can send Request the needed information to?",
+    "path": [
+     {
+      "at": "The subscription service's own list",
+      "kind": "own-list",
+      "says": "The subscriber is accepted for Request the needed information."
+     }
+    ],
+    "answer": "Accepted, for Request the needed information only."
+   },
+   "reason": "recipient-established",
+   "caption": "The subscriber: Accepted, for Request the needed information only."
+  },
+  {
+   "seq": 11,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 12,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 13,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The subscription service's limits."
+  },
+  {
+   "seq": 14,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The subscription service's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 16,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The subscriber's agent."
+  },
+  {
+   "seq": 17,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0002",
+    "from": "The subscription service's agent",
+    "to": "The subscriber's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:82bc2ce1df8…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The subscription service's agent to The subscriber's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0002",
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:cancel-subscription:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:cancel-subscription:owner-agent:actor",
+        "party": "urn:fictional:cancel-subscription:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:2ab80009a74bff9510b205c950be73faa00e735b95a75866155580b88d44ef21"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The subscription service says The subscription service's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:5f4c89ea504e4d3a5b2ac08bf41cee75:1794560400000",
+        "party": "urn:fictional:cancel-subscription:receiver",
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:cancel-subscription",
+         "urn:op:cancel-subscription:request",
+         "urn:op:cancel-subscription:renew"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:ec9f0bbcee21ef032649acba8f2b217eb5f0a0ca31d001861ed7a5914a076c4a"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:cancel-subscription:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "subscription.control"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:cancel-subscription"
+      },
+      "digest": "sha-256:ca5d7b5916de366b1835e11374d147c80670a197e94d178c14cbbe32bfe6bdb2"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The subscription service's agent sends an invoke message to The subscriber's agent."
+  },
+  {
+   "seq": 18,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0002",
+    "from": "The subscription service's agent",
+    "to": "The subscriber's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:82bc2ce1df8…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The subscription service's agent to The subscriber's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0002",
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:cancel-subscription:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:cancel-subscription:owner-agent:actor",
+        "party": "urn:fictional:cancel-subscription:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:2ab80009a74bff9510b205c950be73faa00e735b95a75866155580b88d44ef21"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The subscription service says The subscription service's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:5f4c89ea504e4d3a5b2ac08bf41cee75:1794560400000",
+        "party": "urn:fictional:cancel-subscription:receiver",
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:cancel-subscription",
+         "urn:op:cancel-subscription:request",
+         "urn:op:cancel-subscription:renew"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:ec9f0bbcee21ef032649acba8f2b217eb5f0a0ca31d001861ed7a5914a076c4a"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:cancel-subscription:request\"; \"urn:purpose:cancel-subscription\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:cancel-subscription:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "subscription.control"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:cancel-subscription"
+      },
+      "digest": "sha-256:ca5d7b5916de366b1835e11374d147c80670a197e94d178c14cbbe32bfe6bdb2",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:cancel-subscription:request"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:cancel-subscription"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from The subscription service's agent reaches the inbound gate."
+  },
+  {
+   "seq": 19,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The subscription service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 20,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 21,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:5f4c89ea504e4d3a5b2ac08bf41cee75:1794560400000",
+    "text": "A representation statement signed with The subscription service's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The subscription service signed a statement that The subscription service's agent acts for them in this operation."
+  },
+  {
+   "seq": 22,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 23,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 24,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 25,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to share urn:op:cancel subscription with The subscription service."
+  },
+  {
+   "seq": 26,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The subscriber's mandate covers this action."
+  },
+  {
+   "seq": 27,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The subscription service a party I can send Cancelling a subscription to?",
+    "path": [
+     {
+      "at": "The subscriber's own list",
+      "kind": "own-list",
+      "says": "The subscription service is accepted for Cancelling a subscription."
+     }
+    ],
+    "answer": "Accepted, for Cancelling a subscription only."
+   },
+   "reason": "recipient-established",
+   "caption": "The subscription service: Accepted, for Cancelling a subscription only."
+  },
+  {
+   "seq": 28,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 29,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 30,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The subscriber's limits."
+  },
+  {
+   "seq": 31,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 32,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:terms:cancel-subscription:subscription",
+    "text": "The issuer's terms: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription. They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "The subscription service's subscription.control statement: its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+  },
+  {
+   "seq": 33,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 34,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The subscriber's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 35,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The subscription service's agent."
+  },
+  {
+   "seq": 36,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0002",
+    "from": "The subscriber's agent",
+    "to": "The subscription service's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:a37476cb974…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The subscriber's agent to The subscription service's agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-cancel-subscription-branch-1:owner-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0002",
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:cancel-subscription:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:cancel-subscription:owner"
+       },
+       "to": {
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "party": "urn:fictional:cancel-subscription:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:28f1bde2150e8116f565aa6d281c1a489dcbfac87fcf9d5e5501332bb53b9154"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The subscriber says The subscriber's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:44e214b447aa5eca452b078ff63d1361:1794560400000",
+        "party": "urn:fictional:cancel-subscription:owner",
+        "actor": "urn:fictional:cancel-subscription:owner-agent:actor",
+        "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "operations": [
+         "urn:op:cancel-subscription",
+         "urn:op:cancel-subscription:request",
+         "urn:op:cancel-subscription:renew"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:02d9d5686e6bfcfde96a49dd0dbade0112c32f5213f0250d392e8eff906af7a1"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:cancel-subscription",
+        "version": "0.1"
+       },
+       "input": {
+        "items": [
+         "urn:scenario:cancel-subscription:subscription"
+        ]
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:cancel-subscription"
+      },
+      "digest": "sha-256:fcba0ed6757e7f96b8b5474f657c7d59d945f82271f7d175ffbc817b9bd48051"
+     },
+     "evidence": {
+      "present": true,
+      "summary": "1 statement(s) signed by their sources: subscription.control from The subscription service.",
+      "raw": [
+       {
+        "subscription": "urn:fictional:subscription",
+        "active": true,
+        "id": "urn:scenario:cancel-subscription:subscription",
+        "issuer": "urn:fictional:cancel-subscription:receiver",
+        "subject": "urn:fictional:cancel-subscription:owner",
+        "claimType": "subscription.control",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:cancel-subscription:subscription",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:cancel-subscription:subscription",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:cancel-subscription"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:cancel-subscription:subscription",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:cancel-subscription"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:322ac433faa5e29153e4037ac6cdf4cfabd25fa930b5facfb77109a60d85b2f6"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The subscriber's agent; as of 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:cancel-subscription:subscription",
+         "issuer": "urn:fictional:cancel-subscription:receiver",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The subscriber's agent sends an invoke message to The subscription service's agent."
+  },
+  {
+   "seq": 37,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0002",
+    "from": "The subscriber's agent",
+    "to": "The subscription service's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:a37476cb974…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The subscriber's agent to The subscription service's agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-cancel-subscription-branch-1:owner-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0002",
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:cancel-subscription:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:cancel-subscription:owner"
+       },
+       "to": {
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "party": "urn:fictional:cancel-subscription:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:28f1bde2150e8116f565aa6d281c1a489dcbfac87fcf9d5e5501332bb53b9154"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The subscriber says The subscriber's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:44e214b447aa5eca452b078ff63d1361:1794560400000",
+        "party": "urn:fictional:cancel-subscription:owner",
+        "actor": "urn:fictional:cancel-subscription:owner-agent:actor",
+        "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "operations": [
+         "urn:op:cancel-subscription",
+         "urn:op:cancel-subscription:request",
+         "urn:op:cancel-subscription:renew"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:02d9d5686e6bfcfde96a49dd0dbade0112c32f5213f0250d392e8eff906af7a1"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:cancel-subscription\"; \"urn:scenario:cancel-subscription:subscription\"; \"urn:purpose:cancel-subscription\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:cancel-subscription",
+        "version": "0.1"
+       },
+       "input": {
+        "items": [
+         "urn:scenario:cancel-subscription:subscription"
+        ]
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:cancel-subscription"
+      },
+      "digest": "sha-256:fcba0ed6757e7f96b8b5474f657c7d59d945f82271f7d175ffbc817b9bd48051",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:cancel-subscription"
+       },
+       {
+        "path": "input.items.0",
+        "text": "urn:scenario:cancel-subscription:subscription"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:cancel-subscription"
+       }
+      ]
+     },
+     "evidence": {
+      "present": true,
+      "summary": "1 statement(s) signed by their sources: subscription.control from The subscription service.",
+      "raw": [
+       {
+        "subscription": "urn:fictional:subscription",
+        "active": true,
+        "id": "urn:scenario:cancel-subscription:subscription",
+        "issuer": "urn:fictional:cancel-subscription:receiver",
+        "subject": "urn:fictional:cancel-subscription:owner",
+        "claimType": "subscription.control",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:cancel-subscription:subscription",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:cancel-subscription:subscription",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:cancel-subscription"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:cancel-subscription:subscription",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:cancel-subscription"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:322ac433faa5e29153e4037ac6cdf4cfabd25fa930b5facfb77109a60d85b2f6"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The subscriber's agent; as of 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:cancel-subscription:subscription",
+         "issuer": "urn:fictional:cancel-subscription:receiver",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from The subscriber's agent reaches the inbound gate."
+  },
+  {
+   "seq": 38,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The subscriber's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 39,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:cancel-subscription:subscription.control",
+    "text": "The subscription service is accepted for subscription.control claims."
+   },
+   "resolution": {
+    "question": "Is The subscription service an authority for subscription.control claims about The subscriber?",
+    "path": [
+     {
+      "at": "The subscription service's own list",
+      "kind": "own-list",
+      "says": "The subscription service is accepted for subscription.control."
+     }
+    ],
+    "answer": "Accepted, for subscription.control claims only."
+   },
+   "caption": "The subscription service's subscription.control statement: The subscription service is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 40,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:44e214b447aa5eca452b078ff63d1361:1794560400000",
+    "text": "A representation statement signed with The subscriber's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The subscriber signed a statement that The subscriber's agent acts for them in this operation."
+  },
+  {
+   "seq": 41,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:cancel-subscription:subscription",
+    "text": "Its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+   },
+   "caption": "The subscription service's subscription.control statement: its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+  },
+  {
+   "seq": 42,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:cancel-subscription:subscription.control",
+    "text": "Accept subscription.control from urn:fictional:cancel-subscription:receiver by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The subscription service's subscription.control statement is fit for Cancelling a subscription: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 43,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 44,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:cancel-subscription:subscription",
+    "label": "The subscription service's subscription.control statement",
+    "claimType": "subscription.control",
+    "subject": "urn:fictional:cancel-subscription:owner",
+    "value": null,
+    "source": "urn:fictional:cancel-subscription:receiver",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:cancel-subscription:subscription",
+     "summary": "use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription"
+    },
+    "provenance": "signed by The subscription service"
+   },
+   "caption": "The subscription service's subscription.control statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 45,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Offer free months to stay with The subscriber."
+  },
+  {
+   "seq": 46,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The subscription service's mandate covers this action."
+  },
+  {
+   "seq": 47,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The subscriber a party I can send Offer free months to stay to?",
+    "path": [
+     {
+      "at": "The subscription service's own list",
+      "kind": "own-list",
+      "says": "The subscriber is accepted for Offer free months to stay."
+     }
+    ],
+    "answer": "Accepted, for Offer free months to stay only."
+   },
+   "reason": "recipient-established",
+   "caption": "The subscriber: Accepted, for Offer free months to stay only."
+  },
+  {
+   "seq": 48,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 49,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 50,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The subscription service's limits."
+  },
+  {
+   "seq": 51,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 52,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The subscription service's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 53,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The propose message goes to The subscriber's agent."
+  },
+  {
+   "seq": 54,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0004",
+    "from": "The subscription service's agent",
+    "to": "The subscriber's agent",
+    "kind": "propose",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:843581d8002…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The subscription service's agent to The subscriber's agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0004.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0004",
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0003",
+       "kind": "propose",
+       "from": {
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:cancel-subscription:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:cancel-subscription:owner-agent:actor",
+        "party": "urn:fictional:cancel-subscription:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:ed9d77b77fa223ad1ed42cef9a94df8ece2fdd68993a7bba2eef5f8b340f77cd"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The subscription service says The subscription service's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:5f4c89ea504e4d3a5b2ac08bf41cee75:1794560400000",
+        "party": "urn:fictional:cancel-subscription:receiver",
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:cancel-subscription",
+         "urn:op:cancel-subscription:request",
+         "urn:op:cancel-subscription:renew"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:ec9f0bbcee21ef032649acba8f2b217eb5f0a0ca31d001861ed7a5914a076c4a"
+     },
+     "content": {
+      "present": true,
+      "summary": "An offer to start urn:op:cancel-subscription:renew, with terms (round 1).",
+      "raw": {
+       "operation": {
+        "id": "urn:op:cancel-subscription:renew",
+        "version": "0.1"
+       },
+       "terms": {
+        "freeMonths": 3
+       },
+       "termsDigest": "sha-256:ae85a7b065e7f1974dd0e3c97294a1a9811667799a0033d3e4eecdd7c12cc823",
+       "round": 1
+      },
+      "digest": "sha-256:f8dad75fc2e87ce05b6c4742c4baeaca90eade683162bb1c3a0c7d828a348281"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "freeMonths": 3
+      },
+      "digest": "sha-256:ae85a7b065e7f1974dd0e3c97294a1a9811667799a0033d3e4eecdd7c12cc823"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0003"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The subscription service's agent sends a propose message to The subscriber's agent."
+  },
+  {
+   "seq": 55,
+   "step": 7,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0004",
+    "from": "The subscription service's agent",
+    "to": "The subscriber's agent",
+    "kind": "propose",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:843581d8002…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The subscription service's agent to The subscriber's agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0004.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0004",
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0003",
+       "kind": "propose",
+       "from": {
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:cancel-subscription:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:cancel-subscription:owner-agent:actor",
+        "party": "urn:fictional:cancel-subscription:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:ed9d77b77fa223ad1ed42cef9a94df8ece2fdd68993a7bba2eef5f8b340f77cd"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The subscription service says The subscription service's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:5f4c89ea504e4d3a5b2ac08bf41cee75:1794560400000",
+        "party": "urn:fictional:cancel-subscription:receiver",
+        "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:cancel-subscription",
+         "urn:op:cancel-subscription:request",
+         "urn:op:cancel-subscription:renew"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:ec9f0bbcee21ef032649acba8f2b217eb5f0a0ca31d001861ed7a5914a076c4a"
+     },
+     "content": {
+      "present": true,
+      "summary": "An offer to start urn:op:cancel-subscription:renew, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:cancel-subscription:renew\"; \"sha-256:ae85a7b065e7f1974dd0e3c97294a1a9811667799a0033d3e4eecdd7c12cc823\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:cancel-subscription:renew",
+        "version": "0.1"
+       },
+       "terms": {
+        "freeMonths": 3
+       },
+       "termsDigest": "sha-256:ae85a7b065e7f1974dd0e3c97294a1a9811667799a0033d3e4eecdd7c12cc823",
+       "round": 1
+      },
+      "digest": "sha-256:f8dad75fc2e87ce05b6c4742c4baeaca90eade683162bb1c3a0c7d828a348281",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:cancel-subscription:renew"
+       },
+       {
+        "path": "termsDigest",
+        "text": "sha-256:ae85a7b065e7f1974dd0e3c97294a1a9811667799a0033d3e4eecdd7c12cc823"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "freeMonths": 3
+      },
+      "digest": "sha-256:ae85a7b065e7f1974dd0e3c97294a1a9811667799a0033d3e4eecdd7c12cc823"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0003"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "A propose message from The subscription service's agent reaches the inbound gate."
+  },
+  {
+   "seq": 56,
+   "step": 7,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The subscription service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 57,
+   "step": 7,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 58,
+   "step": 7,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:5f4c89ea504e4d3a5b2ac08bf41cee75:1794560400000",
+    "text": "A representation statement signed with The subscription service's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The subscription service signed a statement that The subscription service's agent acts for them in this operation."
+  },
+  {
+   "seq": 59,
+   "step": 7,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 60,
+   "step": 7,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 61,
+   "step": 7,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 62,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Offer free months to stay with The subscription service."
+  },
+  {
+   "seq": 63,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "fail",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "not-authorised",
+   "rule": {
+    "id": "urn:awp:mandate:ab7172f718933a8c9c65b8e026d057ba:cancel-subscription",
+    "text": "No rule in The subscriber's mandate lets the agent take the next step in Offer free months to stay with The subscription service for urn:purpose:cancel subscription (no applicable grant in the mandate (deny by default))."
+   },
+   "caption": "The subscriber's mandate does not allow this: take the next step in Offer free months to stay with The subscription service."
+  },
+  {
+   "seq": 64,
+   "step": 8,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "fail",
+   "outcome": "stop",
+   "reason": "not-authorised",
+   "caption": "The action is stopped; nothing leaves."
+  }
+ ]
+}

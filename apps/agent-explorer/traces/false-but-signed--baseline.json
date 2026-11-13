@@ -1,12 +1,40 @@
 {
  "x-authored-by": "Codex GPT-6",
  "schema": "agent-trace/0.1",
+ "useCase": "false-but-signed",
+ "path": "main",
+ "parties": [
+  {
+   "id": "lender",
+   "name": "The lender"
+  },
+  {
+   "id": "lender-agent",
+   "name": "The lender's agent"
+  },
+  {
+   "id": "employer",
+   "name": "The employer"
+  },
+  {
+   "id": "tax-register",
+   "name": "The fictional tax register"
+  },
+  {
+   "id": "employee",
+   "name": "The employee"
+  },
+  {
+   "id": "employer-agent",
+   "name": "The employer's agent"
+  }
+ ],
  "scenario": {
   "id": "false-but-signed",
   "title": "A registered source signs something false",
   "steps": {
-   "1": "Admit false income true income",
-   "2": "Record"
+   "1": "The lender's agent checks and admits the signed statements.",
+   "2": "The lender's agent checks the durable record."
   }
  },
  "configuration": {
@@ -34,13 +62,13 @@
   },
   {
    "id": "employer-agent",
-   "name": "Employer agent",
+   "name": "The employer's agent",
    "actsFor": "employer",
    "role": "agent"
   }
  ],
  "generated": {
-  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
   "core": "scripted"
  },
  "standIns": [
@@ -75,7 +103,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "employer's annual-income statement is intact and signed with employer's pinned key."
+   "caption": "The employer's annual-income statement is intact and signed with The employer's pinned key."
   },
   {
    "seq": 2,
@@ -100,20 +128,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "urn:source-rule:employer",
-    "text": "employer is accepted for annual-income claims."
+    "text": "The employer is accepted for annual-income claims."
    },
    "resolution": {
-    "question": "Is employer an authority for annual-income claims about employee?",
+    "question": "Is The employer an authority for annual-income claims about The employee?",
     "path": [
      {
-      "at": "lender's own list",
+      "at": "The lender's own list",
       "kind": "own-list",
-      "says": "employer is accepted for annual-income."
+      "says": "The employer is accepted for annual-income."
      }
     ],
     "answer": "Accepted, for annual-income claims only."
    },
-   "caption": "employer's annual-income statement: employer is an accepted source for this kind of claim."
+   "caption": "The employer's annual-income statement: The employer is an accepted source for this kind of claim."
   },
   {
    "seq": 3,
@@ -131,7 +159,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "employer's annual-income statement asks for nothing, so there is no authority to check."
+   "caption": "The employer's annual-income statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 4,
@@ -158,7 +186,7 @@
     "id": "urn:terms:income",
     "text": "Its terms allow this: ."
    },
-   "caption": "employer's annual-income statement: its terms allow this: ."
+   "caption": "The employer's annual-income statement: its terms allow this: ."
   },
   {
    "seq": 5,
@@ -180,7 +208,7 @@
     "id": "urn:profile:false-but-signed:annual-income",
     "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
    },
-   "caption": "employer's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
+   "caption": "The employer's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -209,7 +237,7 @@
    "verdict": "ask-more",
    "outcome": "ask-more",
    "reason": "completeness-not-established",
-   "caption": "employer's annual-income statement is refused and kept out of memory."
+   "caption": "The employer's annual-income statement is refused and kept out of memory."
   },
   {
    "seq": 8,
@@ -232,7 +260,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "tax-register's annual-income statement is intact and signed with tax-register's pinned key."
+   "caption": "The fictional tax register's annual-income statement is intact and signed with The fictional tax register's pinned key."
   },
   {
    "seq": 9,
@@ -257,20 +285,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "urn:source-rule:tax-register",
-    "text": "tax-register is accepted for annual-income claims."
+    "text": "The fictional tax register is accepted for annual-income claims."
    },
    "resolution": {
-    "question": "Is tax-register an authority for annual-income claims about employee?",
+    "question": "Is The fictional tax register an authority for annual-income claims about The employee?",
     "path": [
      {
-      "at": "lender's own list",
+      "at": "The lender's own list",
       "kind": "own-list",
-      "says": "tax-register is accepted for annual-income."
+      "says": "The fictional tax register is accepted for annual-income."
      }
     ],
     "answer": "Accepted, for annual-income claims only."
    },
-   "caption": "tax-register's annual-income statement: tax-register is an accepted source for this kind of claim."
+   "caption": "The fictional tax register's annual-income statement: The fictional tax register is an accepted source for this kind of claim."
   },
   {
    "seq": 10,
@@ -288,7 +316,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "tax-register's annual-income statement asks for nothing, so there is no authority to check."
+   "caption": "The fictional tax register's annual-income statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 11,
@@ -315,7 +343,7 @@
     "id": "default-terms",
     "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
    },
-   "caption": "tax-register's annual-income statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   "caption": "The fictional tax register's annual-income statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
   },
   {
    "seq": 12,
@@ -337,7 +365,7 @@
     "id": "urn:profile:false-but-signed:annual-income",
     "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
    },
-   "caption": "tax-register's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
+   "caption": "The fictional tax register's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
   },
   {
    "seq": 13,
@@ -366,7 +394,7 @@
    "verdict": "ask-more",
    "outcome": "ask-more",
    "reason": "completeness-not-established",
-   "caption": "tax-register's annual-income statement is refused and kept out of memory."
+   "caption": "The fictional tax register's annual-income statement is refused and kept out of memory."
   },
   {
    "seq": 15,
@@ -376,6 +404,5 @@
    "kind": "record",
    "caption": "6 entries in this agent's hash-chained record; the chain verifies."
   }
- ],
- "useCase": "false-but-signed"
+ ]
 }

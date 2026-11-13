@@ -205,11 +205,88 @@ Checks that carry the weight, by number of use cases: source 32, limits-approval
 
 Use cases that convey a derived answer instead of records: 23 (by-source 9, proved 9, joint 3, attested 2).
 
-Use cases with a real run: 11 of 70. The rest are specified and not yet run.
+Use cases with a real run: 55 of 70. The rest are specified and not yet run.
 
-Run so far: A mortgage in principle (5 of 5 paths); Paying a supplier's invoice (3 of 3 paths); A referral from a family doctor to a specialist (3 of 3 paths); A discharge letter in a doctor's own words (2 of 2 paths); Access to allergies in an emergency (3 of 3 paths); Hiring: right to work and qualifications (2 of 3 paths); Two people agree to share a flat (2 of 2 paths); Taking on a new supplier (3 of 3 paths); Changing a supplier's bank details in a business system (3 of 3 paths); A service agent that keeps asking (3 of 3 paths); A registered source signs something false (2 of 2 paths).
+Every use case is written as a profile and a scenario file and run through the reference gates with a scripted core. Of 166 paths, 97 run and give the outcome the catalogue expects, 15 run and give a different outcome or reason, and 54 cannot run yet. By use case: 36 run on every path, 19 run on some, 15 on none.
 
-Paths written and not run: Hiring: right to work and qualifications, Showing the permit is still valid without showing its date: Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates.
+### Runs that differ from the catalogue
+
+| Use case | Path | The gates gave | The catalogue expected |
+|---|---|---|---|
+| A joint mortgage for two people | One applicant withdraws their mandate mid-way | stop (`mandate-invalid`) | stop (`mandate-withdrawn`) |
+| A loan for a small company | The director's role does not cover borrowing | stop (`not-authorised`) | ask more (`representation-out-of-scope`) |
+| A loan for a small company | Management accounts are self-reported, not filed | ask more (`structured-form-required`) | ask more (`method-not-accepted`) |
+| An insurance claim with photographs | The insurer's model reads the photo as minor damage; the garage says otherwise | stop (`method-not-accepted`) | ask more (`structured-form-required`) |
+| An insurance claim with photographs | The estimate is from a garage the insurer does not accept | stop (`evidence-invalid`) | ask more (`source-not-authoritative`) |
+| Sharing activity data for a discount | The insurer's terms allow use in underwriting | stop (`not-authorised`) | stop (`terms-not-acceptable`) |
+| A request to change where salary is paid | The message is unsigned email | stop (`evidence-invalid`) | stop (`unsigned-not-allowed`) |
+| A request to change where salary is paid | It is signed, but not under the employee's mandate | stop (`evidence-invalid`) | stop (`representation-missing`) |
+| Claiming a benefit | Household composition is self-reported only | ask more (`structured-form-required`) | ask more (`method-not-accepted`) |
+| Showing a degree to an employer abroad | No chain links the two national registers | refuse (`source-unknown`) | ask more (`source-unknown`) |
+| A product recall notice | The notice is not signed by the registered manufacturer | stop (`source-not-authoritative`) | stop (`source-unknown`) |
+| Applying for a visa | The consulate cannot verify the foreign bank | refuse (`source-unknown`) | ask more (`source-unknown`) |
+| Proving recycled content along a supply chain | One tier's input is self-declared | refuse (`method-not-accepted`) | ask more (`method-not-accepted`) |
+| Being introduced to a stranger safely | One side can show only a self-made profile | refuse (`source-not-authoritative`) | ask principal (`method-not-accepted`) |
+| Content that must not be used for training | The fetching agent has no rule for "training" | go (`within-limits`) | stop (`unsupported-term`) |
+
+### Paths that cannot run yet, and why
+
+| Use case | Path | What is missing |
+|---|---|---|
+| A joint mortgage for two people | The main path | Needs a multi-principal agreement binding both applicants' distinct approvals to one terms digest. |
+| An insurance quote with the least disclosure | The main path | Needs a proof system |
+| Correcting an error on a credit file | The main path | Needs source-precedence conflict resolution, a deadline-bound correction agreement and regulator-claim evidence exchange; signatures and a local ledger do not implement that dispute workflow. |
+| Correcting an error on a credit file | The agency does not answer by its deadline | Needs source-precedence conflict resolution, a deadline-bound correction agreement and regulator-claim evidence exchange; signatures and a local ledger do not implement that dispute workflow. |
+| Moving a health record to a new practice | The main path | Needs Solid protected-reference transport for a record preserving original clinical, patient and estimate provenance; the local holder only re-signs its own statements. Conflict precedence is also not implemented. |
+| Moving a health record to a new practice | The patient's note of an allergy differs from the clinical entry | Needs Solid protected-reference transport for a record preserving original clinical, patient and estimate provenance; the local holder only re-signs its own statements. Conflict precedence is also not implemented. |
+| Dispensing a prescription | The main path | Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently. |
+| Dispensing a prescription | The same prescription is presented at a second pharmacy | Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently. |
+| Dispensing a prescription | The prescriber's registration lapsed last month | Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently. |
+| Proving eligibility for a clinical trial | The main path | Needs a proof system |
+| An adult child acts for a parent | The main path | Needs attenuating multi-hop personal delegation with current power-of-attorney register status; the organization credential checks only one entity-to-agent link. |
+| An adult child acts for a parent | The agent tries to change where the father lives, outside the power | Needs attenuating multi-hop personal delegation with current power-of-attorney register status; the organization credential checks only one entity-to-agent link. |
+| An adult child acts for a parent | The power is revoked | Needs attenuating multi-hop personal delegation with current power-of-attorney register status; the organization credential checks only one entity-to-agent link. |
+| Health data across a border | The main path | Needs attestation |
+| Health data across a border | No mapping exists for a medicine | Needs a versioned clinical-code mapping registry and unsupported-term admission; these checks are independent of attestation but are not implemented. |
+| Hospitals count a cohort together | The main path | Needs joint computation |
+| Hospitals count a cohort together | The result would cover fewer than the minimum number of patients | Needs joint computation |
+| Hospitals count a cohort together | One hospital does not attest its input | Needs attestation |
+| Hiring: right to work and qualifications | Show valid until at least a date while hiding the actual date | Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates. |
+| Proving income from several platforms | The main path | Needs joint computation |
+| Applying to rent a home | The main path | Needs a proof system |
+| Buying a home | The main path | Needs a durable multi-party conveyancing agreement chain, escrow/funds conditions and coordinated completion; the local submission adapter does not implement a home purchase. |
+| An accountant files a tax return | The main path | Needs client-to-accountant-to-agent delegation bound to the selected taxpayer account and current professional-register authority. A single owner mandate or organization credential is not that chain. |
+| An accountant files a tax return | The agent reads another client's account by mistake | Needs client-to-accountant-to-agent delegation bound to the selected taxpayer account and current professional-register authority. A single owner mandate or organization credential is not that chain. |
+| Showing a degree to an employer abroad | The main path | Needs a proof system |
+| A parent consents for a child | The main path | Needs child-to-parent authority, current objections and a policy for whose consent is sufficient; organization roles do not establish parental power or resolve conflicting parents. |
+| A parent consents for a child | The second parent has objected | Needs child-to-parent authority, current objections and a policy for whose consent is sufficient; organization roles do not establish parental power or resolve conflicting parents. |
+| Proving age to buy something | The main path | Needs a proof system |
+| Booking a trip | The main path | Needs a coordinated flight/hotel reservation plan, total-trip budget accounting and ticketing-only passport release; the synthetic effect adapter cannot confirm travel reservations. |
+| Applying for a visa | The main path | Needs a proof system |
+| Switching energy supplier | The main path | Needs a transferable supply agreement credential and service-switch completion/rollback binding; an ordinary local offer/acceptance is not the catalogue's switching workflow. |
+| Withdrawing consent and asking for deletion | The main path | Needs a general erasure/onward-notification duty executor and agreement-chain discovery. The engine only has assessment-specific local erasure and emergency notification duties. |
+| Withdrawing consent and asking for deletion | The company passed the data on with no duty to inform | Needs a general erasure/onward-notification duty executor and agreement-chain discovery. The engine only has assessment-specific local erasure and emergency notification duties. |
+| Taking a dispute to an ombudsman | The main path | Needs regulator-claim exchange of both parties' signed record segments, continuity/gap verification and a forum decision gate. checkRecord only validates the local ledger and is not that evidential workflow. |
+| Taking a dispute to an ombudsman | The lender's record has a gap | Needs regulator-claim exchange of both parties' signed record segments, continuity/gap verification and a forum decision gate. checkRecord only validates the local ledger and is not that evidential workflow. |
+| Proving recycled content along a supply chain | The main path | Needs a proof system |
+| Financing an invoice once | The main path | Needs a shared authoritative invoice-financing register with atomic reservation/redemption and current cross-financier status. An issuer-signed static active/withdrawn flag is not single financing. |
+| Financing an invoice once | The same invoice is offered to a second financier | Needs a shared authoritative invoice-financing register with atomic reservation/redemption and current cross-financier status. An issuer-signed static active/withdrawn flag is not single financing. |
+| Competitors compare pay without sharing it | The main path | Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result. |
+| Competitors compare pay without sharing it | Only two employers contribute | Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result. |
+| A researcher queries sensitive data | The main path | Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap. |
+| A researcher queries sensitive data | A query is outside the approved protocol | Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap. |
+| A researcher queries sensitive data | The number of related queries passes the cap | Needs an approved-query dataset executor, protocol-bound query grants and durable counters across related queries; ordinary message-round limits are not a research-query cap. |
+| Telling customers about a security incident | The main path | Needs general agreement-bound fan-out notification duties, acknowledgement tracking and deadline/timeout audit. Emergency-only notification records do not implement customer incident notices or result-uncertain acknowledgement recovery. |
+| Telling customers about a security incident | A customer's agent does not acknowledge receipt | Needs general agreement-bound fan-out notification duties, acknowledgement tracking and deadline/timeout audit. Emergency-only notification records do not implement customer incident notices or result-uncertain acknowledgement recovery. |
+| A service agent hands a customer to a partner's agent | The main path | Needs an A2A handoff binding and attenuating retailer-to-partner delegated authority; the data runner's local binding does not implement this delegation chain. |
+| A service agent hands a customer to a partner's agent | The handoff passes on more than the retailer holds | Needs verification of the complete retailer-to-partner authority chain and its attenuation; a one-link representation cannot test authority greater than the delegator holds. |
+| Two people's agents find a time to meet | The main path | Needs attestation |
+| Selling a used car to a stranger | The main path | Needs escrow reservation/release tied to current vehicle ownership and a complete finance-register search; a bank-submission stand-in is not escrow. |
+| Being introduced to a stranger safely | The main path | Needs a proof system |
+| Licensing a photograph | The main path | Needs transferable agreement credentials and licence-specific asset/expiry enforcement across publisher systems; an ordinary offer/acceptance trace does not implement that lifecycle. |
+| A receiver passes data on against its terms | The main path | Needs observation of a receiver's system copying outside its own gate and a regulator claim over its signed acceptance; the honest runtime cannot emit that bypass as a gated success. |
+| The other side has no agent | The main path | Needs an unsigned prose email-endpoint entry configuration with pinned endpoint identity and human approval. The data runner only routes signed agent messages and cannot give an email-only business a fictional agent. |
+| The other side has no agent | The reply asks for payment details by email | Needs an unsigned prose email-endpoint entry configuration with pinned endpoint identity and human approval. The data runner only routes signed agent messages and cannot give an email-only business a fictional agent. |
 
 ## 7. What is missing
 

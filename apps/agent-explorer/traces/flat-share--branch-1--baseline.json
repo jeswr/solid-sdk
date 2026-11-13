@@ -1,12 +1,39 @@
 {
  "x-authored-by": "Codex GPT-6",
  "schema": "agent-trace/0.1",
+ "useCase": "flat-share",
+ "path": {
+  "index": 1,
+  "what": "One side's identity cannot be tied to any source the other accepts"
+ },
+ "parties": [
+  {
+   "id": "alex",
+   "name": "Alex, a fictional flatmate"
+  },
+  {
+   "id": "alex-agent",
+   "name": "Alex's agent"
+  },
+  {
+   "id": "blair",
+   "name": "Blair, a fictional flatmate"
+  },
+  {
+   "id": "blair-agent",
+   "name": "Blair's agent"
+  }
+ ],
  "scenario": {
   "id": "flat-share--branch-1",
-  "title": "Two people agree to share a flat: one side's identity cannot be tied to any source the other accepts",
+  "title": "Two people agree to share a flat: One side's identity cannot be tied to any source the other accepts",
   "steps": {
-   "1": "Offer",
-   "2": "Unknown sender"
+   "1": "Alex's agent sends a signed request.",
+   "2": "Blair's agent checks the incoming message and prepares a response.",
+   "3": "Blair's agent completes the trust decision step.",
+   "4": "Alex's agent checks the incoming message and prepares a response.",
+   "5": "Blair's agent checks the durable record.",
+   "6": "Alex's agent checks the durable record."
   }
  },
  "configuration": {
@@ -28,19 +55,19 @@
  "agents": [
   {
    "id": "alex-agent",
-   "name": "The alex's agent",
+   "name": "Alex's agent",
    "actsFor": "alex",
    "role": "agent"
   },
   {
    "id": "blair-agent",
-   "name": "The blair's agent",
+   "name": "Blair's agent",
    "actsFor": "blair",
    "role": "agent"
   }
  ],
  "generated": {
-  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
   "core": "scripted"
  },
  "standIns": [],
@@ -51,7 +78,7 @@
    "agent": "alex-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:op:flat share with blair."
+   "caption": "The core proposes to take the next step in flat-share with Blair, a fictional flatmate."
   },
   {
    "seq": 2,
@@ -75,10 +102,10 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "alex's mandate lets the agent use urn:op:flat share, on its own."
+    "text": "Alex, a fictional flatmate's mandate lets the agent use urn:op:flat share, on its own."
    },
    "reason": "within-mandate",
-   "caption": "alex's mandate covers this action."
+   "caption": "Alex, a fictional flatmate's mandate covers this action."
   },
   {
    "seq": 3,
@@ -101,18 +128,18 @@
     }
    ],
    "resolution": {
-    "question": "Is blair a party I can send urn:op:flat share to?",
+    "question": "Is Blair, a fictional flatmate a party I can send flat-share to?",
     "path": [
      {
-      "at": "alex's own list",
+      "at": "Alex, a fictional flatmate's own list",
       "kind": "own-list",
-      "says": "blair is accepted for urn:op:flat share."
+      "says": "Blair, a fictional flatmate is accepted for flat-share."
      }
     ],
-    "answer": "Accepted, for urn:op:flat share only."
+    "answer": "Accepted, for flat-share only."
    },
    "reason": "recipient-established",
-   "caption": "blair: Accepted, for urn:op:flat share only."
+   "caption": "Blair, a fictional flatmate: Accepted, for flat-share only."
   },
   {
    "seq": 4,
@@ -166,7 +193,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within alex's limits."
+   "caption": "Inside what the agent may do on its own, and within Alex, a fictional flatmate's limits."
   },
   {
    "seq": 7,
@@ -211,7 +238,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with alex-agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with Alex's agent's pinned key, and written to the record."
   },
   {
    "seq": 9,
@@ -221,7 +248,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The propose message goes to blair-agent."
+   "caption": "The propose message goes to Blair's agent."
   },
   {
    "seq": 10,
@@ -231,8 +258,8 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-flat-share-branch-1:alex-agent:0002",
-    "from": "alex-agent",
-    "to": "blair-agent",
+    "from": "Alex's agent",
+    "to": "Blair's agent",
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
@@ -241,7 +268,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From alex-agent to blair-agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-branch-1:alex-agent:0002.",
+      "summary": "From Alex's agent to Blair's agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-branch-1:alex-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
@@ -268,7 +295,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): alex says alex-agent acts for it.",
+      "summary": "1 representation statement(s): Alex, a fictional flatmate says Alex's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -341,7 +368,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "alex-agent sends a propose message to blair-agent."
+   "caption": "Alex's agent sends a propose message to Blair's agent."
   },
   {
    "seq": 11,
@@ -351,8 +378,8 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-flat-share-branch-1:alex-agent:0002",
-    "from": "alex-agent",
-    "to": "blair-agent",
+    "from": "Alex's agent",
+    "to": "Blair's agent",
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
@@ -361,7 +388,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From alex-agent to blair-agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-branch-1:alex-agent:0002.",
+      "summary": "From Alex's agent to Blair's agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-branch-1:alex-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
@@ -388,7 +415,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): alex says alex-agent acts for it.",
+      "summary": "1 representation statement(s): Alex, a fictional flatmate says Alex's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -475,7 +502,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A propose message from alex-agent reaches the inbound gate."
+   "caption": "A propose message from Alex's agent reaches the inbound gate."
   },
   {
    "seq": 12,
@@ -502,7 +529,7 @@
     "id": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with alex-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with Alex's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 13,
@@ -551,6 +578,5 @@
    },
    "caption": "The gate built this trust question. The sender's self-description establishes no role or authority."
   }
- ],
- "useCase": "flat-share"
+ ]
 }

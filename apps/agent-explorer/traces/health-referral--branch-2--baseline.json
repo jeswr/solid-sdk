@@ -1,12 +1,52 @@
 {
  "x-authored-by": "Codex GPT-6",
  "schema": "agent-trace/0.1",
+ "useCase": "health-referral",
+ "path": {
+  "index": 2,
+  "what": "The referrer is not on the professional register"
+ },
+ "parties": [
+  {
+   "id": "practice",
+   "name": "The family practice"
+  },
+  {
+   "id": "clinic",
+   "name": "The specialist clinic"
+  },
+  {
+   "id": "record-holder",
+   "name": "The local record holder"
+  },
+  {
+   "id": "register",
+   "name": "The professional register"
+  },
+  {
+   "id": "clinician",
+   "name": "The clinician"
+  },
+  {
+   "id": "practice-agent",
+   "name": "The family practice's agent"
+  },
+  {
+   "id": "clinic-agent",
+   "name": "The specialist clinic's agent"
+  }
+ ],
  "scenario": {
   "id": "health-referral--branch-2",
-  "title": "A referral from a family doctor to a specialist: the referrer is not on the professional register",
+  "title": "A referral from a family doctor to a specialist: The referrer is not on the professional register",
   "steps": {
-   "1": "Registered role",
-   "2": "Select relevant history"
+   "1": "The family practice's agent checks and admits the signed statements.",
+   "2": "The family practice's agent sends a signed request.",
+   "3": "The family practice's agent obtains a staff approval.",
+   "4": "The specialist clinic's agent checks the incoming message and prepares a response.",
+   "5": "The specialist clinic's agent requests the permitted record item.",
+   "6": "The specialist clinic's agent checks the observed result.",
+   "7": "The specialist clinic's agent checks the durable record."
   }
  },
  "configuration": {
@@ -28,19 +68,19 @@
  "agents": [
   {
    "id": "practice-agent",
-   "name": "The practice's agent",
+   "name": "The family practice's agent",
    "actsFor": "practice",
    "role": "agent"
   },
   {
    "id": "clinic-agent",
-   "name": "The clinic's agent",
+   "name": "The specialist clinic's agent",
    "actsFor": "clinic",
    "role": "agent"
   }
  ],
  "generated": {
-  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
   "core": "scripted"
  },
  "standIns": [
@@ -75,7 +115,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "register's organization.role statement is intact and signed with register's pinned key."
+   "caption": "The professional register's organization.role statement is intact and signed with The professional register's pinned key."
   },
   {
    "seq": 2,
@@ -99,22 +139,22 @@
    ],
    "reason": "source-unknown",
    "resolution": {
-    "question": "Is register an authority for organization.role claims about clinician?",
+    "question": "Is The professional register an authority for organization.role claims about The clinician?",
     "path": [
      {
-      "at": "practice's own list",
+      "at": "The family practice's own list",
       "kind": "own-list",
-      "says": "No entry for register for this kind of claim."
+      "says": "No entry for The professional register for this kind of claim."
      },
      {
       "at": "Local professional register root",
       "kind": "root",
-      "says": "No register it delegates to lists register."
+      "says": "No register it delegates to lists The professional register."
      }
     ],
     "answer": "No register answers for this source."
    },
-   "caption": "register's organization.role statement: register is not accepted as a source for this kind of claim."
+   "caption": "The professional register's organization.role statement: The professional register is not accepted as a source for this kind of claim."
   },
   {
    "seq": 3,
@@ -132,7 +172,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "register's organization.role statement asks for nothing, so there is no authority to check."
+   "caption": "The professional register's organization.role statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 4,
@@ -143,7 +183,7 @@
    "verdict": "fail",
    "outcome": "refuse",
    "reason": "source-unknown",
-   "caption": "register's organization.role statement is refused and kept out of memory."
+   "caption": "The professional register's organization.role statement is refused and kept out of memory."
   },
   {
    "seq": 5,
@@ -151,7 +191,7 @@
    "agent": "practice-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:op:health referral with clinic."
+   "caption": "The core proposes to use urn:op:health referral with The specialist clinic."
   },
   {
    "seq": 6,
@@ -175,10 +215,10 @@
    ],
    "rule": {
     "id": "urn:rule:refer",
-    "text": "practice's mandate lets the agent use urn:op:health referral, on its own."
+    "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
    },
    "reason": "within-mandate",
-   "caption": "practice's mandate covers this action."
+   "caption": "The family practice's mandate covers this action."
   },
   {
    "seq": 7,
@@ -209,6 +249,5 @@
    "reason": "source-unknown",
    "caption": "A refused source cannot authorize the action."
   }
- ],
- "useCase": "health-referral"
+ ]
 }

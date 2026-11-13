@@ -1,0 +1,2261 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "hardship-request",
+ "path": "main",
+ "parties": [
+  {
+   "id": "owner",
+   "name": "The borrower"
+  },
+  {
+   "id": "receiver",
+   "name": "The lender"
+  },
+  {
+   "id": "owner-agent",
+   "name": "The borrower's agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The lender's agent"
+  }
+ ],
+ "scenario": {
+  "id": "hardship-request",
+  "title": "Asking a lender for breathing space",
+  "steps": {
+   "1": "The borrower's agent checks the signed statements.",
+   "2": "The lender's agent sends the signed request.",
+   "3": "The borrower's agent checks the message and prepares a response.",
+   "4": "The borrower's agent sends the signed request.",
+   "5": "The borrower's agent completes the approve step.",
+   "6": "The borrower's agent completes the approve step.",
+   "7": "The lender's agent checks the message and prepares a response.",
+   "8": "The lender's agent completes the read content step.",
+   "9": "The lender's agent proposes the local action."
+  }
+ },
+ "configuration": {
+  "id": "hardship-request-local",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "plain-language-upgrade",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "owner-agent",
+   "name": "The borrower's agent",
+   "actsFor": "owner",
+   "role": "agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The lender's agent",
+   "actsFor": "receiver",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Outside organizations and data sources",
+   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The borrower's unstructured-content statement is intact and signed with The borrower's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:hardship-request:unstructured-content",
+    "text": "The borrower is accepted for unstructured-content claims."
+   },
+   "resolution": {
+    "question": "Is The borrower an authority for unstructured-content claims about The borrower?",
+    "path": [
+     {
+      "at": "The borrower's own list",
+      "kind": "own-list",
+      "says": "The borrower is accepted for unstructured-content."
+     }
+    ],
+    "answer": "Accepted, for unstructured-content claims only."
+   },
+   "caption": "The borrower's unstructured-content statement: The borrower is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The borrower's unstructured-content statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:hardship-request:original",
+    "text": "Its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+   },
+   "caption": "The borrower's unstructured-content statement: its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:hardship-request:unstructured-content",
+    "text": "Accept unstructured-content from urn:fictional:hardship-request:owner by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The borrower's unstructured-content statement is fit for urn:scenario:hardship-request:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The borrower's unstructured-content statement is admitted."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:hardship-request:original",
+    "label": "The borrower's unstructured-content statement",
+    "claimType": "unstructured-content",
+    "subject": "urn:fictional:hardship-request:owner",
+    "value": null,
+    "source": "urn:fictional:hardship-request:owner",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:hardship-request:original",
+     "summary": "use for urn:purpose:hardship request; share for urn:purpose:hardship request"
+    },
+    "provenance": "signed by The borrower"
+   },
+   "caption": "The borrower's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 8,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Request the needed information with The borrower."
+  },
+  {
+   "seq": 9,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The lender's mandate covers this action."
+  },
+  {
+   "seq": 10,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The borrower a party I can send Request the needed information to?",
+    "path": [
+     {
+      "at": "The lender's own list",
+      "kind": "own-list",
+      "says": "The borrower is accepted for Request the needed information."
+     }
+    ],
+    "answer": "Accepted, for Request the needed information only."
+   },
+   "reason": "recipient-established",
+   "caption": "The borrower: Accepted, for Request the needed information only."
+  },
+  {
+   "seq": 11,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 12,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 13,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The lender's limits."
+  },
+  {
+   "seq": 14,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The lender's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 16,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The borrower's agent."
+  },
+  {
+   "seq": 17,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-hardship-request-main:receiver-agent:0002",
+    "from": "The lender's agent",
+    "to": "The borrower's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:a84390fab44…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The lender's agent to The borrower's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-hardship-request-main:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+       "id": "urn:awp:engine-hardship-request-main:receiver-agent:0002",
+       "conversation": "urn:awp:engine-hardship-request-main:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:hardship-request:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:hardship-request:owner-agent:actor",
+        "party": "urn:fictional:hardship-request:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:f8a9029e5f2228f32755446a45e443b58e2582261f78e33de4f7f3b106d66b85"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The lender says The lender's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:ef570f084258f9983959a5bb66dd271f:1794560400000",
+        "party": "urn:fictional:hardship-request:receiver",
+        "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:hardship-request",
+         "urn:op:hardship-request:request",
+         "urn:op:hardship-request:decision"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:360b481212fa30a7f267a035c0337ea6fdb9fe71987aaa04f1142c408866be29"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:hardship-request:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "unstructured-content"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:hardship-request"
+      },
+      "digest": "sha-256:fc502efb2590d40fb0784355fdfa2359e089d8db5ee32f2e241a240091dd3583"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-hardship-request-main:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade"
+    }
+   ],
+   "caption": "The lender's agent sends an invoke message to The borrower's agent."
+  },
+  {
+   "seq": 18,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-hardship-request-main:receiver-agent:0002",
+    "from": "The lender's agent",
+    "to": "The borrower's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:a84390fab44…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The lender's agent to The borrower's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-hardship-request-main:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+       "id": "urn:awp:engine-hardship-request-main:receiver-agent:0002",
+       "conversation": "urn:awp:engine-hardship-request-main:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:hardship-request:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:hardship-request:owner-agent:actor",
+        "party": "urn:fictional:hardship-request:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:f8a9029e5f2228f32755446a45e443b58e2582261f78e33de4f7f3b106d66b85"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The lender says The lender's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:ef570f084258f9983959a5bb66dd271f:1794560400000",
+        "party": "urn:fictional:hardship-request:receiver",
+        "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:hardship-request",
+         "urn:op:hardship-request:request",
+         "urn:op:hardship-request:decision"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:360b481212fa30a7f267a035c0337ea6fdb9fe71987aaa04f1142c408866be29"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:hardship-request:request\"; \"urn:purpose:hardship-request\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:hardship-request:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "unstructured-content"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:hardship-request"
+      },
+      "digest": "sha-256:fc502efb2590d40fb0784355fdfa2359e089d8db5ee32f2e241a240091dd3583",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:hardship-request:request"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:hardship-request"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-hardship-request-main:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade"
+    }
+   ],
+   "caption": "An invoke message from The lender's agent reaches the inbound gate."
+  },
+  {
+   "seq": 19,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The lender's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 20,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 21,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:ef570f084258f9983959a5bb66dd271f:1794560400000",
+    "text": "A representation statement signed with The lender's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The lender signed a statement that The lender's agent acts for them in this operation."
+  },
+  {
+   "seq": 22,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 23,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 24,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 25,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to share urn:op:hardship request with The lender."
+  },
+  {
+   "seq": 26,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The borrower's mandate covers this action."
+  },
+  {
+   "seq": 27,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The lender a party I can send Asking a lender for breathing space to?",
+    "path": [
+     {
+      "at": "The borrower's own list",
+      "kind": "own-list",
+      "says": "The lender is accepted for Asking a lender for breathing space."
+     }
+    ],
+    "answer": "Accepted, for Asking a lender for breathing space only."
+   },
+   "reason": "recipient-established",
+   "caption": "The lender: Accepted, for Asking a lender for breathing space only."
+  },
+  {
+   "seq": 28,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 29,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 30,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "ask-principal",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "approval-required",
+   "rule": {
+    "id": "sha-256:b7f9b926b71c470d2a0c60ceab8a80d0de6d455613e03087b6227f60f9683b3d",
+    "text": "Requires 1 approval(s) from the principal."
+   },
+   "caption": "The required people must decide this exact action."
+  },
+  {
+   "seq": 31,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "ask-principal",
+   "outcome": "ask-principal",
+   "reason": "approval-required",
+   "caption": "The action is held for the named decision makers."
+  },
+  {
+   "seq": 32,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "principal",
+   "kind": "ask-principal",
+   "reason": "approval-required",
+   "chat": {
+    "who": "agent",
+    "text": "The lender asks for 0 of your statements: nothing. They would use them for urn:purpose:hardship request. May I share them? Action digest: sha-256:b7f9b926b71c470d2a0c60ceab8a80d0de6d455613e03087b6227f60f9683b3d. Parameters: {}"
+   },
+   "caption": "The gate built this request from the action and the approval rule."
+  },
+  {
+   "seq": 33,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "principal",
+   "kind": "principal-reply",
+   "chat": {
+    "who": "principal",
+    "text": "Share these exact words with the lender; retain my diagnosis."
+   },
+   "caption": "Approves by signing an answer bound to the exact action."
+  },
+  {
+   "seq": 34,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The borrower's mandate covers this action."
+  },
+  {
+   "seq": 35,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The lender a party I can send Asking a lender for breathing space to?",
+    "path": [
+     {
+      "at": "The borrower's own list",
+      "kind": "own-list",
+      "says": "The lender is accepted for Asking a lender for breathing space."
+     }
+    ],
+    "answer": "Accepted, for Asking a lender for breathing space only."
+   },
+   "reason": "recipient-established",
+   "caption": "The lender: Accepted, for Asking a lender for breathing space only."
+  },
+  {
+   "seq": 36,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 37,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 38,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The borrower's limits."
+  },
+  {
+   "seq": 39,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 40,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:terms:hardship-request:original",
+    "text": "The issuer's terms: use for urn:purpose:hardship request; share for urn:purpose:hardship request. They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "The borrower's unstructured-content statement: its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+  },
+  {
+   "seq": 41,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 42,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "Context item The borrower's unstructured-content statement (urn:fictional:hardship-request:owner) is needed for this purpose."
+  },
+  {
+   "seq": 43,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "terms-allow",
+   "caption": "The borrower's unstructured-content statement: Its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+  },
+  {
+   "seq": 44,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "ask-principal",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "context-not-clear",
+   "caption": "Context item invoke from urn:fictional:hardship-request:receiver-agent:actor (urn:fictional:hardship-request:receiver) is not established as needed for this purpose."
+  },
+  {
+   "seq": 45,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "ask-principal",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "context-not-clear",
+   "caption": "invoke from urn:fictional:hardship-request:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+  },
+  {
+   "seq": 46,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "ask-principal",
+   "outcome": "ask-principal",
+   "reason": "context-not-clear",
+   "caption": "The task context is not clear for this text, recipient and purpose."
+  },
+  {
+   "seq": 47,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "principal",
+   "kind": "ask-principal",
+   "reason": "context-not-clear",
+   "chat": {
+    "who": "agent",
+    "text": "May I send this exact text to The lender for urn:purpose:hardship-request?\nI have lost my work and am caring for a relative. Please consider reduced payments while I recover."
+   },
+   "caption": "The text is held before release; approval binds message digest sha-256:9bdd5c5c8ce0e477dd968ed4acccceabbbec58052bd990f34fd61557f0ccc4ab."
+  },
+  {
+   "seq": 48,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "principal",
+   "kind": "principal-reply",
+   "chat": {
+    "who": "principal",
+    "text": "Send the exact held letter bytes to this lender."
+   },
+   "caption": "Approves by signing an answer bound to the exact action."
+  },
+  {
+   "seq": 49,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The borrower's mandate covers this action."
+  },
+  {
+   "seq": 50,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The lender a party I can send Asking a lender for breathing space to?",
+    "path": [
+     {
+      "at": "The borrower's own list",
+      "kind": "own-list",
+      "says": "The lender is accepted for Asking a lender for breathing space."
+     }
+    ],
+    "answer": "Accepted, for Asking a lender for breathing space only."
+   },
+   "reason": "recipient-established",
+   "caption": "The lender: Accepted, for Asking a lender for breathing space only."
+  },
+  {
+   "seq": 51,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 52,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 53,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The borrower's limits."
+  },
+  {
+   "seq": 54,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 55,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:terms:hardship-request:original",
+    "text": "The issuer's terms: use for urn:purpose:hardship request; share for urn:purpose:hardship request. They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "The borrower's unstructured-content statement: its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+  },
+  {
+   "seq": 56,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 57,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "Context item The borrower's unstructured-content statement (urn:fictional:hardship-request:owner) is needed for this purpose."
+  },
+  {
+   "seq": 58,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "terms-allow",
+   "caption": "The borrower's unstructured-content statement: Its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+  },
+  {
+   "seq": 59,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "ask-principal",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "context-not-clear",
+   "caption": "Context item invoke from urn:fictional:hardship-request:receiver-agent:actor (urn:fictional:hardship-request:receiver) is not established as needed for this purpose."
+  },
+  {
+   "seq": 60,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "ask-principal",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "context-not-clear",
+   "caption": "invoke from urn:fictional:hardship-request:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+  },
+  {
+   "seq": 61,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "approval-given",
+   "caption": "The principal approved these exact bytes for this recipient and purpose."
+  },
+  {
+   "seq": 62,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "terms-allow",
+   "caption": "The context rule permits this text."
+  },
+  {
+   "seq": 63,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The borrower's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 64,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The lender's agent."
+  },
+  {
+   "seq": 65,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-hardship-request-main:owner-agent:0002",
+    "from": "The borrower's agent",
+    "to": "The lender's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:2c440f60762…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The borrower's agent to The lender's agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-hardship-request-main:owner-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+       "id": "urn:awp:engine-hardship-request-main:owner-agent:0002",
+       "conversation": "urn:awp:engine-hardship-request-main:owner-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:hardship-request:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:hardship-request:owner"
+       },
+       "to": {
+        "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+        "party": "urn:fictional:hardship-request:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:9bdd5c5c8ce0e477dd968ed4acccceabbbec58052bd990f34fd61557f0ccc4ab"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The borrower says The borrower's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:9c2d3c2bbc678f8dd1404d326d448d0e:1794560400000",
+        "party": "urn:fictional:hardship-request:owner",
+        "actor": "urn:fictional:hardship-request:owner-agent:actor",
+        "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "operations": [
+         "urn:op:hardship-request",
+         "urn:op:hardship-request:request",
+         "urn:op:hardship-request:decision"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:e1640e46b3451cdd6153ac683d2e186e5f9201beee1d9dac3e919721692318b2"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"I have lost my work and am caring for a relative. Please consider reduced payments while I recover.\"",
+      "raw": {
+       "body": {
+        "operation": {
+         "id": "urn:op:hardship-request",
+         "version": "0.1"
+        },
+        "input": {
+         "items": [
+          "urn:scenario:hardship-request:original"
+         ]
+        },
+        "basis": {
+         "kind": "represented"
+        },
+        "purpose": "urn:purpose:hardship-request"
+       },
+       "content": [
+        {
+         "id": "urn:content:hardship-request:original",
+         "mediaType": "text/plain",
+         "bytes": "I have lost my work and am caring for a relative. Please consider reduced payments while I recover.",
+         "digest": "sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562"
+        }
+       ]
+      },
+      "digest": "sha-256:f99a27c6f5061d63b7e6261a301586ea47355f845a94f2d867a5567a02fdcbdf",
+      "untrusted": [
+       {
+        "path": "content.0.bytes",
+        "text": "I have lost my work and am caring for a relative. Please consider reduced payments while I recover."
+       }
+      ]
+     },
+     "evidence": {
+      "present": true,
+      "summary": "1 statement(s) signed by their sources: unstructured-content from The borrower.",
+      "raw": [
+       {
+        "contentDigest": "sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562",
+        "id": "urn:scenario:hardship-request:original",
+        "issuer": "urn:fictional:hardship-request:owner",
+        "subject": "urn:fictional:hardship-request:owner",
+        "claimType": "unstructured-content",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:hardship-request:original",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:hardship-request:original",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:hardship-request"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:hardship-request:original",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:hardship-request"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:f22dbf49dfdcd030d6269b76e7aabc93c9a5f5d051e370364a024c22de2bff62"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The borrower's agent; as of 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-hardship-request-main:owner-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:hardship-request:original",
+         "issuer": "urn:fictional:hardship-request:owner",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade"
+    }
+   ],
+   "caption": "The borrower's agent sends an invoke message to The lender's agent."
+  },
+  {
+   "seq": 66,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-hardship-request-main:owner-agent:0002",
+    "from": "The borrower's agent",
+    "to": "The lender's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:2c440f60762…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The borrower's agent to The lender's agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-hardship-request-main:owner-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+       "id": "urn:awp:engine-hardship-request-main:owner-agent:0002",
+       "conversation": "urn:awp:engine-hardship-request-main:owner-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:hardship-request:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:hardship-request:owner"
+       },
+       "to": {
+        "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+        "party": "urn:fictional:hardship-request:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:9bdd5c5c8ce0e477dd968ed4acccceabbbec58052bd990f34fd61557f0ccc4ab"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The borrower says The borrower's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:9c2d3c2bbc678f8dd1404d326d448d0e:1794560400000",
+        "party": "urn:fictional:hardship-request:owner",
+        "actor": "urn:fictional:hardship-request:owner-agent:actor",
+        "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "operations": [
+         "urn:op:hardship-request",
+         "urn:op:hardship-request:request",
+         "urn:op:hardship-request:decision"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:e1640e46b3451cdd6153ac683d2e186e5f9201beee1d9dac3e919721692318b2"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:hardship-request\"; \"urn:scenario:hardship-request:original\"; \"urn:purpose:hardship-request\"; \"I have lost my work and am caring for a relative. Please consider reduced payments while I recover.\"",
+      "raw": {
+       "body": {
+        "operation": {
+         "id": "urn:op:hardship-request",
+         "version": "0.1"
+        },
+        "input": {
+         "items": [
+          "urn:scenario:hardship-request:original"
+         ]
+        },
+        "basis": {
+         "kind": "represented"
+        },
+        "purpose": "urn:purpose:hardship-request"
+       },
+       "content": [
+        {
+         "id": "urn:content:hardship-request:original",
+         "mediaType": "text/plain",
+         "bytes": "I have lost my work and am caring for a relative. Please consider reduced payments while I recover.",
+         "digest": "sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562"
+        }
+       ]
+      },
+      "digest": "sha-256:f99a27c6f5061d63b7e6261a301586ea47355f845a94f2d867a5567a02fdcbdf",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:hardship-request"
+       },
+       {
+        "path": "input.items.0",
+        "text": "urn:scenario:hardship-request:original"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:hardship-request"
+       },
+       {
+        "path": "content.0.bytes",
+        "text": "I have lost my work and am caring for a relative. Please consider reduced payments while I recover."
+       }
+      ]
+     },
+     "evidence": {
+      "present": true,
+      "summary": "1 statement(s) signed by their sources: unstructured-content from The borrower.",
+      "raw": [
+       {
+        "contentDigest": "sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562",
+        "id": "urn:scenario:hardship-request:original",
+        "issuer": "urn:fictional:hardship-request:owner",
+        "subject": "urn:fictional:hardship-request:owner",
+        "claimType": "unstructured-content",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:hardship-request:original",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:hardship-request:original",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:hardship-request"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:hardship-request:original",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:hardship-request"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:f22dbf49dfdcd030d6269b76e7aabc93c9a5f5d051e370364a024c22de2bff62"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The borrower's agent; as of 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-hardship-request-main:owner-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:hardship-request:original",
+         "issuer": "urn:fictional:hardship-request:owner",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade"
+    }
+   ],
+   "caption": "An invoke message from The borrower's agent reaches the inbound gate."
+  },
+  {
+   "seq": 67,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The borrower's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 68,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:hardship-request:unstructured-content",
+    "text": "The borrower is accepted for unstructured-content claims."
+   },
+   "resolution": {
+    "question": "Is The borrower an authority for unstructured-content claims about The borrower?",
+    "path": [
+     {
+      "at": "The lender's own list",
+      "kind": "own-list",
+      "says": "The borrower is accepted for unstructured-content."
+     }
+    ],
+    "answer": "Accepted, for unstructured-content claims only."
+   },
+   "caption": "The borrower's unstructured-content statement: The borrower is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 69,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:9c2d3c2bbc678f8dd1404d326d448d0e:1794560400000",
+    "text": "A representation statement signed with The borrower's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The borrower signed a statement that The borrower's agent acts for them in this operation."
+  },
+  {
+   "seq": 70,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:hardship-request:original",
+    "text": "Its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+   },
+   "caption": "The borrower's unstructured-content statement: its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+  },
+  {
+   "seq": 71,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:hardship-request:unstructured-content",
+    "text": "Accept unstructured-content from urn:fictional:hardship-request:owner by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The borrower's unstructured-content statement is fit for Asking a lender for breathing space: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 72,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 73,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:hardship-request:original",
+    "label": "The borrower's unstructured-content statement",
+    "claimType": "unstructured-content",
+    "subject": "urn:fictional:hardship-request:owner",
+    "value": null,
+    "source": "urn:fictional:hardship-request:owner",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:hardship-request:original",
+     "summary": "use for urn:purpose:hardship request; share for urn:purpose:hardship request"
+    },
+    "provenance": "signed by The borrower"
+   },
+   "caption": "The borrower's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 74,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "memory",
+   "kind": "store",
+   "caption": "Unstructured data sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562; not instructions; source urn:fictional:hardship-request:owner."
+  },
+  {
+   "seq": 75,
+   "step": 8,
+   "agent": "receiver-agent",
+   "part": "memory",
+   "kind": "store",
+   "caption": "Model-output reading of unstructured data sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562; claim content.opinion."
+  },
+  {
+   "seq": 76,
+   "step": 9,
+   "agent": "receiver-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in A person decides on the original content with The lender."
+  },
+  {
+   "seq": 77,
+   "step": 9,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The lender's mandate covers this action."
+  },
+  {
+   "seq": 78,
+   "step": 9,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The lender a party I can send A person decides on the original content to?",
+    "path": [
+     {
+      "at": "The lender's own list",
+      "kind": "own-list",
+      "says": "The lender is accepted for A person decides on the original content."
+     }
+    ],
+    "answer": "Accepted, for A person decides on the original content only."
+   },
+   "reason": "recipient-established",
+   "caption": "The lender: Accepted, for A person decides on the original content only."
+  },
+  {
+   "seq": 79,
+   "step": 9,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 80,
+   "step": 9,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 81,
+   "step": 9,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "ask-principal",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "approval-required",
+   "rule": {
+    "id": "sha-256:8d9bfa14cbd4135642217497f7e6b5c147a86791e7ff37b643708655a243af6d",
+    "text": "Requires 1 approval(s) from the principal."
+   },
+   "caption": "The required people must decide this exact action."
+  },
+  {
+   "seq": 82,
+   "step": 9,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "ask-principal",
+   "outcome": "ask-principal",
+   "reason": "approval-required",
+   "caption": "The action is held for the named decision makers."
+  },
+  {
+   "seq": 83,
+   "step": 9,
+   "agent": "receiver-agent",
+   "part": "principal",
+   "kind": "ask-principal",
+   "reason": "approval-required",
+   "chat": {
+    "who": "agent",
+    "text": "The lender asks me to take the next step in A person decides on the original content with The lender for urn:purpose:hardship request. May I go ahead? Action digest: sha-256:8d9bfa14cbd4135642217497f7e6b5c147a86791e7ff37b643708655a243af6d. Parameters: {\"decision\":\"consider-reduced-payments\",\"originalDigest\":\"sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562\",\"support\":[\"urn:scenario:hardship-request:original\"]}"
+   },
+   "caption": "The gate built this request from the action and the approval rule."
+  }
+ ]
+}

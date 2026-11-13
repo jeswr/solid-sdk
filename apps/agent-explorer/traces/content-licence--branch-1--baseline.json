@@ -1,0 +1,963 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "content-licence",
+ "path": {
+  "index": 1,
+  "what": "The publisher's agent would pass the image to a sister company"
+ },
+ "parties": [
+  {
+   "id": "owner",
+   "name": "The publisher"
+  },
+  {
+   "id": "receiver",
+   "name": "The sister company"
+  },
+  {
+   "id": "photographer",
+   "name": "The photographer"
+  },
+  {
+   "id": "owner-agent",
+   "name": "The publisher's agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The sister company's agent"
+  }
+ ],
+ "scenario": {
+  "id": "content-licence--branch-1",
+  "title": "Licensing a photograph: The publisher's agent would pass the image to a sister company",
+  "steps": {
+   "1": "The publisher's agent checks the signed statements.",
+   "2": "The sister company's agent sends the signed request.",
+   "3": "The publisher's agent checks the message and prepares a response.",
+   "4": "The publisher's agent sends the signed request."
+  }
+ },
+ "configuration": {
+  "id": "baseline",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "owner-agent",
+   "name": "The publisher's agent",
+   "actsFor": "owner",
+   "role": "agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The sister company's agent",
+   "actsFor": "receiver",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Outside organizations and data sources",
+   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+  },
+  {
+   "what": "Licence-lifecycle-free onward restriction",
+   "replacedBy": "The photographer's signed asset binding and terms allow the publisher but explicitly prohibit its sister company; original synthetic image bytes are present in the stopped proposal"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The photographer's photo.licensed-asset statement is intact and signed with The photographer's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:content-licence:photo.licensed-asset",
+    "text": "The photographer is accepted for photo.licensed-asset claims."
+   },
+   "resolution": {
+    "question": "Is The photographer an authority for photo.licensed-asset claims about The publisher?",
+    "path": [
+     {
+      "at": "The publisher's own list",
+      "kind": "own-list",
+      "says": "The photographer is accepted for photo.licensed-asset."
+     }
+    ],
+    "answer": "Accepted, for photo.licensed-asset claims only."
+   },
+   "caption": "The photographer's photo.licensed-asset statement: The photographer is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The photographer's photo.licensed-asset statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:content-licence:image",
+    "text": "Its terms allow this: use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver."
+   },
+   "caption": "The photographer's photo.licensed-asset statement: its terms allow this: use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:content-licence:photo.licensed-asset",
+    "text": "Accept photo.licensed-asset from urn:fictional:content-licence:photographer by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The photographer's photo.licensed-asset statement is fit for urn:scenario:content-licence:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The photographer's photo.licensed-asset statement is admitted."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:content-licence:image",
+    "label": "The photographer's photo.licensed-asset statement",
+    "claimType": "photo.licensed-asset",
+    "subject": "urn:fictional:content-licence:owner",
+    "value": null,
+    "source": "urn:fictional:content-licence:photographer",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:content-licence:image",
+     "summary": "use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver"
+    },
+    "provenance": "signed by The photographer"
+   },
+   "caption": "The photographer's photo.licensed-asset statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 8,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Request the needed information with The publisher."
+  },
+  {
+   "seq": 9,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The sister company's mandate covers this action."
+  },
+  {
+   "seq": 10,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The publisher a party I can send Request the needed information to?",
+    "path": [
+     {
+      "at": "The sister company's own list",
+      "kind": "own-list",
+      "says": "The publisher is accepted for Request the needed information."
+     }
+    ],
+    "answer": "Accepted, for Request the needed information only."
+   },
+   "reason": "recipient-established",
+   "caption": "The publisher: Accepted, for Request the needed information only."
+  },
+  {
+   "seq": 11,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 12,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 13,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The sister company's limits."
+  },
+  {
+   "seq": 14,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The sister company's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 16,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The publisher's agent."
+  },
+  {
+   "seq": 17,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-content-licence-branch-1:receiver-agent:0002",
+    "from": "The sister company's agent",
+    "to": "The publisher's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:9c3c4eb912c…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The sister company's agent to The publisher's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-content-licence-branch-1:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-content-licence-branch-1:receiver-agent:0002",
+       "conversation": "urn:awp:engine-content-licence-branch-1:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:content-licence:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:content-licence:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:content-licence:owner-agent:actor",
+        "party": "urn:fictional:content-licence:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:25ddca25a58858a2eabfdaeb2184b84e3918e90a0de19d32187fdc8a1ce7db9f"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The sister company says The sister company's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:d9dffda45d94cc61d01534a0e67ff779:1794560400000",
+        "party": "urn:fictional:content-licence:receiver",
+        "actor": "urn:fictional:content-licence:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:content-licence",
+         "urn:op:content-licence:request"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:da92a73fd8c0453aca94d1b625584a4ec10710fd09de99c1d38a4ee35d88993a"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:content-licence:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "photo.licensed-asset"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:content-licence"
+      },
+      "digest": "sha-256:8da2ceb3c95f22a3525a19acd402fff07856a28d651889a5c5db3ba2600d88e7"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-content-licence-branch-1:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The sister company's agent sends an invoke message to The publisher's agent."
+  },
+  {
+   "seq": 18,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-content-licence-branch-1:receiver-agent:0002",
+    "from": "The sister company's agent",
+    "to": "The publisher's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:9c3c4eb912c…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The sister company's agent to The publisher's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-content-licence-branch-1:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-content-licence-branch-1:receiver-agent:0002",
+       "conversation": "urn:awp:engine-content-licence-branch-1:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:content-licence:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:content-licence:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:content-licence:owner-agent:actor",
+        "party": "urn:fictional:content-licence:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:25ddca25a58858a2eabfdaeb2184b84e3918e90a0de19d32187fdc8a1ce7db9f"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The sister company says The sister company's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:d9dffda45d94cc61d01534a0e67ff779:1794560400000",
+        "party": "urn:fictional:content-licence:receiver",
+        "actor": "urn:fictional:content-licence:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:content-licence",
+         "urn:op:content-licence:request"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:da92a73fd8c0453aca94d1b625584a4ec10710fd09de99c1d38a4ee35d88993a"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:content-licence:request\"; \"urn:purpose:content-licence\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:content-licence:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "photo.licensed-asset"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:content-licence"
+      },
+      "digest": "sha-256:8da2ceb3c95f22a3525a19acd402fff07856a28d651889a5c5db3ba2600d88e7",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:content-licence:request"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:content-licence"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-content-licence-branch-1:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from The sister company's agent reaches the inbound gate."
+  },
+  {
+   "seq": 19,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The sister company's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 20,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 21,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:d9dffda45d94cc61d01534a0e67ff779:1794560400000",
+    "text": "A representation statement signed with The sister company's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The sister company signed a statement that The sister company's agent acts for them in this operation."
+  },
+  {
+   "seq": 22,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 23,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 24,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 25,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to share urn:op:content licence with The sister company."
+  },
+  {
+   "seq": 26,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The publisher's mandate covers this action."
+  },
+  {
+   "seq": 27,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The sister company a party I can send Licensing a photograph to?",
+    "path": [
+     {
+      "at": "The publisher's own list",
+      "kind": "own-list",
+      "says": "The sister company is accepted for Licensing a photograph."
+     }
+    ],
+    "answer": "Accepted, for Licensing a photograph only."
+   },
+   "reason": "recipient-established",
+   "caption": "The sister company: Accepted, for Licensing a photograph only."
+  },
+  {
+   "seq": 28,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 29,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 30,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The publisher's limits."
+  },
+  {
+   "seq": 31,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 32,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "fail",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "prohibited",
+   "rule": {
+    "id": "urn:terms:content-licence:image",
+    "text": "The issuer's terms: use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver. They go out with the data."
+   },
+   "caption": "The photographer's photo.licensed-asset statement: its terms forbid this (use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver)."
+  },
+  {
+   "seq": 33,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "fail",
+   "outcome": "stop",
+   "reason": "prohibited",
+   "caption": "The actual credential's terms prohibit release."
+  }
+ ]
+}

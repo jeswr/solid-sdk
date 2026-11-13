@@ -1,24 +1,68 @@
 {
  "x-authored-by": "Codex GPT-6",
  "schema": "agent-trace/0.1",
+ "useCase": "mortgage-in-principle",
+ "path": "main",
+ "parties": [
+  {
+   "id": "sam",
+   "name": "Sam, the fictional applicant"
+  },
+  {
+   "id": "north",
+   "name": "The fictional lender"
+  },
+  {
+   "id": "sam-agent",
+   "name": "Sam's agent"
+  },
+  {
+   "id": "north-agent",
+   "name": "The fictional lender's agent"
+  },
+  {
+   "id": "paywell",
+   "name": "The fictional payroll provider"
+  },
+  {
+   "id": "harbour",
+   "name": "Sam's fictional bank"
+  },
+  {
+   "id": "index",
+   "name": "The mortgage product index"
+  },
+  {
+   "id": "identity-provider",
+   "name": "The fictional identity provider"
+  },
+  {
+   "id": "index-agent",
+   "name": "The mortgage product index's agent"
+  },
+  {
+   "id": "harbour-agent",
+   "name": "Sam's fictional bank's agent"
+  }
+ ],
  "scenario": {
   "id": "mortgage-main",
-  "title": "Sam's mortgage in principle, all 14 steps: the product index, the register chain and a stronger approval at his bank",
+  "title": "A mortgage in principle",
   "steps": {
-   "1": "Sam signs a mandate",
-   "2": "Sam asks for a mortgage in principle",
-   "3": "Sam's agent finds lenders through the index and looks North Bank up on the register",
-   "4": "The agents describe themselves and Sam's agent applies",
-   "5": "North Bank says what evidence it needs",
-   "6": "Sam's agent asks Harbour Bank for a signed balance statement",
-   "7": "Harbour Bank asks for a stronger approval",
-   "8": "Sam does a face check and the request is sent again",
-   "9": "Harbour Bank returns a signed statement with its terms",
-   "10": "Sam's agent checks the statements it holds",
-   "11": "Sam is asked, and the agent shares the evidence",
-   "12": "North Bank's gate checks the evidence",
-   "13": "North Bank returns a signed decision in principle",
-   "14": "Each side checks its own record"
+   "1": "Sam signs a mandate.",
+   "2": "Sam asks for a mortgage in principle.",
+   "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+   "4": "The agents describe themselves and Sam's agent applies.",
+   "5": "North Bank says what evidence it needs.",
+   "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+   "7": "Harbour Bank asks for a stronger approval.",
+   "8": "Sam does a face check and the request is sent again.",
+   "9": "Harbour Bank returns a signed statement with its terms.",
+   "10": "Sam's agent checks the statements it holds.",
+   "11": "Sam is asked, and the agent shares the evidence.",
+   "12": "North Bank's gate checks the evidence.",
+   "13": "North Bank returns a signed decision in principle.",
+   "14": "Each side checks its own record."
   }
  },
  "configuration": {
@@ -46,25 +90,25 @@
   },
   {
    "id": "lender",
-   "name": "North Bank's agent",
+   "name": "The fictional lender's agent",
    "actsFor": "north",
    "role": "agent"
   },
   {
    "id": "index",
-   "name": "the index's agent",
+   "name": "The mortgage product index's agent",
    "actsFor": "index",
    "role": "agent"
   },
   {
    "id": "bank",
-   "name": "Harbour Bank's agent",
+   "name": "Sam's fictional bank's agent",
    "actsFor": "harbour",
    "role": "agent"
   }
  ],
  "generated": {
-  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
   "core": "scripted"
  },
  "standIns": [
@@ -82,7 +126,7 @@
    "kind": "record",
    "rule": {
     "id": "urn:awp:mandate:4c52b19e2d73c62fa2ca06b6af81c0df:mortgage-main",
-    "text": "Sam's mandate lets the agent use mortgage prequalification for mortgage application with North Bank or https://valleybank.example/#org, on its own. Sam's mandate lets the agent use mortgage product search for product search with the mortgage product index, on its own. Sam's mandate lets the agent use balance statement for mortgage application with Harbour Bank, on its own. Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves. Sam's mandate lets the agent compensate payment for mortgage application with North Bank, after Sam approves."
+    "text": "Sam, the fictional applicant's mandate lets the agent use mortgage prequalification for mortgage application with The fictional lender or https://valleybank.example/#org, on its own. Sam, the fictional applicant's mandate lets the agent use mortgage product search for product search with The mortgage product index, on its own. Sam, the fictional applicant's mandate lets the agent use balance statement for mortgage application with Sam's fictional bank, on its own. Sam, the fictional applicant's mandate lets the agent distribute evidence disclosure for credit assessment with The fictional lender or https://valleybank.example/#org, after Sam, the fictional applicant approves. Sam, the fictional applicant's mandate lets the agent compensate payment for mortgage application with The fictional lender, after Sam, the fictional applicant approves."
    },
    "refs": [
     {
@@ -94,7 +138,7 @@
      "suite": "odrl-rules"
     }
    ],
-   "caption": "Sam signed this mandate with their own key; the agent verified it, wrote it to its record, and every check reads it: 5 rules, valid until 2027-01-12."
+   "caption": "Sam, the fictional applicant signed this mandate with their own key; the agent verified it, wrote it to its record, and every check reads it: 5 rules, valid until 2027-01-12."
   },
   {
    "seq": 2,
@@ -106,7 +150,7 @@
     "who": "principal",
     "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
    },
-   "caption": "Sam asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does."
+   "caption": "Sam, the fictional applicant asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does."
   },
   {
    "seq": 3,
@@ -129,7 +173,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "North Bank's mortgage.product statement is intact and signed with North Bank's pinned key."
+   "caption": "The fictional lender's mortgage.product statement is intact and signed with The fictional lender's pinned key."
   },
   {
    "seq": 4,
@@ -154,15 +198,15 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-    "text": "North Bank is accepted for mortgage.product claims."
+    "text": "The fictional lender is accepted for mortgage.product claims."
    },
    "resolution": {
-    "question": "Is North Bank an authority for mortgage.product claims?",
+    "question": "Is The fictional lender an authority for mortgage.product claims?",
     "path": [
      {
-      "at": "the mortgage product index's own list",
+      "at": "The mortgage product index's own list",
       "kind": "own-list",
-      "says": "No entry for North Bank for this kind of claim."
+      "says": "No entry for The fictional lender for this kind of claim."
      },
      {
       "at": "National trust root",
@@ -172,12 +216,12 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "North Bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+      "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
      }
     ],
     "answer": "Accepted, for mortgage.product claims only."
    },
-   "caption": "North Bank's mortgage.product statement: North Bank is an accepted source for this kind of claim."
+   "caption": "The fictional lender's mortgage.product statement: The fictional lender is an accepted source for this kind of claim."
   },
   {
    "seq": 5,
@@ -195,7 +239,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "North Bank's mortgage.product statement asks for nothing, so there is no authority to check."
+   "caption": "The fictional lender's mortgage.product statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 6,
@@ -222,7 +266,7 @@
     "id": "urn:awp:product-terms:northbank-fixed-5",
     "text": "Its terms allow this: use for product search; share for product search."
    },
-   "caption": "North Bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
+   "caption": "The fictional lender's mortgage.product statement: its terms allow this: use for product search; share for product search."
   },
   {
    "seq": 7,
@@ -244,7 +288,7 @@
     "id": "urn:profile:mortgage:mortgage.product",
     "text": "Accept mortgage.product from https://northbank.example/#org, https://harbourbank.example/#org by published-by-lender, at most 31 days old."
    },
-   "caption": "North Bank's mortgage.product statement is fit for urn:scenario:mortgage-main:task: published-by-lender, 12 days old."
+   "caption": "The fictional lender's mortgage.product statement is fit for urn:scenario:mortgage-main:task: published-by-lender, 12 days old."
   },
   {
    "seq": 8,
@@ -254,7 +298,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "North Bank's mortgage.product statement is admitted."
+   "caption": "The fictional lender's mortgage.product statement is admitted."
   },
   {
    "seq": 9,
@@ -264,7 +308,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:product:northbank-fixed-5",
-    "label": "North Bank's mortgage.product statement",
+    "label": "The fictional lender's mortgage.product statement",
     "claimType": "mortgage.product",
     "subject": "unknown",
     "value": {
@@ -281,9 +325,9 @@
      "id": "urn:awp:product-terms:northbank-fixed-5",
      "summary": "use for product search; share for product search"
     },
-    "provenance": "signed by North Bank, issued 2026-11-01T09:00:00Z"
+    "provenance": "signed by The fictional lender, issued 2026-11-01T09:00:00Z"
    },
-   "caption": "North Bank's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The fictional lender's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 10,
@@ -306,7 +350,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "Harbour Bank's mortgage.product statement is intact and signed with Harbour Bank's pinned key."
+   "caption": "Sam's fictional bank's mortgage.product statement is intact and signed with Sam's fictional bank's pinned key."
   },
   {
    "seq": 11,
@@ -331,15 +375,15 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/harbour-bank#2026-11-13",
-    "text": "Harbour Bank is accepted for mortgage.product claims."
+    "text": "Sam's fictional bank is accepted for mortgage.product claims."
    },
    "resolution": {
-    "question": "Is Harbour Bank an authority for mortgage.product claims?",
+    "question": "Is Sam's fictional bank an authority for mortgage.product claims?",
     "path": [
      {
-      "at": "the mortgage product index's own list",
+      "at": "The mortgage product index's own list",
       "kind": "own-list",
-      "says": "No entry for Harbour Bank for this kind of claim."
+      "says": "No entry for Sam's fictional bank for this kind of claim."
      },
      {
       "at": "National trust root",
@@ -349,12 +393,12 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "Harbour Bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+      "says": "Sam's fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
      }
     ],
     "answer": "Accepted, for mortgage.product claims only."
    },
-   "caption": "Harbour Bank's mortgage.product statement: Harbour Bank is an accepted source for this kind of claim."
+   "caption": "Sam's fictional bank's mortgage.product statement: Sam's fictional bank is an accepted source for this kind of claim."
   },
   {
    "seq": 12,
@@ -372,7 +416,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "Harbour Bank's mortgage.product statement asks for nothing, so there is no authority to check."
+   "caption": "Sam's fictional bank's mortgage.product statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 13,
@@ -399,7 +443,7 @@
     "id": "urn:awp:product-terms:harbourbank-fixed-2",
     "text": "Its terms allow this: use for product search; share for product search."
    },
-   "caption": "Harbour Bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
+   "caption": "Sam's fictional bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
   },
   {
    "seq": 14,
@@ -421,7 +465,7 @@
     "id": "urn:profile:mortgage:mortgage.product",
     "text": "Accept mortgage.product from https://northbank.example/#org, https://harbourbank.example/#org by published-by-lender, at most 31 days old."
    },
-   "caption": "Harbour Bank's mortgage.product statement is fit for urn:scenario:mortgage-main:task: published-by-lender, 12 days old."
+   "caption": "Sam's fictional bank's mortgage.product statement is fit for urn:scenario:mortgage-main:task: published-by-lender, 12 days old."
   },
   {
    "seq": 15,
@@ -431,7 +475,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "Harbour Bank's mortgage.product statement is admitted."
+   "caption": "Sam's fictional bank's mortgage.product statement is admitted."
   },
   {
    "seq": 16,
@@ -441,7 +485,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:product:harbourbank-fixed-2",
-    "label": "Harbour Bank's mortgage.product statement",
+    "label": "Sam's fictional bank's mortgage.product statement",
     "claimType": "mortgage.product",
     "subject": "unknown",
     "value": {
@@ -458,9 +502,9 @@
      "id": "urn:awp:product-terms:harbourbank-fixed-2",
      "summary": "use for product search; share for product search"
     },
-    "provenance": "signed by Harbour Bank, issued 2026-11-01T09:00:00Z"
+    "provenance": "signed by Sam's fictional bank, issued 2026-11-01T09:00:00Z"
    },
-   "caption": "Harbour Bank's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "Sam's fictional bank's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 17,
@@ -468,7 +512,7 @@
    "agent": "sams-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use mortgage product search with the mortgage product index."
+   "caption": "The core proposes to use mortgage product search with The mortgage product index."
   },
   {
    "seq": 18,
@@ -491,7 +535,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Sam's mandate covers this action."
+   "caption": "Sam, the fictional applicant's mandate covers this action."
   },
   {
    "seq": 19,
@@ -514,18 +558,18 @@
     }
    ],
    "resolution": {
-    "question": "Is the mortgage product index a party I can send mortgage product search to?",
+    "question": "Is The mortgage product index a party I can send https://w3id.org/jeswr/awp#op/mortgage-product-search to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "the mortgage product index is accepted for mortgage product search."
+      "says": "The mortgage product index is accepted for https://w3id.org/jeswr/awp#op/mortgage-product-search."
      }
     ],
-    "answer": "Accepted, for mortgage product search only."
+    "answer": "Accepted, for https://w3id.org/jeswr/awp#op/mortgage-product-search only."
    },
    "reason": "recipient-established",
-   "caption": "the mortgage product index: Accepted, for mortgage product search only."
+   "caption": "The mortgage product index: Accepted, for https://w3id.org/jeswr/awp#op/mortgage-product-search only."
   },
   {
    "seq": 20,
@@ -579,7 +623,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Sam's limits."
+   "caption": "Inside what the agent may do on its own, and within Sam, the fictional applicant's limits."
   },
   {
    "seq": 23,
@@ -634,7 +678,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The invoke message goes to the index's agent."
+   "caption": "The invoke message goes to The mortgage product index's agent."
   },
   {
    "seq": 26,
@@ -644,8 +688,8 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0002",
-    "from": "Sam",
-    "to": "the index's agent",
+    "from": "Sam, the fictional applicant",
+    "to": "The mortgage product index's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -654,7 +698,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam to the index's agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0002.",
+      "summary": "From Sam, the fictional applicant to The mortgage product index's agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
@@ -729,7 +773,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Sam sends an invoke message to the index's agent."
+   "caption": "Sam, the fictional applicant sends an invoke message to The mortgage product index's agent."
   },
   {
    "seq": 27,
@@ -739,8 +783,8 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0002",
-    "from": "Sam",
-    "to": "the index's agent",
+    "from": "Sam, the fictional applicant",
+    "to": "The mortgage product index's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -749,7 +793,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam to the index's agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0002.",
+      "summary": "From Sam, the fictional applicant to The mortgage product index's agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
@@ -834,7 +878,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Sam reaches the inbound gate."
+   "caption": "An invoke message from Sam, the fictional applicant reaches the inbound gate."
   },
   {
    "seq": 28,
@@ -1039,7 +1083,7 @@
     "text": "The issuer's terms: use for product search; share for product search. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "North Bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
+   "caption": "The fictional lender's mortgage.product statement: its terms allow this: use for product search; share for product search."
   },
   {
    "seq": 38,
@@ -1079,7 +1123,7 @@
     "text": "The issuer's terms: use for product search; share for product search. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Harbour Bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
+   "caption": "Sam's fictional bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
   },
   {
    "seq": 40,
@@ -1119,7 +1163,7 @@
     "text": "The issuer's terms: use for product search; share for product search. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "North Bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
+   "caption": "The fictional lender's mortgage.product statement: its terms allow this: use for product search; share for product search."
   },
   {
    "seq": 42,
@@ -1141,7 +1185,7 @@
     "text": "The issuer's terms: use for product search; share for product search. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Harbour Bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
+   "caption": "Sam's fictional bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
   },
   {
    "seq": 43,
@@ -1186,7 +1230,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with the index's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The mortgage product index's agent's pinned key, and written to the record."
   },
   {
    "seq": 45,
@@ -1196,7 +1240,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The deliver message goes to Sam."
+   "caption": "The deliver message goes to Sam, the fictional applicant."
   },
   {
    "seq": 46,
@@ -1206,8 +1250,8 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:index-agent:0001",
-    "from": "the index's agent",
-    "to": "Sam",
+    "from": "The mortgage product index's agent",
+    "to": "Sam, the fictional applicant",
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
@@ -1216,7 +1260,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From the index's agent to Sam; deliver; signed (JWS EdDSA, pinned key 7mgkYNtR_MwE…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:index-agent:0001.",
+      "summary": "From The mortgage product index's agent to Sam, the fictional applicant; deliver; signed (JWS EdDSA, pinned key 7mgkYNtR_MwE…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:index-agent:0001.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
@@ -1282,7 +1326,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "2 statement(s) signed by their sources: mortgage.product from North Bank; mortgage.product from Harbour Bank.",
+      "summary": "2 statement(s) signed by their sources: mortgage.product from The fictional lender; mortgage.product from Sam's fictional bank.",
       "raw": [
        {
         "type": "MortgageProduct",
@@ -1394,7 +1438,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-main-main:sam-agent:0002. The statements were issued by their sources and are relayed, not authored, by the index's agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
+      "summary": "Answers urn:awp:engine-mortgage-main-main:sam-agent:0002. The statements were issued by their sources and are relayed, not authored, by The mortgage product index's agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-main-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-main-main:sam-agent:0002",
@@ -1430,7 +1474,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "the index's agent sends a deliver message to Sam."
+   "caption": "The mortgage product index's agent sends a deliver message to Sam, the fictional applicant."
   },
   {
    "seq": 47,
@@ -1440,8 +1484,8 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:index-agent:0001",
-    "from": "the index's agent",
-    "to": "Sam",
+    "from": "The mortgage product index's agent",
+    "to": "Sam, the fictional applicant",
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
@@ -1450,7 +1494,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From the index's agent to Sam; deliver; signed (JWS EdDSA, pinned key 7mgkYNtR_MwE…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:index-agent:0001.",
+      "summary": "From The mortgage product index's agent to Sam, the fictional applicant; deliver; signed (JWS EdDSA, pinned key 7mgkYNtR_MwE…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:index-agent:0001.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
@@ -1554,7 +1598,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "2 statement(s) signed by their sources: mortgage.product from North Bank; mortgage.product from Harbour Bank.",
+      "summary": "2 statement(s) signed by their sources: mortgage.product from The fictional lender; mortgage.product from Sam's fictional bank.",
       "raw": [
        {
         "type": "MortgageProduct",
@@ -1666,7 +1710,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-main-main:sam-agent:0002. The statements were issued by their sources and are relayed, not authored, by the index's agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
+      "summary": "Answers urn:awp:engine-mortgage-main-main:sam-agent:0002. The statements were issued by their sources and are relayed, not authored, by The mortgage product index's agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-main-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-main-main:sam-agent:0002",
@@ -1702,7 +1746,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A deliver message from the index's agent reaches the inbound gate."
+   "caption": "A deliver message from The mortgage product index's agent reaches the inbound gate."
   },
   {
    "seq": 48,
@@ -1729,7 +1773,7 @@
     "id": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with the index's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The mortgage product index's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 49,
@@ -1754,15 +1798,15 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-    "text": "North Bank is accepted for mortgage.product claims."
+    "text": "The fictional lender is accepted for mortgage.product claims."
    },
    "resolution": {
-    "question": "Is North Bank an authority for mortgage.product claims about the mortgage product index?",
+    "question": "Is The fictional lender an authority for mortgage.product claims about The mortgage product index?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for North Bank for this kind of claim."
+      "says": "No entry for The fictional lender for this kind of claim."
      },
      {
       "at": "National trust root",
@@ -1772,12 +1816,12 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "North Bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+      "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
      }
     ],
     "answer": "Accepted, for mortgage.product claims only."
    },
-   "caption": "North Bank's mortgage.product statement: North Bank is an accepted source for this kind of claim."
+   "caption": "The fictional lender's mortgage.product statement: The fictional lender is an accepted source for this kind of claim."
   },
   {
    "seq": 50,
@@ -1802,15 +1846,15 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/harbour-bank#2026-11-13",
-    "text": "Harbour Bank is accepted for mortgage.product claims."
+    "text": "Sam's fictional bank is accepted for mortgage.product claims."
    },
    "resolution": {
-    "question": "Is Harbour Bank an authority for mortgage.product claims about the mortgage product index?",
+    "question": "Is Sam's fictional bank an authority for mortgage.product claims about The mortgage product index?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for Harbour Bank for this kind of claim."
+      "says": "No entry for Sam's fictional bank for this kind of claim."
      },
      {
       "at": "National trust root",
@@ -1820,12 +1864,12 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "Harbour Bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+      "says": "Sam's fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
      }
     ],
     "answer": "Accepted, for mortgage.product claims only."
    },
-   "caption": "Harbour Bank's mortgage.product statement: Harbour Bank is an accepted source for this kind of claim."
+   "caption": "Sam's fictional bank's mortgage.product statement: Sam's fictional bank is an accepted source for this kind of claim."
   },
   {
    "seq": 51,
@@ -1870,7 +1914,7 @@
     "id": "urn:awp:product-terms:northbank-fixed-5",
     "text": "Its terms allow this: use for product search; share for product search."
    },
-   "caption": "North Bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
+   "caption": "The fictional lender's mortgage.product statement: its terms allow this: use for product search; share for product search."
   },
   {
    "seq": 53,
@@ -1897,7 +1941,7 @@
     "id": "urn:awp:product-terms:harbourbank-fixed-2",
     "text": "Its terms allow this: use for product search; share for product search."
    },
-   "caption": "Harbour Bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
+   "caption": "Sam's fictional bank's mortgage.product statement: its terms allow this: use for product search; share for product search."
   },
   {
    "seq": 54,
@@ -1919,7 +1963,7 @@
     "id": "urn:profile:mortgage:mortgage.product",
     "text": "Accept mortgage.product from https://northbank.example/#org, https://harbourbank.example/#org by published-by-lender, at most 31 days old."
    },
-   "caption": "North Bank's mortgage.product statement is fit for a mortgage application: published-by-lender, 12 days old."
+   "caption": "The fictional lender's mortgage.product statement is fit for https://w3id.org/jeswr/awp#op/mortgage-product-search: published-by-lender, 12 days old."
   },
   {
    "seq": 55,
@@ -1941,7 +1985,7 @@
     "id": "urn:profile:mortgage:mortgage.product",
     "text": "Accept mortgage.product from https://northbank.example/#org, https://harbourbank.example/#org by published-by-lender, at most 31 days old."
    },
-   "caption": "Harbour Bank's mortgage.product statement is fit for a mortgage application: published-by-lender, 12 days old."
+   "caption": "Sam's fictional bank's mortgage.product statement is fit for https://w3id.org/jeswr/awp#op/mortgage-product-search: published-by-lender, 12 days old."
   },
   {
    "seq": 56,
@@ -1961,7 +2005,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:product:northbank-fixed-5",
-    "label": "North Bank's mortgage.product statement",
+    "label": "The fictional lender's mortgage.product statement",
     "claimType": "mortgage.product",
     "subject": "unknown",
     "value": {
@@ -1978,9 +2022,9 @@
      "id": "urn:awp:product-terms:northbank-fixed-5",
      "summary": "use for product search; share for product search"
     },
-    "provenance": "signed by North Bank, issued 2026-11-01T09:00:00Z"
+    "provenance": "signed by The fictional lender, issued 2026-11-01T09:00:00Z"
    },
-   "caption": "North Bank's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The fictional lender's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 58,
@@ -1990,7 +2034,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:product:harbourbank-fixed-2",
-    "label": "Harbour Bank's mortgage.product statement",
+    "label": "Sam's fictional bank's mortgage.product statement",
     "claimType": "mortgage.product",
     "subject": "unknown",
     "value": {
@@ -2007,9 +2051,9 @@
      "id": "urn:awp:product-terms:harbourbank-fixed-2",
      "summary": "use for product search; share for product search"
     },
-    "provenance": "signed by Harbour Bank, issued 2026-11-01T09:00:00Z"
+    "provenance": "signed by Sam's fictional bank, issued 2026-11-01T09:00:00Z"
    },
-   "caption": "Harbour Bank's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "Sam's fictional bank's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 59,
@@ -2055,12 +2099,12 @@
     }
    ],
    "resolution": {
-    "question": "Is North Bank a party I can send mortgage prequalification to?",
+    "question": "Is The fictional lender a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for North Bank."
+      "says": "No entry for The fictional lender."
      },
      {
       "at": "National trust root",
@@ -2070,17 +2114,17 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
+      "says": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:00:00.000Z."
      }
     ],
-    "answer": "Accepted, for mortgage prequalification only."
+    "answer": "Accepted, for Mortgage decision in principle only."
    },
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-    "text": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
+    "text": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:00:00.000Z."
    },
    "reason": "recipient-established",
-   "caption": "North Bank: Accepted, for mortgage prequalification only."
+   "caption": "The fictional lender: Accepted, for Mortgage decision in principle only."
   },
   {
    "seq": 61,
@@ -2171,7 +2215,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The describe message goes to North Bank's agent."
+   "caption": "The describe message goes to The fictional lender's agent."
   },
   {
    "seq": 66,
@@ -2182,7 +2226,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0004",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "describe",
     "carriage": {
      "suite": "direct-http",
@@ -2191,7 +2235,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0004.",
+      "summary": "From Sam's agent to The fictional lender's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0004.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2258,7 +2302,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Sam's agent sends a describe message to North Bank's agent."
+   "caption": "Sam's agent sends a describe message to The fictional lender's agent."
   },
   {
    "seq": 67,
@@ -2269,7 +2313,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0004",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "describe",
     "carriage": {
      "suite": "direct-http",
@@ -2278,7 +2322,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0004.",
+      "summary": "From Sam's agent to The fictional lender's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0004.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2510,7 +2554,7 @@
     }
    ],
    "reason": "recipient-established",
-   "caption": "Sam's agent is reached through the key pinned when the two were introduced."
+   "caption": "Sam, the fictional applicant's agent is reached through the key pinned when the two were introduced."
   },
   {
    "seq": 76,
@@ -2591,7 +2635,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The fictional lender's agent's pinned key, and written to the record."
   },
   {
    "seq": 80,
@@ -2611,7 +2655,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0001",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "description",
     "carriage": {
@@ -2621,7 +2665,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0001.",
+      "summary": "From The fictional lender's agent to Sam's agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0001.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2817,7 +2861,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "North Bank's agent sends a description message to Sam's agent."
+   "caption": "The fictional lender's agent sends a description message to Sam's agent."
   },
   {
    "seq": 82,
@@ -2827,7 +2871,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0001",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "description",
     "carriage": {
@@ -2837,7 +2881,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0001.",
+      "summary": "From The fictional lender's agent to Sam's agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0001.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3279,7 +3323,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A description message from North Bank's agent reaches the inbound gate."
+   "caption": "A description message from The fictional lender's agent reaches the inbound gate."
   },
   {
    "seq": 83,
@@ -3306,7 +3350,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The fictional lender's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 84,
@@ -3406,7 +3450,7 @@
    "agent": "sams-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use mortgage prequalification with North Bank."
+   "caption": "The core proposes to take the next step in Mortgage decision in principle with The fictional lender."
   },
   {
    "seq": 90,
@@ -3430,10 +3474,10 @@
    ],
    "rule": {
     "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
-    "text": "Sam's mandate lets the agent use mortgage prequalification for mortgage application with North Bank or https://valleybank.example/#org, on its own."
+    "text": "Sam, the fictional applicant's mandate lets the agent use mortgage prequalification for mortgage application with The fictional lender or https://valleybank.example/#org, on its own."
    },
    "reason": "within-mandate",
-   "caption": "Sam's mandate covers this action."
+   "caption": "Sam, the fictional applicant's mandate covers this action."
   },
   {
    "seq": 91,
@@ -3456,12 +3500,12 @@
     }
    ],
    "resolution": {
-    "question": "Is North Bank a party I can send mortgage prequalification to?",
+    "question": "Is The fictional lender a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for North Bank."
+      "says": "No entry for The fictional lender."
      },
      {
       "at": "National trust root",
@@ -3471,17 +3515,17 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
+      "says": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:00:00.000Z."
      }
     ],
-    "answer": "Accepted, for mortgage prequalification only."
+    "answer": "Accepted, for Mortgage decision in principle only."
    },
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-    "text": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
+    "text": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:00:00.000Z."
    },
    "reason": "recipient-established",
-   "caption": "North Bank: Accepted, for mortgage prequalification only."
+   "caption": "The fictional lender: Accepted, for Mortgage decision in principle only."
   },
   {
    "seq": 92,
@@ -3535,7 +3579,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Sam's limits."
+   "caption": "Inside what the agent may do on its own, and within Sam, the fictional applicant's limits."
   },
   {
    "seq": 95,
@@ -3590,7 +3634,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The propose message goes to North Bank's agent."
+   "caption": "The propose message goes to The fictional lender's agent."
   },
   {
    "seq": 98,
@@ -3601,7 +3645,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0005",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
@@ -3610,7 +3654,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0005.",
+      "summary": "From Sam's agent to The fictional lender's agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0005.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3638,7 +3682,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -3720,7 +3764,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Sam's agent sends a propose message to North Bank's agent."
+   "caption": "Sam's agent sends a propose message to The fictional lender's agent."
   },
   {
    "seq": 99,
@@ -3731,7 +3775,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0005",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
@@ -3740,7 +3784,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0005.",
+      "summary": "From Sam's agent to The fictional lender's agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0005.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3768,7 +3812,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -3938,9 +3982,9 @@
    "reason": "authority-valid",
    "rule": {
     "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
-    "text": "A representation statement signed with Sam's pinned key must name this agent, this operation and a current validity period."
+    "text": "A representation statement signed with Sam, the fictional applicant's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "Sam signed a statement that Sam's agent acts for them in this operation."
+   "caption": "Sam, the fictional applicant signed a statement that Sam's agent acts for them in this operation."
   },
   {
    "seq": 103,
@@ -3999,7 +4043,7 @@
    "agent": "lender",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use mortgage prequalification with Sam."
+   "caption": "The core proposes to take the next step in Mortgage decision in principle with Sam, the fictional applicant."
   },
   {
    "seq": 107,
@@ -4023,10 +4067,10 @@
    ],
    "rule": {
     "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
-    "text": "North Bank's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
+    "text": "The fictional lender's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
    },
    "reason": "within-mandate",
-   "caption": "North Bank's mandate covers this action."
+   "caption": "The fictional lender's mandate covers this action."
   },
   {
    "seq": 108,
@@ -4049,17 +4093,17 @@
     }
    ],
    "resolution": {
-    "question": "Is Sam a party I can send mortgage prequalification to?",
+    "question": "Is Sam, the fictional applicant a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "North Bank's own list",
+      "at": "The fictional lender's own list",
       "kind": "own-list",
-      "says": "No entry for Sam."
+      "says": "No entry for Sam, the fictional applicant."
      },
      {
       "at": "National trust root",
       "kind": "root",
-      "says": "No register it delegates to lists Sam."
+      "says": "No register it delegates to lists Sam, the fictional applicant."
      }
     ],
     "answer": "No register answers for this party."
@@ -4069,7 +4113,7 @@
     "text": "Replies go to the verified sender of the request."
    },
    "reason": "recipient-established",
-   "caption": "A reply to Sam's verified agent, which opened this conversation; no register lists private persons."
+   "caption": "A reply to Sam, the fictional applicant's verified agent, which opened this conversation; no register lists private persons."
   },
   {
    "seq": 109,
@@ -4123,7 +4167,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within North Bank's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional lender's limits."
   },
   {
    "seq": 112,
@@ -4168,7 +4212,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The fictional lender's agent's pinned key, and written to the record."
   },
   {
    "seq": 114,
@@ -4188,7 +4232,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0002",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "propose",
     "carriage": {
@@ -4198,7 +4242,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0002.",
+      "summary": "From The fictional lender's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4227,7 +4271,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): North Bank says North Bank's agent acts for it.",
+      "summary": "1 representation statement(s): The fictional lender says The fictional lender's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -4389,7 +4433,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "North Bank's agent sends a propose message to Sam's agent."
+   "caption": "The fictional lender's agent sends a propose message to Sam's agent."
   },
   {
    "seq": 116,
@@ -4397,7 +4441,7 @@
    "agent": "sams-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use balance statement with Harbour Bank."
+   "caption": "The core proposes to use balance statement with Sam's fictional bank."
   },
   {
    "seq": 117,
@@ -4420,7 +4464,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Sam's mandate covers this action."
+   "caption": "Sam, the fictional applicant's mandate covers this action."
   },
   {
    "seq": 118,
@@ -4443,18 +4487,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Harbour Bank a party I can send balance statement to?",
+    "question": "Is Sam's fictional bank a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "Harbour Bank is accepted for balance statement."
+      "says": "Sam's fictional bank is accepted for https://w3id.org/jeswr/awp#op/balance-statement."
      }
     ],
-    "answer": "Accepted, for balance statement only."
+    "answer": "Accepted, for https://w3id.org/jeswr/awp#op/balance-statement only."
    },
    "reason": "recipient-established",
-   "caption": "Harbour Bank: Accepted, for balance statement only."
+   "caption": "Sam's fictional bank: Accepted, for https://w3id.org/jeswr/awp#op/balance-statement only."
   },
   {
    "seq": 119,
@@ -4508,7 +4552,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Sam's limits."
+   "caption": "Inside what the agent may do on its own, and within Sam, the fictional applicant's limits."
   },
   {
    "seq": 122,
@@ -4563,7 +4607,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The invoke message goes to Harbour Bank's agent."
+   "caption": "The invoke message goes to Sam's fictional bank's agent."
   },
   {
    "seq": 125,
@@ -4574,7 +4618,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0007",
     "from": "Sam's agent",
-    "to": "Harbour Bank's agent",
+    "to": "Sam's fictional bank's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -4583,7 +4627,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to Harbour Bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0007.",
+      "summary": "From Sam's agent to Sam's fictional bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0007.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4611,7 +4655,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -4686,7 +4730,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Sam's agent sends an invoke message to Harbour Bank's agent."
+   "caption": "Sam's agent sends an invoke message to Sam's fictional bank's agent."
   },
   {
    "seq": 126,
@@ -4697,7 +4741,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0007",
     "from": "Sam's agent",
-    "to": "Harbour Bank's agent",
+    "to": "Sam's fictional bank's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -4706,7 +4750,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to Harbour Bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0007.",
+      "summary": "From Sam's agent to Sam's fictional bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0007.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4734,7 +4778,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -4889,9 +4933,9 @@
    "reason": "assurance-insufficient",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
-    "text": "Harbour Bank gives this only on a certified face check, attested by an accepted identity provider."
+    "text": "Sam's fictional bank gives https://w3id.org/jeswr/awp#op/balance-statement only on a certified face check, attested by an accepted identity provider."
    },
-   "caption": "Sam's mandate is signed with their own key, but this needs a certified face check."
+   "caption": "Sam, the fictional applicant's mandate is signed with their own key, but this needs a certified face check."
   },
   {
    "seq": 130,
@@ -4948,17 +4992,17 @@
     }
    ],
    "resolution": {
-    "question": "Is Sam a party I can send balance statement to?",
+    "question": "Is Sam, the fictional applicant a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
     "path": [
      {
-      "at": "Harbour Bank's own list",
+      "at": "Sam's fictional bank's own list",
       "kind": "own-list",
-      "says": "No entry for Sam."
+      "says": "No entry for Sam, the fictional applicant."
      },
      {
       "at": "National trust root",
       "kind": "root",
-      "says": "No register it delegates to lists Sam."
+      "says": "No register it delegates to lists Sam, the fictional applicant."
      }
     ],
     "answer": "No register answers for this party."
@@ -4968,7 +5012,7 @@
     "text": "Replies go to the verified sender of the request."
    },
    "reason": "recipient-established",
-   "caption": "A reply to Sam's verified agent, which opened this conversation; no register lists private persons."
+   "caption": "A reply to Sam, the fictional applicant's verified agent, which opened this conversation; no register lists private persons."
   },
   {
    "seq": 133,
@@ -5049,7 +5093,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Harbour Bank's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with Sam's fictional bank's agent's pinned key, and written to the record."
   },
   {
    "seq": 137,
@@ -5069,7 +5113,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:harbour-agent:0003",
-    "from": "Harbour Bank's agent",
+    "from": "Sam's fictional bank's agent",
     "to": "Sam's agent",
     "kind": "challenge",
     "carriage": {
@@ -5079,7 +5123,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Harbour Bank's agent to Sam's agent; challenge; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:harbour-agent:0003.",
+      "summary": "From Sam's fictional bank's agent to Sam's agent; challenge; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:harbour-agent:0003.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5173,7 +5217,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Harbour Bank's agent sends a challenge message to Sam's agent."
+   "caption": "Sam's fictional bank's agent sends a challenge message to Sam's agent."
   },
   {
    "seq": 139,
@@ -5183,7 +5227,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:harbour-agent:0003",
-    "from": "Harbour Bank's agent",
+    "from": "Sam's fictional bank's agent",
     "to": "Sam's agent",
     "kind": "challenge",
     "carriage": {
@@ -5193,7 +5237,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Harbour Bank's agent to Sam's agent; challenge; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:harbour-agent:0003.",
+      "summary": "From Sam's fictional bank's agent to Sam's agent; challenge; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:harbour-agent:0003.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5299,7 +5343,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A challenge message from Harbour Bank's agent reaches the inbound gate."
+   "caption": "A challenge message from Sam's fictional bank's agent reaches the inbound gate."
   },
   {
    "seq": 140,
@@ -5326,7 +5370,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Harbour Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with Sam's fictional bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 141,
@@ -5426,7 +5470,7 @@
    "agent": "sams-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use balance statement with Harbour Bank."
+   "caption": "The core proposes to use balance statement with Sam's fictional bank."
   },
   {
    "seq": 147,
@@ -5449,7 +5493,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Sam's mandate covers this action."
+   "caption": "Sam, the fictional applicant's mandate covers this action."
   },
   {
    "seq": 148,
@@ -5472,18 +5516,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Harbour Bank a party I can send balance statement to?",
+    "question": "Is Sam's fictional bank a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "Harbour Bank is accepted for balance statement."
+      "says": "Sam's fictional bank is accepted for https://w3id.org/jeswr/awp#op/balance-statement."
      }
     ],
-    "answer": "Accepted, for balance statement only."
+    "answer": "Accepted, for https://w3id.org/jeswr/awp#op/balance-statement only."
    },
    "reason": "recipient-established",
-   "caption": "Harbour Bank: Accepted, for balance statement only."
+   "caption": "Sam's fictional bank: Accepted, for https://w3id.org/jeswr/awp#op/balance-statement only."
   },
   {
    "seq": 149,
@@ -5539,9 +5583,9 @@
    "reason": "approval-required",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
-    "text": "Harbour Bank asked for a certified face check before it will do this."
+    "text": "Sam's fictional bank asked for a certified face check before it will do this."
    },
-   "caption": "Harbour Bank asked for a certified face check before it will do this. The gate asks Sam to approve in that form."
+   "caption": "Sam's fictional bank asked for a certified face check before it will do this. The gate asks Sam, the fictional applicant to approve in that form."
   },
   {
    "seq": 152,
@@ -5552,7 +5596,7 @@
    "verdict": "ask-principal",
    "outcome": "ask-principal",
    "reason": "approval-required",
-   "caption": "The gate holds the action and asks Sam."
+   "caption": "The gate holds the action and asks Sam, the fictional applicant."
   },
   {
    "seq": 153,
@@ -5562,9 +5606,9 @@
    "kind": "ask-principal",
    "chat": {
     "who": "agent",
-    "text": "Before Harbour Bank will go ahead with balance statement, it asks you to approve with a certified face check. May I ask you to do that now?"
+    "text": "Before Sam's fictional bank will go ahead with https://w3id.org/jeswr/awp#op/balance-statement, it asks you to approve with a certified face check. May I ask you to do that now?"
    },
-   "caption": "Sam is asked to approve this exact action; the approval will be bound to its digest."
+   "caption": "Sam, the fictional applicant is asked to approve this exact action; the approval will be bound to its digest."
   },
   {
    "seq": 154,
@@ -5587,7 +5631,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "the identity provider's identity.approval statement is intact and signed with the identity provider's pinned key."
+   "caption": "The fictional identity provider's identity.approval statement is intact and signed with The fictional identity provider's pinned key."
   },
   {
    "seq": 155,
@@ -5612,15 +5656,15 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/identity-framework-register/id-provider#2026-11-13",
-    "text": "the identity provider is accepted for identity.approval claims."
+    "text": "The fictional identity provider is accepted for identity.approval claims."
    },
    "resolution": {
-    "question": "Is the identity provider an authority for identity.approval claims about Sam?",
+    "question": "Is The fictional identity provider an authority for identity.approval claims about Sam, the fictional applicant?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for the identity provider for this kind of claim."
+      "says": "No entry for The fictional identity provider for this kind of claim."
      },
      {
       "at": "National trust root",
@@ -5630,12 +5674,12 @@
      {
       "at": "Identity framework register",
       "kind": "register",
-      "says": "the identity provider is authorized; it is an authority for identity.approval. Checked 2026-11-13T09:01:00.000Z."
+      "says": "The fictional identity provider is authorized; it is an authority for identity.approval. Checked 2026-11-13T09:01:00.000Z."
      }
     ],
     "answer": "Accepted, for identity.approval claims only."
    },
-   "caption": "the identity provider's identity.approval statement: the identity provider is an accepted source for this kind of claim."
+   "caption": "The fictional identity provider's identity.approval statement: The fictional identity provider is an accepted source for this kind of claim."
   },
   {
    "seq": 156,
@@ -5653,7 +5697,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "the identity provider's identity.approval statement asks for nothing, so there is no authority to check."
+   "caption": "The fictional identity provider's identity.approval statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 157,
@@ -5680,7 +5724,7 @@
     "id": "urn:terms:face-check",
     "text": "Its terms allow this: use for mortgage application; share for mortgage application."
    },
-   "caption": "the identity provider's identity.approval statement: its terms allow this: use for mortgage application; share for mortgage application."
+   "caption": "The fictional identity provider's identity.approval statement: its terms allow this: use for mortgage application; share for mortgage application."
   },
   {
    "seq": 158,
@@ -5702,7 +5746,7 @@
     "id": "urn:profile:mortgage:identity.*",
     "text": "Accept identity.* from  by certified-face-check, at most 1 days old."
    },
-   "caption": "the identity provider's identity.approval statement is fit for urn:scenario:mortgage-main:task: certified-face-check, 0 days old."
+   "caption": "The fictional identity provider's identity.approval statement is fit for urn:scenario:mortgage-main:task: certified-face-check, 0 days old."
   },
   {
    "seq": 159,
@@ -5712,7 +5756,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "the identity provider's identity.approval statement is admitted."
+   "caption": "The fictional identity provider's identity.approval statement is admitted."
   },
   {
    "seq": 160,
@@ -5722,7 +5766,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0008",
-    "label": "the identity provider's identity.approval statement",
+    "label": "The fictional identity provider's identity.approval statement",
     "claimType": "identity.approval",
     "subject": "https://sam.example/#me",
     "value": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
@@ -5732,9 +5776,9 @@
      "id": "urn:terms:face-check",
      "summary": "use for mortgage application; share for mortgage application"
     },
-    "provenance": "signed by the identity provider, issued 2026-11-13T09:01:00.000Z"
+    "provenance": "signed by The fictional identity provider, issued 2026-11-13T09:01:00.000Z"
    },
-   "caption": "the identity provider's identity.approval statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The fictional identity provider's identity.approval statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 161,
@@ -5769,7 +5813,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Sam's mandate covers this action."
+   "caption": "Sam, the fictional applicant's mandate covers this action."
   },
   {
    "seq": 163,
@@ -5792,18 +5836,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Harbour Bank a party I can send balance statement to?",
+    "question": "Is Sam's fictional bank a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "Harbour Bank is accepted for balance statement."
+      "says": "Sam's fictional bank is accepted for https://w3id.org/jeswr/awp#op/balance-statement."
      }
     ],
-    "answer": "Accepted, for balance statement only."
+    "answer": "Accepted, for https://w3id.org/jeswr/awp#op/balance-statement only."
    },
    "reason": "recipient-established",
-   "caption": "Harbour Bank: Accepted, for balance statement only."
+   "caption": "Sam's fictional bank: Accepted, for https://w3id.org/jeswr/awp#op/balance-statement only."
   },
   {
    "seq": 164,
@@ -5859,9 +5903,9 @@
    "reason": "approval-given",
    "rule": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent-approval:0001",
-    "text": "Sam's signed approval, bound to digest sha-256:14504f85…."
+    "text": "Sam, the fictional applicant's signed approval, bound to digest sha-256:14504f85…."
    },
-   "caption": "Sam approved this exact action with a certified face check, as Harbour Bank asked; the attestation goes with the request."
+   "caption": "Sam, the fictional applicant approved this exact action with a certified face check, as Sam's fictional bank asked; the attestation goes with the request."
   },
   {
    "seq": 167,
@@ -5901,7 +5945,7 @@
     "text": "The issuer's terms: use for mortgage application; share for mortgage application. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "the identity provider's identity.approval statement: its terms allow this: use for mortgage application; share for mortgage application."
+   "caption": "The fictional identity provider's identity.approval statement: its terms allow this: use for mortgage application; share for mortgage application."
   },
   {
    "seq": 169,
@@ -5956,7 +6000,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The invoke message goes to Harbour Bank's agent."
+   "caption": "The invoke message goes to Sam's fictional bank's agent."
   },
   {
    "seq": 172,
@@ -5967,7 +6011,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0009",
     "from": "Sam's agent",
-    "to": "Harbour Bank's agent",
+    "to": "Sam's fictional bank's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -5976,7 +6020,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to Harbour Bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0009.",
+      "summary": "From Sam's agent to Sam's fictional bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0009.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6004,7 +6048,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -6050,7 +6094,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "1 statement(s) signed by their sources: identity.approval from the identity provider.",
+      "summary": "1 statement(s) signed by their sources: identity.approval from The fictional identity provider.",
       "raw": [
        {
         "type": "ApprovalAttestation",
@@ -6151,7 +6195,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Sam's agent sends an invoke message to Harbour Bank's agent."
+   "caption": "Sam's agent sends an invoke message to Sam's fictional bank's agent."
   },
   {
    "seq": 173,
@@ -6162,7 +6206,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0009",
     "from": "Sam's agent",
-    "to": "Harbour Bank's agent",
+    "to": "Sam's fictional bank's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -6171,7 +6215,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to Harbour Bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0009.",
+      "summary": "From Sam's agent to Sam's fictional bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0009.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6199,7 +6243,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -6263,7 +6307,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "1 statement(s) signed by their sources: identity.approval from the identity provider.",
+      "summary": "1 statement(s) signed by their sources: identity.approval from The fictional identity provider.",
       "raw": [
        {
         "type": "ApprovalAttestation",
@@ -6416,15 +6460,15 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/identity-framework-register/id-provider#2026-11-13",
-    "text": "the identity provider is accepted for identity.approval claims."
+    "text": "The fictional identity provider is accepted for identity.approval claims."
    },
    "resolution": {
-    "question": "Is the identity provider an authority for identity.approval claims about Sam?",
+    "question": "Is The fictional identity provider an authority for identity.approval claims about Sam, the fictional applicant?",
     "path": [
      {
-      "at": "Harbour Bank's own list",
+      "at": "Sam's fictional bank's own list",
       "kind": "own-list",
-      "says": "No entry for the identity provider for this kind of claim."
+      "says": "No entry for The fictional identity provider for this kind of claim."
      },
      {
       "at": "National trust root",
@@ -6434,12 +6478,12 @@
      {
       "at": "Identity framework register",
       "kind": "register",
-      "says": "the identity provider is authorized; it is an authority for identity.approval. Checked 2026-11-13T09:01:00.000Z."
+      "says": "The fictional identity provider is authorized; it is an authority for identity.approval. Checked 2026-11-13T09:01:00.000Z."
      }
     ],
     "answer": "Accepted, for identity.approval claims only."
    },
-   "caption": "the identity provider's identity.approval statement: the identity provider is an accepted source for this kind of claim."
+   "caption": "The fictional identity provider's identity.approval statement: The fictional identity provider is an accepted source for this kind of claim."
   },
   {
    "seq": 176,
@@ -6459,9 +6503,9 @@
    "reason": "authority-valid",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
-    "text": "Harbour Bank gives this only on a certified face check, attested by an accepted identity provider."
+    "text": "Sam's fictional bank gives https://w3id.org/jeswr/awp#op/balance-statement only on a certified face check, attested by an accepted identity provider."
    },
-   "caption": "Sam signed a statement that Sam's agent acts for them, and approved it with a certified face check, attested by the identity provider."
+   "caption": "Sam, the fictional applicant signed a statement that Sam's agent acts for them, and approved it with a certified face check, attested by The fictional identity provider."
   },
   {
    "seq": 177,
@@ -6488,7 +6532,7 @@
     "id": "urn:terms:face-check",
     "text": "Its terms allow this: use for mortgage application; share for mortgage application."
    },
-   "caption": "the identity provider's identity.approval statement: its terms allow this: use for mortgage application; share for mortgage application."
+   "caption": "The fictional identity provider's identity.approval statement: its terms allow this: use for mortgage application; share for mortgage application."
   },
   {
    "seq": 178,
@@ -6510,7 +6554,7 @@
     "id": "urn:profile:mortgage:identity.*",
     "text": "Accept identity.* from  by certified-face-check, at most 1 days old."
    },
-   "caption": "the identity provider's identity.approval statement is fit for a mortgage application: certified-face-check, 0 days old."
+   "caption": "The fictional identity provider's identity.approval statement is fit for https://w3id.org/jeswr/awp#op/balance-statement: certified-face-check, 0 days old."
   },
   {
    "seq": 179,
@@ -6530,7 +6574,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0008",
-    "label": "the identity provider's identity.approval statement",
+    "label": "The fictional identity provider's identity.approval statement",
     "claimType": "identity.approval",
     "subject": "https://sam.example/#me",
     "value": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
@@ -6540,9 +6584,9 @@
      "id": "urn:terms:face-check",
      "summary": "use for mortgage application; share for mortgage application"
     },
-    "provenance": "signed by the identity provider, issued 2026-11-13T09:01:00.000Z"
+    "provenance": "signed by The fictional identity provider, issued 2026-11-13T09:01:00.000Z"
    },
-   "caption": "the identity provider's identity.approval statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The fictional identity provider's identity.approval statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 181,
@@ -6550,7 +6594,7 @@
    "agent": "bank",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share balance statement with Sam."
+   "caption": "The core proposes to share balance statement with Sam, the fictional applicant."
   },
   {
    "seq": 182,
@@ -6573,7 +6617,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Harbour Bank's mandate covers this action."
+   "caption": "Sam's fictional bank's mandate covers this action."
   },
   {
    "seq": 183,
@@ -6596,17 +6640,17 @@
     }
    ],
    "resolution": {
-    "question": "Is Sam a party I can send balance statement to?",
+    "question": "Is Sam, the fictional applicant a party I can send https://w3id.org/jeswr/awp#op/balance-statement to?",
     "path": [
      {
-      "at": "Harbour Bank's own list",
+      "at": "Sam's fictional bank's own list",
       "kind": "own-list",
-      "says": "No entry for Sam."
+      "says": "No entry for Sam, the fictional applicant."
      },
      {
       "at": "National trust root",
       "kind": "root",
-      "says": "No register it delegates to lists Sam."
+      "says": "No register it delegates to lists Sam, the fictional applicant."
      }
     ],
     "answer": "No register answers for this party."
@@ -6616,7 +6660,7 @@
     "text": "Replies go to the verified sender of the request."
    },
    "reason": "recipient-established",
-   "caption": "A reply to Sam's verified agent, which opened this conversation; no register lists private persons."
+   "caption": "A reply to Sam, the fictional applicant's verified agent, which opened this conversation; no register lists private persons."
   },
   {
    "seq": 184,
@@ -6656,7 +6700,7 @@
     "text": "use and share only for a mortgage application or credit assessment, never for marketing, delete within 90 days, share only with a regulated lender."
    },
    "reason": "terms-allow",
-   "caption": "Harbour Bank's own terms go with it: use and share only for a mortgage application or credit assessment, never for marketing, delete within 90 days, share only with a regulated lender."
+   "caption": "Sam's fictional bank's own terms go with it: use and share only for a mortgage application or credit assessment, never for marketing, delete within 90 days, share only with a regulated lender."
   },
   {
    "seq": 186,
@@ -6674,7 +6718,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Harbour Bank's limits."
+   "caption": "Inside what the agent may do on its own, and within Sam's fictional bank's limits."
   },
   {
    "seq": 187,
@@ -6719,7 +6763,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Harbour Bank's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with Sam's fictional bank's agent's pinned key, and written to the record."
   },
   {
    "seq": 189,
@@ -6739,7 +6783,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:harbour-agent:0004",
-    "from": "Harbour Bank's agent",
+    "from": "Sam's fictional bank's agent",
     "to": "Sam's agent",
     "kind": "deliver",
     "carriage": {
@@ -6749,7 +6793,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Harbour Bank's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-main:harbour-agent:0004.",
+      "summary": "From Sam's fictional bank's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-main:harbour-agent:0004.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6802,7 +6846,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "1 statement(s) signed by their sources: deposit.balance from Harbour Bank.",
+      "summary": "1 statement(s) signed by their sources: deposit.balance from Sam's fictional bank.",
       "raw": [
        {
         "type": "EvidenceStatement",
@@ -6913,7 +6957,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-main-main:sam-agent:0009. The statements were issued by their sources and are relayed, not authored, by Harbour Bank's agent; as of 2026-10-31T23:59:59Z.",
+      "summary": "Answers urn:awp:engine-mortgage-main-main:sam-agent:0009. The statements were issued by their sources and are relayed, not authored, by Sam's fictional bank's agent; as of 2026-10-31T23:59:59Z.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-main-main:sam-agent:0006",
        "inReplyTo": "urn:awp:engine-mortgage-main-main:sam-agent:0009",
@@ -6943,7 +6987,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Harbour Bank's agent sends a deliver message to Sam's agent."
+   "caption": "Sam's fictional bank's agent sends a deliver message to Sam's agent."
   },
   {
    "seq": 191,
@@ -6953,7 +6997,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:harbour-agent:0004",
-    "from": "Harbour Bank's agent",
+    "from": "Sam's fictional bank's agent",
     "to": "Sam's agent",
     "kind": "deliver",
     "carriage": {
@@ -6963,7 +7007,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Harbour Bank's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-main:harbour-agent:0004.",
+      "summary": "From Sam's fictional bank's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key EfqzpUjqRQf7…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-main-main:harbour-agent:0004.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -7038,7 +7082,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "1 statement(s) signed by their sources: deposit.balance from Harbour Bank.",
+      "summary": "1 statement(s) signed by their sources: deposit.balance from Sam's fictional bank.",
       "raw": [
        {
         "type": "EvidenceStatement",
@@ -7149,7 +7193,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-main-main:sam-agent:0009. The statements were issued by their sources and are relayed, not authored, by Harbour Bank's agent; as of 2026-10-31T23:59:59Z.",
+      "summary": "Answers urn:awp:engine-mortgage-main-main:sam-agent:0009. The statements were issued by their sources and are relayed, not authored, by Sam's fictional bank's agent; as of 2026-10-31T23:59:59Z.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-main-main:sam-agent:0006",
        "inReplyTo": "urn:awp:engine-mortgage-main-main:sam-agent:0009",
@@ -7179,7 +7223,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A deliver message from Harbour Bank's agent reaches the inbound gate."
+   "caption": "A deliver message from Sam's fictional bank's agent reaches the inbound gate."
   },
   {
    "seq": 192,
@@ -7206,7 +7250,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Harbour Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with Sam's fictional bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 193,
@@ -7231,20 +7275,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#rule/sam/own-bank-balances",
-    "text": "Harbour Bank is accepted for deposit.balance claims."
+    "text": "Sam's fictional bank is accepted for deposit.balance claims."
    },
    "resolution": {
-    "question": "Is Harbour Bank an authority for deposit.balance claims about Sam?",
+    "question": "Is Sam's fictional bank an authority for deposit.balance claims about Sam, the fictional applicant?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "Harbour Bank is accepted for deposit.balance."
+      "says": "Sam's fictional bank is accepted for deposit.balance."
      }
     ],
     "answer": "Accepted, for deposit.balance claims only."
    },
-   "caption": "Harbour Bank's deposit.balance statement: Harbour Bank is an accepted source for this kind of claim."
+   "caption": "Sam's fictional bank's deposit.balance statement: Sam's fictional bank is an accepted source for this kind of claim."
   },
   {
    "seq": 194,
@@ -7289,7 +7333,7 @@
     "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
     "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
    },
-   "caption": "Harbour Bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
   },
   {
    "seq": 196,
@@ -7311,7 +7355,7 @@
     "id": "urn:profile:mortgage:deposit.*",
     "text": "Accept deposit.* from  by recorded-by-authority, at most 31 days old."
    },
-   "caption": "Harbour Bank's deposit.balance statement is fit for a mortgage application: recorded-by-authority, 12 days old."
+   "caption": "Sam's fictional bank's deposit.balance statement is fit for https://w3id.org/jeswr/awp#op/balance-statement: recorded-by-authority, 12 days old."
   },
   {
    "seq": 197,
@@ -7331,7 +7375,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
-    "label": "Harbour Bank's deposit.balance statement",
+    "label": "Sam's fictional bank's deposit.balance statement",
     "claimType": "deposit.balance",
     "subject": "https://sam.example/#me",
     "value": 90000,
@@ -7346,9 +7390,9 @@
      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
      "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
     },
-    "provenance": "signed by Harbour Bank, issued 2026-11-01T09:00:00Z"
+    "provenance": "signed by Sam's fictional bank, issued 2026-11-01T09:00:00Z"
    },
-   "caption": "Harbour Bank's deposit.balance statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "Sam's fictional bank's deposit.balance statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 199,
@@ -7371,7 +7415,7 @@
     }
    ],
    "reason": "intact",
-   "caption": "Paywell's income.gross.monthly-series statement is intact and signed with Paywell's pinned key."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement is intact and signed with The fictional payroll provider's pinned key."
   },
   {
    "seq": 200,
@@ -7396,20 +7440,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#rule/sam/payroll-income",
-    "text": "Paywell is accepted for income.gross.monthly-series claims."
+    "text": "The fictional payroll provider is accepted for income.gross.monthly-series claims."
    },
    "resolution": {
-    "question": "Is Paywell an authority for income.gross.monthly-series claims about Sam?",
+    "question": "Is The fictional payroll provider an authority for income.gross.monthly-series claims about Sam, the fictional applicant?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "Paywell is accepted for income.gross.monthly-series."
+      "says": "The fictional payroll provider is accepted for income.gross.monthly-series."
      }
     ],
     "answer": "Accepted, for income.gross.monthly-series claims only."
    },
-   "caption": "Paywell's income.gross.monthly-series statement: Paywell is an accepted source for this kind of claim."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: The fictional payroll provider is an accepted source for this kind of claim."
   },
   {
    "seq": 201,
@@ -7427,7 +7471,7 @@
     }
    ],
    "reason": "no-action",
-   "caption": "Paywell's income.gross.monthly-series statement asks for nothing, so there is no authority to check."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement asks for nothing, so there is no authority to check."
   },
   {
    "seq": 202,
@@ -7454,7 +7498,7 @@
     "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
     "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
    },
-   "caption": "Paywell's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
   },
   {
    "seq": 203,
@@ -7476,7 +7520,7 @@
     "id": "urn:profile:mortgage:income.*",
     "text": "Accept income.* from  by recorded-by-authority, at most 92 days old."
    },
-   "caption": "Paywell's income.gross.monthly-series statement is fit for urn:scenario:mortgage-main:task: recorded-by-authority, 12 days old."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement is fit for urn:scenario:mortgage-main:task: recorded-by-authority, 12 days old."
   },
   {
    "seq": 204,
@@ -7486,7 +7530,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "Paywell's income.gross.monthly-series statement is admitted."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement is admitted."
   },
   {
    "seq": 205,
@@ -7496,7 +7540,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:evidence:paywell-income-2026-10",
-    "label": "Paywell's income.gross.monthly-series statement",
+    "label": "The fictional payroll provider's income.gross.monthly-series statement",
     "claimType": "income.gross.monthly-series",
     "subject": "https://sam.example/#me",
     "value": [
@@ -7559,9 +7603,9 @@
      "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
      "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
     },
-    "provenance": "signed by Paywell, issued 2026-11-02T09:00:00Z"
+    "provenance": "signed by The fictional payroll provider, issued 2026-11-02T09:00:00Z"
    },
-   "caption": "Paywell's income.gross.monthly-series statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 206,
@@ -7571,7 +7615,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0002",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "propose",
     "carriage": {
@@ -7581,7 +7625,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0002.",
+      "summary": "From The fictional lender's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -7610,7 +7654,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): North Bank says North Bank's agent acts for it.",
+      "summary": "1 representation statement(s): The fictional lender says The fictional lender's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -7822,7 +7866,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A propose message from North Bank's agent reaches the inbound gate."
+   "caption": "A propose message from The fictional lender's agent reaches the inbound gate."
   },
   {
    "seq": 207,
@@ -7849,7 +7893,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The fictional lender's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 208,
@@ -7892,9 +7936,9 @@
    "reason": "authority-valid",
    "rule": {
     "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
-    "text": "A representation statement signed with North Bank's pinned key must name this agent, this operation and a current validity period."
+    "text": "A representation statement signed with The fictional lender's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "North Bank signed a statement that North Bank's agent acts for them in this operation."
+   "caption": "The fictional lender signed a statement that The fictional lender's agent acts for them in this operation."
   },
   {
    "seq": 210,
@@ -7953,7 +7997,7 @@
    "agent": "sams-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share Harbour Bank's deposit.balance statement and Paywell's income.gross.monthly-series statement with North Bank."
+   "caption": "The core proposes to share Sam's fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement with The fictional lender."
   },
   {
    "seq": 214,
@@ -7977,10 +8021,10 @@
    ],
    "rule": {
     "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
-    "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves."
+    "text": "Sam, the fictional applicant's mandate lets the agent distribute evidence disclosure for credit assessment with The fictional lender or https://valleybank.example/#org, after Sam, the fictional applicant approves."
    },
    "reason": "within-mandate",
-   "caption": "Sam's mandate covers this action, with approval."
+   "caption": "Sam, the fictional applicant's mandate covers this action, with approval."
   },
   {
    "seq": 215,
@@ -8003,12 +8047,12 @@
     }
    ],
    "resolution": {
-    "question": "Is North Bank a party I can send mortgage prequalification to?",
+    "question": "Is The fictional lender a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for North Bank."
+      "says": "No entry for The fictional lender."
      },
      {
       "at": "National trust root",
@@ -8018,17 +8062,17 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:01:00.000Z."
+      "says": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:01:00.000Z."
      }
     ],
-    "answer": "Accepted, for mortgage prequalification only."
+    "answer": "Accepted, for Mortgage decision in principle only."
    },
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-    "text": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:01:00.000Z."
+    "text": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:01:00.000Z."
    },
    "reason": "recipient-established",
-   "caption": "North Bank: Accepted, for mortgage prequalification only."
+   "caption": "The fictional lender: Accepted, for Mortgage decision in principle only."
   },
   {
    "seq": 216,
@@ -8050,7 +8094,7 @@
     "id": "sha-256:7f404bf5a2748b0c494635b077cb87a92f6ad6e2cdd2d3a31872ed73704efdc5",
     "text": "The request asks for income.gross.monthly series and deposit.balance; by value is the only form in this configuration."
    },
-   "caption": "Only what the request needs goes: Harbour Bank's deposit.balance statement and Paywell's income.gross.monthly-series statement."
+   "caption": "Only what the request needs goes: Sam's fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement."
   },
   {
    "seq": 217,
@@ -8072,7 +8116,7 @@
     "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Harbour Bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 218,
@@ -8094,7 +8138,7 @@
     "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Paywell's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 219,
@@ -8114,9 +8158,9 @@
    "reason": "approval-required",
    "rule": {
     "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
-    "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves."
+    "text": "Sam, the fictional applicant's mandate lets the agent distribute evidence disclosure for credit assessment with The fictional lender or https://valleybank.example/#org, after Sam, the fictional applicant approves."
    },
-   "caption": "The mandate says to ask Sam first."
+   "caption": "The mandate says to ask Sam, the fictional applicant first."
   },
   {
    "seq": 220,
@@ -8127,7 +8171,7 @@
    "verdict": "ask-principal",
    "outcome": "ask-principal",
    "reason": "approval-required",
-   "caption": "The gate holds the action and asks Sam."
+   "caption": "The gate holds the action and asks Sam, the fictional applicant."
   },
   {
    "seq": 221,
@@ -8137,9 +8181,9 @@
    "kind": "ask-principal",
    "chat": {
     "who": "agent",
-    "text": "North Bank asks for two of your statements: Harbour Bank's deposit.balance statement and Paywell's income.gross.monthly-series statement. They would use them for credit assessment, keep them for 60 days and pass them on only to https://underwriter.example/#org. May I share them?"
+    "text": "The fictional lender asks for two of your statements: Sam's fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement. They would use them for credit assessment, keep them for 60 days and pass them on only to https://underwriter.example/#org. May I share them?"
    },
-   "caption": "Sam is asked to approve this exact action; the approval will be bound to its digest."
+   "caption": "Sam, the fictional applicant is asked to approve this exact action; the approval will be bound to its digest."
   },
   {
    "seq": 222,
@@ -8175,10 +8219,10 @@
    ],
    "rule": {
     "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
-    "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves."
+    "text": "Sam, the fictional applicant's mandate lets the agent distribute evidence disclosure for credit assessment with The fictional lender or https://valleybank.example/#org, after Sam, the fictional applicant approves."
    },
    "reason": "within-mandate",
-   "caption": "Sam's mandate covers this action, with approval."
+   "caption": "Sam, the fictional applicant's mandate covers this action, with approval."
   },
   {
    "seq": 224,
@@ -8201,12 +8245,12 @@
     }
    ],
    "resolution": {
-    "question": "Is North Bank a party I can send mortgage prequalification to?",
+    "question": "Is The fictional lender a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for North Bank."
+      "says": "No entry for The fictional lender."
      },
      {
       "at": "National trust root",
@@ -8216,17 +8260,17 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:02:00.000Z."
+      "says": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:02:00.000Z."
      }
     ],
-    "answer": "Accepted, for mortgage prequalification only."
+    "answer": "Accepted, for Mortgage decision in principle only."
    },
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-    "text": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:02:00.000Z."
+    "text": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:02:00.000Z."
    },
    "reason": "recipient-established",
-   "caption": "North Bank: Accepted, for mortgage prequalification only."
+   "caption": "The fictional lender: Accepted, for Mortgage decision in principle only."
   },
   {
    "seq": 225,
@@ -8248,7 +8292,7 @@
     "id": "sha-256:7f404bf5a2748b0c494635b077cb87a92f6ad6e2cdd2d3a31872ed73704efdc5",
     "text": "The request asks for income.gross.monthly series and deposit.balance; by value is the only form in this configuration."
    },
-   "caption": "Only what the request needs goes: Harbour Bank's deposit.balance statement and Paywell's income.gross.monthly-series statement."
+   "caption": "Only what the request needs goes: Sam's fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement."
   },
   {
    "seq": 226,
@@ -8270,7 +8314,7 @@
     "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Harbour Bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 227,
@@ -8292,7 +8336,7 @@
     "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Paywell's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 228,
@@ -8312,9 +8356,9 @@
    "reason": "approval-given",
    "rule": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent-approval:0002",
-    "text": "Sam's signed approval, bound to digest sha-256:b5e667e7…."
+    "text": "Sam, the fictional applicant's signed approval, bound to digest sha-256:b5e667e7…."
    },
-   "caption": "Sam approved this exact action."
+   "caption": "Sam, the fictional applicant approved this exact action."
   },
   {
    "seq": 229,
@@ -8351,7 +8395,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The accept message goes to North Bank's agent."
+   "caption": "The accept message goes to The fictional lender's agent."
   },
   {
    "seq": 231,
@@ -8362,7 +8406,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0010",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "accept",
     "carriage": {
      "suite": "direct-http",
@@ -8371,7 +8415,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; accept; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0010.",
+      "summary": "From Sam's agent to The fictional lender's agent; accept; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0010.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -8400,7 +8444,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -8467,7 +8511,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Sam's agent sends an accept message to North Bank's agent."
+   "caption": "Sam's agent sends an accept message to The fictional lender's agent."
   },
   {
    "seq": 232,
@@ -8491,10 +8535,10 @@
    ],
    "rule": {
     "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
-    "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves."
+    "text": "Sam, the fictional applicant's mandate lets the agent distribute evidence disclosure for credit assessment with The fictional lender or https://valleybank.example/#org, after Sam, the fictional applicant approves."
    },
    "reason": "within-mandate",
-   "caption": "Sam's mandate covers this action, with approval."
+   "caption": "Sam, the fictional applicant's mandate covers this action, with approval."
   },
   {
    "seq": 233,
@@ -8517,12 +8561,12 @@
     }
    ],
    "resolution": {
-    "question": "Is North Bank a party I can send mortgage prequalification to?",
+    "question": "Is The fictional lender a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for North Bank."
+      "says": "No entry for The fictional lender."
      },
      {
       "at": "National trust root",
@@ -8532,17 +8576,17 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:02:00.000Z."
+      "says": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:02:00.000Z."
      }
     ],
-    "answer": "Accepted, for mortgage prequalification only."
+    "answer": "Accepted, for Mortgage decision in principle only."
    },
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-    "text": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:02:00.000Z."
+    "text": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:02:00.000Z."
    },
    "reason": "recipient-established",
-   "caption": "North Bank: Accepted, for mortgage prequalification only."
+   "caption": "The fictional lender: Accepted, for Mortgage decision in principle only."
   },
   {
    "seq": 234,
@@ -8564,7 +8608,7 @@
     "id": "sha-256:7f404bf5a2748b0c494635b077cb87a92f6ad6e2cdd2d3a31872ed73704efdc5",
     "text": "The request asks for income.gross.monthly series and deposit.balance; by value is the only form in this configuration."
    },
-   "caption": "Only what the request needs goes: Harbour Bank's deposit.balance statement and Paywell's income.gross.monthly-series statement."
+   "caption": "Only what the request needs goes: Sam's fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement."
   },
   {
    "seq": 235,
@@ -8586,7 +8630,7 @@
     "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Harbour Bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 236,
@@ -8608,7 +8652,7 @@
     "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Paywell's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 237,
@@ -8628,9 +8672,9 @@
    "reason": "approval-given",
    "rule": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent-approval:0002",
-    "text": "Sam's signed approval, bound to digest sha-256:b5e667e7…."
+    "text": "Sam, the fictional applicant's signed approval, bound to digest sha-256:b5e667e7…."
    },
-   "caption": "Sam approved this exact action."
+   "caption": "Sam, the fictional applicant approved this exact action."
   },
   {
    "seq": 238,
@@ -8670,7 +8714,7 @@
     "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Paywell's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 240,
@@ -8710,7 +8754,7 @@
     "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Harbour Bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 242,
@@ -8765,7 +8809,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The deliver message goes to North Bank's agent."
+   "caption": "The deliver message goes to The fictional lender's agent."
   },
   {
    "seq": 245,
@@ -8776,7 +8820,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0011",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
@@ -8785,7 +8829,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; deliver; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0011.",
+      "summary": "From Sam's agent to The fictional lender's agent; deliver; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0011.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -8837,7 +8881,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "2 statement(s) signed by their sources: income.gross.monthly-series from Paywell; deposit.balance from Harbour Bank.",
+      "summary": "2 statement(s) signed by their sources: income.gross.monthly-series from The fictional payroll provider; deposit.balance from Sam's fictional bank.",
       "raw": [
        {
         "type": "EvidenceStatement",
@@ -9126,7 +9170,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Sam's agent sends a deliver message to North Bank's agent."
+   "caption": "Sam's agent sends a deliver message to The fictional lender's agent."
   },
   {
    "seq": 246,
@@ -9137,7 +9181,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0010",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "accept",
     "carriage": {
      "suite": "direct-http",
@@ -9146,7 +9190,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; accept; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0010.",
+      "summary": "From Sam's agent to The fictional lender's agent; accept; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0010.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -9175,7 +9219,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -9326,9 +9370,9 @@
    "reason": "authority-valid",
    "rule": {
     "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
-    "text": "A representation statement signed with Sam's pinned key must name this agent, this operation and a current validity period."
+    "text": "A representation statement signed with Sam, the fictional applicant's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "Sam signed a statement that Sam's agent acts for them in this operation."
+   "caption": "Sam, the fictional applicant signed a statement that Sam's agent acts for them in this operation."
   },
   {
    "seq": 250,
@@ -9390,7 +9434,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0011",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
@@ -9399,7 +9443,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; deliver; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0011.",
+      "summary": "From Sam's agent to The fictional lender's agent; deliver; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0011.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -9465,7 +9509,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "2 statement(s) signed by their sources: income.gross.monthly-series from Paywell; deposit.balance from Harbour Bank.",
+      "summary": "2 statement(s) signed by their sources: income.gross.monthly-series from The fictional payroll provider; deposit.balance from Sam's fictional bank.",
       "raw": [
        {
         "type": "EvidenceStatement",
@@ -9806,20 +9850,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#rule/nb/paywell-income",
-    "text": "Paywell is accepted for income.gross.monthly-series claims."
+    "text": "The fictional payroll provider is accepted for income.gross.monthly-series claims."
    },
    "resolution": {
-    "question": "Is Paywell an authority for income.gross.monthly-series claims about Sam?",
+    "question": "Is The fictional payroll provider an authority for income.gross.monthly-series claims about Sam, the fictional applicant?",
     "path": [
      {
-      "at": "North Bank's own list",
+      "at": "The fictional lender's own list",
       "kind": "own-list",
-      "says": "Paywell is accepted for income.gross.monthly-series."
+      "says": "The fictional payroll provider is accepted for income.gross.monthly-series."
      }
     ],
     "answer": "Accepted, for income.gross.monthly-series claims only."
    },
-   "caption": "Paywell's income.gross.monthly-series statement: Paywell is an accepted source for this kind of claim."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: The fictional payroll provider is an accepted source for this kind of claim."
   },
   {
    "seq": 256,
@@ -9844,20 +9888,20 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#rule/nb/harbourbank-deposits",
-    "text": "Harbour Bank is accepted for deposit.balance claims."
+    "text": "Sam's fictional bank is accepted for deposit.balance claims."
    },
    "resolution": {
-    "question": "Is Harbour Bank an authority for deposit.balance claims about Sam?",
+    "question": "Is Sam's fictional bank an authority for deposit.balance claims about Sam, the fictional applicant?",
     "path": [
      {
-      "at": "North Bank's own list",
+      "at": "The fictional lender's own list",
       "kind": "own-list",
-      "says": "Harbour Bank is accepted for deposit.balance."
+      "says": "Sam's fictional bank is accepted for deposit.balance."
      }
     ],
     "answer": "Accepted, for deposit.balance claims only."
    },
-   "caption": "Harbour Bank's deposit.balance statement: Harbour Bank is an accepted source for this kind of claim."
+   "caption": "Sam's fictional bank's deposit.balance statement: Sam's fictional bank is an accepted source for this kind of claim."
   },
   {
    "seq": 257,
@@ -9879,7 +9923,7 @@
     "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
     "text": "The representation accepted earlier in this conversation, still valid."
    },
-   "caption": "Settled when this conversation opened: Sam's signed representation statement still covers it."
+   "caption": "Settled when this conversation opened: Sam, the fictional applicant's signed representation statement still covers it."
   },
   {
    "seq": 258,
@@ -9906,7 +9950,7 @@
     "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
     "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
    },
-   "caption": "Paywell's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
   },
   {
    "seq": 259,
@@ -9933,7 +9977,7 @@
     "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
     "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
    },
-   "caption": "Harbour Bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
   },
   {
    "seq": 260,
@@ -9955,7 +9999,7 @@
     "id": "urn:profile:mortgage:income.*",
     "text": "Accept income.* from  by recorded-by-authority, at most 92 days old."
    },
-   "caption": "Paywell's income.gross.monthly-series statement is fit for a mortgage application: recorded-by-authority, 12 days old."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement is fit for Mortgage decision in principle: recorded-by-authority, 12 days old."
   },
   {
    "seq": 261,
@@ -9977,7 +10021,7 @@
     "id": "urn:profile:mortgage:deposit.*",
     "text": "Accept deposit.* from  by recorded-by-authority, at most 31 days old."
    },
-   "caption": "Harbour Bank's deposit.balance statement is fit for a mortgage application: recorded-by-authority, 12 days old."
+   "caption": "Sam's fictional bank's deposit.balance statement is fit for Mortgage decision in principle: recorded-by-authority, 12 days old."
   },
   {
    "seq": 262,
@@ -9997,7 +10041,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:evidence:paywell-income-2026-10",
-    "label": "Paywell's income.gross.monthly-series statement",
+    "label": "The fictional payroll provider's income.gross.monthly-series statement",
     "claimType": "income.gross.monthly-series",
     "subject": "https://sam.example/#me",
     "value": [
@@ -10060,9 +10104,9 @@
      "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
      "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
     },
-    "provenance": "signed by Paywell, issued 2026-11-02T09:00:00Z"
+    "provenance": "signed by The fictional payroll provider, issued 2026-11-02T09:00:00Z"
    },
-   "caption": "Paywell's income.gross.monthly-series statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 264,
@@ -10072,7 +10116,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
-    "label": "Harbour Bank's deposit.balance statement",
+    "label": "Sam's fictional bank's deposit.balance statement",
     "claimType": "deposit.balance",
     "subject": "https://sam.example/#me",
     "value": 90000,
@@ -10087,9 +10131,9 @@
      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
      "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
     },
-    "provenance": "signed by Harbour Bank, issued 2026-11-01T09:00:00Z"
+    "provenance": "signed by Sam's fictional bank, issued 2026-11-01T09:00:00Z"
    },
-   "caption": "Harbour Bank's deposit.balance statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "Sam's fictional bank's deposit.balance statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 265,
@@ -10135,17 +10179,17 @@
     }
    ],
    "resolution": {
-    "question": "Is Sam a party I can send mortgage prequalification to?",
+    "question": "Is Sam, the fictional applicant a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "North Bank's own list",
+      "at": "The fictional lender's own list",
       "kind": "own-list",
-      "says": "No entry for Sam."
+      "says": "No entry for Sam, the fictional applicant."
      },
      {
       "at": "National trust root",
       "kind": "root",
-      "says": "No register it delegates to lists Sam."
+      "says": "No register it delegates to lists Sam, the fictional applicant."
      }
     ],
     "answer": "No register answers for this party."
@@ -10155,7 +10199,7 @@
     "text": "Replies go to the verified sender of the request."
    },
    "reason": "recipient-established",
-   "caption": "A reply to Sam's verified agent, which opened this conversation; no register lists private persons."
+   "caption": "A reply to Sam, the fictional applicant's verified agent, which opened this conversation; no register lists private persons."
   },
   {
    "seq": 267,
@@ -10236,7 +10280,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The fictional lender's agent's pinned key, and written to the record."
   },
   {
    "seq": 271,
@@ -10256,7 +10300,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0003",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "receipt",
     "carriage": {
@@ -10266,7 +10310,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0003.",
+      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0003.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -10377,7 +10421,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "North Bank's agent sends a receipt message to Sam's agent."
+   "caption": "The fictional lender's agent sends a receipt message to Sam's agent."
   },
   {
    "seq": 273,
@@ -10387,7 +10431,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0003",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "receipt",
     "carriage": {
@@ -10397,7 +10441,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0003.",
+      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0003.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -10550,7 +10594,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A receipt message from North Bank's agent reaches the inbound gate."
+   "caption": "A receipt message from The fictional lender's agent reaches the inbound gate."
   },
   {
    "seq": 274,
@@ -10577,7 +10621,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The fictional lender's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 275,
@@ -10622,7 +10666,7 @@
     "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
     "text": "The representation accepted earlier in this conversation, still valid."
    },
-   "caption": "Settled when this conversation opened: North Bank's signed representation statement still covers it."
+   "caption": "Settled when this conversation opened: The fictional lender's signed representation statement still covers it."
   },
   {
    "seq": 277,
@@ -10685,7 +10729,7 @@
    "agent": "sams-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use mortgage prequalification with North Bank."
+   "caption": "The core proposes to take the next step in Mortgage decision in principle with The fictional lender."
   },
   {
    "seq": 281,
@@ -10709,10 +10753,10 @@
    ],
    "rule": {
     "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
-    "text": "Sam's mandate lets the agent use mortgage prequalification for mortgage application with North Bank or https://valleybank.example/#org, on its own."
+    "text": "Sam, the fictional applicant's mandate lets the agent use mortgage prequalification for mortgage application with The fictional lender or https://valleybank.example/#org, on its own."
    },
    "reason": "within-mandate",
-   "caption": "Sam's mandate covers this action."
+   "caption": "Sam, the fictional applicant's mandate covers this action."
   },
   {
    "seq": 282,
@@ -10735,12 +10779,12 @@
     }
    ],
    "resolution": {
-    "question": "Is North Bank a party I can send mortgage prequalification to?",
+    "question": "Is The fictional lender a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for North Bank."
+      "says": "No entry for The fictional lender."
      },
      {
       "at": "National trust root",
@@ -10750,17 +10794,17 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:03:00.000Z."
+      "says": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:03:00.000Z."
      }
     ],
-    "answer": "Accepted, for mortgage prequalification only."
+    "answer": "Accepted, for Mortgage decision in principle only."
    },
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-    "text": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:03:00.000Z."
+    "text": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:03:00.000Z."
    },
    "reason": "recipient-established",
-   "caption": "North Bank: Accepted, for mortgage prequalification only."
+   "caption": "The fictional lender: Accepted, for Mortgage decision in principle only."
   },
   {
    "seq": 283,
@@ -10814,7 +10858,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Sam's limits."
+   "caption": "Inside what the agent may do on its own, and within Sam, the fictional applicant's limits."
   },
   {
    "seq": 286,
@@ -10869,7 +10913,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The invoke message goes to North Bank's agent."
+   "caption": "The invoke message goes to The fictional lender's agent."
   },
   {
    "seq": 289,
@@ -10880,7 +10924,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0012",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -10889,7 +10933,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0012.",
+      "summary": "From Sam's agent to The fictional lender's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0012.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -10917,7 +10961,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -10993,7 +11037,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Sam's agent sends an invoke message to North Bank's agent."
+   "caption": "Sam's agent sends an invoke message to The fictional lender's agent."
   },
   {
    "seq": 290,
@@ -11004,7 +11048,7 @@
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:sam-agent:0012",
     "from": "Sam's agent",
-    "to": "North Bank's agent",
+    "to": "The fictional lender's agent",
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
@@ -11013,7 +11057,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to North Bank's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0012.",
+      "summary": "From Sam's agent to The fictional lender's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:sam-agent:0012.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -11041,7 +11085,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Sam says Sam's agent acts for it.",
+      "summary": "1 representation statement(s): Sam, the fictional applicant says Sam's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -11201,9 +11245,9 @@
    "reason": "authority-valid",
    "rule": {
     "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
-    "text": "A representation statement signed with Sam's pinned key must name this agent, this operation and a current validity period."
+    "text": "A representation statement signed with Sam, the fictional applicant's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "Sam signed a statement that Sam's agent acts for them in this operation."
+   "caption": "Sam, the fictional applicant signed a statement that Sam's agent acts for them in this operation."
   },
   {
    "seq": 294,
@@ -11266,7 +11310,7 @@
    "agent": "lender",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use mortgage prequalification with Sam."
+   "caption": "The core proposes to take the next step in Mortgage decision in principle with Sam, the fictional applicant."
   },
   {
    "seq": 298,
@@ -11290,10 +11334,10 @@
    ],
    "rule": {
     "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
-    "text": "North Bank's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
+    "text": "The fictional lender's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
    },
    "reason": "within-mandate",
-   "caption": "North Bank's mandate covers this action."
+   "caption": "The fictional lender's mandate covers this action."
   },
   {
    "seq": 299,
@@ -11316,17 +11360,17 @@
     }
    ],
    "resolution": {
-    "question": "Is Sam a party I can send mortgage prequalification to?",
+    "question": "Is Sam, the fictional applicant a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "North Bank's own list",
+      "at": "The fictional lender's own list",
       "kind": "own-list",
-      "says": "No entry for Sam."
+      "says": "No entry for Sam, the fictional applicant."
      },
      {
       "at": "National trust root",
       "kind": "root",
-      "says": "No register it delegates to lists Sam."
+      "says": "No register it delegates to lists Sam, the fictional applicant."
      }
     ],
     "answer": "No register answers for this party."
@@ -11336,7 +11380,7 @@
     "text": "Replies go to the verified sender of the request."
    },
    "reason": "recipient-established",
-   "caption": "A reply to Sam's verified agent, which opened this conversation; no register lists private persons."
+   "caption": "A reply to Sam, the fictional applicant's verified agent, which opened this conversation; no register lists private persons."
   },
   {
    "seq": 300,
@@ -11390,7 +11434,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within North Bank's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional lender's limits."
   },
   {
    "seq": 303,
@@ -11435,7 +11479,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The fictional lender's agent's pinned key, and written to the record."
   },
   {
    "seq": 305,
@@ -11455,7 +11499,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0005",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "deliver",
     "carriage": {
@@ -11465,7 +11509,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0005.",
+      "summary": "From The fictional lender's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0005.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -11516,7 +11560,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "1 statement(s) signed by their sources: mortgage.decision-in-principle from North Bank.",
+      "summary": "1 statement(s) signed by their sources: mortgage.decision-in-principle from The fictional lender.",
       "raw": [
        {
         "type": "DecisionInPrinciple",
@@ -11550,7 +11594,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by North Bank's agent; as of 2026-11-13T09:03:00.000Z.",
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The fictional lender's agent; as of 2026-11-13T09:03:00.000Z.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-main-main:sam-agent:0003",
        "statements": [
@@ -11579,7 +11623,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "North Bank's agent sends a deliver message to Sam's agent."
+   "caption": "The fictional lender's agent sends a deliver message to Sam's agent."
   },
   {
    "seq": 307,
@@ -11589,7 +11633,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0005",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "deliver",
     "carriage": {
@@ -11599,7 +11643,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0005.",
+      "summary": "From The fictional lender's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0005.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -11668,7 +11712,7 @@
      },
      "evidence": {
       "present": true,
-      "summary": "1 statement(s) signed by their sources: mortgage.decision-in-principle from North Bank.",
+      "summary": "1 statement(s) signed by their sources: mortgage.decision-in-principle from The fictional lender.",
       "raw": [
        {
         "type": "DecisionInPrinciple",
@@ -11702,7 +11746,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by North Bank's agent; as of 2026-11-13T09:03:00.000Z.",
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The fictional lender's agent; as of 2026-11-13T09:03:00.000Z.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-main-main:sam-agent:0003",
        "statements": [
@@ -11731,7 +11775,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A deliver message from North Bank's agent reaches the inbound gate."
+   "caption": "A deliver message from The fictional lender's agent reaches the inbound gate."
   },
   {
    "seq": 308,
@@ -11758,7 +11802,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The fictional lender's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 309,
@@ -11783,15 +11827,15 @@
    "reason": "source-accepted",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-    "text": "North Bank is accepted for mortgage.decision-in-principle claims."
+    "text": "The fictional lender is accepted for mortgage.decision-in-principle claims."
    },
    "resolution": {
-    "question": "Is North Bank an authority for mortgage.decision-in-principle claims about Sam?",
+    "question": "Is The fictional lender an authority for mortgage.decision-in-principle claims about Sam, the fictional applicant?",
     "path": [
      {
-      "at": "Sam's own list",
+      "at": "Sam, the fictional applicant's own list",
       "kind": "own-list",
-      "says": "No entry for North Bank for this kind of claim."
+      "says": "No entry for The fictional lender for this kind of claim."
      },
      {
       "at": "National trust root",
@@ -11801,12 +11845,12 @@
      {
       "at": "Sector register",
       "kind": "register",
-      "says": "North Bank is authorized; it is an authority for mortgage.decision-in-principle. Checked 2026-11-13T09:03:00.000Z."
+      "says": "The fictional lender is authorized; it is an authority for mortgage.decision-in-principle. Checked 2026-11-13T09:03:00.000Z."
      }
     ],
     "answer": "Accepted, for mortgage.decision-in-principle claims only."
    },
-   "caption": "North Bank's mortgage.decision-in-principle statement: North Bank is an accepted source for this kind of claim."
+   "caption": "The fictional lender's mortgage.decision-in-principle statement: The fictional lender is an accepted source for this kind of claim."
   },
   {
    "seq": 310,
@@ -11828,7 +11872,7 @@
     "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
     "text": "The representation accepted earlier in this conversation, still valid."
    },
-   "caption": "Settled when this conversation opened: North Bank's signed representation statement still covers it."
+   "caption": "Settled when this conversation opened: The fictional lender's signed representation statement still covers it."
   },
   {
    "seq": 311,
@@ -11855,7 +11899,7 @@
     "id": "default-terms",
     "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
    },
-   "caption": "North Bank's mortgage.decision-in-principle statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   "caption": "The fictional lender's mortgage.decision-in-principle statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
   },
   {
    "seq": 312,
@@ -11877,7 +11921,7 @@
     "id": "urn:profile:mortgage:mortgage.decision-in-principle",
     "text": "Accept mortgage.decision-in-principle from https://northbank.example/#org by decided-by-authority, at most 30 days old."
    },
-   "caption": "North Bank's mortgage.decision-in-principle statement is fit for a mortgage application: decided-by-authority, 0 days old."
+   "caption": "The fictional lender's mortgage.decision-in-principle statement is fit for Mortgage decision in principle: decided-by-authority, 0 days old."
   },
   {
    "seq": 313,
@@ -11897,7 +11941,7 @@
    "kind": "store",
    "fact": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0004",
-    "label": "North Bank's mortgage.decision-in-principle statement",
+    "label": "The fictional lender's mortgage.decision-in-principle statement",
     "claimType": "mortgage.decision-in-principle",
     "subject": "https://sam.example/#me",
     "value": {
@@ -11909,9 +11953,9 @@
     },
     "source": "https://northbank.example/#org",
     "method": "decided-by-authority",
-    "provenance": "signed by North Bank, issued 2026-11-13T09:03:00.000Z"
+    "provenance": "signed by The fictional lender, issued 2026-11-13T09:03:00.000Z"
    },
-   "caption": "North Bank's mortgage.decision-in-principle statement is stored with its source, how it was produced, its date and its terms."
+   "caption": "The fictional lender's mortgage.decision-in-principle statement is stored with its source, how it was produced, its date and its terms."
   },
   {
    "seq": 315,
@@ -11957,17 +12001,17 @@
     }
    ],
    "resolution": {
-    "question": "Is Sam a party I can send mortgage prequalification to?",
+    "question": "Is Sam, the fictional applicant a party I can send Mortgage decision in principle to?",
     "path": [
      {
-      "at": "North Bank's own list",
+      "at": "The fictional lender's own list",
       "kind": "own-list",
-      "says": "No entry for Sam."
+      "says": "No entry for Sam, the fictional applicant."
      },
      {
       "at": "National trust root",
       "kind": "root",
-      "says": "No register it delegates to lists Sam."
+      "says": "No register it delegates to lists Sam, the fictional applicant."
      }
     ],
     "answer": "No register answers for this party."
@@ -11977,7 +12021,7 @@
     "text": "Replies go to the verified sender of the request."
    },
    "reason": "recipient-established",
-   "caption": "A reply to Sam's verified agent, which opened this conversation; no register lists private persons."
+   "caption": "A reply to Sam, the fictional applicant's verified agent, which opened this conversation; no register lists private persons."
   },
   {
    "seq": 317,
@@ -12058,7 +12102,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with North Bank's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The fictional lender's agent's pinned key, and written to the record."
   },
   {
    "seq": 321,
@@ -12078,7 +12122,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0007",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "receipt",
     "carriage": {
@@ -12088,7 +12132,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0007.",
+      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0007.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -12173,7 +12217,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "North Bank's agent sends a receipt message to Sam's agent."
+   "caption": "The fictional lender's agent sends a receipt message to Sam's agent."
   },
   {
    "seq": 323,
@@ -12183,7 +12227,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-mortgage-main-main:north-agent:0007",
-    "from": "North Bank's agent",
+    "from": "The fictional lender's agent",
     "to": "Sam's agent",
     "kind": "receipt",
     "carriage": {
@@ -12193,7 +12237,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From North Bank's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0007.",
+      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:03:00.000Z to 2026-11-13T15:03:00.000Z; one-time id urn:awp:engine-mortgage-main-main:north-agent:0007.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -12292,7 +12336,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A receipt message from North Bank's agent reaches the inbound gate."
+   "caption": "A receipt message from The fictional lender's agent reaches the inbound gate."
   },
   {
    "seq": 324,
@@ -12319,7 +12363,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with North Bank's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The fictional lender's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 325,
@@ -12364,7 +12408,7 @@
     "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
     "text": "The representation accepted earlier in this conversation, still valid."
    },
-   "caption": "Settled when this conversation opened: North Bank's signed representation statement still covers it."
+   "caption": "Settled when this conversation opened: The fictional lender's signed representation statement still covers it."
   },
   {
    "seq": 327,

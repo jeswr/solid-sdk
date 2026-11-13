@@ -377,6 +377,8 @@
     var ag = S.trace.agents.filter(function (x) { return x.id === 'sams-agent'; })[0] || S.trace.agents[0];
     var p = ag && AX.partyById[ag.actsFor];
     if (p) return p.name;
+    var tp = ag && (S.trace.parties || []).filter(function (x) { return x.id === ag.actsFor; })[0];
+    if (tp) return tp.name;
     if (ag && ag.actsFor && /^[a-z0-9-]+$/.test(ag.actsFor)) return 'The ' + ag.actsFor.replace(/-/g, ' ');
     return (ag && ag.actsFor) || 'Principal';
   }
@@ -420,7 +422,8 @@
     var kind = partyKind(id);
     var v = { id: id, name: a.name, kind: kind === 'service' ? 'service' : 'agent', badge: acting ? 'Acting' : 'Counterpart', acting: acting, compact: true };
     var party = AX.partyById[id] || {};
-    var actsFor = a.actsFor && a.actsFor !== id ? (AX.partyById[a.actsFor] || {}).name || a.actsFor : (party.actsFor ? (AX.partyById[party.actsFor] || {}).name : a.name);
+    var tParty = (S.trace.parties || []).filter(function (x) { return x.id === a.actsFor; })[0];
+    var actsFor = a.actsFor && a.actsFor !== id ? (AX.partyById[a.actsFor] || tParty || {}).name || a.actsFor : (party.actsFor ? (AX.partyById[party.actsFor] || {}).name : a.name);
     v.role = a.role || party.role || '';
     if (v.kind === 'agent') {
       v.principal = actsFor || a.name;

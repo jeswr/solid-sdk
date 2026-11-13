@@ -1,0 +1,2053 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "wearable-data",
+ "path": "main",
+ "parties": [
+  {
+   "id": "owner",
+   "name": "The person"
+  },
+  {
+   "id": "receiver",
+   "name": "The insurer"
+  },
+  {
+   "id": "device-maker",
+   "name": "The device maker"
+  },
+  {
+   "id": "owner-agent",
+   "name": "The person's agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The insurer's agent"
+  }
+ ],
+ "scenario": {
+  "id": "wearable-data",
+  "title": "Sharing activity data for a discount",
+  "steps": {
+   "1": "The person's agent checks the signed statements.",
+   "2": "The insurer's agent sends the signed request.",
+   "3": "The person's agent checks the message and prepares a response.",
+   "4": "The person's agent sends the signed request.",
+   "5": "The insurer's agent checks the message and prepares a response.",
+   "6": "The person's agent checks the message and prepares a response.",
+   "7": "The insurer's agent checks the durable record."
+  }
+ },
+ "configuration": {
+  "id": "baseline",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "owner-agent",
+   "name": "The person's agent",
+   "actsFor": "owner",
+   "role": "agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The insurer's agent",
+   "actsFor": "receiver",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Outside organizations and data sources",
+   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The device maker's activity.weekly-total statement is intact and signed with The device maker's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:wearable-data:activity.weekly-total",
+    "text": "The device maker is accepted for activity.weekly-total claims."
+   },
+   "resolution": {
+    "question": "Is The device maker an authority for activity.weekly-total claims about The person?",
+    "path": [
+     {
+      "at": "The person's own list",
+      "kind": "own-list",
+      "says": "The device maker is accepted for activity.weekly-total."
+     }
+    ],
+    "answer": "Accepted, for activity.weekly-total claims only."
+   },
+   "caption": "The device maker's activity.weekly-total statement: The device maker is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The device maker's activity.weekly-total statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:wearable-data:weekly-total",
+    "text": "Its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+   },
+   "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:wearable-data:activity.weekly-total",
+    "text": "Accept activity.weekly-total from urn:fictional:wearable-data:device-maker by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The device maker's activity.weekly-total statement is fit for urn:scenario:wearable-data:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The device maker's activity.weekly-total statement is admitted."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:wearable-data:weekly-total",
+    "label": "The device maker's activity.weekly-total statement",
+    "claimType": "activity.weekly-total",
+    "subject": "urn:fictional:wearable-data:owner",
+    "value": null,
+    "source": "urn:fictional:wearable-data:device-maker",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "period": {
+     "start": "2026-11-02",
+     "end": "2026-11-08"
+    },
+    "terms": {
+     "id": "urn:terms:wearable-data:weekly-total",
+     "summary": "use for urn:purpose:wearable data; share for urn:purpose:wearable data"
+    },
+    "provenance": "signed by The device maker"
+   },
+   "caption": "The device maker's activity.weekly-total statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 8,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Request the needed information with The person."
+  },
+  {
+   "seq": 9,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The insurer's mandate covers this action."
+  },
+  {
+   "seq": 10,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The person a party I can send Request the needed information to?",
+    "path": [
+     {
+      "at": "The insurer's own list",
+      "kind": "own-list",
+      "says": "The person is accepted for Request the needed information."
+     }
+    ],
+    "answer": "Accepted, for Request the needed information only."
+   },
+   "reason": "recipient-established",
+   "caption": "The person: Accepted, for Request the needed information only."
+  },
+  {
+   "seq": 11,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 12,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 13,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The insurer's limits."
+  },
+  {
+   "seq": 14,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The insurer's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 16,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The person's agent."
+  },
+  {
+   "seq": 17,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-wearable-data-main:receiver-agent:0002",
+    "from": "The insurer's agent",
+    "to": "The person's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:7200a3ff638…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The insurer's agent to The person's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-wearable-data-main:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-wearable-data-main:receiver-agent:0002",
+       "conversation": "urn:awp:engine-wearable-data-main:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:wearable-data:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:wearable-data:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:wearable-data:owner-agent:actor",
+        "party": "urn:fictional:wearable-data:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:b3be08520ed3471430579a6228b5219412ad9576c480993a25c38c40ea083299"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The insurer says The insurer's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:0a000d837eda848a95be80375e6c439f:1794560400000",
+        "party": "urn:fictional:wearable-data:receiver",
+        "actor": "urn:fictional:wearable-data:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:wearable-data",
+         "urn:op:wearable-data:request"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:42713e9cc4b8fa52f1102bb53516ebfa1ff312286bda091a73c1e5e47d4f8c20"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:wearable-data:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "activity.weekly-total",
+        "requestedPurpose": "urn:purpose:wearable-data"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:wearable-data"
+      },
+      "digest": "sha-256:564aaea6c4f29dc5002bb8de229d79d42347f228547a2bd1f6b7c054f401a41b"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-wearable-data-main:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The insurer's agent sends an invoke message to The person's agent."
+  },
+  {
+   "seq": 18,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-wearable-data-main:receiver-agent:0002",
+    "from": "The insurer's agent",
+    "to": "The person's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:7200a3ff638…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The insurer's agent to The person's agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-wearable-data-main:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-wearable-data-main:receiver-agent:0002",
+       "conversation": "urn:awp:engine-wearable-data-main:receiver-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:wearable-data:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:wearable-data:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:wearable-data:owner-agent:actor",
+        "party": "urn:fictional:wearable-data:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:b3be08520ed3471430579a6228b5219412ad9576c480993a25c38c40ea083299"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The insurer says The insurer's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:0a000d837eda848a95be80375e6c439f:1794560400000",
+        "party": "urn:fictional:wearable-data:receiver",
+        "actor": "urn:fictional:wearable-data:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:wearable-data",
+         "urn:op:wearable-data:request"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:42713e9cc4b8fa52f1102bb53516ebfa1ff312286bda091a73c1e5e47d4f8c20"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:wearable-data:request\"; \"urn:purpose:wearable-data\"; \"urn:purpose:wearable-data\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:wearable-data:request",
+        "version": "0.1"
+       },
+       "input": {
+        "request": "activity.weekly-total",
+        "requestedPurpose": "urn:purpose:wearable-data"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:wearable-data"
+      },
+      "digest": "sha-256:564aaea6c4f29dc5002bb8de229d79d42347f228547a2bd1f6b7c054f401a41b",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:wearable-data:request"
+       },
+       {
+        "path": "input.requestedPurpose",
+        "text": "urn:purpose:wearable-data"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:wearable-data"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-wearable-data-main:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from The insurer's agent reaches the inbound gate."
+  },
+  {
+   "seq": 19,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The insurer's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 20,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 21,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:0a000d837eda848a95be80375e6c439f:1794560400000",
+    "text": "A representation statement signed with The insurer's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The insurer signed a statement that The insurer's agent acts for them in this operation."
+  },
+  {
+   "seq": 22,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 23,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 24,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 25,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to share urn:op:wearable data with The insurer."
+  },
+  {
+   "seq": 26,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The person's mandate covers this action."
+  },
+  {
+   "seq": 27,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The insurer a party I can send Sharing activity data for a discount to?",
+    "path": [
+     {
+      "at": "The person's own list",
+      "kind": "own-list",
+      "says": "The insurer is accepted for Sharing activity data for a discount."
+     }
+    ],
+    "answer": "Accepted, for Sharing activity data for a discount only."
+   },
+   "reason": "recipient-established",
+   "caption": "The insurer: Accepted, for Sharing activity data for a discount only."
+  },
+  {
+   "seq": 28,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 29,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 30,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The person's limits."
+  },
+  {
+   "seq": 31,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 32,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:terms:wearable-data:weekly-total",
+    "text": "The issuer's terms: use for urn:purpose:wearable data; share for urn:purpose:wearable data. They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+  },
+  {
+   "seq": 33,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 34,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The person's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 35,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The insurer's agent."
+  },
+  {
+   "seq": 36,
+   "step": 4,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-wearable-data-main:owner-agent:0002",
+    "from": "The person's agent",
+    "to": "The insurer's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:db2ba5c5d54…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The person's agent to The insurer's agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-wearable-data-main:owner-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-wearable-data-main:owner-agent:0002",
+       "conversation": "urn:awp:engine-wearable-data-main:owner-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:wearable-data:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:wearable-data:owner"
+       },
+       "to": {
+        "actor": "urn:fictional:wearable-data:receiver-agent:actor",
+        "party": "urn:fictional:wearable-data:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:c628956ccb4f6a4fa6f8747b6199f785196b6d07e3d49d2b86c21899ef4d7e25"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The person says The person's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:64ec916f4e329ca385b96debf7983e80:1794560400000",
+        "party": "urn:fictional:wearable-data:owner",
+        "actor": "urn:fictional:wearable-data:owner-agent:actor",
+        "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "operations": [
+         "urn:op:wearable-data",
+         "urn:op:wearable-data:request"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:be4ac79f65c04e104c15cfc79be9fed0310d3e3fc0c8d241d7240a0dbf6cd71d"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:wearable-data",
+        "version": "0.1"
+       },
+       "input": {
+        "items": [
+         "urn:scenario:wearable-data:weekly-total"
+        ]
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:wearable-data"
+      },
+      "digest": "sha-256:c54272d98cabe90b09c959de9a82d85eef2f00a510234ac7e7d9c7562da68928"
+     },
+     "evidence": {
+      "present": true,
+      "summary": "1 statement(s) signed by their sources: activity.weekly-total from The device maker.",
+      "raw": [
+       {
+        "value": 35000,
+        "period": {
+         "start": "2026-11-02",
+         "end": "2026-11-08"
+        },
+        "id": "urn:scenario:wearable-data:weekly-total",
+        "issuer": "urn:fictional:wearable-data:device-maker",
+        "subject": "urn:fictional:wearable-data:owner",
+        "claimType": "activity.weekly-total",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:wearable-data:weekly-total",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:wearable-data:weekly-total",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:wearable-data"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:wearable-data:weekly-total",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:wearable-data"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:df85331bd5a56b4ef6ff03aed0dc4e5ea7d5770f06a8b54b67b985198810c0df"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The person's agent; as of 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-wearable-data-main:owner-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:wearable-data:weekly-total",
+         "issuer": "urn:fictional:wearable-data:device-maker",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The person's agent sends an invoke message to The insurer's agent."
+  },
+  {
+   "seq": 37,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-wearable-data-main:owner-agent:0002",
+    "from": "The person's agent",
+    "to": "The insurer's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:db2ba5c5d54…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The person's agent to The insurer's agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-wearable-data-main:owner-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-wearable-data-main:owner-agent:0002",
+       "conversation": "urn:awp:engine-wearable-data-main:owner-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:wearable-data:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:wearable-data:owner"
+       },
+       "to": {
+        "actor": "urn:fictional:wearable-data:receiver-agent:actor",
+        "party": "urn:fictional:wearable-data:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:c628956ccb4f6a4fa6f8747b6199f785196b6d07e3d49d2b86c21899ef4d7e25"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The person says The person's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:64ec916f4e329ca385b96debf7983e80:1794560400000",
+        "party": "urn:fictional:wearable-data:owner",
+        "actor": "urn:fictional:wearable-data:owner-agent:actor",
+        "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "operations": [
+         "urn:op:wearable-data",
+         "urn:op:wearable-data:request"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:be4ac79f65c04e104c15cfc79be9fed0310d3e3fc0c8d241d7240a0dbf6cd71d"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:wearable-data\"; \"urn:scenario:wearable-data:weekly-total\"; \"urn:purpose:wearable-data\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:wearable-data",
+        "version": "0.1"
+       },
+       "input": {
+        "items": [
+         "urn:scenario:wearable-data:weekly-total"
+        ]
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:wearable-data"
+      },
+      "digest": "sha-256:c54272d98cabe90b09c959de9a82d85eef2f00a510234ac7e7d9c7562da68928",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:wearable-data"
+       },
+       {
+        "path": "input.items.0",
+        "text": "urn:scenario:wearable-data:weekly-total"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:wearable-data"
+       }
+      ]
+     },
+     "evidence": {
+      "present": true,
+      "summary": "1 statement(s) signed by their sources: activity.weekly-total from The device maker.",
+      "raw": [
+       {
+        "value": 35000,
+        "period": {
+         "start": "2026-11-02",
+         "end": "2026-11-08"
+        },
+        "id": "urn:scenario:wearable-data:weekly-total",
+        "issuer": "urn:fictional:wearable-data:device-maker",
+        "subject": "urn:fictional:wearable-data:owner",
+        "claimType": "activity.weekly-total",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:wearable-data:weekly-total",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:wearable-data:weekly-total",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:wearable-data"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:wearable-data:weekly-total",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "urn:purpose:wearable-data"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:df85331bd5a56b4ef6ff03aed0dc4e5ea7d5770f06a8b54b67b985198810c0df"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The person's agent; as of 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-wearable-data-main:owner-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:wearable-data:weekly-total",
+         "issuer": "urn:fictional:wearable-data:device-maker",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from The person's agent reaches the inbound gate."
+  },
+  {
+   "seq": 38,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The person's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 39,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:wearable-data:activity.weekly-total",
+    "text": "The device maker is accepted for activity.weekly-total claims."
+   },
+   "resolution": {
+    "question": "Is The device maker an authority for activity.weekly-total claims about The person?",
+    "path": [
+     {
+      "at": "The insurer's own list",
+      "kind": "own-list",
+      "says": "The device maker is accepted for activity.weekly-total."
+     }
+    ],
+    "answer": "Accepted, for activity.weekly-total claims only."
+   },
+   "caption": "The device maker's activity.weekly-total statement: The device maker is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 40,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:64ec916f4e329ca385b96debf7983e80:1794560400000",
+    "text": "A representation statement signed with The person's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The person signed a statement that The person's agent acts for them in this operation."
+  },
+  {
+   "seq": 41,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:wearable-data:weekly-total",
+    "text": "Its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+   },
+   "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+  },
+  {
+   "seq": 42,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:wearable-data:activity.weekly-total",
+    "text": "Accept activity.weekly-total from urn:fictional:wearable-data:device-maker by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The device maker's activity.weekly-total statement is fit for Sharing activity data for a discount: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 43,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 44,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:wearable-data:weekly-total",
+    "label": "The device maker's activity.weekly-total statement",
+    "claimType": "activity.weekly-total",
+    "subject": "urn:fictional:wearable-data:owner",
+    "value": null,
+    "source": "urn:fictional:wearable-data:device-maker",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "period": {
+     "start": "2026-11-02",
+     "end": "2026-11-08"
+    },
+    "terms": {
+     "id": "urn:terms:wearable-data:weekly-total",
+     "summary": "use for urn:purpose:wearable data; share for urn:purpose:wearable data"
+    },
+    "provenance": "signed by The device maker"
+   },
+   "caption": "The device maker's activity.weekly-total statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 45,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
+  },
+  {
+   "seq": 46,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The person a party I can send Sharing activity data for a discount to?",
+    "path": [
+     {
+      "at": "The insurer's own list",
+      "kind": "own-list",
+      "says": "The person is accepted for Sharing activity data for a discount."
+     }
+    ],
+    "answer": "Accepted, for Sharing activity data for a discount only."
+   },
+   "reason": "recipient-established",
+   "caption": "The person: Accepted, for Sharing activity data for a discount only."
+  },
+  {
+   "seq": 47,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no personal data in this protocol message."
+  },
+  {
+   "seq": 48,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no data terms to apply."
+  },
+  {
+   "seq": 49,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 50,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The insurer's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 51,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The deliver message goes to The person's agent."
+  },
+  {
+   "seq": 52,
+   "step": 5,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-wearable-data-main:receiver-agent:0003",
+    "from": "The insurer's agent",
+    "to": "The person's agent",
+    "kind": "deliver",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:14d83a5f92c…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The insurer's agent to The person's agent; deliver; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-wearable-data-main:receiver-agent:0003.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-wearable-data-main:receiver-agent:0003",
+       "conversation": "urn:awp:engine-wearable-data-main:owner-agent:0001",
+       "kind": "deliver",
+       "from": {
+        "actor": "urn:fictional:wearable-data:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:wearable-data:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:wearable-data:owner-agent:actor",
+        "party": "urn:fictional:wearable-data:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-wearable-data-main:owner-agent:0002",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:00588c7e6c39c7dd6496a60db52bf5fe7da0992d1e37a316ee86ab8758e3a27c"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Delivers the result under the agreement.",
+      "raw": {
+       "ref": "urn:awp:engine-wearable-data-main:owner-agent:0002",
+       "basis": {
+        "kind": "invocation",
+        "invocation": "urn:awp:engine-wearable-data-main:owner-agent:0002"
+       },
+       "operation": {
+        "id": "urn:op:wearable-data",
+        "version": "0.1"
+       },
+       "output": {
+        "status": "received"
+       }
+      },
+      "digest": "sha-256:cdafa8c2ae6fad483211ccd7f902b882d461f619c7365de526a1aefaefbceea7"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "invocation",
+       "invocation": "urn:awp:engine-wearable-data-main:owner-agent:0002"
+      },
+      "digest": "sha-256:a2e5d1e8df33e193a62a80bc3895e9d492b9b371b681a1c7af28c6196b6e6b91"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-wearable-data-main:owner-agent:0002.",
+      "raw": {
+       "conversation": "urn:awp:engine-wearable-data-main:owner-agent:0001",
+       "inReplyTo": "urn:awp:engine-wearable-data-main:owner-agent:0002"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The insurer's agent sends a deliver message to The person's agent."
+  },
+  {
+   "seq": 53,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-wearable-data-main:receiver-agent:0003",
+    "from": "The insurer's agent",
+    "to": "The person's agent",
+    "kind": "deliver",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:14d83a5f92c…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The insurer's agent to The person's agent; deliver; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-wearable-data-main:receiver-agent:0003.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-wearable-data-main:receiver-agent:0003",
+       "conversation": "urn:awp:engine-wearable-data-main:owner-agent:0001",
+       "kind": "deliver",
+       "from": {
+        "actor": "urn:fictional:wearable-data:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:wearable-data:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:wearable-data:owner-agent:actor",
+        "party": "urn:fictional:wearable-data:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-wearable-data-main:owner-agent:0002",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:00588c7e6c39c7dd6496a60db52bf5fe7da0992d1e37a316ee86ab8758e3a27c"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-wearable-data-main:owner-agent:0002\"; \"urn:awp:engine-wearable-data-main:owner-agent:0002\"; \"urn:op:wearable-data\"",
+      "raw": {
+       "ref": "urn:awp:engine-wearable-data-main:owner-agent:0002",
+       "basis": {
+        "kind": "invocation",
+        "invocation": "urn:awp:engine-wearable-data-main:owner-agent:0002"
+       },
+       "operation": {
+        "id": "urn:op:wearable-data",
+        "version": "0.1"
+       },
+       "output": {
+        "status": "received"
+       }
+      },
+      "digest": "sha-256:cdafa8c2ae6fad483211ccd7f902b882d461f619c7365de526a1aefaefbceea7",
+      "untrusted": [
+       {
+        "path": "ref",
+        "text": "urn:awp:engine-wearable-data-main:owner-agent:0002"
+       },
+       {
+        "path": "basis.invocation",
+        "text": "urn:awp:engine-wearable-data-main:owner-agent:0002"
+       },
+       {
+        "path": "operation.id",
+        "text": "urn:op:wearable-data"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "invocation",
+       "invocation": "urn:awp:engine-wearable-data-main:owner-agent:0002"
+      },
+      "digest": "sha-256:a2e5d1e8df33e193a62a80bc3895e9d492b9b371b681a1c7af28c6196b6e6b91"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-wearable-data-main:owner-agent:0002.",
+      "raw": {
+       "conversation": "urn:awp:engine-wearable-data-main:owner-agent:0001",
+       "inReplyTo": "urn:awp:engine-wearable-data-main:owner-agent:0002"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "A deliver message from The insurer's agent reaches the inbound gate."
+  },
+  {
+   "seq": 54,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The insurer's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 55,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 56,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This message asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 57,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 58,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 59,
+   "step": 6,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 60,
+   "step": 7,
+   "agent": "receiver-agent",
+   "part": "record",
+   "kind": "record",
+   "caption": "10 entries in this agent's hash-chained record; the chain verifies."
+  }
+ ]
+}

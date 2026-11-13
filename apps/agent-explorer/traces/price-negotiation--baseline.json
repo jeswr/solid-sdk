@@ -1,0 +1,1334 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "price-negotiation",
+ "path": "main",
+ "parties": [
+  {
+   "id": "owner",
+   "name": "The buyer"
+  },
+  {
+   "id": "receiver",
+   "name": "The seller"
+  },
+  {
+   "id": "owner-agent",
+   "name": "The buyer's agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The seller's agent"
+  }
+ ],
+ "scenario": {
+  "id": "price-negotiation",
+  "title": "Negotiating a price",
+  "steps": {
+   "1": "The buyer's agent checks the signed statements.",
+   "2": "The seller's agent sends the signed request.",
+   "3": "The buyer's agent checks the message and prepares a response.",
+   "4": "The seller's agent checks the message and prepares a response.",
+   "5": "The buyer's agent checks the durable record.",
+   "6": "The seller's agent checks the durable record.",
+   "7": "The buyer's agent completes the conversation step.",
+   "8": "The seller's agent completes the conversation step.",
+   "9": "The buyer's agent checks the observed result."
+  }
+ },
+ "configuration": {
+  "id": "baseline",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "owner-agent",
+   "name": "The buyer's agent",
+   "actsFor": "owner",
+   "role": "agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The seller's agent",
+   "actsFor": "receiver",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Outside organizations and data sources",
+   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+  },
+  {
+   "what": "Bicycle sale",
+   "replacedBy": "Fictional parties sign one GBP 80 offer and its exact acceptance; no physical delivery or payment settlement is simulated"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The buyer's buyer.ceiling statement is intact and signed with The buyer's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:price-negotiation:buyer.ceiling",
+    "text": "The buyer is accepted for buyer.ceiling claims."
+   },
+   "resolution": {
+    "question": "Is The buyer an authority for buyer.ceiling claims about The buyer?",
+    "path": [
+     {
+      "at": "The buyer's own list",
+      "kind": "own-list",
+      "says": "The buyer is accepted for buyer.ceiling."
+     }
+    ],
+    "answer": "Accepted, for buyer.ceiling claims only."
+   },
+   "caption": "The buyer's buyer.ceiling statement: The buyer is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The buyer's buyer.ceiling statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:price-negotiation:ceiling",
+    "text": "Its terms allow this: use for urn:purpose:buyer planning."
+   },
+   "caption": "The buyer's buyer.ceiling statement: its terms allow this: use for urn:purpose:buyer planning."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:price-negotiation:buyer.ceiling",
+    "text": "Accept buyer.ceiling from urn:fictional:price-negotiation:owner by self-reported, at most 30 days old."
+   },
+   "caption": "The buyer's buyer.ceiling statement is fit for urn:scenario:price-negotiation:task: self-reported, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The buyer's buyer.ceiling statement is admitted."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:price-negotiation:ceiling",
+    "label": "The buyer's buyer.ceiling statement",
+    "claimType": "buyer.ceiling",
+    "subject": "urn:fictional:price-negotiation:owner",
+    "value": null,
+    "source": "urn:fictional:price-negotiation:owner",
+    "method": "self-reported",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:price-negotiation:ceiling",
+     "summary": "use for urn:purpose:buyer planning"
+    },
+    "provenance": "signed by The buyer"
+   },
+   "caption": "The buyer's buyer.ceiling statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 8,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Negotiating a price with The buyer."
+  },
+  {
+   "seq": 9,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The seller's mandate covers this action."
+  },
+  {
+   "seq": 10,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The buyer a party I can send Negotiating a price to?",
+    "path": [
+     {
+      "at": "The seller's own list",
+      "kind": "own-list",
+      "says": "The buyer is accepted for Negotiating a price."
+     }
+    ],
+    "answer": "Accepted, for Negotiating a price only."
+   },
+   "reason": "recipient-established",
+   "caption": "The buyer: Accepted, for Negotiating a price only."
+  },
+  {
+   "seq": 11,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 12,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 13,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The seller's limits."
+  },
+  {
+   "seq": 14,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The seller's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 16,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The propose message goes to The buyer's agent."
+  },
+  {
+   "seq": 17,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
+    "from": "The seller's agent",
+    "to": "The buyer's agent",
+    "kind": "propose",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:f3c6e7cb5ec…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The seller's agent to The buyer's agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-price-negotiation-main:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
+       "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001",
+       "kind": "propose",
+       "from": {
+        "actor": "urn:fictional:price-negotiation:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:price-negotiation:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:price-negotiation:owner-agent:actor",
+        "party": "urn:fictional:price-negotiation:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:53e1cc9c27ea74d6c36182928878b1ab5899a599c9b15bf4b021c824c229e037"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The seller says The seller's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:0886c90c163981244cb9746a9d2eab22:1794560400000",
+        "party": "urn:fictional:price-negotiation:receiver",
+        "actor": "urn:fictional:price-negotiation:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:price-negotiation",
+         "urn:op:price-negotiation:request",
+         "urn:op:price-negotiation:disclose"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:a61259a45ff2f7b98f796739ddd9d8b72106c12d9d8b8a0cd38a440f92116584"
+     },
+     "content": {
+      "present": true,
+      "summary": "An offer to start urn:op:price-negotiation, with terms (round 1).",
+      "raw": {
+       "operation": {
+        "id": "urn:op:price-negotiation",
+        "version": "0.1"
+       },
+       "terms": {
+        "price": 80,
+        "currency": "GBP",
+        "item": "fictional-bicycle"
+       },
+       "termsDigest": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0",
+       "round": 1
+      },
+      "digest": "sha-256:15c8cbcbd53b3af2d02639fc861a37de2ddefd3289c5bb27ebb814153e6c68cd"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "price": 80,
+       "currency": "GBP",
+       "item": "fictional-bicycle"
+      },
+      "digest": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The seller's agent sends a propose message to The buyer's agent."
+  },
+  {
+   "seq": 18,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
+    "from": "The seller's agent",
+    "to": "The buyer's agent",
+    "kind": "propose",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:f3c6e7cb5ec…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The seller's agent to The buyer's agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-price-negotiation-main:receiver-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
+       "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001",
+       "kind": "propose",
+       "from": {
+        "actor": "urn:fictional:price-negotiation:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:price-negotiation:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:price-negotiation:owner-agent:actor",
+        "party": "urn:fictional:price-negotiation:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:53e1cc9c27ea74d6c36182928878b1ab5899a599c9b15bf4b021c824c229e037"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The seller says The seller's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:0886c90c163981244cb9746a9d2eab22:1794560400000",
+        "party": "urn:fictional:price-negotiation:receiver",
+        "actor": "urn:fictional:price-negotiation:receiver-agent:actor",
+        "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "operations": [
+         "urn:op:price-negotiation",
+         "urn:op:price-negotiation:request",
+         "urn:op:price-negotiation:disclose"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:a61259a45ff2f7b98f796739ddd9d8b72106c12d9d8b8a0cd38a440f92116584"
+     },
+     "content": {
+      "present": true,
+      "summary": "An offer to start urn:op:price-negotiation, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:price-negotiation\"; \"sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:price-negotiation",
+        "version": "0.1"
+       },
+       "terms": {
+        "price": 80,
+        "currency": "GBP",
+        "item": "fictional-bicycle"
+       },
+       "termsDigest": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0",
+       "round": 1
+      },
+      "digest": "sha-256:15c8cbcbd53b3af2d02639fc861a37de2ddefd3289c5bb27ebb814153e6c68cd",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:price-negotiation"
+       },
+       {
+        "path": "termsDigest",
+        "text": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "price": 80,
+       "currency": "GBP",
+       "item": "fictional-bicycle"
+      },
+      "digest": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "A propose message from The seller's agent reaches the inbound gate."
+  },
+  {
+   "seq": 19,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The seller's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 20,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 21,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:0886c90c163981244cb9746a9d2eab22:1794560400000",
+    "text": "A representation statement signed with The seller's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The seller signed a statement that The seller's agent acts for them in this operation."
+  },
+  {
+   "seq": 22,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 23,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 24,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 25,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in Negotiating a price with The seller."
+  },
+  {
+   "seq": 26,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "The buyer's mandate covers this action."
+  },
+  {
+   "seq": 27,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The seller a party I can send Negotiating a price to?",
+    "path": [
+     {
+      "at": "The buyer's own list",
+      "kind": "own-list",
+      "says": "The seller is accepted for Negotiating a price."
+     }
+    ],
+    "answer": "Accepted, for Negotiating a price only."
+   },
+   "reason": "recipient-established",
+   "caption": "The seller: Accepted, for Negotiating a price only."
+  },
+  {
+   "seq": 28,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 29,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 30,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within The buyer's limits."
+  },
+  {
+   "seq": 31,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The buyer's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 32,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The accept message goes to The seller's agent."
+  },
+  {
+   "seq": 33,
+   "step": 3,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-price-negotiation-main:owner-agent:0001",
+    "from": "The buyer's agent",
+    "to": "The seller's agent",
+    "kind": "accept",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:51374638386…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The buyer's agent to The seller's agent; accept; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-price-negotiation-main:owner-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-price-negotiation-main:owner-agent:0001",
+       "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001",
+       "kind": "accept",
+       "from": {
+        "actor": "urn:fictional:price-negotiation:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:price-negotiation:owner"
+       },
+       "to": {
+        "actor": "urn:fictional:price-negotiation:receiver-agent:actor",
+        "party": "urn:fictional:price-negotiation:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:df9f42d1108ed31368c304f6be1a26f570e5dda56cf61652180f3f2126f2fc53"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The buyer says The buyer's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:049b859fcabac8dc77aac3a4c9e9e57b:1794560400000",
+        "party": "urn:fictional:price-negotiation:owner",
+        "actor": "urn:fictional:price-negotiation:owner-agent:actor",
+        "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "operations": [
+         "urn:op:price-negotiation",
+         "urn:op:price-negotiation:request",
+         "urn:op:price-negotiation:disclose"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:088d17e8b7a987911ddfe8e7de0fdf1cf3e0d2a804a3cbbae1c28b9f98295cae"
+     },
+     "content": {
+      "present": true,
+      "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id.",
+      "raw": {
+       "proposal": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
+       "termsDigest": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0",
+       "agreement": "urn:awp:agreement:bcbec632e5bc66e68089f57c1c0c7bae"
+      },
+      "digest": "sha-256:351fb3795321c22986b7559bd80352b225ccc33359421f377547ba36e97b1bee"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Binds to the offered terms by their digest.",
+      "raw": {
+       "termsDigest": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0"
+      },
+      "digest": "sha-256:c5763ea21152b9f3f64844d0d0700a2af8bf978f14c8b984526525bd22549efb"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-price-negotiation-main:receiver-agent:0002.",
+      "raw": {
+       "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001",
+       "inReplyTo": "urn:awp:engine-price-negotiation-main:receiver-agent:0002"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The buyer's agent sends an accept message to The seller's agent."
+  },
+  {
+   "seq": 34,
+   "step": 4,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-price-negotiation-main:owner-agent:0001",
+    "from": "The buyer's agent",
+    "to": "The seller's agent",
+    "kind": "accept",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:51374638386…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The buyer's agent to The seller's agent; accept; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-price-negotiation-main:owner-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-price-negotiation-main:owner-agent:0001",
+       "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001",
+       "kind": "accept",
+       "from": {
+        "actor": "urn:fictional:price-negotiation:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:price-negotiation:owner"
+       },
+       "to": {
+        "actor": "urn:fictional:price-negotiation:receiver-agent:actor",
+        "party": "urn:fictional:price-negotiation:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:df9f42d1108ed31368c304f6be1a26f570e5dda56cf61652180f3f2126f2fc53"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): The buyer says The buyer's agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:049b859fcabac8dc77aac3a4c9e9e57b:1794560400000",
+        "party": "urn:fictional:price-negotiation:owner",
+        "actor": "urn:fictional:price-negotiation:owner-agent:actor",
+        "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "operations": [
+         "urn:op:price-negotiation",
+         "urn:op:price-negotiation:request",
+         "urn:op:price-negotiation:disclose"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:088d17e8b7a987911ddfe8e7de0fdf1cf3e0d2a804a3cbbae1c28b9f98295cae"
+     },
+     "content": {
+      "present": true,
+      "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-price-negotiation-main:receiver-agent:0002\"; \"sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0\"; \"urn:awp:agreement:bcbec632e5bc66e68089f57c1c0c7bae\"",
+      "raw": {
+       "proposal": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
+       "termsDigest": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0",
+       "agreement": "urn:awp:agreement:bcbec632e5bc66e68089f57c1c0c7bae"
+      },
+      "digest": "sha-256:351fb3795321c22986b7559bd80352b225ccc33359421f377547ba36e97b1bee",
+      "untrusted": [
+       {
+        "path": "proposal",
+        "text": "urn:awp:engine-price-negotiation-main:receiver-agent:0002"
+       },
+       {
+        "path": "termsDigest",
+        "text": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0"
+       },
+       {
+        "path": "agreement",
+        "text": "urn:awp:agreement:bcbec632e5bc66e68089f57c1c0c7bae"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Binds to the offered terms by their digest.",
+      "raw": {
+       "termsDigest": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0"
+      },
+      "digest": "sha-256:c5763ea21152b9f3f64844d0d0700a2af8bf978f14c8b984526525bd22549efb"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-price-negotiation-main:receiver-agent:0002.",
+      "raw": {
+       "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001",
+       "inReplyTo": "urn:awp:engine-price-negotiation-main:receiver-agent:0002"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An accept message from The buyer's agent reaches the inbound gate."
+  },
+  {
+   "seq": 35,
+   "step": 4,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The buyer's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 36,
+   "step": 4,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 37,
+   "step": 4,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:049b859fcabac8dc77aac3a4c9e9e57b:1794560400000",
+    "text": "A representation statement signed with The buyer's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The buyer signed a statement that The buyer's agent acts for them in this operation."
+  },
+  {
+   "seq": 38,
+   "step": 4,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 39,
+   "step": 4,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 40,
+   "step": 4,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 41,
+   "step": 5,
+   "agent": "owner-agent",
+   "part": "record",
+   "kind": "record",
+   "caption": "11 entries in this agent's hash-chained record; the chain verifies."
+  },
+  {
+   "seq": 42,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "record",
+   "kind": "record",
+   "caption": "9 entries in this agent's hash-chained record; the chain verifies."
+  }
+ ]
+}

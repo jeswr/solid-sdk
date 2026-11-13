@@ -1,43 +1,66 @@
 {
  "x-authored-by": "Codex GPT-6",
  "schema": "agent-trace/0.1",
+ "useCase": "probing-counterparty",
+ "path": {
+  "index": 1,
+  "what": "The tenth request, like the first, is outside the mandate"
+ },
+ "parties": [
+  {
+   "id": "rowan",
+   "name": "Rowan, a fictional customer"
+  },
+  {
+   "id": "cedar",
+   "name": "The fictional service"
+  },
+  {
+   "id": "person-agent",
+   "name": "Rowan's agent"
+  },
+  {
+   "id": "service-agent",
+   "name": "The service's agent"
+  }
+ ],
  "scenario": {
   "id": "probing-counterparty--tenth-request",
-  "title": "A service agent that keeps asking: the tenth request, like the first, is outside the mandate",
+  "title": "A service agent that keeps asking: The tenth request, like the first, is outside the mandate",
   "steps": {
-   "1": "Request",
-   "2": "Open channel",
-   "3": "Channel accepted",
-   "4": "Probe 1",
-   "5": "Probe arrives 1",
-   "6": "Outside 1",
-   "7": "Probe 2",
-   "8": "Probe arrives 2",
-   "9": "Outside 2",
-   "10": "Probe 3",
-   "11": "Probe arrives 3",
-   "12": "Outside 3",
-   "13": "Probe 4",
-   "14": "Probe arrives 4",
-   "15": "Outside 4",
-   "16": "Probe 5",
-   "17": "Probe arrives 5",
-   "18": "Outside 5",
-   "19": "Probe 6",
-   "20": "Probe arrives 6",
-   "21": "Outside 6",
-   "22": "Probe 7",
-   "23": "Probe arrives 7",
-   "24": "Outside 7",
-   "25": "Probe 8",
-   "26": "Probe arrives 8",
-   "27": "Outside 8",
-   "28": "Probe 9",
-   "29": "Probe arrives 9",
-   "30": "Outside 9",
-   "31": "Probe 10",
-   "32": "Probe arrives 10",
-   "33": "Outside 10"
+   "1": "The service's agent sends a signed request.",
+   "2": "Rowan's agent checks the incoming message and prepares a response.",
+   "3": "The service's agent checks the incoming message and prepares a response.",
+   "4": "The service's agent completes the message step.",
+   "5": "Rowan's agent checks the incoming message and prepares a response.",
+   "6": "Rowan's agent proposes the local action.",
+   "7": "The service's agent completes the message step.",
+   "8": "Rowan's agent checks the incoming message and prepares a response.",
+   "9": "Rowan's agent proposes the local action.",
+   "10": "The service's agent completes the message step.",
+   "11": "Rowan's agent checks the incoming message and prepares a response.",
+   "12": "Rowan's agent proposes the local action.",
+   "13": "The service's agent completes the message step.",
+   "14": "Rowan's agent checks the incoming message and prepares a response.",
+   "15": "Rowan's agent proposes the local action.",
+   "16": "The service's agent completes the message step.",
+   "17": "Rowan's agent checks the incoming message and prepares a response.",
+   "18": "Rowan's agent proposes the local action.",
+   "19": "The service's agent completes the message step.",
+   "20": "Rowan's agent checks the incoming message and prepares a response.",
+   "21": "Rowan's agent proposes the local action.",
+   "22": "The service's agent completes the message step.",
+   "23": "Rowan's agent checks the incoming message and prepares a response.",
+   "24": "Rowan's agent proposes the local action.",
+   "25": "The service's agent completes the message step.",
+   "26": "Rowan's agent checks the incoming message and prepares a response.",
+   "27": "Rowan's agent proposes the local action.",
+   "28": "The service's agent completes the message step.",
+   "29": "Rowan's agent checks the incoming message and prepares a response.",
+   "30": "Rowan's agent proposes the local action.",
+   "31": "The service's agent completes the message step.",
+   "32": "Rowan's agent checks the incoming message and prepares a response.",
+   "33": "Rowan's agent proposes the local action."
   }
  },
  "configuration": {
@@ -65,13 +88,13 @@
   },
   {
    "id": "service-agent",
-   "name": "Cedar's agent",
+   "name": "The service's agent",
    "actsFor": "cedar",
    "role": "agent"
   }
  ],
  "generated": {
-  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
   "core": "scripted"
  },
  "standIns": [],
@@ -82,7 +105,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 2,
@@ -105,7 +128,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 3,
@@ -128,18 +151,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 4,
@@ -193,7 +216,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 7,
@@ -238,7 +261,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 9,
@@ -258,7 +281,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "propose",
     "carriage": {
@@ -268,7 +291,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002.",
+      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -295,7 +318,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Cedar Service says Cedar's agent acts for it.",
+      "summary": "1 representation statement(s): The fictional service says The service's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -376,7 +399,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends a propose message to Rowan's agent."
+   "caption": "The service's agent sends a propose message to Rowan's agent."
   },
   {
    "seq": 11,
@@ -386,7 +409,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "propose",
     "carriage": {
@@ -396,7 +419,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002.",
+      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -423,7 +446,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Cedar Service says Cedar's agent acts for it.",
+      "summary": "1 representation statement(s): The fictional service says The service's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -518,7 +541,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "A propose message from Cedar's agent reaches the inbound gate."
+   "caption": "A propose message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 12,
@@ -545,7 +568,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 13,
@@ -588,9 +611,9 @@
    "reason": "authority-valid",
    "rule": {
     "id": "urn:awp:representation:2a26df0df87f54e40c0217cc5834a93f:1794560400000",
-    "text": "A representation statement signed with Cedar Service's pinned key must name this agent, this operation and a current validity period."
+    "text": "A representation statement signed with The fictional service's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "Cedar Service signed a statement that Cedar's agent acts for them in this operation."
+   "caption": "The fictional service signed a statement that The service's agent acts for them in this operation."
   },
   {
    "seq": 15,
@@ -649,7 +672,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Cedar Service."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with The fictional service."
   },
   {
    "seq": 19,
@@ -672,7 +695,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Rowan Vale's mandate covers this action."
+   "caption": "Rowan, a fictional customer's mandate covers this action."
   },
   {
    "seq": 20,
@@ -695,18 +718,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Cedar Service a party I can send urn:operation:service query to?",
+    "question": "Is The fictional service a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Rowan Vale's own list",
+      "at": "Rowan, a fictional customer's own list",
       "kind": "own-list",
-      "says": "Cedar Service is accepted for urn:operation:service query."
+      "says": "The fictional service is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Cedar Service: Accepted, for urn:operation:service query only."
+   "caption": "The fictional service: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 21,
@@ -760,7 +783,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Rowan Vale's limits."
+   "caption": "Inside what the agent may do on its own, and within Rowan, a fictional customer's limits."
   },
   {
    "seq": 24,
@@ -797,7 +820,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The accept message goes to Cedar's agent."
+   "caption": "The accept message goes to The service's agent."
   },
   {
    "seq": 26,
@@ -808,7 +831,7 @@
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:person-agent:0001",
     "from": "Rowan's agent",
-    "to": "Cedar's agent",
+    "to": "The service's agent",
     "kind": "accept",
     "carriage": {
      "suite": "direct-http",
@@ -817,7 +840,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Rowan's agent to Cedar's agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:person-agent:0001.",
+      "summary": "From Rowan's agent to The service's agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:person-agent:0001.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -845,7 +868,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Rowan Vale says Rowan's agent acts for it.",
+      "summary": "1 representation statement(s): Rowan, a fictional customer says Rowan's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -909,7 +932,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Rowan's agent sends an accept message to Cedar's agent."
+   "caption": "Rowan's agent sends an accept message to The service's agent."
   },
   {
    "seq": 27,
@@ -920,7 +943,7 @@
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:person-agent:0001",
     "from": "Rowan's agent",
-    "to": "Cedar's agent",
+    "to": "The service's agent",
     "kind": "accept",
     "carriage": {
      "suite": "direct-http",
@@ -929,7 +952,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Rowan's agent to Cedar's agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:person-agent:0001.",
+      "summary": "From Rowan's agent to The service's agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:person-agent:0001.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -957,7 +980,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): Rowan Vale says Rowan's agent acts for it.",
+      "summary": "1 representation statement(s): Rowan, a fictional customer says Rowan's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -1105,9 +1128,9 @@
    "reason": "authority-valid",
    "rule": {
     "id": "urn:awp:representation:8085bb433c522764582542add66f79ce:1794560400000",
-    "text": "A representation statement signed with Rowan Vale's pinned key must name this agent, this operation and a current validity period."
+    "text": "A representation statement signed with Rowan, a fictional customer's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "Rowan Vale signed a statement that Rowan's agent acts for them in this operation."
+   "caption": "Rowan, a fictional customer signed a statement that Rowan's agent acts for them in this operation."
   },
   {
    "seq": 31,
@@ -1166,7 +1189,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 35,
@@ -1189,7 +1212,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 36,
@@ -1212,18 +1235,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 37,
@@ -1277,7 +1300,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 40,
@@ -1322,7 +1345,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 42,
@@ -1342,7 +1365,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0003",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -1352,7 +1375,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0003.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0003.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1437,7 +1460,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 44,
@@ -1447,7 +1470,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0003",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -1457,7 +1480,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0003.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0003.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1556,7 +1579,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 45,
@@ -1583,7 +1606,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 46,
@@ -1626,9 +1649,9 @@
    "reason": "representation-missing",
    "rule": {
     "id": "urn:operation:service-query",
-    "text": "A representation statement signed with Cedar Service's pinned key must name this agent, this operation and a current validity period."
+    "text": "A representation statement signed with The fictional service's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "The sender has not shown that it acts for Cedar Service here."
+   "caption": "The sender has not shown that it acts for The fictional service here."
   },
   {
    "seq": 48,
@@ -1685,18 +1708,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Cedar Service a party I can send urn:operation:service query to?",
+    "question": "Is The fictional service a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Rowan Vale's own list",
+      "at": "Rowan, a fictional customer's own list",
       "kind": "own-list",
-      "says": "Cedar Service is accepted for urn:operation:service query."
+      "says": "The fictional service is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Cedar Service: Accepted, for urn:operation:service query only."
+   "caption": "The fictional service: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 51,
@@ -1787,7 +1810,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The refuse message goes to Cedar's agent."
+   "caption": "The refuse message goes to The service's agent."
   },
   {
    "seq": 56,
@@ -1798,7 +1821,7 @@
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:person-agent:0002",
     "from": "Rowan's agent",
-    "to": "Cedar's agent",
+    "to": "The service's agent",
     "kind": "refuse",
     "carriage": {
      "suite": "direct-http",
@@ -1807,7 +1830,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Rowan's agent to Cedar's agent; refuse; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:person-agent:0002.",
+      "summary": "From Rowan's agent to The service's agent; refuse; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:person-agent:0002.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1878,7 +1901,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Rowan's agent sends a refuse message to Cedar's agent."
+   "caption": "Rowan's agent sends a refuse message to The service's agent."
   },
   {
    "seq": 57,
@@ -1886,7 +1909,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 58,
@@ -1911,9 +1934,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 59,
@@ -1932,7 +1955,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 61,
@@ -1955,7 +1978,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 62,
@@ -1978,18 +2001,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 63,
@@ -2043,7 +2066,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 66,
@@ -2088,7 +2111,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 68,
@@ -2108,7 +2131,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0004",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -2118,7 +2141,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0004.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0004.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2203,7 +2226,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 70,
@@ -2213,7 +2236,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0004",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -2223,7 +2246,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0004.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0004.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2322,7 +2345,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 71,
@@ -2349,7 +2372,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 72,
@@ -2368,7 +2391,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 74,
@@ -2393,9 +2416,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 75,
@@ -2414,7 +2437,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 77,
@@ -2437,7 +2460,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 78,
@@ -2460,18 +2483,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 79,
@@ -2525,7 +2548,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 82,
@@ -2570,7 +2593,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 84,
@@ -2590,7 +2613,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0005",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -2600,7 +2623,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0005.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0005.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2685,7 +2708,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 86,
@@ -2695,7 +2718,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0005",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -2705,7 +2728,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0005.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0005.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2804,7 +2827,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 87,
@@ -2831,7 +2854,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 88,
@@ -2850,7 +2873,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 90,
@@ -2875,9 +2898,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 91,
@@ -2896,7 +2919,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 93,
@@ -2919,7 +2942,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 94,
@@ -2942,18 +2965,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 95,
@@ -3007,7 +3030,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 98,
@@ -3052,7 +3075,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 100,
@@ -3072,7 +3095,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0006",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -3082,7 +3105,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0006.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0006.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3167,7 +3190,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 102,
@@ -3177,7 +3200,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0006",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -3187,7 +3210,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0006.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0006.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3286,7 +3309,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 103,
@@ -3313,7 +3336,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 104,
@@ -3332,7 +3355,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 106,
@@ -3357,9 +3380,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 107,
@@ -3378,7 +3401,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 109,
@@ -3401,7 +3424,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 110,
@@ -3424,18 +3447,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 111,
@@ -3489,7 +3512,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 114,
@@ -3534,7 +3557,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 116,
@@ -3554,7 +3577,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0007",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -3564,7 +3587,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0007.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0007.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3649,7 +3672,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 118,
@@ -3659,7 +3682,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0007",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -3669,7 +3692,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0007.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0007.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3768,7 +3791,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 119,
@@ -3795,7 +3818,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 120,
@@ -3814,7 +3837,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 122,
@@ -3839,9 +3862,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 123,
@@ -3860,7 +3883,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 125,
@@ -3883,7 +3906,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 126,
@@ -3906,18 +3929,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 127,
@@ -3971,7 +3994,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 130,
@@ -4016,7 +4039,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 132,
@@ -4036,7 +4059,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0008",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -4046,7 +4069,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0008.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0008.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4131,7 +4154,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 134,
@@ -4141,7 +4164,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0008",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -4151,7 +4174,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0008.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0008.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4250,7 +4273,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 135,
@@ -4277,7 +4300,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 136,
@@ -4296,7 +4319,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 138,
@@ -4321,9 +4344,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 139,
@@ -4342,7 +4365,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 141,
@@ -4365,7 +4388,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 142,
@@ -4388,18 +4411,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 143,
@@ -4453,7 +4476,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 146,
@@ -4498,7 +4521,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 148,
@@ -4518,7 +4541,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0009",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -4528,7 +4551,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0009.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0009.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4613,7 +4636,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 150,
@@ -4623,7 +4646,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0009",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -4633,7 +4656,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0009.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0009.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4732,7 +4755,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 151,
@@ -4759,7 +4782,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 152,
@@ -4778,7 +4801,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 154,
@@ -4803,9 +4826,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 155,
@@ -4824,7 +4847,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 157,
@@ -4847,7 +4870,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 158,
@@ -4870,18 +4893,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 159,
@@ -4935,7 +4958,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 162,
@@ -4980,7 +5003,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 164,
@@ -5000,7 +5023,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0010",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -5010,7 +5033,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0010.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0010.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5095,7 +5118,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 166,
@@ -5105,7 +5128,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0010",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -5115,7 +5138,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0010.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0010.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5214,7 +5237,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 167,
@@ -5241,7 +5264,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 168,
@@ -5260,7 +5283,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 170,
@@ -5285,9 +5308,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 171,
@@ -5306,7 +5329,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 173,
@@ -5329,7 +5352,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 174,
@@ -5352,18 +5375,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 175,
@@ -5417,7 +5440,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 178,
@@ -5462,7 +5485,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 180,
@@ -5482,7 +5505,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0011",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -5492,7 +5515,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0011.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0011.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5577,7 +5600,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 182,
@@ -5587,7 +5610,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0011",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -5597,7 +5620,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0011.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0011.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5696,7 +5719,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 183,
@@ -5723,7 +5746,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 184,
@@ -5742,7 +5765,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 186,
@@ -5767,9 +5790,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 187,
@@ -5788,7 +5811,7 @@
    "agent": "service-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+   "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
   },
   {
    "seq": 189,
@@ -5811,7 +5834,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "Cedar Service's mandate covers this action."
+   "caption": "The fictional service's mandate covers this action."
   },
   {
    "seq": 190,
@@ -5834,18 +5857,18 @@
     }
    ],
    "resolution": {
-    "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+    "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
     "path": [
      {
-      "at": "Cedar Service's own list",
+      "at": "The fictional service's own list",
       "kind": "own-list",
-      "says": "Rowan Vale is accepted for urn:operation:service query."
+      "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
      }
     ],
-    "answer": "Accepted, for urn:operation:service query only."
+    "answer": "Accepted, for A bounded request for contact details only."
    },
    "reason": "recipient-established",
-   "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+   "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
   },
   {
    "seq": 191,
@@ -5899,7 +5922,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+   "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
   },
   {
    "seq": 194,
@@ -5944,7 +5967,7 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The service's agent's pinned key, and written to the record."
   },
   {
    "seq": 196,
@@ -5964,7 +5987,7 @@
    "kind": "message-out",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0012",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -5974,7 +5997,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0012.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0012.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6059,7 +6082,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "Cedar's agent sends an invoke message to Rowan's agent."
+   "caption": "The service's agent sends an invoke message to Rowan's agent."
   },
   {
    "seq": 198,
@@ -6069,7 +6092,7 @@
    "kind": "message-in",
    "packet": {
     "id": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0012",
-    "from": "Cedar's agent",
+    "from": "The service's agent",
     "to": "Rowan's agent",
     "kind": "invoke",
     "carriage": {
@@ -6079,7 +6102,7 @@
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Cedar's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0012.",
+      "summary": "From The service's agent to Rowan's agent; invoke; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-tenth-request:service-agent:0012.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6178,7 +6201,7 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from Cedar's agent reaches the inbound gate."
+   "caption": "An invoke message from The service's agent reaches the inbound gate."
   },
   {
    "seq": 199,
@@ -6205,7 +6228,7 @@
     "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The service's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
   },
   {
    "seq": 200,
@@ -6224,7 +6247,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with Cedar Service."
+   "caption": "The core proposes to use urn:operation:private history with The fictional service."
   },
   {
    "seq": 202,
@@ -6249,9 +6272,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan Vale's mandate lets the agent use urn:operation:private history with Cedar Service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan Vale's mandate does not allow this: use urn:operation:private history with Cedar Service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
   },
   {
    "seq": 203,
@@ -6264,6 +6287,5 @@
    "reason": "not-authorised",
    "caption": "The action is stopped; nothing leaves."
   }
- ],
- "useCase": "probing-counterparty"
+ ]
 }
