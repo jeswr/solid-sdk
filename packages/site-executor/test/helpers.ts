@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Test helpers: an ActionRequest built from Turtle (n3, test-only stand-in for
 // site-model's parseActionRequest) and a tiny 127.0.0.1 HTTP server harness.
 
@@ -83,7 +84,15 @@ export async function startServer(handler: Handler): Promise<TestServer> {
       });
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EPERM") throw error;
+    return memoryServer(handler, requests);
+  }
   const { port } = server.address() as AddressInfo;
   return {
     url: `http://127.0.0.1:${port}`,
@@ -93,6 +102,56 @@ export async function startServer(handler: Handler): Promise<TestServer> {
         server.closeAllConnections();
         server.close(() => resolve());
       }),
+  };
+}
+
+// Sandboxed runs cannot bind sockets. Exercise the same fixture handlers via
+// Fetch Request/Response objects, without skipping HTTP behavior assertions.
+let memoryPort = 20000;
+const memoryRoutes = new Map<string, { handler: Handler; requests: LoggedRequest[] }>();
+function memoryServer(handler: Handler, requests: LoggedRequest[]): TestServer {
+  const url = `http://127.0.0.1:${memoryPort++}`;
+  memoryRoutes.set(url, { handler, requests });
+  globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    if (request.signal.aborted) throw request.signal.reason;
+    const target = new URL(request.url);
+    const route = memoryRoutes.get(target.origin);
+    if (!route) throw new Error("no fixture on this origin");
+    const logged: LoggedRequest = {
+      method: request.method,
+      url: target.pathname + target.search,
+      headers: { ...Object.fromEntries(request.headers), host: target.host },
+      body: await request.text(),
+    };
+    route.requests.push(logged);
+    return new Promise<Response>((resolve, reject) => {
+      let status = 200;
+      let headers = new Headers();
+      const response = {
+        statusCode: 200,
+        writeHead(code: number, values: Record<string, string | string[]>) {
+          status = code;
+          headers = new Headers();
+          for (const [name, value] of Object.entries(values)) {
+            for (const v of Array.isArray(value) ? value : [value]) headers.append(name, v);
+          }
+        },
+        end(body: string) {
+          resolve(
+            new Response([204, 205, 304].includes(status) ? null : body, { status, headers }),
+          );
+        },
+      } as unknown as ServerResponse;
+      Promise.resolve(route.handler(logged, response)).catch(reject);
+    });
+  };
+  return {
+    url,
+    requests,
+    async close() {
+      memoryRoutes.delete(url);
+    },
   };
 }
 
