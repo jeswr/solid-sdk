@@ -123,9 +123,6 @@ export function learnFilterSelections(
     const writeBind: Record<string, string> = { [witness]: `$step0.${property}` };
     const mapping: Record<string, string> = {};
     for (const p of inputs) {
-      // Resolving a selection always starts at the first page.
-      if (/(?:page|current)(?:\]|$)/i.test(decodeURIComponent(p.name)) && !/size/i.test(p.name))
-        p.default = "1";
       readBind[p.name] = `$input.${p.name}`;
     }
     for (const filter of filters) {

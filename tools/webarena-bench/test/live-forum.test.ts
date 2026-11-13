@@ -45,6 +45,35 @@ it.skipIf(!process.env.SAB_LIVE_FORUM_URL)(
     });
     expect(result.warnings.filter((w) => w.startsWith("demonstration"))).toEqual([]);
     expect(validateSiteModel(result.model)).toEqual([]);
+    if (process.env.SAB_LIVE_OUTPUT_DIR) {
+      await mkdir(process.env.SAB_LIVE_OUTPUT_DIR, { recursive: true, mode: 0o700 });
+      await writeFile(
+        join(process.env.SAB_LIVE_OUTPUT_DIR, "forum-learning.json"),
+        JSON.stringify(
+          {
+            model: result.model,
+            writeResponses: result.writeResponses,
+            redirects: result.trace
+              .filter(
+                (r) =>
+                  r.phase === "demonstration" && (r.redirectedTo || r.redirectedFrom !== undefined),
+              )
+              .map((r) => ({
+                seq: r.seq,
+                method: r.method,
+                url: r.url,
+                status: r.status,
+                redirectedTo: r.redirectedTo,
+                redirectedFrom: r.redirectedFrom,
+                bodyTruncated: r.bodyTruncated,
+              })),
+          },
+          null,
+          2,
+        ),
+        { mode: 0o600 },
+      );
+    }
     const model = readSiteModel(await writeSiteModel(result.model));
     const op = (pattern: RegExp, kind?: string) =>
       need(
@@ -119,7 +148,12 @@ it.skipIf(!process.env.SAB_LIVE_FORUM_URL)(
       credentials,
     );
     calls.length = 0;
-    const executor = createTaskExecutor({ model, sessions, fetch: transport });
+    const executor = createTaskExecutor({
+      model,
+      sessions,
+      fetch: transport,
+      writeResponses: result.writeResponses,
+    });
     const item = forumFixture();
     let postId = "",
       commentId = "";
@@ -206,6 +240,7 @@ it.skipIf(!process.env.SAB_LIVE_FORUM_URL)(
       },
       async (input: PlannerInput) => {
         expect(last(input).status, last(input).error).toBe("done");
+        expect(last(input).observations).toContain("Completed");
         expect(sent()).toBe(++expectedPosts);
         after?.(input);
         return { kind: "act" as const, turtle: await readAfter() };
@@ -350,6 +385,13 @@ it.skipIf(!process.env.SAB_LIVE_FORUM_URL)(
         await deleteOwnForumPost(page, origin, item);
       } finally {
         await browser.close();
+      }
+      if (process.env.SAB_LIVE_OUTPUT_DIR) {
+        await writeFile(
+          join(process.env.SAB_LIVE_OUTPUT_DIR, "forum-traffic.json"),
+          JSON.stringify({ approvals, calls, postId, commentId }, null, 2),
+          { mode: 0o600 },
+        );
       }
     }
     console.log(

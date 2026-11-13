@@ -296,11 +296,10 @@ a similarly named neighbour with a distinct SKU. A broad name search matching bo
 before write approval. The delete Flow resolves the intended SKU and names that product in
 its approval, re-resolves on retry, deletes it, then confirms the neighbour still exists.
 The opt-in fixture configures a resolver whose concrete query scope equals the witnessed delete
-form, rather than exempting grid transport defaults. It declares the known create/update
-created-location pattern through executor-local `writeResponses`. The delete redirect has no
+form, rather than exempting grid transport defaults. It forwards the profiler's demonstration-learned `writeResponses` beside the RDF model. The delete redirect has no
 created-location declaration: it emits Uncertain with no identity, and subsequent complete grid
-reads verify deletion and the surviving neighbour. Production profiling keeps its learned model;
-these explicit sandbox declarations belong only to the opt-in test.
+reads verify deletion and the surviving neighbour. The resolver scope adaptation belongs only to the opt-in test. Production profiling retains
+its learned model and stores response policies in the profile JSON sidecar.
 Exactly two create POSTs, one update POST and one delete POST are required; an identical
 repeated create is blocked within the task. Grid reads check both prices and disappearance.
 Browser cleanup covers both products after execution, including failure, using only the test's
@@ -345,3 +344,12 @@ The create request obtains its forum ID from an earlier learned options read. Ne
 identities come from executor receipts. Forum verification uses the learned exclusive ID cursor,
 so imports whose existing IDs exceed the fresh sequence still show the created item. Optional
 SAB_LIVE_OUTPUT_DIR stores a compact forum-acceptance.json with operations and approval summaries.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Live fixtures pass the profiler's learned `writeResponses` to the executor. They declare no
+created-location patterns. The benchmark profile JSON sidecar stores the same policy map;
+execution loads it beside the TTL model. Without that artifact, redirected writes retain
+Uncertain outcomes under the executor's existing rules.
+
+The opt-in admin live files run serially because they share the sandbox account and its
+authentication state; ordinary unit tests retain file parallelism.

@@ -26,7 +26,14 @@ describe("read-only profiling and generic demonstration seam", () => {
     config.modelsDir = await mkdtemp(join(tmpdir(), "webarena-profile-"));
     directories.push(config.modelsDir);
     const model = shopModel(config.sites.shopping.baseUrl);
-    vi.mocked(profileSite).mockResolvedValue({ model, trace: [], warnings: [] });
+    const writeResponses = {
+      "urn:fixture:write": {
+        createdLocationPattern: "/items/{id}",
+        redirectCount: 1,
+        finalStatus: 200,
+      },
+    };
+    vi.mocked(profileSite).mockResolvedValue({ model, trace: [], writeResponses, warnings: [] });
     const path = await profileBenchmark(config, "shopping");
     expect(profileSite).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -40,6 +47,7 @@ describe("read-only profiling and generic demonstration seam", () => {
     const manifest = await readFile(join(config.modelsDir, "shopping.profile.json"), "utf8");
     expect(manifest).not.toContain(login.password);
     expect(JSON.parse(manifest).demonstrations).toBeNull();
+    expect(JSON.parse(manifest).writeResponses).toEqual(writeResponses);
   });
   it("rejects failed login and undemonstrated writes", async () => {
     const config = fixtureConfig();
@@ -47,12 +55,22 @@ describe("read-only profiling and generic demonstration seam", () => {
     config.modelsDir = await mkdtemp(join(tmpdir(), "webarena-profile-"));
     directories.push(config.modelsDir);
     const model = shopModel(config.sites.shopping.baseUrl);
-    vi.mocked(profileSite).mockResolvedValue({ model, trace: [], warnings: ["login: failed"] });
+    vi.mocked(profileSite).mockResolvedValue({
+      model,
+      trace: [],
+      writeResponses: {},
+      warnings: ["login: failed"],
+    });
     await expect(profileBenchmark(config, "shopping")).rejects.toThrow("login failed");
     const write = model.operations.find((o) => o.label === "Add to basket");
     if (!write) throw new Error("Missing write fixture.");
     write.provenance = { ...write.provenance, method: "form" };
-    vi.mocked(profileSite).mockResolvedValue({ model, trace: [], warnings: [] });
+    vi.mocked(profileSite).mockResolvedValue({
+      model,
+      trace: [],
+      writeResponses: {},
+      warnings: [],
+    });
     await expect(profileBenchmark(config, "shopping")).rejects.toThrow("undemonstrated");
   });
   it("replays an immutable generic UI recording, hashes it, and refuses wrong-site recordings", async () => {

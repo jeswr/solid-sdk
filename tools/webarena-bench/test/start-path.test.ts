@@ -26,7 +26,12 @@ it("keeps the environment origin while applying a per-site start path and profil
     const path = join(directory, "config.json");
     await writeFile(path, JSON.stringify(raw));
     const config = await loadConfig(path);
-    vi.mocked(profileSite).mockResolvedValue({ model: emptyModel(), trace: [], warnings: [] });
+    vi.mocked(profileSite).mockResolvedValue({
+      model: emptyModel(),
+      trace: [],
+      writeResponses: {},
+      warnings: [],
+    });
     await profileBenchmark(config, "shopping_admin");
     expect(profileSite).toHaveBeenCalledWith(
       expect.objectContaining({ startUrl: "http://127.0.0.1:7780/admin", maxProfileMs: 30000 }),

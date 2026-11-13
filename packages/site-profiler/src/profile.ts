@@ -7,9 +7,10 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { registerCookieSecrets, secretRedactor } from "@jeswr/site-executor";
 import type { Extraction, LearnMethod, LoginRoute, Operation, SiteModel } from "@jeswr/site-model";
 import type { Browser } from "playwright";
-import { crawl } from "./crawl.js";
+import { crawl, navigationLinks } from "./crawl.js";
 import { buildFlow, type DemoStep, runDemonstration } from "./demonstrations.js";
 import { emptyListProbe } from "./empty-list-probe.js";
 import { applyExtraction, proposeHtmlExtraction, proposeJsonExtraction } from "./extraction.js";
@@ -55,6 +56,7 @@ import {
 } from "./util.js";
 import { findProbeUrl, playwrightReplayer, verifyOperations } from "./verify.js";
 import { learnDemonstratedForm } from "./write-learning.js";
+import { learnWriteResponses } from "./write-responses.js";
 
 const FALLBACK_CHROMIUM = ["/opt/pw-browsers/chromium-1243/chrome-linux64/chrome"];
 
@@ -141,7 +143,12 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
 
   const browser = options.browser ?? (await launchChromium());
   const context = await browser.newContext({ serviceWorkers: "block" });
-  const recorder = new Recorder(origin);
+  const cookieSecrets = new Set<string>();
+  const loginCookieNames = new Set<string>();
+  const recorder = new Recorder(origin, (cookie, loginResponse) => {
+    if (loginResponse) loginCookieNames.add(cookie.name);
+    registerCookieSecrets(cookieSecrets, cookie, { loginCookieNames: [...loginCookieNames] });
+  });
   await recorder.attach(context);
   const maxProfileMs = options.maxProfileMs ?? 180_000;
   if (
@@ -166,6 +173,14 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     timer = setTimeout(() => reject(new Error("Profile time limit exceeded")), maxProfileMs);
   });
   const learn = async (): Promise<ProfileResult> => {
+    const cookieContext = () => ({
+      loginCookieNames: [...loginCookieNames],
+    });
+    const readCookies = async () => {
+      const cookies = await context.cookies();
+      for (const cookie of cookies) registerCookieSecrets(cookieSecrets, cookie, cookieContext());
+      return cookies;
+    };
     // 8a. Sign in first (user-authorised), so the crawl also sees signed-in pages.
     let login: LoginObservation | undefined;
     if (options.login) {
@@ -183,8 +198,9 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     });
     let tokens = discoverSessionTokens(
       crawled.pages.map((p) => ({ url: p.finalUrl, html: p.html })),
-      await context.cookies(),
+      await readCookies(),
       recorder.trace,
+      cookieContext(),
     );
     warnings.push(...crawled.warnings);
 
@@ -279,8 +295,9 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
           .filter((r) => r.phase === "demonstration" && r.bodySample && isHtmlType(r.contentType))
           .map((r) => ({ url: r.url, html: r.bodySample ?? "" })),
       ],
-      await context.cookies(),
+      await readCookies(),
       recorder.trace,
+      cookieContext(),
     );
     for (const r of recorder.trace)
       if (r.postDataTruncated || r.postDataUnsupported)
@@ -533,8 +550,35 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       if (candidate.form && login?.success) {
         const route: LoginRoute = { method: "password", operation: op.id };
         if (login.sessionCookies.length) route.sessionCookies = login.sessionCookies;
-        const pageUrls = crawled.pages.map((p) => p.finalUrl);
-        const probe = await findProbeUrl(probeCandidates(login, pageUrls), verifier);
+        const pageUrls = [
+          ...crawled.pages.map((p) => p.finalUrl),
+          ...crawled.pages.flatMap((page) =>
+            navigationLinks(page.html).flatMap(([href, label]) => {
+              try {
+                const url = new URL(href, page.finalUrl);
+                return url.origin === origin && !url.search && !isDangerousLink(url.href, label)
+                  ? [url.href]
+                  : [];
+              } catch {
+                return [];
+              }
+            }),
+          ),
+        ];
+        const verifiedSignedInReads = verifiedOps
+          .filter(
+            (read) =>
+              read.effect === "read" &&
+              read.session === "signed-in" &&
+              read.request.method === "GET" &&
+              (read.provenance.successes ?? 0) > 0 &&
+              !/[{?]/.test(read.request.urlTemplate),
+          )
+          .map((read) => read.request.urlTemplate);
+        const probe = await findProbeUrl(
+          probeCandidates(login, pageUrls, verifiedSignedInReads),
+          verifier,
+        );
         if (probe) route.probeUrl = probe;
         loginRoutes.push(route);
       } else if (!candidate.form) {
@@ -564,7 +608,9 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     );
     const secrets = [
       ...tokens.keys(),
-      ...discoverCredentialSources(formPages, await context.cookies()).secrets,
+      ...discoverCredentialSources(formPages, await readCookies(), recorder.trace, cookieContext())
+        .secrets,
+      ...cookieSecrets,
       ...candidates.flatMap((candidate) =>
         candidate.csrf.flatMap(({ source }) => {
           if (source.kind !== "html" && source.kind !== "meta") return [];
@@ -580,11 +626,19 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         }),
       ),
       ...tokenFields,
-      ...(await context.cookies().then((cs) => cs.map((c) => c.value))),
       ...(options.login ? [options.login.password] : []),
     ];
+    // Demonstration cleanup can remove the landing resource before read verification.
+    // Its recorded response and learned read still supply the witnessed response policy.
+    const writeResponses = learnWriteResponses(operations, recorder.trace, origin);
+    const redact = secretRedactor(new Set(secrets));
+    for (const [id, policy] of Object.entries(writeResponses)) {
+      const encoded = JSON.stringify(policy);
+      if (redact(encoded) !== encoded) delete writeResponses[id];
+    }
     return {
       model,
+      writeResponses,
       trace: redactTrace(recorder.trace, secrets),
       warnings: redactTraceStrings(warnings, secrets),
     };
@@ -599,7 +653,5 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
 }
 
 function redactTraceStrings(values: string[], secrets: string[]): string[] {
-  return values.map((value) =>
-    secrets.filter(Boolean).reduce((out, secret) => out.split(secret).join("[redacted]"), value),
-  );
+  return values.map(secretRedactor(new Set(secrets)));
 }

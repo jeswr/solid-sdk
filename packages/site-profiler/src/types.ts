@@ -3,6 +3,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // Types local to the profiler. The output contract (SiteModel and friends) lives in @jeswr/site-model.
 
+import type { ExecutorOptions } from "@jeswr/site-executor";
 import type { CsrfRule, EffectClass, LearnMethod, SiteModel } from "@jeswr/site-model";
 import type { Browser, Page } from "playwright";
 
@@ -37,11 +38,15 @@ export interface RecordedRequest {
   contentType?: string;
   /** Location header of a redirect response. */
   redirectedTo?: string;
+  /** Exact recorder sequence of the request whose redirect caused this request. */
+  redirectedFrom?: number;
   /** Names of the cookies the response set. */
   setCookieNames?: string[];
   /** Response body, truncated to the profiler's sample limit. */
   bodySample?: string;
   bodyTruncated?: boolean;
+  /** Error/validation check over the complete witnessed response, before sample truncation. */
+  responsePageError?: boolean;
   /** True when the profiler's guard refused to send it (a non-GET outside demonstrations and login). */
   blocked?: boolean;
 }
@@ -181,6 +186,8 @@ export interface ProfileOptions {
 
 export interface ProfileResult {
   model: SiteModel;
+  /** Learned demonstration response policies; persist separately from model RDF. */
+  writeResponses: NonNullable<ExecutorOptions["writeResponses"]>;
   trace: RecordedRequest[];
   warnings: string[];
 }

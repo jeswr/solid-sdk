@@ -273,3 +273,21 @@ A scripted planner creates a post, comments, edits, votes, deletes the comment a
 post, with deny/approve decisions recorded at every write and an identical-comment repeat refusal.
 The host logs in through the learned cookie-check login route; page HTML stays outside planner
 history. Enable with SAB_LIVE_FORUM_URL; see the harness README for the command.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Cookie intake and learning use the executor's shared classifier/registration and redactor.
+HttpOnly, login-set/changed, model/vault-declared and common session-named cookies are credentials
+from four characters, using the shared `MIN_REDACTION_LENGTH` floor. Other cookies need a logical payload of at least eight characters;
+a preference `1` does not mask item IDs. Register wire, unquoted, percent-decoded and
+decoded-unquoted payloads together. Traces, warnings and snapshots share HTML-entity and mixed
+plus/percent form normalization with executor observations. Sub-four-character values are
+guessable, provide no confidentiality, and never register for redaction or suppress samples;
+the origin guard still confines them to their own site. Registered values of four to seven
+characters keep token boundaries; eight or more receive full redaction in every supported form.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+When hosting a profiler result, pass both `model` and `writeResponses` to `createTaskExecutor`.
+These demonstration-learned response policies remain a separate trusted artifact through model
+RDF round trips; model RDF alone cannot preserve them. The scripted shop host forwards the
+profiler output, without hand-written created-location patterns. Missing policies retain the
+executor's Uncertain outcome and repeat guard.

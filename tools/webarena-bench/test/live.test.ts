@@ -101,7 +101,7 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
     }
     const sessions = new InMemorySessions();
     await loginWithPassword(model, createExecutorFetch({ model, sessions }), credentials);
-    const executor = createExecutor({ model, sessions });
+    const executor = createExecutor({ model, sessions, writeResponses: result.writeResponses });
     const person = find("customer_listing", "SearchAction");
     const order = find("sales_order_grid", "ViewAction");
     const product = find("product_listing", "SearchAction");

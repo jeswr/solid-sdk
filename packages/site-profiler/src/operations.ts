@@ -11,6 +11,7 @@ import {
   type Operation,
   type Parameter,
 } from "@jeswr/site-model";
+import { learnedPagination } from "./pagination.js";
 import type { CandidateParam, EndpointCandidate, Label } from "./types.js";
 import { s, sab, singular, slug, xsd } from "./util.js";
 
@@ -161,7 +162,13 @@ export function toParameter(
       ...(c.bodyTemplate && p.name === "quantity" ? {} : { default: example ?? "1" }),
     };
   } else if (/^page$/i.test(p.name)) {
-    param = { ...base, path: [sab("page")], range: xsd("integer"), required: false, default: "1" };
+    param = {
+      ...base,
+      path: [sab("page")],
+      range: xsd("integer"),
+      required: false,
+      ...(example !== undefined ? { default: example } : {}),
+    };
   } else {
     // Extra query parameters (filters, limits) stay optional: RFC 6570 drops them when unset.
     const required = p.location !== "query" && p.required && !p.hidden;
@@ -179,9 +186,9 @@ export function toParameter(
       param.default = String(Math.min(Number(example), 25));
     if (/page.?size|limit|per.?page/i.test(decoded))
       param.description = "Rows per page, at most 25.";
-    else if (/(?:page|current)(?:\]|$)/i.test(decoded))
-      param.description = "Page number, starting at 1.";
   }
+  const pagination = learnedPagination(c, p, extraction);
+  if (pagination) param.description = pagination;
   if (example !== undefined && example !== "[redacted]" && param.path.length)
     param.example = example;
   if (p.options?.length) {

@@ -89,7 +89,7 @@ it("marks a recorded filter-selected mass write with a flow-only identity and ma
   });
   expect(
     selected.flow.inputs.find((p) => decodeURIComponent(p.name) === "paging[current]")?.default,
-  ).toBe("1");
+  ).toBe("3");
   expect(f.write.request.bodyTemplate).not.toContain(selected.witness);
   const model = {
     id: f.ctx.modelId,

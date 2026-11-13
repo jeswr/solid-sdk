@@ -19,9 +19,9 @@ if (!["scripted", "claude", "codex"].includes(values.planner)) {
 }
 const shop = await startShop();
 try {
-  const model = await learnShop(shop);
+  const { model, writeResponses } = await learnShop(shop);
   shop.state.reset(); // The learning demonstration's order is separate from the task.
-  const { executor } = await shopExecutor(model);
+  const { executor } = await shopExecutor(model, undefined, writeResponses);
   const planner =
     values.planner === "claude"
       ? claudeCliPlanner({ model: values.model ?? "sonnet" })

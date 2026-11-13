@@ -281,7 +281,7 @@ describe("review r8 — transmitted token redaction", () => {
     expect(result.observations[0]?.turtle).toContain("[redacted]");
   });
 
-  it("redacts registered short forms while ignoring empty values", () => {
+  it("redacts eligible short forms while ignoring sub-four-character values", () => {
     const redact = secretRedactor(
       new Set([
         "",
@@ -294,10 +294,10 @@ describe("review r8 — transmitted token redaction", () => {
         "12345678",
       ]),
     );
-    expect(redact("abc 1234567 tiny")).toBe("[redacted] [redacted] [redacted]");
+    expect(redact("abc 1234567 tiny")).toBe("abc [redacted] [redacted]");
     expect(redact("12345678")).toBe("[redacted]");
     expect(redact("😀😀😀😀          ")).toBe("[redacted][redacted]");
-    expect(redact("%61%62%63")).toBe("[redacted]");
+    expect(redact("%61%62%63")).toBe("%61%62%63");
   });
 
   it("redacts mixed/nested percent, JSON and HTML escapes while preserving ordinary markup", () => {

@@ -121,6 +121,7 @@ export async function profileBenchmark(config: BenchConfig, site: Site): Promise
     generatedAt: result.model.generatedAt,
     maxPages: config.maxPages,
     warnings: result.warnings,
+    writeResponses: result.writeResponses,
     demonstrations: recorded
       ? {
           scope: "site-generic",

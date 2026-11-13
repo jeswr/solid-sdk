@@ -272,3 +272,24 @@ it("keeps numeric identities intact when a preference cookie has a one-character
     "http://127.0.0.1:9999/items/18 [redacted]",
   );
 });
+
+it.each([
+  true,
+  false,
+])("preserves a one-character cookie in host redaction regardless of classification: %s", async (httpOnly) => {
+  const model = modelFixture(),
+    sessions = new InMemorySessions();
+  sessions.set(model.site, undefined, {
+    cookies: [
+      { name: "preference", value: "1", httpOnly, domain: "shop.test", path: "/" },
+      { name: "session", value: "Ab7xQ2", httpOnly: true, domain: "shop.test", path: "/" },
+    ],
+  });
+  const executor = createTaskExecutor({ model, sessions });
+  await executor.execute({
+    node: "urn:request",
+    types: ["https://schema.org/UnknownAction"],
+    values: () => [],
+  });
+  expect(executor.redact?.("/items/1 /items/18 Ab7xQ2")).toBe("/items/1 /items/18 [redacted]");
+});

@@ -164,7 +164,7 @@ describe("operations", () => {
         .map((p) => [p.name, p.required, p.default, p.range]),
     ).toEqual([
       ["q", true, undefined, xsd("string")],
-      ["page", false, "1", xsd("integer")],
+      ["page", false, "2", xsd("integer")],
       ["limit", false, undefined, xsd("integer")],
     ]);
     const unknownThing = cand([req("GET", "/widgets/9")]);

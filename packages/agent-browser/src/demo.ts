@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { InMemorySessions } from "@jeswr/site-executor";
+import { type ExecutorOptions, InMemorySessions } from "@jeswr/site-executor";
 import { readSiteModel, SCHEMA, type SiteModel, writeSiteModel } from "@jeswr/site-model";
-import { profileSite } from "@jeswr/site-profiler";
+import { type ProfileResult, profileSite } from "@jeswr/site-profiler";
 import type { RunningShop } from "@jeswr/test-shop";
 import { LiteralAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -15,7 +15,7 @@ export const SHOP_LOGIN = { username: "alex@example.test", password: "correct-ho
 export const SHOP_GOAL = "Buy the Trail Runner sneakers if they cost no more than GBP 20";
 
 /** The same search -> view -> add -> checkout demonstration used by the profiler's e2e test. */
-export async function learnShop(shop: RunningShop): Promise<SiteModel> {
+export async function learnShop(shop: RunningShop): Promise<ProfileResult> {
   const result = await profileSite({
     startUrl: shop.url,
     login: SHOP_LOGIN,
@@ -62,23 +62,19 @@ export async function learnShop(shop: RunningShop): Promise<SiteModel> {
   result.model.operations = result.model.operations.filter(
     (o) => o.actionType !== `${SCHEMA}SearchAction` || flowOperations.has(o.id),
   );
-  return readSiteModel(await writeSiteModel(result.model));
+  return { ...result, model: readSiteModel(await writeSiteModel(result.model)) };
 }
 
 export async function shopExecutor(
   model: SiteModel,
   persona?: string,
+  writeResponses?: ExecutorOptions["writeResponses"],
 ): Promise<{
   executor: TaskExecutor;
   sessions: InMemorySessions;
 }> {
   const sessions = new InMemorySessions();
   await loginWithPassword(model, createExecutorFetch({ model, sessions, persona }), SHOP_LOGIN);
-  const writeResponses = Object.fromEntries(
-    model.operations
-      .filter((op) => op.effect === "payment")
-      .map((op) => [op.id, { createdLocationPattern: "/orders/{id}" }]),
-  );
   return { executor: createTaskExecutor({ model, sessions, persona, writeResponses }), sessions };
 }
 

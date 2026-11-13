@@ -41,10 +41,12 @@ export interface ExtractOutput {
   items: ExtractedItem[];
   /** Observed root count, never inferred from page size. */
   total?: number;
+  /** Only an explicit JSON array at a valid root can prove exhaustion. */
+  collectionState?: "empty" | "nonempty" | "invalid" | "unknown";
   turtle: string;
   truncation: { items: boolean; values: boolean };
   /** Re-render retained structured values with newly discovered secrets. */
-  render: (redact: (text: string) => string, suppressSamples?: boolean) => Promise<string>;
+  render: (redact: (text: string) => string) => Promise<string>;
 }
 export const PREFIXES = { schema: SCHEMA, sab: SAB, rdf: RDF, xsd: XSD } as const;
 /** JSON.parse's source context preserves decimal lexicals and exposes exponent spellings. */
@@ -116,6 +118,7 @@ function rawItems(
   truncation: ExtractOutput["truncation"],
   account: (rule: FieldRule | undefined, count: number) => void,
   onTotal: (value: unknown, count: number) => void,
+  onCollection: (state: NonNullable<ExtractOutput["collectionState"]>) => void,
 ): Map<FieldRule, RawValue[]>[] {
   let roots: unknown[];
   if (extraction.format === "json") {
@@ -128,6 +131,39 @@ function rawItems(
       throw new ExtractionError("response is not valid JSON");
     }
     const root = extraction.itemPath ? jsonPointer(doc, extraction.itemPath) : doc;
+    const isError = (value: unknown): boolean =>
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.entries(value).some(
+        ([key, member]) =>
+          (/^(error|errors|redirect|ajaxRedirect)$/i.test(key) && !!member) ||
+          (/^success$/i.test(key) && member === false) ||
+          (/^status$/i.test(key) &&
+            typeof member === "string" &&
+            /^(error|failed|failure)$/i.test(member)),
+      );
+    // Error envelopes can wrap the declared root; item data itself is not an envelope.
+    const path = extraction.itemPath?.split("/") ?? [];
+    const errorEnvelope =
+      isError(doc) ||
+      path
+        .slice(1)
+        .some((_part, index) => isError(jsonPointer(doc, path.slice(0, index + 1).join("/"))));
+    const validItem = (value: unknown) =>
+      value !== null &&
+      typeof value === "object" &&
+      !(value instanceof JsonNumber) &&
+      !Array.isArray(value);
+    const validRoot = Array.isArray(root) ? root.every(validItem) : validItem(root);
+    onCollection(
+      errorEnvelope || !validRoot
+        ? "invalid"
+        : Array.isArray(root) && root.length === 0
+          ? "empty"
+          : "nonempty",
+    );
+    if (errorEnvelope || !validRoot) return [];
     if (extraction.totalPath !== undefined)
       onTotal(
         (() => {
@@ -154,6 +190,7 @@ function rawItems(
       const value = elementText(totals[0] as AnyNode).trim();
       onTotal(/^\d+$/.test(value) ? Number(value) : value, roots.length);
     }
+    onCollection(roots.length ? "nonempty" : "unknown");
     truncation.items = truncation.items || roots.length > maxItems;
     roots = roots.slice(0, maxItems);
   }
@@ -207,6 +244,7 @@ export async function extract(
     quadCount = 0;
   const truncation = { items: false, values: false };
   let total: number | undefined;
+  let collectionState: ExtractOutput["collectionState"];
   const retained = rawItems(
     extraction,
     body,
@@ -227,6 +265,9 @@ export async function extract(
         throw new ExtractionError("invalid list total");
       total = value;
       if (value > count) truncation.items = true;
+    },
+    (state) => {
+      collectionState = state;
     },
   );
   const extraType =
@@ -305,10 +346,7 @@ export async function extract(
     }
     return item;
   });
-  const render = async (
-    redactor: (text: string) => string,
-    suppressSamples = false,
-  ): Promise<string> => {
+  const render = async (redactor: (text: string) => string): Promise<string> => {
     const redact = (value: string): string => {
       const s = redactor(value);
       if (s.length > maxLen) truncation.values = true;
@@ -361,14 +399,7 @@ export async function extract(
       addQuad(subject, namedNode(`${RDF}type`), namedNode(expandIri(extraction.itemType)));
       if (extraType)
         addQuad(subject, namedNode(`${SCHEMA}additionalType`), literal(redact(extraType)));
-      if (suppressSamples && [...raw].some(([rule, values]) => rule.untrusted && values.length))
-        addQuad(
-          subject,
-          namedNode(`${SAB}samplesSuppressed`),
-          literal("true", namedNode(`${XSD}boolean`)),
-        );
       for (const [rule, values] of raw) {
-        if (suppressSamples && rule.untrusted) continue;
         for (const v of values) {
           let object: Quad_Object;
           if (rule.untrusted) object = literal(redact(v.lexical));
@@ -409,6 +440,7 @@ export async function extract(
   };
   return {
     items,
+    collectionState,
     turtle: await render(options.redact),
     truncation,
     render,

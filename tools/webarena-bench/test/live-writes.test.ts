@@ -103,7 +103,33 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
       await mkdir(process.env.SAB_LIVE_OUTPUT_DIR, { recursive: true, mode: 0o700 });
       await writeFile(
         join(process.env.SAB_LIVE_OUTPUT_DIR, "writes-learning.json"),
-        JSON.stringify({ model, warnings: learned.warnings, demonstrated }, null, 2),
+        JSON.stringify(
+          {
+            model,
+            writeResponses: learned.writeResponses,
+            warnings: learned.warnings,
+            demonstrated,
+            redirects: learned.trace
+              .filter(
+                (r) =>
+                  r.phase === "demonstration" && (r.redirectedTo || r.redirectedFrom !== undefined),
+              )
+              .map((r) => ({
+                seq: r.seq,
+                method: r.method,
+                url: r.url,
+                status: r.status,
+                redirectedTo: r.redirectedTo,
+                redirectedFrom: r.redirectedFrom,
+                bodyTruncated: r.bodyTruncated,
+                responsePageError: r.responsePageError,
+                contentType: r.contentType,
+                bodySample: r.bodySample,
+              })),
+          },
+          null,
+          2,
+        ),
         { mode: 0o600 },
       );
     }
@@ -154,16 +180,7 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
       model,
       sessions,
       fetch: transport,
-      writeResponses: Object.fromEntries(
-        [create, update].map((op) => [
-          op.id,
-          {
-            createdLocationPattern:
-              "/admin/catalog/product/edit/id/{id}/set/4/type/simple/store/0/back/edit/",
-            errorLocationPatterns: ["/admin/catalog/product/validate/"],
-          },
-        ]),
-      ),
+      writeResponses: learned.writeResponses,
     });
     const item = productFixture();
     const similar = { ...productFixture(), name: `${item.name} Similar` };

@@ -5,9 +5,11 @@
 // learning rule: outside a demonstration (or the user-authorised login) no non-GET request leaves
 // the browser. Blocked requests are kept in the trace as evidence of candidate writes.
 
+import { parseSetCookie, type SecretCookie } from "@jeswr/site-executor";
 import type { BrowserContext, Request, Response } from "playwright";
 import { formFields } from "./form-body.js";
 import { isCsrfFieldName } from "./forms.js";
+import { responsePageError } from "./response-evidence.js";
 import type { Phase, RecordedRequest } from "./types.js";
 import { isDangerousLink, isStatic, truncate } from "./util.js";
 
@@ -120,7 +122,22 @@ export class Recorder {
   private readonly entries = new Map<Request, RecordedRequest>();
   private readonly blocked = new WeakSet<Request>();
 
-  constructor(readonly siteOrigin: string) {}
+  constructor(
+    readonly siteOrigin: string,
+    private readonly onCookie?: (cookie: SecretCookie, loginResponse: boolean) => void,
+  ) {}
+
+  /** Register raw cookie intake without retaining it in the returned trace. */
+  rememberCookies(cookies: readonly SecretCookie[]): void {
+    for (const cookie of cookies) this.onCookie?.(cookie, false);
+  }
+
+  rememberSetCookies(lines: readonly string[], url: string, loginResponse = false): void {
+    for (const line of lines) {
+      const cookie = parseSetCookie(line, new URL(url), new Date());
+      if (cookie) this.onCookie?.(cookie, loginResponse);
+    }
+  }
 
   /** True while non-GET requests may leave the browser. */
   writesAllowed(): boolean {
@@ -195,9 +212,14 @@ export class Recorder {
       cookieNames: [],
     };
     if (this.blocked.has(req)) entry.blocked = true;
+    const previous = req.redirectedFrom();
+    const parent = previous && this.entries.get(previous);
+    if (parent) entry.redirectedFrom = parent.seq;
     this.entries.set(req, entry);
     this.trace.push(entry);
     const headers = await req.allHeaders().catch(() => req.headers());
+    for (const [name, value] of parseCookieHeader(headers.cookie))
+      this.onCookie?.({ name, value }, false);
     const clean = sanitiseHeaders(headers);
     entry.requestHeaders = clean.requestHeaders;
     entry.cookieNames = clean.cookieNames;
@@ -236,13 +258,22 @@ export class Recorder {
     if (headers.location) entry.redirectedTo = new URL(headers.location, entry.url).toString();
     const setCookies = (await res.headersArray().catch(() => []))
       .filter((h) => h.name.toLowerCase() === "set-cookie")
-      .map((h) => h.value.split("=")[0]?.trim() ?? "")
+      .map((h) => {
+        this.rememberSetCookies(
+          [h.value],
+          entry.url,
+          entry.phase === "login" && entry.method === "POST" && entry.url === this.loginTarget,
+        );
+        return h.value.split("=")[0]?.trim() ?? "";
+      })
       .filter(Boolean);
     if (setCookies.length) entry.setCookieNames = setCookies;
     if (entry.status >= 300 && entry.status < 400) return;
     if (!TEXT_TYPES.test(entry.contentType ?? "")) return;
     try {
       const body = await res.text();
+      if (entry.phase === "demonstration" && /html|json/i.test(entry.contentType ?? ""))
+        entry.responsePageError = responsePageError(body, entry.contentType);
       const t = truncate(body, BODY_LIMIT);
       entry.bodySample = t.text;
       if (t.truncated) entry.bodyTruncated = true;

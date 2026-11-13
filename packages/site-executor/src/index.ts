@@ -13,6 +13,12 @@ export {
   requestFingerprint,
 } from "./compile.js";
 export {
+  type CookieSecretContext,
+  isSessionCredentialCookie,
+  registerCookieSecrets,
+  type SecretCookie,
+} from "./cookie-secrets.js";
+export {
   applySetCookies,
   type Cookie,
   cookieHeader,
@@ -69,8 +75,14 @@ export {
   type Target,
 } from "./match.js";
 export { describeUrl, guardUrl, isLoopbackHost, OriginError, siteOrigin } from "./origin.js";
+export {
+  MIN_REDACTION_LENGTH,
+  normaliseSecretText,
+  registerSecret,
+  secretRedactor,
+} from "./secrets.js";
 // AUTHORED-BY Codex GPT-6.1-Sol — shared read-only redaction API.
-export { secretRedactor } from "./secrets.js";
+export { pagingKind, selectionPaginationDescription } from "./selection.js";
 export {
   expandTemplate,
   parseTemplate,
@@ -78,4 +90,4 @@ export {
   UriTemplateError,
 } from "./uri-template.js";
 export { BindingError, idFromIri, resolveParameter, validateValue } from "./values.js";
-export type { WriteResponsePolicy } from "./write-response.js";
+export { matchesCreatedIdentity, type WriteResponsePolicy } from "./write-response.js";

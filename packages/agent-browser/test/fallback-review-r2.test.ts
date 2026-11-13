@@ -364,6 +364,10 @@ describe("fallback review r2 Chromium regressions", () => {
           res.end('<p id="exposed"></p><script src="/credential.js"></script>');
         } else if (path === "/pre-source") {
           res.end(`<p>${token}</p>`);
+        } else if (path === "/cookie-echo") {
+          res.end(
+            '<p>quoted-cookie-secret demo&#45;only&#45;form&#45;key&#45;secret %63srf+one%20two+secret /items/1</p><input type="hidden" name="form_key" value="demo-only-form-key-secret"><meta name="csrf-token" content="csrf one two secret"><input aria-label="Echo" value="quoted-cookie-secret">',
+          );
         } else if (path === "/header") {
           res.end(
             "<p>" +
@@ -435,6 +439,54 @@ describe("fallback review r2 Chromium regressions", () => {
         token,
       );
       expect(JSON.stringify(d.trace)).toContain("redacted");
+    } finally {
+      await d.close();
+    }
+  });
+  it.each([
+    '"quoted-cookie-secret"',
+    "%22quoted-cookie-secret%22",
+  ])("r10/r3 registers logical cookie payloads before snapshots and learning: %s", async (value) => {
+    const sessions = new InMemorySessions();
+    sessions.set(origin, undefined, {
+      cookies: [
+        { name: "sid", value, domain: "127.0.0.1", path: "/", httpOnly: true },
+        { name: "preference", value: "1", domain: "127.0.0.1", path: "/" },
+      ],
+    });
+    const d = await driver(sessions);
+    try {
+      await d.goto("/cookie-echo");
+      const snapshot = await d.snapshot();
+      for (const surface of [
+        snapshot.text,
+        JSON.stringify(snapshot.nodes),
+        JSON.stringify(d.trace),
+        JSON.stringify(await d.candidates()),
+      ]) {
+        expect(surface).not.toMatch(
+          /quoted-cookie-secret|demo-only-form-key-secret|%63srf|csrf one two secret/,
+        );
+      }
+      expect(snapshot.text).toContain("/items/1");
+      expect(snapshot.text).toContain("[redacted]");
+    } finally {
+      await d.close();
+    }
+  });
+  it("r10 keeps free-text snapshots for a one-character HttpOnly cookie", async () => {
+    const sessions = new InMemorySessions();
+    sessions.set(origin, undefined, {
+      cookies: [{ name: "ordinary", value: "1", httpOnly: true, domain: "127.0.0.1", path: "/" }],
+    });
+    const d = await driver(sessions);
+    try {
+      await d.goto("/cookie-echo");
+      const snapshot = await d.snapshot();
+      expect(snapshot.text).not.toContain("samples suppressed");
+      expect(snapshot.text).toContain("/items/1");
+      expect(JSON.stringify(d.trace)).toContain("/items/1");
+      expect(JSON.stringify(d.trace)).not.toContain("samples suppressed");
     } finally {
       await d.close();
     }

@@ -1,6 +1,14 @@
 // AUTHORED-BY Codex GPT-6
 // Opaque values are session material only when a page/cookie supplies them and at least two
 // requests repeat them. Ordinary IDs, one-off nonces and user input never qualify by shape alone.
+import {
+  type CookieSecretContext,
+  isSessionCredentialCookie,
+  registerCookieSecrets,
+  registerSecret,
+  type SecretCookie,
+  secretRedactor,
+} from "@jeswr/site-executor";
 import type { CsrfSource } from "@jeswr/site-model";
 import { isCsrfFieldName } from "./forms.js";
 import { attr, attrValue, descendants, parseHtml } from "./html.js";
@@ -15,19 +23,20 @@ const opaque = (v: string) =>
 /** Explicit credentials qualify on their first use. Unsupported script sources are secrets only. */
 export function discoverCredentialSources(
   pages: Array<{ url: string; html: string }>,
-  cookies: Array<{ name: string; value: string }>,
+  cookies: SecretCookie[],
   responses: readonly RecordedRequest[] = [],
+  context: CookieSecretContext = {},
 ): { tokens: Map<string, CsrfSource>; secrets: Set<string> } {
   const tokens = new Map<string, CsrfSource>();
   const secrets = new Set<string>();
   const credentialName = (name: string) =>
     isCsrfFieldName(name) || /token|secret|session|auth|password|api.?key/i.test(name);
   const scriptSecrets = (source: string) => {
-    for (const value of scriptCredentialSecrets(source)) secrets.add(value);
+    for (const value of scriptCredentialSecrets(source)) registerSecret(secrets, value);
   };
   const jsonSecrets = (value: unknown, credential = false): void => {
     if ((typeof value === "string" || typeof value === "number") && credential)
-      secrets.add(String(value));
+      registerSecret(secrets, String(value));
     else if (Array.isArray(value)) {
       for (const item of value) jsonSecrets(item, credential);
     } else if (value && typeof value === "object")
@@ -60,11 +69,11 @@ export function discoverCredentialSources(
       const name = attr(el, "name") ?? "";
       const value = attr(el, el.name === "meta" ? "content" : "value");
       if (!value) continue;
-      if (el.name === "input" && attr(el, "type") === "password") secrets.add(value);
+      if (el.name === "input" && attr(el, "type") === "password") registerSecret(secrets, value);
       if (!credentialName(name)) continue;
       if (el.name === "meta") {
         tokens.set(value, { kind: "meta", urlTemplate: page.url, name });
-        secrets.add(value);
+        registerSecret(secrets, value);
       } else if (el.name === "input" && attr(el, "type") === "hidden") {
         tokens.set(value, {
           kind: "html",
@@ -72,22 +81,26 @@ export function discoverCredentialSources(
           selector: `input[name=${attrValue(name)}]`,
           attribute: "value",
         });
-        secrets.add(value);
+        registerSecret(secrets, value);
       }
     }
   }
   for (const cookie of cookies) {
     if (!cookie.value) continue;
-    tokens.set(cookie.value, { kind: "cookie", name: cookie.name });
-    secrets.add(cookie.value);
+    const forms = new Set<string>();
+    registerCookieSecrets(forms, cookie, context);
+    for (const value of forms) registerSecret(secrets, value);
+    if (isSessionCredentialCookie(cookie, context))
+      tokens.set(cookie.value, { kind: "cookie", name: cookie.name });
   }
   return { tokens, secrets };
 }
 
 export function discoverSessionTokens(
   pages: Array<{ url: string; html: string }>,
-  cookies: Array<{ name: string; value: string }>,
+  cookies: SecretCookie[],
   requests: readonly RecordedRequest[],
+  context: CookieSecretContext = {},
 ): Map<string, CsrfSource> {
   const sources = new Map<string, CsrfSource>();
   for (const page of pages) {
@@ -107,7 +120,8 @@ export function discoverSessionTokens(
     }
   }
   for (const c of cookies)
-    if (opaque(c.value)) sources.set(c.value, { kind: "cookie", name: c.name });
+    if (isSessionCredentialCookie(c, context) && opaque(c.value))
+      sources.set(c.value, { kind: "cookie", name: c.name });
   const counts = new Map<string, number>();
   for (const r of requests) {
     const u = new URL(r.url);
@@ -131,22 +145,13 @@ export function redactTrace(
   requests: RecordedRequest[],
   tokens: Iterable<string>,
 ): RecordedRequest[] {
-  const secrets = [...new Set(tokens)].filter(Boolean).sort((a, b) => b.length - a.length);
+  const secrets = new Set(tokens);
+  const redact = secretRedactor(secrets);
   const walk = (value: unknown): unknown => {
-    if (typeof value === "string") {
-      let out = value;
-      for (const token of secrets)
-        for (const form of new Set([
-          token,
-          encodeURIComponent(token),
-          JSON.stringify(token).slice(1, -1),
-        ]))
-          out = out.split(form).join("[redacted]");
-      return out;
-    }
+    if (typeof value === "string") return redact(value);
     if (Array.isArray(value)) return value.map(walk);
     if (value !== null && typeof value === "object")
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, walk(v)]));
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [redact(k), walk(v)]));
     return value;
   };
   return walk(requests) as RecordedRequest[];

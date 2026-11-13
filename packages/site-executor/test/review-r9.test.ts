@@ -334,7 +334,7 @@ describe("r9 registered secrets", () => {
     return op;
   }
   async function observe(
-    cookies: Array<{ name: string; value: string }>,
+    cookies: Array<{ name: string; value: string; httpOnly?: boolean }>,
     echo: string,
     extra: Partial<ExecutorOptions> = {},
   ) {
@@ -345,7 +345,7 @@ describe("r9 registered secrets", () => {
         domain: "shop.test",
         path: "/",
         secure: true,
-        httpOnly: true,
+        httpOnly: c.httpOnly ?? true,
       })),
     });
     return createExecutor({
@@ -373,8 +373,62 @@ describe("r9 registered secrets", () => {
     expect(result.observations[0]?.turtle).toContain("UntrustedText");
     expect(result.observations[0]?.turtle).toContain("[redacted]");
   });
+  it.each([
+    true,
+    false,
+  ])("r10 sub-four-character cookies preserve facts regardless of classification: %s", async (httpOnly) => {
+    const result = await observe([{ name: "preference", value: "1", httpOnly }], "item 1");
+    expect(result.status).toBe("done");
+    const turtle = result.observations[0]?.turtle ?? "";
+    expect(turtle).toContain("item 1");
+    expect(turtle).toContain("UntrustedText");
+    expect(turtle).not.toContain("samplesSuppressed");
+  });
+  it("keeps item IDs and text with a one-character HttpOnly cookie check while redacting a six-character session", async () => {
+    const result = await observe(
+      [
+        { name: "_cookie_check", value: "1", httpOnly: true },
+        { name: "session", value: "Ab7xQ2", httpOnly: true },
+      ],
+      "item 1 /items/1 Ab7xQ2",
+      {
+        fetch: async (_input, init) => {
+          expect(new Headers(init?.headers).get("cookie")).toBe("_cookie_check=1; session=Ab7xQ2");
+          return Response.json({
+            items: [
+              { id: "1", name: "item 1 /items/1 Ab7xQ2", description: "item 1 /items/1 Ab7xQ2" },
+            ],
+          });
+        },
+      },
+    );
+    expect(result.status).toBe("done");
+    const turtle = result.observations[0]?.turtle ?? "";
+    expect(turtle).toContain('schema:identifier "1"');
+    expect(turtle).toContain('schema:name "item 1 /items/1 [redacted]"');
+    expect(turtle).toContain('rdf:value "item 1 /items/1 [redacted]"');
+    expect(turtle).not.toContain("samplesSuppressed");
+    expect(JSON.stringify(result)).not.toContain("Ab7xQ2");
+  });
+  it("still refuses off-origin redirects before forwarding a one-character cookie", async () => {
+    let calls = 0;
+    const result = await observe([{ name: "_cookie_check", value: "1", httpOnly: true }], "", {
+      fetch: async (input, init) => {
+        calls++;
+        expect(new URL(String(input)).origin).toBe(O);
+        expect(new Headers(init?.headers).get("cookie")).toBe("_cookie_check=1");
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://attacker.test/items/1" },
+        });
+      },
+    });
+    expect(result.status).toBe("error");
+    expect(result.errorKind).toBe("origin");
+    expect(calls).toBe(1);
+  });
   it("matches short secrets at token boundaries through every supported encoding", () => {
-    for (const token of ["a", "abc", "483921", "Ab7xQ2"]) {
+    for (const token of ["abcd", "abcdefg", "483921", "Ab7xQ2"]) {
       const redact = secretRedactor(new Set([token]));
       for (const echo of [
         token,
@@ -386,13 +440,14 @@ describe("r9 registered secrets", () => {
       expect(redact(`x${token}9`)).toBe(`x${token}9`);
     }
   });
-  it("suppresses free-text samples for sub-four-character credentials while keeping safe structured facts", async () => {
+  it("retains free-text samples and structured facts for sub-four-character credentials", async () => {
     const result = await observe([{ name: "sid", value: "abc" }], "free text abc");
     const turtle = result.observations[0]?.turtle ?? "";
-    expect(turtle).toContain("sab:samplesSuppressed true");
-    expect(turtle).not.toContain("schema:description");
+    expect(turtle).not.toContain("samplesSuppressed");
+    expect(turtle).toContain("schema:description");
+    expect(turtle).toContain("UntrustedText");
     expect(turtle).toContain('schema:identifier "99"');
-    expect(turtle).toContain('schema:name "free text [redacted]"');
+    expect(turtle).toContain('schema:name "free text abc"');
   });
   it.each([
     '"q7P9m2V4r6S8t0N3"',

@@ -39,11 +39,13 @@ import {
   isForbiddenHeader,
   requestFingerprint,
 } from "./compile.js";
+import { registerCookieSecrets } from "./cookie-secrets.js";
 import {
   applySetCookies,
   type Cookie,
   cookieHeader,
   cookiesFor,
+  parseSetCookie,
   type SessionBundle,
   type SessionProvider,
 } from "./cookies.js";
@@ -78,7 +80,7 @@ import {
 } from "./money.js";
 import { describeUrl, guardUrl, OriginError, siteOrigin } from "./origin.js";
 import { outcomeTurtle } from "./outcome.js";
-import { cookieSecrets, hasShortSecrets, secretRedactor } from "./secrets.js";
+import { registerSecret, secretRedactor } from "./secrets.js";
 import {
   assertSelectionFilters,
   itemName,
@@ -93,6 +95,7 @@ import { UriTemplateError } from "./uri-template.js";
 import { BindingError, expandIri, idFromIri, isClassRange } from "./values.js";
 import { csrfFieldName, effectiveWireFields, transmittedCsrfSecrets } from "./wire.js";
 import {
+  matchesCreatedIdentity,
   validateWriteResponsePolicy,
   verifiedCreatedLocation,
   type WriteResponsePolicy,
@@ -242,6 +245,7 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 interface RunContext {
   jar: Cookie[];
+  credentialCookies?: string[];
   /** Session headers sent with each request (Cookie/Host-like entries removed). */
   headers: Record<string, string>;
   /** The vault's headers exactly as stored, written back unchanged with cookie updates. */
@@ -380,11 +384,11 @@ export function createExecutor(options: ExecutorOptions): Executor {
 
   function addSecrets(ctx: RunContext): void {
     for (const c of ctx.jar)
-      for (const value of cookieSecrets(c.value)) if (value) ctx.secrets.add(value);
+      registerCookieSecrets(ctx.secrets, c, { model, declaredNames: ctx.credentialCookies });
     for (const v of Object.values(ctx.headers)) {
-      if (v.length > 0) ctx.secrets.add(v);
+      if (v.length > 0) registerSecret(ctx.secrets, v);
       const token = v.trim().split(/\s+/).at(-1);
-      if (token) ctx.secrets.add(token);
+      if (token) registerSecret(ctx.secrets, token);
     }
   }
 
@@ -438,17 +442,30 @@ export function createExecutor(options: ExecutorOptions): Executor {
     }
   }
 
-  async function storeCookies(ctx: RunContext, res: Response, url: URL): Promise<void> {
+  async function storeCookies(
+    ctx: RunContext,
+    res: Response,
+    url: URL,
+    loginResponse = false,
+  ): Promise<void> {
     const setCookies =
       typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [];
     if (setCookies.length === 0) return;
+    for (const line of setCookies) {
+      const cookie = parseSetCookie(line, url, now());
+      if (!cookie) continue;
+      if (loginResponse)
+        ctx.credentialCookies = [...new Set([...(ctx.credentialCookies ?? []), cookie.name])];
+      registerCookieSecrets(ctx.secrets, cookie, { model, declaredNames: ctx.credentialCookies });
+    }
     const { jar, changed } = applySetCookies(ctx.jar, setCookies, url, now());
-    if (!changed) return;
+    if (!changed && !loginResponse) return;
     ctx.jar = jar;
     addSecrets(ctx);
     if (ctx.persistRejected) return;
     const bundle: SessionBundle = {
       cookies: jar,
+      ...(ctx.credentialCookies ? { credentialCookies: [...ctx.credentialCookies] } : {}),
       ...(ctx.revision !== undefined ? { revision: ctx.revision } : {}),
       ...(ctx.storedHeaders ? { headers: { ...ctx.storedHeaders } } : {}),
     };
@@ -465,6 +482,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     body: CompiledRequest["body"],
     accept: string | undefined,
     committed?: () => void,
+    loginResponse = false,
   ): Promise<Response0> {
     let url = guardUrl(startUrl.href, origin);
     let currentMethod = method;
@@ -488,9 +506,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
       if (cookies.length > 0) h.set("cookie", cookieHeader(cookies));
       // Fetch's Headers object is authoritative for trimming and header names.
       // Capture session values after the final header decoration on every hop.
-      for (const name of [...Object.keys(ctx.headers), "cookie"]) {
+      for (const name of Object.keys(ctx.headers)) {
         const value = h.get(name);
-        if (value) ctx.secrets.add(value);
+        if (value) registerSecret(ctx.secrets, value);
       }
       let res: Response;
       try {
@@ -514,7 +532,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
         committed();
         committed = undefined;
       }
-      await storeCookies(ctx, res, url);
+      await storeCookies(
+        ctx,
+        res,
+        url,
+        loginResponse && currentMethod !== "GET" && currentMethod !== "HEAD",
+      );
       const location = res.headers.get("location");
       if (REDIRECT_STATUSES.has(res.status) && location !== null) {
         if (res.body) await budget(ctx, res.body.cancel());
@@ -594,8 +617,38 @@ export function createExecutor(options: ExecutorOptions): Executor {
       if (token === undefined || token === "") {
         throw new CsrfError(`CSRF token not found on ${describeUrl(res.url)}`);
       }
+      if (source.kind === "html") {
+        const referrer = new URL(res.url);
+        referrer.hash = "";
+        compiled.csrfReferer = referrer.href;
+        const policy = writeResponses[compiled.operation];
+        if (policy?.extraction) {
+          // A guarded form alias may serve the resource without redirecting. Its
+          // learned item read supplies the canonical permalink witnessed by the write.
+          try {
+            const out = await extract(policy.extraction, res.body, {
+              baseUrl: res.url.href,
+              redact: redactWith(ctx),
+            });
+            const candidates = new Set(out.items.flatMap((item) => (item.iri ? [item.iri] : [])));
+            const canonical = [...candidates].filter(
+              (url) =>
+                matchesCreatedIdentity(policy.createdLocationPattern, url, url, origin) &&
+                matchesCreatedIdentity(policy.createdLocationPattern, url, referrer.href, origin),
+            );
+            const canonicalUrl = canonical[0];
+            if (canonical.length === 1 && canonicalUrl) {
+              const page = new URL(canonicalUrl);
+              page.hash = "";
+              compiled.csrfReferer = page.href;
+            }
+          } catch {
+            /* Retain the actual guarded form URL when its item read cannot resolve an alias. */
+          }
+        }
+      }
     }
-    ctx.secrets.add(token);
+    registerSecret(ctx.secrets, token);
     return token;
   }
 
@@ -629,7 +682,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       // The compiled inventory already reflects multipart CRLF/USVString,
       // form/query Unicode conversion, JSON values and Fetch header trimming.
       // Register each decoration immediately, even if a later token fails.
-      for (const value of transmittedCsrfSecrets(compiled)) ctx.secrets.add(value);
+      for (const value of transmittedCsrfSecrets(compiled)) registerSecret(ctx.secrets, value);
     }
   }
 
@@ -652,10 +705,17 @@ export function createExecutor(options: ExecutorOptions): Executor {
       ctx,
       compiled.method,
       compiled.url,
-      compiled.headers,
+      {
+        ...compiled.headers,
+        ...(operation.effect !== "read" && compiled.csrfReferer
+          ? { referer: compiled.csrfReferer }
+          : {}),
+      },
       compiled.body,
       accept,
       committed,
+      operation.actionType === "https://jeswr.org/ns/site-action#LoginAction" ||
+        !!model.login?.some((route) => route.operation === operation.id),
     );
     if (res.status >= 400) {
       throw new HttpError(`${operation.label}: ${describeUrl(res.url)} answered ${res.status}`);
@@ -685,12 +745,13 @@ export function createExecutor(options: ExecutorOptions): Executor {
     }
     const redirectedWrite = operation.effect !== "read" && res.redirectLocations.length > 0;
     const createdLocation = redirectedWrite
-      ? verifiedCreatedLocation(
+      ? await verifiedCreatedLocation(
           writeResponses[operation.id],
           res.redirectLocations,
           res.url,
           res.body,
           origin,
+          res.status,
         )
       : undefined;
     if (redirectedWrite && !createdLocation)
@@ -949,9 +1010,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         progress.observations.map(async (record) => ({
           operation: record.operation,
           status: record.status,
-          turtle: record.output
-            ? await record.output.render(redactWith(ctx), hasShortSecrets(ctx.secrets))
-            : await emptyTurtle(),
+          turtle: record.output ? await record.output.render(redactWith(ctx)) : await emptyTurtle(),
           itemCount: record.output?.items.length ?? 0,
         })),
       );
@@ -1095,6 +1154,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
       }
       ctx.revision = bundle?.revision;
       ctx.jar = bundle?.cookies.map((c) => ({ ...c })) ?? [];
+      ctx.credentialCookies = [
+        ...new Set([
+          ...(bundle?.credentialCookies ?? []),
+          ...(model.login?.flatMap((route) => route.sessionCookies ?? []) ?? []),
+        ]),
+      ];
       ctx.headers = { ...(bundle?.headers ?? {}) };
       if (bundle?.headers) ctx.storedHeaders = { ...bundle.headers };
       addSecrets(ctx);
@@ -1139,7 +1204,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       ): Promise<void> => {
         if (!selectionReads.has(index) || !record.output || record.output.total !== undefined)
           return;
-        const next = nextSelectionPage(read, values);
+        const next = nextSelectionPage(read, values, record.output.items.length);
         if (!next) return; // resolveSelection reports unknown completeness.
         const compiled = compileOperation(read, operationValues(read, next), origin);
         const probeRequest: GateRequest = {
@@ -1168,9 +1233,17 @@ export function createExecutor(options: ExecutorOptions): Executor {
             "selection completeness unknown: next-page probe was not authorized",
           );
         const before = sessionFingerprint(false);
-        const probe = await runOperation(ctx, read, next, compiled);
+        let probe: Awaited<ReturnType<typeof runOperation>>;
+        try {
+          probe = await runOperation(ctx, read, next, compiled);
+        } catch {
+          throw new SelectionRefusal("selection completeness unknown: next-page probe failed");
+        }
         record.selectionComplete =
           before === sessionFingerprint(false) &&
+          probe.observation.status >= 200 &&
+          probe.observation.status < 300 &&
+          probe.observation.output?.collectionState === "empty" &&
           probe.items.length === 0 &&
           !!probe.observation.output &&
           !probe.observation.output.truncation.items &&

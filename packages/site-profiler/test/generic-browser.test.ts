@@ -68,6 +68,7 @@ const site = createServer((req, res) => {
     return;
   }
   if (path === "/portal") {
+    res.setHeader("set-cookie", "preference=1; Path=/");
     html(
       '<form method="post"><input name="account[username]"><input name="account[password]" type="password"><button>Sign in</button></form>',
     );

@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 
-import { createExecutor, type ExecutorOptions, type SessionProvider } from "@jeswr/site-executor";
+import {
+  createExecutor,
+  type ExecutorOptions,
+  registerSecret,
+  type SessionProvider,
+} from "@jeswr/site-executor";
 import {
   type ActionRequest,
   type Observation,
@@ -49,9 +54,10 @@ function unresolvedTokenConstant(operation: Operation): boolean {
 export function candidatesFromTrace(
   trace: RecordedRequest[],
   origin: string,
-  cookies: { name: string; value: string }[],
+  cookies: import("@jeswr/site-executor").SecretCookie[],
   approved: ReadonlySet<number>,
   redact: (value: string) => string,
+  cookieContext: import("@jeswr/site-executor").CookieSecretContext = {},
 ): EndpointCandidate[] {
   const safe = trace.filter(
     (r) =>
@@ -67,28 +73,30 @@ export function candidatesFromTrace(
   const pages = evidence
     .filter((r) => /html/i.test(r.contentType ?? "") && r.bodySample)
     .map((r) => ({ url: r.url, html: r.bodySample as string }));
-  const credentials = discoverCredentialSources(pages, cookies, evidence);
-  const tokens = new Map([...discoverSessionTokens(pages, cookies, safe), ...credentials.tokens]);
+  const credentials = discoverCredentialSources(pages, cookies, evidence, cookieContext);
+  const tokens = new Map([
+    ...discoverSessionTokens(pages, cookies, safe, cookieContext),
+    ...credentials.tokens,
+  ]);
   // Recognised session URL tokens are slotted by the profiler before any redaction.
   const forms = pages
     .flatMap((p) => parseForms(p.html, p.url))
     .filter((f) => new URL(f.action).origin === origin);
   const merged = wireCandidates(safe, origin, forms, tokens);
-  const secrets = [
+  const secrets = new Set<string>();
+  for (const value of [
     ...credentials.secrets,
     ...tokens.keys(),
-    ...cookies.map((c) => c.value),
     ...forms.flatMap((f) =>
       f.fields
         .filter((p) => sensitive.test(p.name) || p.type === "password")
         .map((p) => p.value ?? ""),
     ),
-  ].filter(Boolean);
-  const redactSecrets = fallbackRedactor(new Set(secrets));
+  ])
+    registerSecret(secrets, value);
+  const redactSecrets = fallbackRedactor(secrets);
   const clean = (value: string) =>
-    secrets.includes(value)
-      ? "[redacted]"
-      : redactSnapshot(redact(value), redactSecrets, new Set(secrets));
+    secrets.has(value) ? "[redacted]" : redactSnapshot(redact(value), redactSecrets, secrets);
   return merged
     .filter((c) => c.samples.length)
     .map((c) => {

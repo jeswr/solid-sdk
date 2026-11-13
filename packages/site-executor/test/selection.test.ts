@@ -11,6 +11,7 @@ import {
   createExecutor,
   type ExecutorOptions,
   InMemorySessions,
+  selectionPaginationDescription,
 } from "../src/index.js";
 import { actionRequest } from "./helpers.js";
 
@@ -183,6 +184,7 @@ describe("filter selection approvals", () => {
     read.inputs.push(
       {
         name: "page",
+        description: selectionPaginationDescription("page", 1),
         path: [`${sab}page`],
         location: "query",
         range: "http://www.w3.org/2001/XMLSchema#integer",
@@ -474,4 +476,85 @@ describe("filter selection approvals", () => {
     );
     expect(r.calls).toEqual(["GET", "GET"]);
   });
+});
+
+// r10: a missing root is not an empty page, even when HTTP transport succeeded.
+it.each([
+  ['{"error":"query temporarily unavailable"}', 200, false],
+  ["{}", 200, false],
+  ['{"items":null}', 200, false],
+  ['{"items":42}', 200, false],
+  ['{"items":{}}', 200, false],
+  ['{"items":[null]}', 200, false],
+  ['{"items":[],"error":"query temporarily unavailable"}', 200, false],
+  ['{"items":[],"success":false}', 200, false],
+  ['{"items":[]}', 500, false],
+  ['{"items":[]}', 201, true],
+  ['{"items":[]}', 200, true],
+])("r10 only an explicit empty success collection proves exhaustion: %s/%s", async (body, status, empty) => {
+  const source = model();
+  const read = required(source.operations[0]);
+  delete read.extraction?.totalPath;
+  read.inputs.push({
+    name: "page",
+    path: [`${sab}page`],
+    location: "query",
+    range: "http://www.w3.org/2001/XMLSchema#integer",
+    required: false,
+    default: "1",
+    description: selectionPaginationDescription("page", 1),
+  });
+  const gate = createApprovalGate();
+  let writes = 0;
+  const executor = createExecutor({
+    model: source,
+    sessions: new InMemorySessions(),
+    gate,
+    fetch: async (input, init) => {
+      if (init?.method === "POST") {
+        writes++;
+        return Response.json({});
+      }
+      return new URL(String(input)).searchParams.get("page") === "2"
+        ? new Response(body, { status, headers: { "content-type": "application/json" } })
+        : Response.json({ items: [row("42")] });
+    },
+  });
+  const result = await executor.execute(request());
+  expect(result.status).toBe(empty ? "needs-approval" : "refused");
+  if (!empty) {
+    expect(result.errorKind).toBe("ambiguous-target");
+    expect(result.error).toContain("completeness unknown");
+    expect(gate.pending()).toHaveLength(0);
+  } else {
+    gate.approve(required(result.approval).id);
+    expect((await executor.execute(request(), { approvalId: result.approval?.id })).status).toBe(
+      "done",
+    );
+  }
+  expect(writes).toBe(empty ? 1 : 0);
+});
+
+it("r10 refuses an error envelope around a nested extraction root", async () => {
+  const source = model();
+  const read = required(source.operations[0]);
+  read.extraction = {
+    ...required(read.extraction),
+    itemPath: "/data/items",
+    totalPath: "/data/total",
+  };
+  const gate = createApprovalGate();
+  const executor = createExecutor({
+    model: source,
+    sessions: new InMemorySessions(),
+    gate,
+    fetch: async () =>
+      Response.json({
+        data: { error: "query temporarily unavailable", items: [row("42")], total: 1 },
+      }),
+  });
+  const result = await executor.execute(request());
+  expect(result).toMatchObject({ status: "refused", errorKind: "ambiguous-target" });
+  expect(result.error).toContain("completeness unknown");
+  expect(gate.pending()).toHaveLength(0);
 });

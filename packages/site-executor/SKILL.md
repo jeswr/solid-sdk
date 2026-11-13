@@ -89,12 +89,18 @@ Security review hardening:
   subjects or flow facts.
 - Register source and final transmitted cookie/header/token values after decoration, using the
   compiled wire inventory and final Fetch headers rather than duplicating normalization rules.
-  Redact explicitly registered nonempty secrets at any length; forms shorter than eight
-  characters require token boundaries. The eight-character floor applies only to heuristic,
-  unregistered discoveries. Register cookie wire and logical (unquoted, percent-decoded) payloads.
+  Use shared `registerSecret` and `MIN_REDACTION_LENGTH = 4` for all credential intake.
+  Values shorter than four characters are guessable and provide no confidentiality: never
+  register them for redaction or suppress samples because of them. Keep the origin guard for
+  every value. Registered values of four to seven characters require token boundaries; eight
+  or more receive full redaction in every supported form. The eight-character floor applies only to heuristic,
+  unregistered discoveries. Use exported `isSessionCredentialCookie` / `registerCookieSecrets` at every intake and
+  learning boundary. HttpOnly, login-set/changed, model/vault-declared and common session-named
+  cookies register from four characters; other cookies require a logical payload of at least eight.
+  Preserve vault `credentialCookies` through updates. Register wire, unquoted, percent-decoded
+  and decoded-unquoted payloads.
   Normalize form `+` to space before percent decoding. Keep trimmed, mixed/nested percent,
-  JSON and HTML entity coverage. For registered secrets shorter than four characters, suppress
-  free-text samples, record `sab:samplesSuppressed true`, and retain safe structured fields. Redact before truncating, and re-render every observation with the final secret set
+  JSON and HTML entity coverage. Redact before truncating, and re-render every observation with the final secret set
   on done, error, denial and approval returns. Retain structured values, never re-redact Turtle.
 - Bound extraction before materializing items: 200 items, 100 values per field, 1000 total values,
   3000 quads, 1 MiB output, 4000 emitted characters per value. Value/quad/byte overflow fails closed.
@@ -166,7 +172,11 @@ preference writes and uses a scripted planner. Never invoke a planner/model CLI 
   CSRF target, keeping all other undeclared endpoint/body/source variables invalid.
 
 Selection completeness requires observed `totalPath` equality or a zero-item next-page probe
-using modeled pagination, unchanged filters and session, through the read gate. Unknown
+using declared pagination, unchanged filters and session, through the read gate. Preserve the
+observed start (0 or 1); require the strict `sab:pagination` description declaration documented
+in README, and advance offsets by returned item count. Only an explicit empty JSON array at
+a valid declared root of a 2xx success response proves exhaustion; malformed/missing roots,
+error envelopes, non-success statuses and zero HTML matches leave completeness unknown. Unknown
 completeness refuses with ambiguous-target, including explicit all. Compare every concrete
 selection field on both requests, with only declared paging/sorting and CSRF exemptions.
 Always show sent identifiers beside names in write approvals; refuse planner names conflicting
@@ -178,3 +188,13 @@ with explicit currency, including complete lists. Round-9 regression files cover
 Form-name identity slots must be numeric; HTML CSRF selector slots must be ASCII slug characters
 only. Expand before wire inventory and token insertion. Never interpolate arbitrary CSS or raw
 form bodies. Keep denial and repeat protection before any HTTP, and test syntax injection.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Accept the profiler's learned `writeResponses` artifact beside the model. Optional redirectCount,
+finalStatus and extraction narrow success to the witnessed chain and item read. Keep the round-9
+first-hop/same-resource/origin rules, and keep undeclared redirects Uncertain with no identity.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Keep Referer executor-owned: for writes using an HTML CSRF source it is the actual guarded
+form page's final URL, never a model header. Use matchesCreatedIdentity for learned permalink
+aliases; same-origin equal IDs alone cannot equate unrelated routes or conflicting item claims.

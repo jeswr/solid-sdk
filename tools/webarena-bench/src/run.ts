@@ -13,7 +13,7 @@ import {
   runTask,
   type TaskTrace,
 } from "@jeswr/agent-browser";
-import { InMemorySessions, siteOrigin } from "@jeswr/site-executor";
+import { type ExecutorOptions, InMemorySessions, siteOrigin } from "@jeswr/site-executor";
 import { readSiteModel, type SiteModel } from "@jeswr/site-model";
 import { DataFactory, Writer } from "n3";
 import { type BenchConfig, evaluatorConfig } from "./config.js";
@@ -49,12 +49,24 @@ export interface RunOptions {
   plannerFactory?: (task: BenchTask) => Planner;
   transport?: Transport;
   models?: Partial<Record<Site, SiteModel>>;
+  writeResponses?: Partial<Record<Site, ExecutorOptions["writeResponses"]>>;
 }
 
 export async function runBenchmark(options: RunOptions): Promise<TaskMetrics[]> {
   const { config } = options;
   const models: Partial<Record<Site, SiteModel>> = { ...options.models };
+  const writeResponses = { ...options.writeResponses };
   for (const site of new Set(options.tasks.flatMap((t) => t.sites))) {
+    if (!models[site] && !writeResponses[site]) {
+      try {
+        const metadata = JSON.parse(
+          await readFile(join(config.modelsDir, `${site}.profile.json`), "utf8"),
+        );
+        writeResponses[site] = metadata.writeResponses;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
     models[site] ??= await readSiteModel(
       await readFile(join(config.modelsDir, `${site}.ttl`), "utf8"),
     );
@@ -117,9 +129,10 @@ export async function runBenchmark(options: RunOptions): Promise<TaskMetrics[]> 
         });
       }
       const executor = combineExecutors(
-        taskModels.map(({ model }) =>
+        taskModels.map(({ site, model }) =>
           createTaskExecutor({
             model,
+            writeResponses: writeResponses[site],
             sessions,
             fetch: har.transport,
             maxExecutionMs: Math.min(30_000, config.taskTimeoutMs),

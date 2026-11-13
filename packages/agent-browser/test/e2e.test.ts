@@ -3,6 +3,7 @@
 
 import type { ApprovalRequest } from "@jeswr/site-executor";
 import type { SiteModel } from "@jeswr/site-model";
+import type { ProfileResult } from "@jeswr/site-profiler";
 import { type RunningShop, startShop } from "@jeswr/test-shop";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { learnShop, SHOP_GOAL, SHOP_LOGIN, shopExecutor, shopPlanner } from "../src/demo.js";
@@ -11,9 +12,10 @@ import { PREFIXES, readQuads } from "../src/rdf.js";
 
 let shop: RunningShop;
 let model: SiteModel;
+let writeResponses: ProfileResult["writeResponses"];
 beforeAll(async () => {
   shop = await startShop();
-  model = await learnShop(shop);
+  ({ model, writeResponses } = await learnShop(shop));
   expect(shop.state.orders).toHaveLength(1); // The demonstration really checked out.
   const flow = model.flows.find((f) => f.actionType === "https://schema.org/BuyAction");
   const operations =
@@ -39,7 +41,7 @@ afterAll(async () => {
 
 describe("fresh test shop -> profiler -> RDF model -> executor -> planner", () => {
   it("a scripted planner trying the identical buy twice creates exactly one shop order", async () => {
-    const { executor } = await shopExecutor(model);
+    const { executor } = await shopExecutor(model, undefined, writeResponses);
     const base = shopPlanner();
     let calls = 0;
     let purchase = "";
@@ -80,7 +82,7 @@ describe("fresh test shop -> profiler -> RDF model -> executor -> planner", () =
     "deny",
     "approve",
   ] as const)("%s creates exactly the authorised number of orders", async (decision) => {
-    const { executor, sessions } = await shopExecutor(model);
+    const { executor, sessions } = await shopExecutor(model, undefined, writeResponses);
     const cookie = (await sessions.get(model.site))?.cookies.find((c) => c.name === "sid")?.value;
     expect(cookie).toBeTruthy();
     const inputs: PlannerInput[] = [];

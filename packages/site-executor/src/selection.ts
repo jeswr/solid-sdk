@@ -25,30 +25,36 @@ export function pagingKind(name: string): "page" | "offset" | "limit" | "sort" |
   return undefined;
 }
 
-/** Probe only a first page with an unambiguous, modeled next-page mechanism. */
+/** Strict declaration in Parameter.description until the shared contract gains pagination.
+ * Ordinary prose, defaults and parameter names alone never establish completeness. */
+export function selectionPaginationDescription(kind: "page" | "offset", start: number): string {
+  return `sab:pagination ${kind} start=${start} advance=${kind === "page" ? "1" : "observed-items"}`;
+}
+
 export function nextSelectionPage(
   operation: Operation,
   values: Record<string, string>,
+  observedSpan: number,
 ): Record<string, string> | undefined {
   const paging = operation.inputs.filter(
     (p) => p.location === "query" && ["page", "offset"].includes(pagingKind(p.name) ?? ""),
   );
-  if (paging.length !== 1) return undefined;
+  if (paging.length !== 1 || !Number.isSafeInteger(observedSpan) || observedSpan <= 0)
+    return undefined;
   const p = paging[0];
   if (!p) return undefined;
+  const declaration = /^sab:pagination (page|offset) start=(0|1) advance=(1|observed-items)$/.exec(
+    p.description ?? "",
+  );
+  if (!declaration || declaration[1] !== pagingKind(p.name)) return undefined;
+  const start = Number(declaration[2]);
+  if (p.description !== selectionPaginationDescription(declaration[1] as "page" | "offset", start))
+    return undefined;
+  if (declaration[1] === "offset" && start !== 0) return undefined;
   const current = values[p.name] ?? p.default;
-  if (pagingKind(p.name) === "page")
-    return current === "1" ? { ...values, [p.name]: "2" } : undefined;
-  const limits = operation.inputs.filter((p) => pagingKind(p.name) === "limit");
-  const limit =
-    limits.length === 1 ? (values[limits[0]?.name ?? ""] ?? limits[0]?.default) : undefined;
-  return current === "0" &&
-    limit &&
-    /^\d+$/.test(limit) &&
-    Number.isSafeInteger(Number(limit)) &&
-    Number(limit) > 0
-    ? { ...values, [p.name]: limit }
-    : undefined;
+  if (current !== String(start)) return undefined;
+  const next = start + (declaration[1] === "page" ? 1 : observedSpan);
+  return Number.isSafeInteger(next) ? { ...values, [p.name]: String(next) } : undefined;
 }
 
 /** Compare the actual selectors, including fixed fields and optional read defaults. */
@@ -177,6 +183,10 @@ export function resolveSelection(
   for (const source of sources) {
     const record = records[source.step];
     const selected = items[source.step] ?? [];
+    if (record?.output?.collectionState === "invalid")
+      throw new SelectionRefusal(
+        "selection completeness unknown: invalid extraction root or error envelope",
+      );
     if (!record?.output || record.output.truncation.items || record.output.truncation.values)
       throw new SelectionRefusal("selection read is partial or truncated");
     if (record.output.total !== selected.length && !record.selectionComplete)

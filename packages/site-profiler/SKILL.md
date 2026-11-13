@@ -90,3 +90,31 @@ must belong to the particular action/form. Numeric IDs in names and token select
 not demonstration constants. Only witnessed redirect aliases may shorten a CSRF source route.
 Never infer a write or reversible vote from page controls alone. The opt-in forum acceptance is
 in webarena-bench (SAB_LIVE_FORUM_URL); reads also run with no demonstrations.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Use the executor's shared cookie classifier, registration helper and normalization-aware redactor
+at intake and learning boundaries. Register all logical cookie forms. HttpOnly, login-set/changed,
+model/vault-declared and common session names qualify from four characters; other cookies require an
+eight-character logical payload. Values below the shared `MIN_REDACTION_LENGTH = 4` floor are guessable and provide no
+confidentiality: never register them for redaction or suppress samples because of them. Keep
+the origin guard unchanged, token-boundary redaction for four to seven characters and full
+redaction for eight or more; short preferences must preserve item identities. Never add a separate display decoder
+or redaction algorithm. Protect trace/warning/snapshot HTML entities and mixed plus/percent echoes.
+
+Preserve observed page/offset defaults everywhere, including selection Flows and empty-list probes.
+Emit the strict `sab:pagination` Parameter.description declaration only after witnessing a starting
+request and same-scope continuation. Offset spans come from returned rows. Unknown semantics,
+invalid roots, error envelopes and non-success probes never prove exhaustion (see executor README).
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Learn executor-local `writeResponses` only from exact recorder-linked demonstration redirect
+chains; never infer a hop from URL coincidence. Reject off-origin, missing, error/validation,
+truncated and conflicting witnesses. Slot only response identity and declared whole path inputs.
+Return the witnessed redirect count, final status and successful landing extraction next to the
+model. Hosts must carry this separate artifact through RDF round trips; persistence into sab:
+requires a future generated-contract change. A landing collection proves no created identity.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Check full witnessed HTML/JSON for error/validation pages before truncating recorder samples.
+Only the recorder's complete-response error evidence can admit a truncated landing sample;
+never infer success from a partial sample alone. Retain extraction/sample bounds.

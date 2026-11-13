@@ -4,7 +4,7 @@ import { discoverCredentialSources, discoverSessionTokens } from "../src/session
 
 const url = "https://shop.test/account";
 describe("explicit credential sources", () => {
-  it("registers short meta/hidden tokens and every cookie on first use without repetition", () => {
+  it("registers eligible meta/hidden tokens and session cookies on first use without repetition", () => {
     const result = discoverCredentialSources(
       [
         {
@@ -33,14 +33,14 @@ describe("explicit credential sources", () => {
       [
         {
           url,
-          html: '<script>const csrfToken="one"; window.csrfToken="two"; csrfToken="three"; const settings={csrfToken:"four"}; const form_key=`five`; const _token="six"+"seven";</script>',
+          html: '<script>const csrfToken="first"; window.csrfToken="second"; csrfToken="three"; const settings={csrfToken:"four"}; const form_key=`five`; const _token="sixth"+"seven";</script>',
         },
       ],
       [],
     );
     expect(result.tokens.size).toBe(0);
     expect(result.secrets).toEqual(
-      new Set(["one", "two", "three", "four", "five", "six", "seven", "sixseven"]),
+      new Set(["first", "second", "three", "four", "five", "sixth", "seven", "sixthseven"]),
     );
   });
   it("keeps ordinary opaque-value discovery dependent on repetition", () => {

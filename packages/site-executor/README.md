@@ -172,11 +172,22 @@ parameter names and descriptions do not activate this behavior. The underlying w
 cannot be invoked directly from an ActionRequest.
 
 Before approval, completeness needs positive evidence: a declared `totalPath` whose observed
-count equals the resolved item count, or modeled pagination starting at the first page whose
-next-page probe returns zero items with the same filters and session. The probe is an ordinary
+count equals the resolved item count, or modeled pagination whose declared starting page matches the actual request and whose
+next-page probe returns an explicitly empty collection at the declared JSON root in a 2xx
+success response, with the same filters and session. Missing/invalid roots, error envelopes,
+HTTP errors and zero HTML selector matches leave completeness unknown. The probe is an ordinary
 authorized read and repeats on approval retry. A single row without either proof has unknown
 completeness and refuses with `errorKind: "ambiguous-target"`. Both explicit-all and ordinary
 selections use this rule.
+
+Until pagination gains a shared contract field, a paging Parameter's description carries the
+strict declaration `sab:pagination page start=0 advance=1` (start may also be 1), or
+`sab:pagination offset start=0 advance=observed-items`. The profiler emits this only after
+witnessing a starting request and its continuation in crawl/demonstration traffic with the same
+scope. Defaults alone and ordinary description prose cannot establish semantics. Offset probes
+advance by the actual returned item count, including server-capped responses; requested limits
+never set the span. No paging value is reset. Old models without a declaration need an observed
+total or reprofiling. HTML lists without totals currently cannot establish exhaustion.
 
 Compare every concrete query, form/JSON and path-filter field in both requests. Only declared
 paging/sorting parameters and CSRF decoration are exempt. Unrecognized names such as `status`
@@ -231,12 +242,17 @@ redacting the complete value.
   body. Both source secrets and their effective transmitted values are registered after request
   decoration, using the compiled wire inventory and final Fetch headers. This includes multipart
   CRLF normalization, USVString conversion, header trimming and percent-encoded path slots.
-  Explicitly registered secrets are redacted at every nonempty length. Forms shorter than eight
-  characters match only at token boundaries, outside longer alphanumeric runs. Only heuristically
-  discovered, unregistered values retain the eight-character floor. Cookie registration includes
-  the wire value and logical payload (quotes stripped and percent-decoded). With a registered
-  secret shorter than four characters, free-text observation samples are suppressed and
-  `sab:samplesSuppressed true` records the suppression; safe structured fields remain. Raw, trimmed, mixed/nested percent-encoded (including form `+`
+  The shared `MIN_REDACTION_LENGTH = 4` floor applies to every credential, regardless of
+  classification: values shorter than four characters are guessable, provide no confidentiality,
+  and are never registered for redaction. They never suppress samples. The origin guard still
+  confines these values to their own site. Registered values of four to seven characters match
+  only at token boundaries, outside longer alphanumeric runs; eight or more receive full
+  redaction in every supported form. Heuristic, unregistered discoveries retain the eight-character
+  floor. Session credential cookies qualify when HttpOnly, set/changed by login, declared by the
+  model/vault, or named like session/auth/token/remember/CSRF cookies. Other cookies qualify only
+  with a logical payload of at least eight characters. Cookie registration includes wire,
+  unquoted, percent-decoded and decoded-unquoted payloads; an encoded or quoted value cannot
+  evade the logical payload floor. Raw, trimmed, mixed/nested percent-encoded (including form `+`
   spaces), JSON-escaped and HTML-entity-escaped echoes are redacted before truncation.
   Every complete summary display value, including unmapped object
   names and model labels, is redacted before whitespace normalization, formatting or truncation. Every return path renders all observations against the final
@@ -433,6 +449,12 @@ writeResponses: {
 Patterns are on-origin paths/URLs with whole-segment variables. HTML success checks use
 `{ format: "html", selector, attribute?, value? }`; without `value`, the element must exist.
 No declaration means a redirect cannot supply an identity and the write is Uncertain.
+The profiler learns these declarations from witnessed demonstrations and returns `writeResponses`
+beside its model. Forward that result directly instead of writing host-specific patterns.
+Learned policies can also require `redirectCount` (exact witnessed hop count), `finalStatus`
+(the witnessed 2xx status), and `extraction` (the learned landing read). Extraction must produce
+complete items and, when Location has an identity, include that trusted identity. These checks
+add evidence requirements; the first-Location, same-resource and origin rules still apply.
 
 Review r7 regressions are in the `review r7` groups of `test/review-r6.test.ts`: executor-owned
 headers through all three routes, static/direct-buy/header-parameter Accept and Accept aliases,
@@ -448,11 +470,17 @@ objects to verify the effective token values.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 `secretRedactor(secrets)` is also exported as a read-only utility for browser snapshot consumers.
-This exposes the existing mixed/nested percent-encoding redactor; executor behavior is unchanged.
+The executor, profiler, host and fallback share this normalization-aware implementation,
+including HTML entities and mixed plus/percent form encodings. `isSessionCredentialCookie` and
+`registerCookieSecrets` share classification and wire/unquoted/decoded/decoded-unquoted
+registration; `CookieSecretContext` accepts model, login and vault declarations.
+`SessionBundle.credentialCookies` supplies vault-declared names and survives session updates.
+`registerSecret` applies the shared `MIN_REDACTION_LENGTH` floor at each credential intake;
+`secretRedactor` enforces the same floor for callers supplying their own sets.
 
 Round 9 regressions: `test/selection.test.ts` covers unknown completeness, pagination probes,
 scope mismatches and conflicting names; `test/review-r9.test.ts` covers concrete summary IDs,
-complete display-money lists, redirect policies, short credentials, sample suppression, cookie
+complete display-money lists, redirect policies, short credentials, retained samples below the registration floor, cookie
 payloads and mixed encodings. `test/list-quality.test.ts` also verifies the formerly masked
 complete display-payment case. Rule W cases in `test/review-r6.test.ts` retain coverage with
 case-sensitive query/form/JSON/path names.
@@ -465,3 +493,16 @@ invalid substitutions refuse before transmission. The expanded names enter the o
 inventory, fingerprint, token collision checks and approval binding; form values remain encoded
 structurally. This small compiler extension supports forms whose names contain an item ID.
 `test/form-identities.test.ts` covers denial, one approved POST, repeat protection and injection.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+For an HTML CSRF source, effectful requests send the actual guarded form page's final URL as
+executor-owned Referer (without a fragment). This preserves native form redirect behavior after
+a canonicalizing page redirect. Models still cannot set Referer, and created-location checks,
+approval binding, fingerprints and one-POST redirect handling remain in force.
+Learned extraction identities may use on-origin permalink aliases within the declared route or
+its trailing display-slug alias; equal IDs on unrelated routes and conflicting identity claims
+are rejected. `matchesCreatedIdentity` shares that check with the profiler.
+
+For a form served at an identity alias, the learned policy's extraction may resolve its single
+matching on-origin canonical permalink for Referer. The permalink must fit the learned route
+and the guarded form's identity; unrelated or ambiguous links never become request context.

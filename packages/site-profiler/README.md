@@ -11,7 +11,7 @@ The planner then asks for actions in RDF and never reads the page.
 ```ts
 import { profileSite } from "@jeswr/site-profiler";
 
-const { model, trace, warnings } = await profileSite({
+const { model, writeResponses, trace, warnings } = await profileSite({
   startUrl: "https://shop.test/",
   login: { username: "alex@example.test", password: "..." }, // optional, user-authorised
   demonstrations: [{ name: "buy-product", run: async (page) => { /* Playwright steps */ } }],
@@ -29,7 +29,7 @@ overrides the executable), `now`, `modelId` (default `urn:sab:model:<host>`), `v
 
 | Step | Module | What it does |
 | --- | --- | --- |
-| Login | `login.ts` | Uses a password form on the redirected start page first, then a sign-in link, then a path-relative login fallback. Signs in through the password form, records the cookies the login set (HttpOnly first) and finds a probe URL that is 200 signed in and refused signed out. Bearer token endpoints in scripts give `refresh` info. |
+| Login | `login.ts` | Uses a password form on the redirected start page first, then a sign-in link, then a path-relative login fallback. Signs in through the password form, records every cookie the login set or changed and finds a probe URL that is 200 signed in and refused signed out. Bearer token endpoints in scripts give `refresh` info. |
 | Crawl | `crawl.ts` | Navigation menu anchors first, then other same-origin links and GET forms (free text gets a word seen on the site). Skips logout/delete-like links and static files. |
 | Guard and trace | `recorder.ts` | Records same-origin requests without cookies, authorization or credential-like body fields. Aborts every non-GET request outside the login and demonstrations. |
 | Scripts | `scripts.ts` | acorn analysis of same-origin JS: `fetch`, fetch wrappers, `XMLHttpRequest`, axios, jQuery; URL patterns from literals and concatenation; CSRF headers read from `document.cookie` or a meta tag. |
@@ -175,7 +175,7 @@ for approval and refuses ambiguous, empty, partial or changed selections; an all
 request requires `sab:all true` with no `schema:object`.
 
 A saved search returning no rows can teach its row shape through at most eight deduplicated,
-read-only probes with the ordinary search cleared, page reset to 1 and size capped at 25.
+read-only probes with the ordinary search cleared and size capped at 25, preserving its observed paging position.
 Dispatch/session values and observed XHR headers are preserved; preferences are never saved.
 A fresh password login retains its page CSRF source so the host can bootstrap its cookie jar;
 the cookie preference applies to demonstrated writes after sign-in.
@@ -219,3 +219,58 @@ row tokens. Witnessed redirect aliases let a CSRF page use an identity route rat
 particular title slug. Delete variants still target explicit path identities. Votes and unknown
 writes stay irreversible-write; a displayed retract button alone does not establish reversibility.
 Only trusted extracted fields can teach flow bindings.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Cookie intake and learning use the executor's shared classifier/registration and redactor.
+HttpOnly, login-set/changed, model/vault-declared and common session-named cookies are credentials
+from four characters, using the shared `MIN_REDACTION_LENGTH` floor. Other cookies need a logical payload of at least eight characters;
+a preference `1` does not mask item IDs. Register wire, unquoted, percent-decoded and
+decoded-unquoted payloads together. Traces, warnings and snapshots share HTML-entity and mixed
+plus/percent form normalization with executor observations. Sub-four-character values are
+guessable, provide no confidentiality, and never register for redaction or suppress samples;
+the origin guard still confines them to their own site. Registered values of four to seven
+characters keep token boundaries; eight or more receive full redaction in every supported form.
+
+Pagination defaults preserve demonstrated/crawled positions. To prove a filter selection complete
+without a total, the profiler must witness both a starting request (page 0/1 or offset 0) and its
+continuation with the same scope. It stores the executor's strict `sab:pagination` declaration
+in the existing Parameter.description, which survives RDF round trips. Offset continuation must
+match the observed row span, including server caps. Missing semantics leave completeness unknown
+and execution refuses. Empty JSON collection roots prove exhaustion only on successful responses;
+missing/invalid roots and error envelopes cannot. HTML lists currently need a total for this proof.
+`test/review-r10.test.ts` exercises learned round-tripped zero-based/offset models; encoded trace
+and warning echoes are in `test/review-r9.test.ts`.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Learned write responses
+
+`profileSite` also returns `writeResponses`, keyed by operation ID in the executor's
+`ExecutorOptions.writeResponses` shape. Pass it beside the model to `createExecutor` or
+`createTaskExecutor({ model, writeResponses, sessions })`. The host owns both trusted artifacts;
+policies never enter the planner catalogue.
+
+Policies are learned only from demonstration writes with a complete, witnessed redirect chain.
+The recorder links each redirect request to its actual parent; a later GET of the same URL is
+insufficient. Every hop must stay on origin and on the first Location's resource, and no hop
+may be blocked, incomplete, an error/validation page or a password page. Conflicting witnesses
+produce no policy. The path pattern replaces only the response identity and whole path inputs
+declared by a matching learned read; other segments remain literal. The observed redirect
+count and final successful HTTP status are retained. When a learned extraction reads the
+landing item, it must contain that identity and becomes required success evidence at execution.
+A witnessed landing collection can establish completion without inventing a created identity.
+No pattern means the executor still returns Uncertain and retains its repeat guard.
+
+**Known persistence gap:** `sab:` model RDF cannot store these policies. A generated-contract
+change across site-model's ontology, shapes, codegen profile and types is needed before that
+can be supported. Until then, store `writeResponses` separately alongside the model; a model-only
+RDF round trip loses them. The benchmark host stores them in its profile JSON sidecar.
+`test/write-responses.test.ts` covers fictional recorded chains, rejected evidence, and executor
+completion/Uncertain behavior with one approved POST and repeat refusal.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The recorder checks the complete witnessed HTML/JSON response for error/validation evidence
+before bounding its returned sample, retaining only the boolean `responsePageError` alongside
+that sample. A truncated landing can teach a route/status policy only with this complete-response
+check; a truncated sample alone remains insufficient. Reads/extractions still retain their
+ordinary sample bounds. In particular, large administrative form pages can teach their witnessed
+identity redirect without storing their entire HTML in the trace.

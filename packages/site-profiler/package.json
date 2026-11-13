@@ -27,6 +27,7 @@
     "test": "pnpm -w exec vitest run --root packages/site-profiler"
   },
   "dependencies": {
+    "@jeswr/site-executor": "workspace:*",
     "@jeswr/site-model": "workspace:*",
     "acorn": "^8.17.0",
     "domhandler": "^5.0.3",

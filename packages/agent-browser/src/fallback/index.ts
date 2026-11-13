@@ -64,6 +64,7 @@ export function createFallback(options: FallbackOptions): Fallback {
       const driver = await BrowserDriver.create({
         ...options,
         site: input.model.site,
+        cookieContext: { model: input.model },
         persona: input.persona ?? options.persona,
         approver: input.approver,
         maxApprovals: input.maxApprovals,

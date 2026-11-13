@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { secretRedactor } from "@jeswr/site-executor";
-import { parseHtml } from "@jeswr/site-profiler";
+import { normaliseSecretText, registerSecret, secretRedactor } from "@jeswr/site-executor";
 
 /** Render page-controlled formatting as text, including bidi and zero-width controls. */
 export function escapeControls(text: string): string {
@@ -24,76 +23,16 @@ export function normaliseSessionHeader(value: string): string {
 
 export function rememberSessionHeader(secrets: Set<string>, value: string): string {
   const normalised = normaliseSessionHeader(value);
-  secrets.add(value);
-  secrets.add(value.trim());
-  secrets.add(normalised);
+  registerSecret(secrets, value);
+  registerSecret(secrets, value.trim());
+  registerSecret(secrets, normalised);
   const credential = normalised.replace(/^[a-z][a-z0-9+.-]*\s+/i, "");
-  if (credential) secrets.add(credential);
+  if (credential) registerSecret(secrets, credential);
   return normalised;
 }
 
-/** Normalize combinations of display encodings without interpreting any markup. */
-function displayText(text: string): string {
-  let out = text;
-  for (let i = 0; i < 32; i++) {
-    const json = out.replace(
-      /\\u([\da-f]{4})|\\x([\da-f]{2})|\\(["\\/bfnrt])/gi,
-      (_match, unicode: string, hex: string, escaped: string) =>
-        unicode || hex
-          ? String.fromCharCode(Number.parseInt(unicode || hex, 16))
-          : (({ b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" } as Record<string, string>)[escaped] ??
-            escaped),
-    );
-    // Escaping '<' makes every parsed node text, including strings that look like HTML.
-    const html = parseHtml(json.replaceAll("<", "&lt;"))
-      .children.map((node) => ("data" in node ? node.data : ""))
-      .join("");
-    const decoded = html.replace(/(?:%[\da-f]{2})+/gi, (run) => {
-      try {
-        return decodeURIComponent(run);
-      } catch {
-        return run;
-      }
-    });
-    if (decoded === out) return out;
-    out = decoded;
-  }
-  return "[redacted]";
-}
-
-/** Apply the executor's redactor after normalizing mixed/nested display encodings. */
-export function fallbackRedactor(secrets: ReadonlySet<string>): (text: string) => string {
-  return (text) => {
-    const variants = new Set(secrets);
-    for (const value of secrets) {
-      if (!value) continue;
-      variants.add(displayText(value));
-      variants.add(JSON.stringify(value).slice(1, -1));
-      variants.add(Buffer.from(value).toString("base64url"));
-      variants.add(Buffer.from(value).toString("base64"));
-    }
-    const redact = secretRedactor(variants);
-    // Explicit browser credentials also cover short tokens. The executor's general redactor
-    // deliberately ignores these; here the source already established that they are secrets.
-    const short = [
-      ...new Set([...secrets].flatMap((value) => [value, value.trim(), displayText(value)])),
-    ]
-      .filter((value) => value.trim() && Array.from(value).length < 8)
-      .sort((a, b) => b.length - a.length);
-    const complete = (value: string) => {
-      let out = redact(value);
-      for (const secret of short)
-        out = out
-          .split("[redacted]")
-          .map((part) => part.split(secret).join("[redacted]"))
-          .join("[redacted]");
-      return out;
-    };
-    const decoded = displayText(text);
-    const clean = complete(decoded);
-    return clean !== decoded || decoded === "[redacted]" ? clean : complete(text);
-  };
-}
+/** Shared executor normalization and short-secret boundary rules. */
+export const fallbackRedactor = secretRedactor;
 
 /** URL credentials are sensitive even before their values are known to the session. */
 export function redactSnapshot(
@@ -102,7 +41,7 @@ export function redactSnapshot(
   secrets: ReadonlySet<string> = new Set(),
 ): string {
   const original = redact(text);
-  const decoded = displayText(original);
+  const decoded = normaliseSecretText(original);
   const scrubbed = decoded.replace(
     /https?:\/\/[^\s<>"']+|\/\/[^\s<>"']+|\/[^\s<>"']+|[?#][^\s<>"']+/gi,
     (value) => {

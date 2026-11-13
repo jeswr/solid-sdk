@@ -11,7 +11,7 @@ import {
   validateSiteModel,
   writeSiteModel,
 } from "@jeswr/site-model";
-import { launchChromium } from "@jeswr/site-profiler";
+import { launchChromium, type ProfileResult } from "@jeswr/site-profiler";
 import { type RunningShop, startShop } from "@jeswr/test-shop";
 import { createServer, type Server } from "http";
 import { DataFactory } from "n3";
@@ -67,9 +67,10 @@ const taskPlanner = (turtle: string) =>
 describe("fallback shop acceptance", () => {
   let shop: RunningShop;
   let model: SiteModel;
+  let writeResponses: ProfileResult["writeResponses"];
   beforeAll(async () => {
     shop = await startShop();
-    model = await learnShop(shop);
+    ({ model, writeResponses } = await learnShop(shop));
     shop.state.reset();
   });
   afterAll(async () => shop?.close());
@@ -86,7 +87,7 @@ describe("fallback shop acceptance", () => {
       delivery: "standard",
       createdAt: "2026-11-01T12:00:00.000Z",
     });
-    const { sessions, executor } = await shopExecutor(model, "orders");
+    const { sessions, executor } = await shopExecutor(model, "orders", writeResponses);
     const turtle = action("SearchAction", true);
     expect((await executor.execute(parseActionRequest(turtle))).status).toBe("no-path");
     const launch = vi.fn(launchChromium);
@@ -160,7 +161,7 @@ describe("fallback shop acceptance", () => {
     "deny",
     "approve",
   ] as const)("B %s delivery address: consent before POST, learned write replays once without a browser", async (decision) => {
-    const { sessions, executor } = await shopExecutor(model, `address-${decision}`);
+    const { sessions, executor } = await shopExecutor(model, `address-${decision}`, writeResponses);
     const address = "12 Example Lane";
     const turtle = action("UpdateAction", false, address);
     const approver = vi.fn(() => decision);

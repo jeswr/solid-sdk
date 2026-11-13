@@ -191,9 +191,12 @@ describe("session material", () => {
     const trace = JSON.stringify(redactTrace(rs, tokens.keys()));
     expect(trace).not.toContain(token);
     expect(trace).not.toContain(cookie);
+    expect(redactTrace([request("/x", { bodySample: 'a " secret' })], ['"'])[0]?.bodySample).toBe(
+      'a " secret',
+    );
     expect(
-      redactTrace([request("/x", { bodySample: 'a " secret' })], ['"'])[0]?.bodySample,
-    ).toContain("[redacted]");
+      redactTrace([request("/x", { bodySample: 'a "secret" echo' })], ['"secret"'])[0]?.bodySample,
+    ).toBe("a [redacted] echo");
   });
   it("recognises HTTP 200 password pages as signed-out probes, and rejects redirect JSON as data", async () => {
     const form = '<form><input type="password" name="password"></form>';

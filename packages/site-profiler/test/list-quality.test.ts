@@ -41,7 +41,7 @@ it("clears a witnessed empty list's saved search with a bounded read, preserving
   };
   const url = new URL(emptyListProbe(sample) ?? "https://invalid.test");
   expect(url.searchParams.get("search")).toBe("");
-  expect(url.searchParams.get("paging[current]")).toBe("1");
+  expect(url.searchParams.get("paging[current]")).toBe("12");
   expect(url.searchParams.get("paging[pageSize]")).toBe("25");
   expect(url.searchParams.get("namespace")).toBe("products");
   expect(url.searchParams.get("ticket")).toBe("session-source");

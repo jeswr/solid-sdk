@@ -66,7 +66,18 @@ beforeAll(async () => {
   });
   model = result.model;
   if (process.env.SAB_DUMP)
-    console.log(JSON.stringify({ model, warnings: result.warnings }, null, 1));
+    console.log(
+      JSON.stringify(
+        {
+          model,
+          warnings: result.warnings,
+          writeResponses: result.writeResponses,
+          trace: result.trace.filter((r) => r.phase === "demonstration"),
+        },
+        null,
+        1,
+      ),
+    );
 }, 120_000);
 
 afterAll(async () => {
@@ -75,6 +86,20 @@ afterAll(async () => {
 });
 
 describe("profiling the test shop", () => {
+  it("returns a learned checkout redirect policy alongside the model", () => {
+    const checkout = model.operations.find((o) => o.effect === "payment");
+    expect(checkout).toBeDefined();
+    const policy = result.writeResponses[checkout?.id ?? ""];
+    expect(policy).toMatchObject({
+      createdLocationPattern: "/orders/{id}",
+      redirectCount: 1,
+      finalStatus: 200,
+    });
+    expect(
+      result.trace.some((r) => r.redirectedFrom !== undefined && r.phase === "demonstration"),
+    ).toBe(true);
+  });
+
   it("names the model after the site", () => {
     expect(model.site).toBe(shop.url);
     expect(model.id).toBe(`urn:sab:model:${new URL(shop.url).host}`);
@@ -213,7 +238,7 @@ describe("profiling the test shop", () => {
     const route = model.login?.find((r) => r.operation?.endsWith("#sign-in"));
     expect(route).toMatchObject({
       method: "password",
-      sessionCookies: ["sid"],
+      sessionCookies: ["sid", "csrf"],
       probeUrl: `${shop.url}/account`,
     });
     const loginOp = model.operations.find((o) => o.id === route?.operation);

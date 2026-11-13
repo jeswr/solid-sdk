@@ -18,7 +18,7 @@ export interface LoginObservation {
   form?: FormInfo;
   /** Page the browser landed on after submitting. */
   landedOn?: string;
-  /** Cookies set or changed by the login, preferring HttpOnly ones. */
+  /** Every cookie set or changed by the login response. */
   sessionCookies: string[];
   error?: string;
 }
@@ -115,7 +115,6 @@ export async function performLogin(
     await recorder.flush();
     const after = await context.cookies(page.url());
     const changed = changedCookies(before, after);
-    const httpOnly = changed.filter((c) => c.httpOnly).map((c) => c.name);
     const stillForm = parseForms(await page.content(), page.url()).some((f) => f.hasPassword);
     const success = changed.length > 0 && !stillForm;
     const obs: LoginObservation = {
@@ -123,7 +122,14 @@ export async function performLogin(
       loginPageUrl,
       form,
       landedOn: page.url(),
-      sessionCookies: httpOnly.length ? httpOnly : changed.map((c) => c.name),
+      sessionCookies: [
+        ...new Set([
+          ...changed.map((c) => c.name),
+          ...recorder.trace
+            .filter((r) => r.phase === "login" && r.method === "POST" && r.url === form.action)
+            .flatMap((r) => r.setCookieNames ?? []),
+        ]),
+      ],
     };
     if (!success) obs.error = "the site did not accept the sign-in";
     return obs;
@@ -135,7 +141,11 @@ export async function performLogin(
 }
 
 /** Probe URL candidates: where the login landed, then account-like pages seen in the crawl. */
-export function probeCandidates(obs: LoginObservation | undefined, pageUrls: string[]): string[] {
+export function probeCandidates(
+  obs: LoginObservation | undefined,
+  pageUrls: string[],
+  verifiedSignedInReads: string[] = [],
+): string[] {
   const out: string[] = [];
   const add = (u: string | undefined) => {
     if (!u) return;
@@ -145,7 +155,13 @@ export function probeCandidates(obs: LoginObservation | undefined, pageUrls: str
   };
   add(obs?.landedOn);
   for (const u of pageUrls)
-    if (/\/(account|profile|me|dashboard|settings|my)(\/|$|\?)/i.test(u)) add(u);
+    if (
+      /\/(account|profile|me|dashboard|settings|my|preferences|notifications|messages|inbox|compose|submit)(\/|$|\?)/i.test(
+        u,
+      )
+    )
+      add(u);
+  for (const url of verifiedSignedInReads) add(url);
   return out;
 }
 

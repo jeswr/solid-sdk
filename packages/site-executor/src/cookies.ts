@@ -26,6 +26,8 @@ export interface SessionBundle {
   /** Opaque revision for compare-and-swap cookie updates. */
   revision?: string;
   cookies: Cookie[];
+  /** Explicit credential cookie names supplied by the vault. */
+  credentialCookies?: string[];
   /** Extra request headers (e.g. a bearer token from the vault). Sent only to the site origin. */
   headers?: Record<string, string>;
 }
@@ -51,6 +53,7 @@ function cloneBundle(bundle: SessionBundle): SessionBundle {
   return {
     ...(bundle.revision !== undefined ? { revision: bundle.revision } : {}),
     cookies: bundle.cookies.map((c) => ({ ...c })),
+    ...(bundle.credentialCookies ? { credentialCookies: [...bundle.credentialCookies] } : {}),
     ...(bundle.headers ? { headers: { ...bundle.headers } } : {}),
   };
 }

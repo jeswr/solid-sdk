@@ -228,7 +228,7 @@ describe("login", () => {
       });
       expect(good).toMatchObject({
         success: true,
-        sessionCookies: ["sid"],
+        sessionCookies: ["sid", "csrf"],
         landedOn: `${shop.url}/account`,
       });
     } finally {
@@ -366,4 +366,29 @@ describe("profileSite", () => {
     expect(result.warnings).toContain("no search operation learned");
     await expect(profileSite({ startUrl: "nope" })).rejects.toThrow(/Bad start URL/);
   }, 60_000);
+});
+
+it("retains a verified signed-in read as a login probe even outside account/settings routes", () => {
+  expect(
+    probeCandidates(
+      {
+        success: true,
+        loginPageUrl: "https://shop.test/login",
+        sessionCookies: ["sid"],
+        landedOn: "https://shop.test/",
+      },
+      ["https://shop.test/public"],
+      ["https://shop.test/composer"],
+    ),
+  ).toEqual(["https://shop.test/composer"]);
+});
+
+it("proposes witnessed compose/notification navigation as probes without guessing an endpoint", () => {
+  expect(
+    probeCandidates(undefined, [
+      "https://shop.test/submit",
+      "https://shop.test/notifications",
+      "https://shop.test/public",
+    ]),
+  ).toEqual(["https://shop.test/submit", "https://shop.test/notifications"]);
 });

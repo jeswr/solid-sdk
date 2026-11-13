@@ -5,6 +5,8 @@ import {
   createApprovalGate,
   createExecutor,
   type ExecutorOptions,
+  registerCookieSecrets,
+  registerSecret,
   type SessionProvider,
   secretRedactor,
   siteOrigin,
@@ -55,7 +57,7 @@ export async function loginWithPassword(
   credentials: { username: string; password: string },
 ): Promise<void> {
   const values = secretSet(executorFetch.sessions, model.site, executorFetch.persona);
-  values.add(credentials.password);
+  registerSecret(values, credentials.password);
   const route = model.login?.find((r) => r.method === "password" && r.operation);
   const operation = model.operations.find((o) => o.id === route?.operation);
   if (!route || !operation) throw new Error("Model has no password login operation.");
@@ -77,7 +79,7 @@ export async function loginWithPassword(
     };
     // A private one-operation model gives empty credential paths a host-only binding.
     // Neither this model nor the in-memory request is rendered or passed to runTask.
-    const hostModel = { ...model, operations: [op], flows: [], login: undefined };
+    const hostModel = { ...model, operations: [op], flows: [], login: [route] };
     const gate = createApprovalGate();
     const executor = createExecutor({ ...executorFetch, model: hostModel, gate });
     const request: ActionRequest = {
@@ -99,7 +101,8 @@ export async function loginWithPassword(
     const uncertain = result.outcome?.status === "uncertain" && result.committed.length === 1;
     if (result.status !== "done" && !(uncertain && route.probeUrl)) throw new Error();
     const bundle = await executorFetch.sessions.get(executorFetch.site, executorFetch.persona);
-    for (const c of bundle?.cookies ?? []) values.add(c.value);
+    for (const c of bundle?.cookies ?? [])
+      registerCookieSecrets(values, c, { model, declaredNames: bundle?.credentialCookies });
     const cookies = cookiesFor(
       bundle?.cookies ?? [],
       new URL(route.probeUrl ?? model.site),
@@ -120,7 +123,7 @@ export async function loginWithPassword(
       };
       const verifier = createExecutor({
         ...executorFetch,
-        model: { ...hostModel, operations: [probe] },
+        model: { ...hostModel, operations: [probe], login: undefined },
       });
       const checked = await verifier.execute({
         node: "urn:agent-browser:probe",
@@ -147,7 +150,11 @@ export function createTaskExecutor(options: Omit<ExecutorOptions, "gate">): Task
     async execute(request, opts) {
       const remember = async () => {
         const bundle = await options.sessions.get(siteOrigin(options.model.site), options.persona);
-        for (const c of bundle?.cookies ?? []) values.add(c.value);
+        for (const c of bundle?.cookies ?? [])
+          registerCookieSecrets(values, c, {
+            model: options.model,
+            declaredNames: bundle?.credentialCookies,
+          });
         for (const v of Object.values(bundle?.headers ?? {})) {
           rememberSessionHeader(values, v);
         }

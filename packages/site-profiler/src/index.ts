@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 /** @jeswr/site-profiler: learn a website once and write its site model. */
 
@@ -78,3 +79,5 @@ export {
   sampleValues,
   verifyOperations,
 } from "./verify.js";
+
+export { learnWriteResponses } from "./write-responses.js";

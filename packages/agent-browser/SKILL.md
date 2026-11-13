@@ -144,3 +144,17 @@ Fallback review invariants:
 The opt-in HTML forum cycle in webarena-bench uses SAB_LIVE_FORUM_URL, learned operations,
 scripted planning, twelve deny/approve decisions, repeat refusal and ownership-checked cleanup.
 Keep this fixture in test support; forum page names and credentials never belong in src/.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Use the executor's shared cookie classifier, registration helper and normalization-aware redactor
+at intake and learning boundaries. Register all logical cookie forms. HttpOnly, login-set/changed,
+model/vault-declared and common session names qualify from four characters; other cookies require an
+eight-character logical payload. Values below the shared `MIN_REDACTION_LENGTH = 4` floor are guessable and provide no
+confidentiality: never register them for redaction or suppress samples because of them. Keep
+the origin guard unchanged, token-boundary redaction for four to seven characters and full
+redaction for eight or more; short preferences must preserve item identities. Never add a separate display decoder
+or redaction algorithm. Protect trace/warning/snapshot HTML entities and mixed plus/percent echoes.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Carry profiler `writeResponses` alongside its model into createTaskExecutor; never reconstruct
+host-specific patterns. Preserve the separate policy artifact through model RDF round trips.

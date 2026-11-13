@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Compiling one operation plus resolved parameter values into a concrete HTTP
 // request: URL template expansion, JSON / form bodies, static headers. Values are
 // inserted structurally (URL encoding, JSON values, form fields), never spliced
@@ -35,6 +36,8 @@ export interface CompiledRequest {
   modelHeaders: string[];
   body?: CompiledBody;
   csrf: CsrfRule[];
+  /** Actual guarded HTML form page fetched while preparing this request's CSRF token. */
+  csrfReferer?: string;
   /** Local contract convention: an unbound whole path slot named by a query CSRF target. */
   pathTokens?: {
     template: string;

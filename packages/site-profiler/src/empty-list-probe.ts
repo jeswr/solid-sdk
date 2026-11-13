@@ -31,8 +31,7 @@ export function emptyListProbe(sample: RecordedRequest): string | undefined {
     if (/^(q|query|search|keyword|keywords|term|s|text)$/i.test(name) && value !== "") {
       url.searchParams.set(name, "");
       changed = true;
-    } else if (/^(?:page|paging\[current\])$/i.test(name)) url.searchParams.set(name, "1");
-    else if (/page.?size|limit|per.?page/i.test(name) && /^\d+$/.test(value))
+    } else if (/page.?size|limit|per.?page/i.test(name) && /^\d+$/.test(value))
       url.searchParams.set(name, String(Math.min(Number(value), 25)));
   }
   return changed ? url.href : undefined;

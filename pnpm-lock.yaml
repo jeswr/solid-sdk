@@ -4423,6 +4423,9 @@ importers:
 
   packages/site-profiler:
     dependencies:
+      '@jeswr/site-executor':
+        specifier: workspace:*
+        version: link:../site-executor
       '@jeswr/site-model':
         specifier: workspace:*
         version: link:../site-model

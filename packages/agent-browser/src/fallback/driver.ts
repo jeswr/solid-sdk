@@ -4,11 +4,15 @@
 import {
   approvalDigest,
   type CommittedWrite,
+  type CookieSecretContext,
   cookieHeader,
   createApprovalGate,
   domainMatches,
   guardUrl,
   parseSetCookie,
+  registerCookieSecrets,
+  registerSecret,
+  type SecretCookie,
   type SessionBundle,
   type SessionProvider,
   siteOrigin,
@@ -65,6 +69,7 @@ export interface DriverClock {
 }
 export interface BrowserDriverOptions {
   site: string;
+  cookieContext?: CookieSecretContext;
   sessions: SessionProvider;
   persona?: string;
   approver?: Approver;
@@ -119,7 +124,7 @@ export class BrowserDriver {
   private forms: FormInfo[] = [];
   private initialCookies = "[]";
   private learnedCandidates: EndpointCandidate[] | undefined;
-  private learningCookies: { name: string; value: string }[] = [];
+  private learningCookies: SecretCookie[] = [];
   requests = 0;
   refreshError: string | undefined;
 
@@ -151,9 +156,23 @@ export class BrowserDriver {
     }
   }
 
+  private cookieContext(): CookieSecretContext {
+    return {
+      ...this.options.cookieContext,
+      declaredNames: [
+        ...(this.options.cookieContext?.declaredNames ?? []),
+        ...(this.session?.credentialCookies ?? []),
+      ],
+    };
+  }
+
+  private rememberCookie(cookie: SecretCookie): void {
+    registerCookieSecrets(this.secrets, cookie, this.cookieContext());
+  }
+
   private async open(): Promise<void> {
     this.session = await this.options.sessions.get(this.origin, this.options.persona);
-    for (const c of this.session?.cookies ?? []) this.secrets.add(c.value);
+    for (const c of this.session?.cookies ?? []) this.rememberCookie(c);
     for (const value of Object.values(this.session?.headers ?? {}))
       rememberSessionHeader(this.secrets, value);
     this.browser = await (this.options.launch ?? launchChromium)();
@@ -343,7 +362,7 @@ export class BrowserDriver {
       headers.cookie = cookieHeader(await this.context.cookies(url));
       for (const [key, value] of Object.entries(this.session?.headers ?? {}))
         headers[key.toLowerCase()] = rememberSessionHeader(this.secrets, value);
-      for (const c of await this.context.cookies()) this.secrets.add(c.value);
+      for (const c of await this.context.cookies()) this.rememberCookie(c);
       this.rememberPageSecrets();
       const wire: Omit<RecordedRequest, "seq" | "phase"> = {
         method,
@@ -399,7 +418,7 @@ export class BrowserDriver {
         const privateField = (name: string) => sensitive.test(name) || privateNames.has(name);
         const names = [...requestedUrl.searchParams.keys()];
         for (const [name, value] of requestedUrl.searchParams)
-          if (privateField(name)) this.secrets.add(value);
+          if (privateField(name)) registerSecret(this.secrets, value);
         if (/application\/json/i.test(headers["content-type"] ?? "")) {
           const value = JSON.parse(raw) as Record<string, unknown>;
           if (
@@ -413,7 +432,7 @@ export class BrowserDriver {
           }
           names.push(...Object.keys(value));
           for (const [key, value_] of Object.entries(value))
-            if (privateField(key)) this.secrets.add(String(value_));
+            if (privateField(key)) registerSecret(this.secrets, String(value_));
         } else if (/application\/x-www-form-urlencoded/i.test(headers["content-type"] ?? "")) {
           const fields = [...new URLSearchParams(raw)];
           if (new Set(fields.map(([k]) => k)).size !== fields.length) {
@@ -421,7 +440,8 @@ export class BrowserDriver {
             return;
           }
           names.push(...fields.map(([k]) => k));
-          for (const [key, value] of fields) if (privateField(key)) this.secrets.add(value);
+          for (const [key, value] of fields)
+            if (privateField(key)) registerSecret(this.secrets, value);
         } else if (raw) {
           await stop("guard", "Unsupported browser write body.");
           return;
@@ -430,9 +450,14 @@ export class BrowserDriver {
           .filter((r) => r.bodySample && /html/i.test(r.contentType ?? ""))
           .map((r) => ({ url: r.url, html: r.bodySample as string }));
         const cookies = await this.context.cookies();
-        const credentials = discoverCredentialSources(pages, cookies, this.recorder.trace);
+        const credentials = discoverCredentialSources(
+          pages,
+          cookies,
+          this.recorder.trace,
+          this.cookieContext(),
+        );
         const tokens = new Map([
-          ...discoverSessionTokens(pages, cookies, this.recorder.trace),
+          ...discoverSessionTokens(pages, cookies, this.recorder.trace, this.cookieContext()),
           ...credentials.tokens,
         ]);
         const fingerprint = browserWriteFingerprint(
@@ -545,7 +570,7 @@ export class BrowserDriver {
         .headersArray()
         .filter((h) => h.name.toLowerCase() === "set-cookie")) {
         const cookie = parseSetCookie(line.value, new URL(url), new Date());
-        if (cookie) this.secrets.add(cookie.value);
+        if (cookie) this.rememberCookie(cookie);
       }
       if (write && status >= 400 && status < 500) {
         this.committed.splice(this.committed.indexOf(write), 1);
@@ -567,7 +592,7 @@ export class BrowserDriver {
           },
         ],
       );
-      for (const value of credentials.secrets) this.secrets.add(value);
+      for (const value of credentials.secrets) registerSecret(this.secrets, value);
       if (entry && /text\/|json|javascript|xml/i.test(entry.contentType ?? "")) {
         entry.bodySample = body.toString("utf8", 0, BODY_LIMIT);
         if (body.length > BODY_LIMIT) entry.bodyTruncated = true;
@@ -615,15 +640,15 @@ export class BrowserDriver {
       .filter((r) => r.bodySample && /html/i.test(r.contentType ?? ""))
       .map((r) => ({ url: r.url, html: r.bodySample as string }));
     for (const value of discoverCredentialSources(pages, [], this.recorder.trace).secrets)
-      this.secrets.add(value);
+      registerSecret(this.secrets, value);
     for (const entry of this.recorder.trace) {
       for (const [name, value] of new URL(entry.url).searchParams)
-        if (sensitive.test(name)) this.secrets.add(value);
+        if (sensitive.test(name)) registerSecret(this.secrets, value);
       if (!entry.bodySample || !/html/i.test(entry.contentType ?? "")) continue;
       for (const form of parseForms(entry.bodySample, entry.url))
         for (const field of form.fields)
           if ((sensitive.test(field.name) || field.type === "password") && field.value)
-            this.secrets.add(field.value);
+            registerSecret(this.secrets, field.value);
     }
   }
 
@@ -654,12 +679,12 @@ export class BrowserDriver {
 
   async snapshot(): Promise<BrowserSnapshot> {
     await this.recorder.flush();
-    for (const cookie of await this.context.cookies()) this.secrets.add(cookie.value);
+    for (const cookie of await this.context.cookies()) this.rememberCookie(cookie);
     const live = discoverCredentialSources(
       [{ url: this.page.url(), html: await this.page.content() }],
       [],
     );
-    for (const value of live.secrets) this.secrets.add(value);
+    for (const value of live.secrets) registerSecret(this.secrets, value);
     this.rememberPageSecrets();
     if (this.failure) throw this.failure;
     // Chromium's actual accessibility tree, rather than page text or DOM/HTML.
@@ -776,7 +801,7 @@ export class BrowserDriver {
     try {
       const html = await this.page.content();
       for (const value of discoverCredentialSources([{ url: this.page.url(), html }], []).secrets)
-        this.secrets.add(value);
+        registerSecret(this.secrets, value);
       this.forms = parseForms(html, this.page.url());
       this.rememberPageSecrets();
       this.submitter = undefined;
@@ -814,7 +839,8 @@ export class BrowserDriver {
                 "function() { return [this.type, this.name, this.autocomplete].join(' '); }",
               returnByValue: true,
             });
-            if (sensitive.test(String(info.result.value))) this.secrets.add(action.text);
+            if (sensitive.test(String(info.result.value)))
+              registerSecret(this.secrets, action.text);
             await element.fill(action.text);
           } else await element.selectOption(action.value);
         } finally {
@@ -862,6 +888,7 @@ export class BrowserDriver {
         this.learningCookies,
         this.approved,
         (value) => this.redact(value),
+        this.cookieContext(),
       );
     if (this.closed) throw new Error("Learning evidence was not finalized before closing.");
     await this.recorder.flush();
@@ -869,7 +896,7 @@ export class BrowserDriver {
       [{ url: this.page.url(), html: await this.page.content() }],
       [],
     );
-    for (const value of credentials.secrets) this.secrets.add(value);
+    for (const value of credentials.secrets) registerSecret(this.secrets, value);
     this.learningCookies = await this.context.cookies();
     this.learnedCandidates = candidatesFromTrace(
       this.recorder.trace,
@@ -877,6 +904,7 @@ export class BrowserDriver {
       this.learningCookies,
       this.approved,
       (value) => this.redact(value),
+      this.cookieContext(),
     );
     return structuredClone(this.learnedCandidates);
   }
@@ -888,10 +916,13 @@ export class BrowserDriver {
       try {
         const cookies = await this.context.cookies();
         this.learningCookies = cookies;
-        for (const c of cookies) this.secrets.add(c.value);
+        for (const c of cookies) this.rememberCookie(c);
         if (JSON.stringify(cookies) !== this.initialCookies)
           await this.options.sessions.update(this.origin, this.options.persona, {
             ...this.session,
+            ...(this.session?.credentialCookies
+              ? { credentialCookies: [...this.session.credentialCookies] }
+              : {}),
             cookies: cookies.map((c) => ({
               ...c,
               domain: new URL(this.origin).hostname,

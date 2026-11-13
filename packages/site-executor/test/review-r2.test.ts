@@ -625,8 +625,8 @@ describe("review r2 execution regressions", () => {
     );
     expect(summary).not.toContain("SECRET");
     expect(summary).not.toContain("20.00");
-    // Explicitly registered short values are secrets too.
-    expect(summary).not.toContain("GBP");
+    // Sub-four-character values provide no confidentiality and stay visible.
+    expect(summary).toContain("GBP");
     expect(summary).toContain("[redacted]");
   });
 

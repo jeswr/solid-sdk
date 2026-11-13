@@ -211,18 +211,28 @@ export function playwrightReplayer(
       try {
         let res: ReplayResponse;
         if (signedIn) {
+          recorder.rememberCookies(await context.cookies(url));
           const bound = { ...values };
           const queryTokens: Array<[string, string]> = [];
           for (const rule of csrf ?? []) {
             if (rule.target.kind !== "query") continue;
             const source = rule.source;
             let token: string | undefined;
-            if (source.kind === "cookie")
-              token = (await context.cookies(url)).find((c) => c.name === source.name)?.value;
-            else {
+            if (source.kind === "cookie") {
+              const cookies = await context.cookies(url);
+              recorder.rememberCookies(cookies);
+              token = cookies.find((c) => c.name === source.name)?.value;
+            } else {
               const response = await context.request.get(
                 expandTemplate(source.urlTemplate, bound),
                 { maxRedirects: 0, timeout: 5000 },
+              );
+              recorder.rememberSetCookies(
+                response
+                  .headersArray()
+                  .filter((h) => h.name.toLowerCase() === "set-cookie")
+                  .map((h) => h.value),
+                response.url(),
               );
               const body = await response.text();
               if (source.kind === "json") {
@@ -251,6 +261,13 @@ export function playwrightReplayer(
             failOnStatusCode: false,
             timeout: 5000,
           });
+          recorder.rememberSetCookies(
+            r
+              .headersArray()
+              .filter((h) => h.name.toLowerCase() === "set-cookie")
+              .map((h) => h.value),
+            url,
+          );
           const headers = r.headers();
           res = { status: r.status(), body: await r.text().catch(() => "") };
           if (headers["content-type"]) res.contentType = headers["content-type"];
@@ -261,6 +278,7 @@ export function playwrightReplayer(
             redirect: "manual",
             signal: AbortSignal.timeout(5000),
           });
+          recorder.rememberSetCookies(r.headers.getSetCookie(), url);
           res = { status: r.status, body: await r.text().catch(() => "") };
           const ct = r.headers.get("content-type");
           if (ct) res.contentType = ct;
