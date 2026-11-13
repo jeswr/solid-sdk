@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-13T18:20Z",
+  "updated": "2026-11-13T18:30Z",
   "note": "Everything to build, in the order it will be done. On 13 Nov 2026 Jesse reviewed the demo and put three things first: RDF throughout, payment as a contract, and real runs behind every selector option; and paused benchmarking. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
   "phases": [
     {
@@ -79,10 +79,10 @@
         },
         {
           "id": "P9.11",
-          "title": "Findings from the first evaluation pass, to adjudicate",
-          "detail": "The parked evaluation run flagged six cases, in three use cases, where a message was still admitted after a required credential had been removed from it, and a disagreement about whether a permission to use something covers narrower actions. Each is either a defect in a gate or in the test's reading of the specification. To be read and settled by Fable, with fixes built by Codex. The rest of the evaluation stays paused.",
+          "title": "Two gate gaps found by the first evaluation pass",
+          "detail": "Settled: both are real gaps in the gates. First, a message that leaves out a claim its operation needs was admitted and nothing asked for it (six cases in three use cases). Second, a permission to use something was read as also allowing it to be passed on (682 cases). Two new core clauses say what must happen, and a build brief is written (brief 27). It runs once the RDF build has landed, because it changes the same gate code. Still open: whether a person's own instructions and reads from memory count as admitted input in the evaluation's third property. The rest of the evaluation stays paused.",
           "status": "next",
-          "owner": "Fable (adjudicate), Codex (fix)"
+          "owner": "Fable (settled), Codex (fix)"
         }
       ]
     },
