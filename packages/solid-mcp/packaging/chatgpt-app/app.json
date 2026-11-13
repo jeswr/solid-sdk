@@ -19,7 +19,7 @@
   "tools": [
     {
       "name": "address_get",
-      "readOnly": true
+      "readOnly": false
     },
     {
       "name": "chat_export",
@@ -47,7 +47,7 @@
     },
     {
       "name": "health_query",
-      "readOnly": true
+      "readOnly": false
     },
     {
       "name": "memory_forget",
@@ -55,7 +55,7 @@
     },
     {
       "name": "memory_recall",
-      "readOnly": true
+      "readOnly": false
     },
     {
       "name": "memory_remember",
