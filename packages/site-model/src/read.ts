@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 /** readSiteModel: RDF -> the typed SiteModel projection, through the generated model. */
 import { createParseScope, type ParseScope } from "@jeswr/model-runtime";
@@ -180,6 +181,7 @@ class Reader {
     return {
       format: data.format,
       ...(data.itemPath === undefined ? {} : { itemPath: data.itemPath }),
+      ...(data.totalPath === undefined ? {} : { totalPath: data.totalPath }),
       itemType: data.itemType,
       ...(data.idField === undefined ? {} : { idField: data.idField }),
       fields,

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // Semantic agent browser: the in-memory contract shared by @jeswr/site-model,
@@ -98,6 +99,8 @@ export interface Extraction {
   format: 'json' | 'html';
   /** JSON: pointer to an array or object. HTML: CSS selector matching each item. Omit = whole document is one item. */
   itemPath?: string;
+  /** JSON pointer / HTML selector to the total number of matching records. */
+  totalPath?: string;
   /** rdf:type for each extracted item, e.g. https://schema.org/Product */
   itemType: string;
   /** Field rule (from fields) whose value becomes the item's IRI; else a blank node. */

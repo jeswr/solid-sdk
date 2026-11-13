@@ -160,3 +160,71 @@ checks. Explicit object types can also narrow read candidates. Bracketed credent
 path-scoped session cookies work through the learned login route. The read-only live acceptance
 in `tools/webarena-bench/test/live.test.ts` exercises fresh host login and execution without
 calling a planner CLI; see the harness README for opt-in settings.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The opt-in `tools/webarena-bench/test/live-writes.test.ts` uses a scripted planner and learned
+operations to create/update/delete a disposable product. It records six approval decisions
+(deny then approve for each action), requires exactly three POSTs, checks an identical-create
+repeat refusal and observes prices/deletion through the grid. Redirect-derived identifier facts
+bind subsequent actions. Paged ItemList counts and partial markers remain in planner RDF history;
+formatted list prices do not relax payment evidence requirements. No planner CLI is used.
+
+## Browser fallback
+
+`runTask({ fallback })` can learn a missing operation during a task. Configure it with the
+same session provider/persona as the executor and a host-supplied `FallbackPlanner`:
+
+```ts
+import { createFallback, scriptedFallbackPlanner } from "@jeswr/agent-browser";
+
+const fallback = createFallback({
+  sessions, persona,
+  // Steps may also be callbacks that find an interactive ref in input.snapshot.nodes.
+  planner: () => scriptedFallbackPlanner(browserSteps),
+  maxSteps: 20,
+});
+const trace = await runTask({ goal, model, executor, planner, approver, fallback, persona });
+const updatedModel = trace.model ?? model; // host decides where to store it
+```
+
+Fallback runs once for an action that returns `no-path` with no matched effect or missing
+known inputs. Its step has `via: "fallback"` and `learned` operation IDs. The next planner
+call receives the updated catalogue, and subsequent actions use a new executor over that
+model. Without `fallback`, the return shape and execution path stay unchanged. The ordinary
+RDF planner receives only bounded executor observations, including untrusted-text wrappers.
+`Fallback.run` and `learnFallback` also return `proposed` operations and `rejected` reasons.
+No model-backed fallback planner or prompt is supplied. `scriptedFallbackPlanner` accepts
+steps, `done`, `give-up`, and input callbacks; an exhausted script gives up. A planner factory
+creates a fresh sequence for each fallback run.
+
+`BrowserDriver.create` owns one Chromium browser, context and page. It installs same-site
+cookies from `SessionProvider.get`; at close it persists changed cookies once using the
+original revision. Rejected updates are never retried. Navigation, resources and credentials
+are restricted to the model origin. New windows, frames, downloads and WebSockets are blocked;
+dialogs are dismissed. Every non-GET pauses at the request boundary. The task's `approver`
+sees the site, form/button label and field names, with no password values. Only `"approve"`
+issues a grant for that exact concrete request and browser step; it is consumed once.
+A denied request is aborted. A numeric spending limit cannot approve an unknown write.
+Sent writes retain executor-compatible fingerprints and Completed/Uncertain RDF receipts,
+so task repeat blocking also covers fallback writes and failures after submission.
+
+`snapshot()` returns Chromium accessibility roles, names, values and stable interactive refs,
+labelled `UNTRUSTED PAGE CONTENT` and `untrusted: true`. Defaults are 100 nodes and 8,000 text
+characters, with explicit truncation. Refs expire after navigation or DOM removal. Actions
+are `goto`, `click`, `fill`, `select`, `press`, and `back`, with a 200 ms minimum interval;
+`clock` and bounds are injectable. `launch` allows host browser configuration and launch
+counting. `SAB_CHROMIUM_PATH` is respected by the default launcher.
+
+After `done`, recorded traffic supplies templates, forms, extraction and labels. Each read
+must replay through the HTTP executor with the session and extract an item. Reads have
+`provenance.method: "fallback"`, confidence at most 0.35, and verification counters. Only
+approved successful writes become write operations; they are never replayed while learning.
+No flow is inferred. Aborts, other origins and credential-bearing candidates are excluded.
+Session URL tokens use the profiler's source/repetition detection and CSRF slots; unresolved
+secret URL constants are rejected. Models validate and round-trip through site-model RDF.
+Writes currently support flat JSON string/number/boolean fields and URL-encoded forms; unsupported bodies fail closed.
+
+`test/fallback.test.ts` exercises real Chromium/loopback order learning, address approval and
+zero-launch executor replay, plus browser guards, pacing, snapshots, refs and revision rejection.
+`test/fallback-learning.test.ts` covers executor verification, token slots, write admission and
+canonical fingerprints. `test/fallback-routing.test.ts` covers statuses that must stay in the executor.

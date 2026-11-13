@@ -88,6 +88,7 @@
     {
       "targetClass": "https://jeswr.org/ns/site-action#Extraction",
       "name": "Extraction",
+      "fields": { "totalPath": { "sanitizeText": false } },
       "subject": {
         "convention": "self"
       }

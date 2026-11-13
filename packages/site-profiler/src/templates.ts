@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 2: endpoint templates. Clusters recorded requests into endpoints, inferring path variables
@@ -7,6 +8,7 @@
 
 import type { CsrfRule, LearnMethod } from "@jeswr/site-model";
 import { isExecutorOwnedHeader } from "@jeswr/site-model";
+import { formFields } from "./form-body.js";
 import { formCsrfRules, isCsrfFieldName } from "./forms.js";
 import { descendants, parseHtml } from "./html.js";
 import type { SessionTokens } from "./session-tokens.js";
@@ -106,8 +108,9 @@ export function requestValues(r: RecordedRequest): {
     }
     return { query, body, bodyLocation: "body" };
   }
-  if (ct === "application/x-www-form-urlencoded") {
-    for (const [k, v] of new URLSearchParams(r.postData)) body.push([k, v, "string"]);
+  if (ct === "application/x-www-form-urlencoded" || ct === "multipart/form-data") {
+    for (const [k, v] of formFields(r.postData, r.requestHeaders["content-type"] ?? ct) ?? [])
+      body.push([k, v, "string"]);
     return { query, body, bodyLocation: "form" };
   }
   return { query, body };
@@ -130,6 +133,10 @@ function staticHeaders(samples: RecordedRequest[]): Record<string, string> {
 function csrfFromSamples(samples: RecordedRequest[]): CsrfRule[] {
   const rules: CsrfRule[] = [];
   for (const s of samples) {
+    for (const [name, cookie] of Object.entries(s.bodyFromCookies ?? {})) {
+      if (!rules.some((r) => r.target.kind === "form" && r.target.name === name))
+        rules.push({ source: { kind: "cookie", name: cookie }, target: { kind: "form", name } });
+    }
     for (const [header, cookie] of Object.entries(s.headersFromCookies ?? {})) {
       if (isExecutorOwnedHeader(header)) continue;
       if (
@@ -185,7 +192,13 @@ export function clusterRequests(
   const groups = new Map<string, RecordedRequest[]>();
   const segmentsOf = new Map<RecordedRequest, string[]>();
   for (const r of requests) {
-    if (r.blocked || r.resourceType === "replay-anonymous") continue;
+    if (
+      r.blocked ||
+      r.postDataTruncated ||
+      r.postDataUnsupported ||
+      r.resourceType === "replay-anonymous"
+    )
+      continue;
     const method = r.method.toUpperCase() as Method;
     if (!METHODS.has(method)) continue;
     let url: URL;
@@ -537,7 +550,11 @@ export function mergeCandidates(candidates: EndpointCandidate[]): EndpointCandid
     existing.params = mergeParams(existing.params, c.params);
     existing.sources = uniq([...existing.sources, ...c.sources]);
     existing.samples = [...existing.samples, ...c.samples];
-    existing.csrf = mergeCsrf(existing.csrf, c.csrf);
+    // A fresh login has no cookie jar yet: its page source bootstraps the cookie.
+    existing.csrf =
+      c.form?.hasPassword || existing.form?.hasPassword
+        ? mergeCsrf(c.csrf, existing.csrf)
+        : mergeCsrf(existing.csrf, c.csrf);
     existing.headers = { ...c.headers, ...existing.headers };
     if (!existing.form && c.form) existing.form = c.form;
     if (!existing.script && c.script) existing.script = c.script;
@@ -555,7 +572,7 @@ export function mergeCandidates(candidates: EndpointCandidate[]): EndpointCandid
 
 /** Values a request supplies for each of a candidate's parameters, or undefined when it does not match. */
 export function matchRequest(
-  candidate: Pick<EndpointCandidate, "method" | "urlTemplate">,
+  candidate: Pick<EndpointCandidate, "method" | "urlTemplate" | "bodyTemplate">,
   r: RecordedRequest,
 ): Record<string, string> | undefined {
   if (r.method.toUpperCase() !== candidate.method) return undefined;
@@ -587,6 +604,12 @@ export function matchRequest(
   const rv = requestValues(r);
   for (const [k, v] of rv.query) if (values[varName(k)] === undefined) values[varName(k)] = v;
   for (const [k, v] of rv.body) if (values[varName(k)] === undefined) values[varName(k)] = v;
+  if (candidate.bodyTemplate)
+    for (const [wireName, placeholder] of new URLSearchParams(candidate.bodyTemplate)) {
+      const name = /^\{([A-Za-z0-9_]+)\}$/.exec(placeholder)?.[1];
+      const value = rv.body.find(([key]) => key === wireName)?.[1];
+      if (name && value !== undefined) values[name] = value;
+    }
   return values;
 }
 

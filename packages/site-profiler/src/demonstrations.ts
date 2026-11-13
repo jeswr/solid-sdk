@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 7: demonstrations. A scripted Playwright session stands in for a person showing the agent a
@@ -7,6 +8,7 @@
 // property; values the demonstrator supplied become flow inputs.
 
 import type { Flow, FlowStep, Operation, Parameter } from "@jeswr/site-model";
+import { responseIdentity } from "@jeswr/site-model";
 import type { BrowserContext } from "playwright";
 import { applyExtraction, type Item } from "./extraction.js";
 import type { Recorder } from "./recorder.js";
@@ -98,6 +100,10 @@ export function buildFlow(
   const firstItems: Array<Item | undefined> = steps.map((st) => {
     const ex = st.operation.extraction;
     const body = st.request.bodySample;
+    if (st.request.redirectedTo && st.operation.effect !== "read") {
+      const identity = responseIdentity(st.request.redirectedTo);
+      if (identity) return { [s("identifier")]: [identity.identifier], [s("url")]: [identity.url] };
+    }
     if (!ex || body === undefined) return undefined;
     return applyExtraction(ex, body, st.request.url)[0];
   });

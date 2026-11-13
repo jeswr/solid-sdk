@@ -37,6 +37,7 @@ export { buildOperation, type OperationContext, toParameter } from "./operations
 export { launchChromium, profileSite, proposeExtraction } from "./profile.js";
 export { BODY_LIMIT, Recorder, redactBody, sanitiseHeaders } from "./recorder.js";
 export { analyseScript, type ScriptAnalysis } from "./scripts.js";
+export { discoverSessionTokens, redactTrace, type SessionTokens } from "./session-tokens.js";
 export {
   bodyTemplateFor,
   candidateFromForm,

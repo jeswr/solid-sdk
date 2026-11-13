@@ -1,75 +1,15 @@
 // AUTHORED-BY Codex GPT-6
 import {
-  captureOrigin,
   NATIVE_HOST_NAME,
   NATIVE_MESSAGE_LIMIT,
   type NativeResult,
   nativeRequestSchema,
   nativeResponseSchema,
 } from '@jeswr/agent-vault/browser';
-import {
-  CAPTURE_PERMISSION_PORT,
-  releaseCapturePermissions,
-} from '../shared/agent-capture-permissions';
+import { installAgentCapture } from './agent-capture';
 
 /** The worker owns one native port, keeping the vault's scheduler alive after the popup closes. */
 export function installNativeVaultBridge(browser = chrome): void {
-  const isPopup = (sender: chrome.runtime.MessageSender | undefined) =>
-    sender?.id === browser.runtime.id &&
-    !sender.tab &&
-    sender.url === browser.runtime.getURL('popup/popup.html');
-  const leases = new Set<chrome.runtime.Port>();
-  const removePermissions = () => {
-    void releaseCapturePermissions(browser.permissions).catch(() => {
-      // Popup destruction can prevent its warning from rendering. Leave a visible toolbar warning.
-      void browser.action.setBadgeText({ text: '!' }).catch(() => {
-        /* no browser diagnostics */
-      });
-    });
-  };
-  // A permission prompt may finish after Chrome destroys the popup and its JS context.
-  browser.permissions.onAdded.addListener((permissions) => {
-    if (!leases.size && permissions.permissions?.includes('cookies')) removePermissions();
-  });
-  browser.runtime.onConnect.addListener((connected) => {
-    if (connected.name !== CAPTURE_PERMISSION_PORT) return;
-    if (!isPopup(connected.sender)) {
-      connected.disconnect();
-      return;
-    }
-    let active = false;
-    let closed = false;
-    const cleanup = () => {
-      if (closed) return;
-      closed = true;
-      leases.delete(connected);
-      removePermissions();
-    };
-    connected.onMessage.addListener((message: unknown) => {
-      try {
-        if (
-          closed ||
-          active ||
-          !message ||
-          typeof message !== 'object' ||
-          Object.keys(message).join(',') !== 'site' ||
-          !('site' in message) ||
-          typeof message.site !== 'string'
-        )
-          throw 0;
-        captureOrigin(message.site);
-        active = true;
-        leases.add(connected);
-      } catch {
-        cleanup();
-        connected.disconnect();
-      }
-    });
-    connected.onDisconnect.addListener(() => {
-      void browser.runtime.lastError;
-      cleanup();
-    });
-  });
   let port: chrome.runtime.Port | undefined;
   let nextId = 0;
   const pending = new Map<
@@ -142,27 +82,17 @@ export function installNativeVaultBridge(browser = chrome): void {
         fail();
       }
     });
-  browser.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+  // No generic popup-to-native proxy: all capture capabilities belong to the lease machine.
+  installAgentCapture(browser, request);
+  browser.runtime.onMessage.addListener((message: unknown, _sender, respond) => {
     if (
-      !message ||
-      typeof message !== 'object' ||
-      !('type' in message) ||
-      message.type !== 'AGENT_VAULT'
-    )
-      return false;
-    // No content script, iframe, other extension or page can reach this host capability.
-    if (
-      !isPopup(sender) ||
-      Object.keys(message).sort().join(',') !== 'request,type' ||
-      !('request' in message)
+      message &&
+      typeof message === 'object' &&
+      'type' in message &&
+      message.type === 'AGENT_VAULT'
     ) {
       respond({ ok: false });
-      return false;
     }
-    void request(message.request).then(
-      (result) => respond({ ok: true, result }),
-      () => respond({ ok: false }),
-    );
-    return true;
+    return false;
   });
 }

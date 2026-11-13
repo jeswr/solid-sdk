@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 9: verification. Replays each learned read with observed values, signed out and (when a
@@ -270,6 +271,7 @@ export function playwrightReplayer(
           method: "GET",
           url,
           resourceType: signedIn ? "replay" : "replay-anonymous",
+          requestHeaders: requestHeaders ?? {},
           status: res.status,
           bodySample: res.body,
         };

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 /** writeSiteModel: the typed SiteModel -> Turtle, through the generated model and n3.Writer. */
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
@@ -153,6 +154,7 @@ class Builder {
     this.node("Extraction", iri, {
       format: e.format,
       ...(e.itemPath === undefined ? {} : { itemPath: e.itemPath }),
+      ...(e.totalPath === undefined ? {} : { totalPath: e.totalPath }),
       itemType: e.itemType,
       ...(e.idField === undefined ? {} : { idField: e.idField }),
       fields: fieldIris,

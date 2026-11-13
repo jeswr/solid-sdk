@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
@@ -20,7 +21,7 @@ import type {
   Operation,
   SiteModel,
 } from "@jeswr/site-model";
-import { actionRequestTerms } from "@jeswr/site-model";
+import { actionRequestTerms, endpointItemType, responseIdentity, SCHEMA } from "@jeswr/site-model";
 import {
   applyCsrfToken,
   bodyInit,
@@ -488,7 +489,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
           throw new OriginError("redirect Location is not a valid URL");
         }
         next = guardUrl(next.href, origin);
-        if (res.status === 303 && currentMethod !== "GET") createdLocation = next.href;
+        if ([301, 302, 303].includes(res.status) && currentMethod !== "GET")
+          createdLocation = next.href;
         if (currentMethod !== "GET" && (res.status === 307 || res.status === 308)) {
           throw new HttpError(
             `${currentMethod} ${describeUrl(url)} answered ${res.status}; a redirect that re-sends the body is not followed`,
@@ -646,7 +648,30 @@ export function createExecutor(options: ExecutorOptions): Executor {
       )
         throw new SessionError("The site requires sign-in again");
     }
-    if (!operation.extraction) {
+    const identity = res.createdLocation ? responseIdentity(res.createdLocation) : undefined;
+    const safeIdentity =
+      identity &&
+      redactWith(ctx)(identity.url) === identity.url &&
+      redactWith(ctx)(identity.identifier) === identity.identifier
+        ? identity
+        : undefined;
+    // Server redirects identify the result even when its HTML form is rendered only by JS.
+    const extraction =
+      operation.extraction ??
+      (safeIdentity
+        ? {
+            format: "json" as const,
+            itemType:
+              endpointItemType(res.createdLocation ?? compiled.url.href)?.itemType ??
+              `${SCHEMA}Thing`,
+            idField: `${SCHEMA}url`,
+            fields: [
+              { property: `${SCHEMA}url`, path: "/url", datatype: "iri" },
+              { property: `${SCHEMA}identifier`, path: "/identifier" },
+            ],
+          }
+        : undefined);
+    if (!extraction) {
       return {
         observation: {
           operation: operation.id,
@@ -657,10 +682,14 @@ export function createExecutor(options: ExecutorOptions): Executor {
         items: [],
       };
     }
-    const out = await extract(operation.extraction, res.body, {
-      baseUrl: res.url.href,
-      redact: redactWith(ctx),
-    });
+    const out = await extract(
+      extraction,
+      operation.extraction ? res.body : JSON.stringify(safeIdentity),
+      {
+        baseUrl: res.url.href,
+        redact: redactWith(ctx),
+      },
+    );
     return {
       observation: {
         operation: operation.id,

@@ -60,3 +60,50 @@ Repeat guard and recovery:
   correct the mapped inputs instead of weakening typed identity matching.
 - Session revisions belong to the executor/vault seam. Advance accepted update revisions; rejection stops persistence for the rest of the execution
   while keeping the in-memory jar; void retains the prior token. Never fetch a new token for old cookies; model learning and planner history must never carry it.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+List/write learning additions: keep totalPath synchronized through types, ontology, both shapes,
+codegen config and generated artifacts (regenerate, never hand-edit). List counts are integers
+on ItemList; unseen records make observations partial. Display coercion requires a row currency
+code for formatted prices and strict ISO-like timestamp syntax; payment evidence rules stay
+unchanged. Type records from endpoint-owned words, ignoring user query values. Refund documents
+fall back to Thing/additionalType text rather than Invoice/category.
+
+Composite write templates must be witnessed by successful demonstrations, size bounded and
+redacted. Prefer witnessed cookie CSRF over hidden/meta sources; script variables require a
+contract discussion, never a hard-coded token. Preserve ordinary flat-form defaults/options.
+Created identities may come from checked on-origin 301/302/303 redirects and supply later flow
+bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
+The harness's opt-in live test creates and cleans up only its own product, blocks background
+preference writes and uses a scripted planner. Never invoke a planner/model CLI for acceptance.
+
+For product administration, a quantity input describes inventoryLevel, not purchase quantity.
+A demonstrated destructive grid search remains a required dynamic input, including when the
+site submits no explicit selected IDs. Never drop or fix that selector to a demonstration SKU.
+
+Browser fallback:
+- Configure `createFallback` only with a host-supplied/scripted `FallbackPlanner`; this package
+  supplies no model-backed planner or prompt. Keep browser snapshots out of the RDF planner.
+- Trigger only on `no-path` with unknown matched effect and no missing known inputs. Retain
+  all existing ambiguous/refused/denied/error paths. Update the task catalogue and executor
+  together after learning; return the new model to the host for storage.
+- All snapshot names/values are untrusted. Bound nodes/text and preserve explicit truncation.
+  Use Chromium AX refs, fail cleanly on removed/navigated nodes, and retain human pacing.
+- Block off-origin traffic, windows, frames, downloads and WebSockets. Dismiss dialogs.
+  Each non-GET requires the same task approver before dispatch; grants bind concrete wire
+  content and one browser step and cannot be shared by concurrent requests. Denial aborts.
+  Summaries show site/button/field names, never password values or session material.
+- Compile fingerprints through the existing executor compiler, before session/CSRF decoration.
+  Remember sent writes even if learning fails, and emit Uncertain on incomplete executions.
+  Check task exclusions at the browser write boundary as well as the executor boundary.
+- Keep raw recorder evidence inside the driver. Use profiler redaction and token-source
+  detection before exposing candidates; no credentials or personal write examples in models.
+  Persist only changed cookies once with the loaded session revision; never retry rejection.
+- Learn only after `done`. Replay reads through the executor, require an extracted item,
+  and use fallback provenance/confidence below crawl. Admit writes only from this run's
+  approved successful traffic; never replay them or infer flows. Validate and RDF-round-trip
+  the new model. Every rejected learning candidate needs a safe reason.
+- Keep real loopback/Chromium tests enabled. Assert the next task uses the executor with zero
+  browser launches for both reads and approved writes. Test guards, rejection, bounds, secrets,
+  session revision failure, single-use grants, uncertain writes and canonical repeat blocking.

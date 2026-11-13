@@ -97,27 +97,33 @@ is withheld, capture refuses without requesting permission or contacting the nat
 and tells the person to allow the extension on this site from Chrome's extension menu first,
 then try again. Capture never requests or removes a host origin. Required `<all_urls>`
 access remains unchanged, and capture does not use the declared optional host patterns.
-Confirmation rechecks host access before sending, including withdrawal during review.
-After review's cleanup it also rechecks cookie absence: an unexpected grant, including a
-late prompt, refuses the capture and triggers cleanup before another review can be attempted.
-The review click requests only the optional `cookies` permission. Cookie access is absent
-at installation; while held, it combines with existing host access and is extension-wide. The feature
-reads cookies matching that page URL, checks exact-host or explicitly vetted parent-domain
-scope (never public suffixes or sibling host-only cookies), and shows site/count/persona.
-Separate confirmation sends them to the person's local encrypted agent vault through a
-Chrome native host registered for this extension ID. It does not send them to a developer
+One worker-owned capture lease serializes review, confirmation, sending and cleanup across
+all popups. A second popup cannot start, request cookies or contact the native host while
+another lease or unresolved permission prompt exists. Review checks the CURRENT active tab,
+its origin and existing host access before arming **Allow cookies and review**. That separate
+popup click requests only optional `cookies`, synchronously inside its user gesture.
+After the prompt the worker rechecks tab/origin and host access before `beginLogin`.
+Cookie access is absent at installation; while held it combines with existing host access
+and is extension-wide. The worker reads cookies matching that page URL, checks exact-host
+or explicitly vetted parent-domain scope (never public suffixes or sibling host-only
+cookies), and shows site/count/persona. Confirmation rechecks this lease's cookie grant,
+tab/origin and host access before reading a fresh snapshot and sending it, and refuses a
+changed cookie count. Capture goes only to the person's local encrypted agent vault through
+a Chrome native host registered for this extension ID. It does not send cookies to a developer
 service or page, store them in extension storage, export passkey keys, or run automatically.
-Only the actual extension popup can invoke the worker channel. The native connection
-allows the vault's configured keep-alive jobs to continue while Chrome is open.
-Cookie access is removed in `finally` immediately after the snapshot is prepared, before
-confirmation, then checked absent with `chrome.permissions.contains({ permissions: ["cookies"] })`.
-Failure, permission denial, cancellation and success restore the same host grants with no
-cookie access. A worker port's `onDisconnect` also removes and verifies cookie permission
-if the popup closes, including grants arriving after closure. Removal rejection or a failed
-absence check displays a popup warning alongside the actual outcome and blocks further sharing
-until removal is verified; worker cleanup failure displays a toolbar `!` badge. A surviving
-grant blocks sharing on reopening the popup. Cookie access belongs only to one capture's
-snapshot step and must be absent outside it.
+Only the actual extension popup can invoke the worker port. The native connection allows
+the vault's configured keep-alive jobs to continue while Chrome is open.
+
+Cookie access belongs only to this exclusive lease and expires after two minutes. Success,
+failure, permission denial, Cancel, timeout and popup disconnect enter worker-owned cleanup:
+remove only `cookies`, then verify absence with `permissions.contains` before releasing the
+lease. The host grants remain unchanged. Cancel is final even when async steps complete
+later. Unresolved prompts fence new captures until their result or late grant is cleaned;
+no late grant can become another lease's authority. If Chrome never reports a closed
+prompt's outcome, sharing remains blocked for that worker lifetime. Removal rejection or a
+failed absence check displays a warning alongside the actual outcome and blocks further
+sharing until removal is verified; worker cleanup failure displays a toolbar `!` badge.
+A surviving grant blocks sharing on every popup load, including withheld or invalid sites.
 
 ## Remote code
 

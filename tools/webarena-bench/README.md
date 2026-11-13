@@ -86,9 +86,7 @@ login and declared demonstrations. Models go to `models/<site>.ttl`, with a comp
 an undemonstrated non-login write prevents saving. No benchmark task is loaded by `profile`.
 
 Writes require **generic per-site demonstrations recorded once**, independently of task
-selection. No live mutation recordings are bundled. The local disposable admin fixture has been exercised
-with read-only profiling and executor acceptance. Until a recording is supplied, the learned model supports its discovered reads
-and login only. Record interactions through the normal UI, using disposable data, then
+selection. A test-support UI demonstration for the disposable admin fixture and opt-in write acceptance are described below. Other sites require their own authorized recordings. Record interactions through the normal UI, using disposable data, then
 encode the selectors/values in a JSON recording and set that site's `demonstrations` config
 path. Never derive recordings from a task intent, expected result, evaluator rule or API doc.
 
@@ -273,3 +271,39 @@ item and restoring it, including the real save request, hidden anti-forgery fiel
 identities. Restore the container snapshot after recording. Learn writes from that demonstration
 and retain per-write executor approvals; never infer save endpoints from task answers. The live
 read test does not establish mutation coverage or a benchmark score.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Opt-in disposable write acceptance
+
+`test/support/admin-product.ts` is a UI demonstration for the local Magento fixture, outside
+production source. It creates `SAB Test Widget <random>` with unique SKU, price 12.34 and
+quantity 5, changes the price to 23.45, then deletes its verified row through the grid action.
+It blocks background preference/bookmark writes. Cleanup checks the response's name, SKU and
+created ID before selecting its checkbox, including when saved columns hide those fields.
+
+```sh
+SAB_LIVE_SITE_URL=http://127.0.0.1:7780/admin \
+  SAB_LIVE_OUTPUT_DIR=/tmp/sab-live \
+  pnpm -w exec vitest run --root tools/webarena-bench test/live-writes.test.ts
+```
+
+The switch and credential overrides match the existing read test. The test learns with
+`profileSite({ demonstrations })`, round-trips the actual model, logs in afresh, and runs
+`createTaskExecutor`/`runTask` with a scripted planner and recorded approvals. Each action is
+first denied (zero additional traffic), then approved. Exactly one create POST, one update
+POST and one delete POST are required; an identical repeated create is blocked within the
+task. Grid reads search the unique SKU and check both prices and disappearance. Browser cleanup
+runs after execution, including failure using only the test's session and verified own item. Optional artifacts stay
+outside the repository. No LLM/planner CLI, benchmark task, evaluator or real catalogue fixture
+is used. The profile has a four-minute deadline; the whole live write test has six minutes.
+
+Counts, endpoint noun types and typed row display values are covered by package unit tests.
+The existing `test/live.test.ts` remains a separate read acceptance. The sandbox must retain
+127.0.0.1 in generated URLs; a localhost redirect is a stop condition. Script-only CSRF sources
+and uploaded/oversized forms cannot be replay-learned with the current contract and bounds.
+
+On this sandbox the admin request sent only the admin session cookie, so learned form_key
+rules use the witnessed hidden input. Cookie sources still take precedence when observed.
+The grid deletion submits `excluded=false` with the unique-SKU search rather than selected IDs;
+that search is required and dynamic in the learned DeleteAction. Generic script-only CSRF sources
+are reported and excluded instead of inventing a new contract source kind.

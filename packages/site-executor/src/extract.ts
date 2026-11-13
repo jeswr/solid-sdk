@@ -1,11 +1,13 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // Bounded, structured extraction. Render only with the complete secret set;
 // keep original lexical values so redaction always precedes truncation.
 import type { Extraction, FieldRule } from "@jeswr/site-model";
-import { SAB, SCHEMA } from "@jeswr/site-model";
+import { endpointItemType, SAB, SCHEMA } from "@jeswr/site-model";
 import type { AnyNode, Element } from "domhandler";
 import { DataFactory, type Quad_Object, Writer } from "n3";
+import { displayDateTime, displayDecimal } from "./display-values.js";
 import { attribute, elementText, jsonPointer, parseHtml, selectElements } from "./dom.js";
 import { expandIri, RDF, XSD } from "./values.js";
 
@@ -22,6 +24,7 @@ export interface ExtractedItem {
 interface RawValue {
   lexical: string;
   inferred?: string;
+  display?: string;
 }
 export interface ExtractOptions {
   baseUrl: string;
@@ -95,6 +98,7 @@ function rawItems(
   maxField: number,
   truncation: ExtractOutput["truncation"],
   account: (rule: FieldRule | undefined, count: number) => void,
+  onTotal: (value: unknown, count: number) => void,
 ): Map<FieldRule, RawValue[]>[] {
   let roots: unknown[];
   if (extraction.format === "json") {
@@ -105,9 +109,14 @@ function rawItems(
       throw new ExtractionError("response is not valid JSON");
     }
     const root = extraction.itemPath ? jsonPointer(doc, extraction.itemPath) : doc;
-    truncation.items = Array.isArray(root)
-      ? root.length > maxItems
-      : root !== undefined && maxItems === 0;
+    if (extraction.totalPath !== undefined)
+      onTotal(
+        jsonPointer(doc, extraction.totalPath),
+        Array.isArray(root) ? root.length : root === undefined ? 0 : 1,
+      );
+    truncation.items =
+      truncation.items ||
+      (Array.isArray(root) ? root.length > maxItems : root !== undefined && maxItems === 0);
     roots =
       root === undefined
         ? []
@@ -117,7 +126,13 @@ function rawItems(
   } else {
     const doc = parseHtml(body);
     roots = extraction.itemPath ? selectElements(extraction.itemPath, doc, maxItems + 1) : [doc];
-    truncation.items = roots.length > maxItems;
+    if (extraction.totalPath !== undefined) {
+      const totals = selectElements(extraction.totalPath, doc, 2);
+      if (totals.length !== 1) throw new ExtractionError("total selector must match one value");
+      const value = elementText(totals[0] as AnyNode).trim();
+      onTotal(/^\d+$/.test(value) ? Number(value) : value, roots.length);
+    }
+    truncation.items = truncation.items || roots.length > maxItems;
     roots = roots.slice(0, maxItems);
   }
   return roots.map((item) => {
@@ -169,15 +184,74 @@ export async function extract(
   let valueCount = 0,
     quadCount = 0;
   const truncation = { items: false, values: false };
-  const retained = rawItems(extraction, body, maxItems, maxField, truncation, (rule, count) => {
-    if (!rule) quadCount += count;
-    else {
-      valueCount += count;
-      quadCount += count * (rule.untrusted ? 3 : 1);
+  let total: number | undefined;
+  const retained = rawItems(
+    extraction,
+    body,
+    maxItems,
+    maxField,
+    truncation,
+    (rule, count) => {
+      if (!rule) quadCount += count;
+      else {
+        valueCount += count;
+        quadCount += count * (rule.untrusted ? 3 : 1);
+      }
+      if (valueCount > maxValues) throw new ExtractionError("total value limit exceeded");
+      if (quadCount > maxQuads) throw new ExtractionError("quad limit exceeded");
+    },
+    (value, count) => {
+      if (typeof value !== "number" || !Number.isSafeInteger(value) || value < count || value < 0)
+        throw new ExtractionError("invalid list total");
+      total = value;
+      if (value > count) truncation.items = true;
+    },
+  );
+  const extraType =
+    extraction.itemType === `${SCHEMA}Thing`
+      ? endpointItemType(options.baseUrl)?.additionalType
+      : undefined;
+  quadCount +=
+    (total === undefined ? 0 : 2 + (truncation.items ? 1 : 0)) + (extraType ? retained.length : 0);
+  if (quadCount > maxQuads) throw new ExtractionError("quad limit exceeded");
+  if (extraction.itemPath !== undefined)
+    for (const raw of retained) {
+      const currencies = new Set(
+        [...raw]
+          .filter(
+            ([rule]) => !rule.untrusted && expandIri(rule.property) === `${SCHEMA}priceCurrency`,
+          )
+          .flatMap(([, values]) => values.map((v) => v.lexical))
+          .filter((v) => /^[A-Z]{3}$/.test(v)),
+      );
+      for (const [rule, values] of raw) {
+        if (rule.untrusted) continue;
+        const property = expandIri(rule.property);
+        for (const value of values) {
+          if (options.redact(value.lexical) !== value.lexical) continue;
+          if (
+            currencies.size === 1 &&
+            [`${SCHEMA}price`, `${SCHEMA}totalPrice`].includes(property)
+          ) {
+            const display = displayDecimal(value.lexical);
+            if (display !== undefined) {
+              value.display = display;
+              value.inferred = `${XSD}decimal`;
+            }
+          } else if (
+            [`${SCHEMA}dateCreated`, `${SCHEMA}dateModified`, `${SCHEMA}datePublished`].includes(
+              property,
+            )
+          ) {
+            const display = displayDateTime(value.lexical);
+            if (display !== undefined) {
+              value.display = display;
+              value.inferred = `${XSD}dateTime`;
+            }
+          }
+        }
+      }
     }
-    if (valueCount > maxValues) throw new ExtractionError("total value limit exceeded");
-    if (quadCount > maxQuads) throw new ExtractionError("quad limit exceeded");
-  });
   const idRule = findIdRule(extraction);
   for (const raw of retained)
     for (const values of raw.values())
@@ -198,7 +272,12 @@ export async function extract(
         }
         return [
           rule.datatype || v.inferred
-            ? literal(v.lexical, namedNode(expandIri(rule.datatype ?? v.inferred ?? "")))
+            ? literal(
+                v.display ?? v.lexical,
+                namedNode(
+                  expandIri(v.display ? (v.inferred ?? "") : (rule.datatype ?? v.inferred ?? "")),
+                ),
+              )
             : literal(v.lexical),
         ];
       });
@@ -239,11 +318,25 @@ export async function extract(
       writer.addQuad(subject, predicate, object);
       if (bytes > maxBytes) throw new ExtractionError("output byte limit exceeded");
     };
+    if (total !== undefined) {
+      const list = blankNode("list");
+      addQuad(list, namedNode(`${RDF}type`), namedNode(`${SCHEMA}ItemList`));
+      if (redactor(String(total)) === String(total))
+        addQuad(
+          list,
+          namedNode(`${SCHEMA}numberOfItems`),
+          literal(String(total), namedNode(`${XSD}integer`)),
+        );
+      if (truncation.items)
+        addQuad(list, namedNode(`${SAB}partial`), literal("true", namedNode(`${XSD}boolean`)));
+    }
     retained.forEach((raw, index) => {
       const id = idRule ? raw.get(idRule)?.[0]?.lexical : undefined;
       const iri = id === undefined ? undefined : resolveIri(id, options.baseUrl);
       const subject = iri && redactor(iri) === iri ? namedNode(iri) : blankNode(`item${index}`);
       addQuad(subject, namedNode(`${RDF}type`), namedNode(expandIri(extraction.itemType)));
+      if (extraType)
+        addQuad(subject, namedNode(`${SCHEMA}additionalType`), literal(redact(extraType)));
       for (const [rule, values] of raw) {
         for (const v of values) {
           let object: Quad_Object;
@@ -255,7 +348,14 @@ export async function extract(
               redactor(value) === value && value.length <= maxLen
                 ? namedNode(value)
                 : literal(redact(value));
-          } else
+          } else if (
+            v.display !== undefined &&
+            redactor(v.lexical) === v.lexical &&
+            redactor(v.display) === v.display
+          )
+            object = literal(redact(v.display), namedNode(v.inferred ?? `${XSD}string`));
+          else if (v.display !== undefined) object = literal(redact(v.lexical));
+          else
             object =
               rule.datatype || v.inferred
                 ? literal(
