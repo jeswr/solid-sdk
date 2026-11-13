@@ -6,7 +6,7 @@ import type { EntrySink } from "./zip-reader.js";
 /** Byte-oriented mboxrd splitter. Only a five-byte line prefix is retained while
  * discarding an oversized message, including an arbitrarily long body line. */
 export function mboxSink(
-  message: (raw: Uint8Array) => Promise<void>,
+  message: (raw: Uint8Array, separatorDate?: Date) => Promise<void>,
   skip: () => void,
   cap = MAX_RAW_BYTES,
 ): EntrySink {
@@ -18,6 +18,9 @@ export function mboxSink(
   let arrows = 0;
   let atStart = true;
   let separator = false;
+  let separatorText = "";
+  let separatorOverflow = false;
+  let separatorDate: Date | undefined;
   let oversized = false;
   let started = false;
   const exceed = () => {
@@ -78,7 +81,7 @@ export function mboxSink(
       raw.set(block.subarray(0, used), offset);
       parts = [];
       block = new Uint8Array();
-      await message(raw);
+      await message(raw, separatorDate);
     }
     parts = [];
     block = new Uint8Array(Math.min(8192, cap));
@@ -92,9 +95,19 @@ export function mboxSink(
       for (let index = 0; index < bytes.length; index++) {
         const byte = bytes[index] as number;
         if (separator) {
-          const newline = bytes.indexOf(10, index);
-          if (newline < 0) break;
-          index = newline;
+          // Bounded separator storage, including separators spanning arbitrary chunks.
+          if (byte !== 10) {
+            if (separatorText.length < 1024) separatorText += String.fromCharCode(byte);
+            else separatorOverflow = true;
+            continue;
+          }
+          const date = !separatorOverflow && /^[^\s]+\s+(.+)$/.exec(separatorText.trim())?.[1];
+          separatorDate = date
+            ? new Date(date + (/ (?:[+-]\d{4}|GMT|UTC)$/.test(date) ? "" : " UTC"))
+            : undefined;
+          if (separatorDate && !Number.isFinite(separatorDate.getTime())) separatorDate = undefined;
+          separatorText = "";
+          separatorOverflow = false;
           separator = false;
           atStart = true;
           continue;

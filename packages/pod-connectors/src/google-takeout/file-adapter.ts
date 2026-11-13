@@ -11,6 +11,7 @@ import type {
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata, NormalisedDoc } from "../core/types.js";
 import { CalendarEvent, CLASSES, TextDocument, WatchAction } from "../core/vocab.js";
+import type { MailWriterOptions } from "../mail/writer.js";
 import { importArchive, mailboxAccount, sniffInput } from "./dispatch.js";
 import { vocabMap } from "./vocab-map.js";
 import { InflationBudget, zipDirectory } from "./zip-reader.js";
@@ -25,7 +26,7 @@ const metadata: IntegrationMetadata = {
   scopes: [],
   categories: ["documents", "media", "calendar", "contacts", "mail", "mobility", "health"],
   whatYouGet:
-    "Mail, calendar, contacts, Drive files, activity history, location visits and Fit daily metrics from supported Takeout exports; unsupported products are reported.",
+    "Mail with sender-asserted purchases and reservations from email markup and sender authentication labels, calendar, contacts, Drive files, activity history, location visits and Fit daily metrics from supported Takeout exports; unsupported products are reported.",
   requirements: [],
 };
 
@@ -36,26 +37,30 @@ export interface Activity {
   readonly time?: Date;
 }
 
-export const googleTakeoutFileAdapter: FileImportAdapter = {
-  vocabMap,
-  metadata,
-  accept: ".zip,application/zip,.json,application/json",
-  streaming: true,
-  fileHint:
-    "Request your archive at takeout.google.com and select the downloaded .zip; no need to unzip. Legacy MyActivity.json is also supported.",
-  exportUrl: "https://takeout.google.com",
+export function createGoogleTakeoutFileAdapter(options: MailWriterOptions = {}): FileImportAdapter {
+  return {
+    vocabMap,
+    metadata,
+    accept: ".zip,application/zip,.json,application/json",
+    streaming: true,
+    fileHint:
+      "Request your archive at takeout.google.com and select the downloaded .zip; no need to unzip. Legacy MyActivity.json is also supported.",
+    exportUrl: "https://takeout.google.com",
 
-  async importFile(file: ImportFile, ctx: FileImportContext): Promise<void | FileImportOutcome> {
-    const input = await sniffInput(file);
-    if (input.zip) {
-      const entries = await zipDirectory(file);
-      const inflationBudget = new InflationBudget();
-      const account = await mailboxAccount(file, entries, inflationBudget);
-      return importArchive(file, ctx, account, entries, { inflationBudget });
-    }
-    await writeActivities(input.text, ctx);
-  },
-};
+    async importFile(file: ImportFile, ctx: FileImportContext): Promise<void | FileImportOutcome> {
+      const input = await sniffInput(file);
+      if (input.zip) {
+        const entries = await zipDirectory(file);
+        const inflationBudget = new InflationBudget();
+        const account = await mailboxAccount(file, entries, inflationBudget);
+        return importArchive(file, ctx, account, entries, { ...options, inflationBudget });
+      }
+      await writeActivities(input.text, ctx);
+    },
+  };
+}
+
+export const googleTakeoutFileAdapter = createGoogleTakeoutFileAdapter();
 
 /** Shared legacy/archive mapping; each archive entry has its own deterministic snapshot. */
 export async function writeActivities(

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   accountRoot,
@@ -33,6 +34,13 @@ import {
 } from "./index.js";
 
 describe("shared mail primitives", () => {
+  it("keeps synthetic markup fixtures outside the published mail modules", () => {
+    for (const extension of ["js", "d.ts"])
+      expect(
+        existsSync(new URL(`../../dist/mail/markup-fixtures.${extension}`, import.meta.url)),
+      ).toBe(false);
+  });
+
   it("keeps the account, message, source, thread, folder and attachment layout", () => {
     expect(accountRoot("me@example.org")).toBe("mail/me~40example.org/");
     expect(messageSlug("a", "<id@host>")).toBe("mail/a/messages/~3Cid~40host~3E.ttl");
@@ -189,6 +197,9 @@ describe("shared mail primitives", () => {
       });
       assert.equal(typeof mail.HTML_TEXT_TRUNCATION_NOTICE, "string");
       assert.equal(typeof mail.createMailWriter, "function");
+      assert.equal(typeof mail.createMailMarkupWriter, "function");
+      assert.equal(typeof mail.rescanMailMarkup, "function");
+      assert.deepEqual(mail.extractEmailMarkup('<script type="application/ld+json">{"@type":"Order"}</script>'), [{ type: "Order", properties: {} }]);
     `,
       ],
       { cwd: new URL("../..", import.meta.url), encoding: "utf8", timeout: 10_000 },

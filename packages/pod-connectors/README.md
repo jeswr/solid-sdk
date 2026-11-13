@@ -186,6 +186,159 @@ collections it reconciles so each dataset uses the ETag from its own read. An in
 retains its cleanup inventory in that RDF for replay; a missing document is a no-op. Attachment
 media types from mail are untrusted: RDF and malformed types are stored as `application/octet-stream`.
 
+## Transactional email markup (CON-A8)
+
+`./mail` exports `extractEmailMarkup(html, { maxBytes?, maxItems? })`,
+`extractEmailMarkupResult(html, options?)` (items, truncation flag and scalar-character count),
+`createMailMarkupWriter(ctx, account, options?)` and `rescanMailMarkup(ctx, account, options?)`.
+The pure extractor returns discriminated `EmailMarkupItem` values (`type`, `properties`), with
+allowlisted schema.org properties containing arrays of inert scalars or nested `MarkupNode`s.
+It supports Order (including OrderItem, Offer and ParcelDelivery), ParcelDelivery,
+FlightReservation, TrainReservation, BusReservation, LodgingReservation,
+FoodEstablishmentReservation, EventReservation and RentalCarReservation.
+
+Extraction accepts JSON-LD scripts, arrays and `@graph`, plus nested microdata scopes.
+Schema.org HTTP/HTTPS type IRIs and optional trailing slashes are normalized to mail's
+`http://schema.org/` vocabulary when written. Compact JSON-LD terms use an implied schema.org
+context; schema.org context strings and a single inline `@vocab` are accepted. Foreign or
+redefining contexts are refused. Nothing is executed or fetched, including contexts, script
+sources, tracking URLs and microdata `itemref`. This is a closed metadata reader, not a full
+JSON-LD processor or browser HTML tree builder. Untyped nested property objects are retained;
+unsupported explicitly typed objects and unknown properties are omitted. URLs remain literals.
+
+The default whole-HTML UTF-8 cap is 1 MiB (configurable up to 8 MiB); an oversized email yields
+no items. Default root item cap is 100 (hard ceiling 1,000). Further fixed caps are 32 script
+blocks (including non-JSON scripts), 50,000 HTML elements, nesting depth 32, 4,096 normalized
+nodes, 4,096 microdata scopes, 16,384 visited property values across the email, 64 values per
+property, 64 attributes per tag, 16 KiB per tag,
+8,192 UTF-16 units per scalar and 50,000 JSON separators per script. JSON depth/structural/string
+guards run before `JSON.parse`. Malformed blocks are skipped, oversized scalar values omitted,
+and unfinished microdata scopes discarded. Tokenization scans forward through the bounded
+input and skips comments and raw script/style/textarea bodies without parsing their HTML.
+
+`createMailWriter(ctx, account, { extractMarkup: false })` disables automatic extraction;
+the default is on after the message RDF and bytes have been stored. The source factories
+`createGmailAdapter(options)` and `createGoogleTakeoutFileAdapter(options)` accept the same
+`MailWriterOptions` (`extractMarkup`, and `markup: { maxBytes, maxItems, maxTotalItems,
+maxUnverifiedItems, maxTotalWrites, maxUnverifiedWrites }`). Scalar extraction across an email is capped at 256 Ki UTF-16 characters;
+completed microdata values also have an independent intermediate budget of that size, before
+normalization can duplicate nested aliases. Extraction stops at exhaustion, retains values
+that fit, and flags `truncated`. Source message IRIs are capped at 8,192 characters before repeated provenance allocation.
+Each item is capped at 256 RDF nodes (`MAX_MARKUP_ITEM_NODES`, root plus nested resources)
+and its UTF-8 Turtle at 64 KiB. The writer keeps a running size estimate while building an
+item and abandons it as soon as either cap is exceeded, before serializing; the exact
+serialized size is then checked before writing and again after session provenance/vocabulary
+mapping. Oversized items are skipped with `markup-item-too-large`.
+Depth overflow suppresses further microdata frames while still finding later JSON-LD scripts.
+A writer shares item and PUT-attempt budgets across messages. Only items accepted for
+writing count against the item budget; skipped, stale and rejected items do not. Verified
+mail has its own allowance (`maxTotalItems`, 2,000 by default) and keeps the per-message cap
+(`maxItems`, default 100). Unverified mail is capped at 10 root items per message
+(`MAX_UNVERIFIED_MARKUP_ITEMS_PER_MESSAGE`) and a separate `maxUnverifiedItems` allowance
+(500 by default, never above `maxTotalItems`), so unverified senders cannot starve later
+verified mail. PUT attempts (`maxTotalWrites`, 2,000 by default) include source
+cleanup-inventory updates and failed attempts. Unverified mail's inventory and item PUTs also
+draw on `maxUnverifiedWrites` (500 by default, never above `maxTotalWrites`), so verified mail
+always keeps the rest of the PUT budget. Hard ceilings are 100,000. Every item of a message is
+decided and size-checked before any PUT, so rejected, stale, blocked and oversized items cost
+no PUT. Accepted items are trimmed to the remaining item allowance and to the PUTs left for
+their trust level (counting the inventory PUT when it is needed); trimmed items are reported
+with the budget error codes. `MailMarkupWriter.exhausted` is true once neither verified nor
+unverified mail can write another item, because each has spent its item or PUT allowance.
+Re-scan uses the same budgets. Failures skip that message's remaining markup and leave its
+email and mailbox import running; cancellation still aborts. `MailWriter.errors`,
+`MailMarkupWriter.errors`, re-scan results and `ImportReport.errors` expose distinct stable
+codes, without exception text: `markup-extraction-failed`, `markup-write-failed`,
+`markup-truncated`, `markup-item-too-large`, `markup-item-budget-exceeded`,
+`markup-write-budget-exceeded` and `markup-source-missing`. Imports can therefore advance their cursor with these
+recoverable markup errors; re-scan can repair partial writes later.
+
+The writer stores schema.org resources under `mail/<account>/purchases/` (orders/deliveries)
+and `mail/<account>/trips/` (reservations), registering their classes there. SHA-256 identities
+use `[type, senderKey, provider, number]` (tracking number for deliveries), otherwise message
+IRI + extraction index. Provider identity prefers URL, identifier, then name; names fold
+ASCII case/whitespace, while URL paths and identifiers retain case. Sender keys are the
+aligned DMARC domain for verified messages and the lowercased From domain otherwise.
+Missing/invalid From uses the source message IRI, preventing cross-message collisions.
+Every nested resource records `prov:wasDerivedFrom`, `fedcon:emailMarkupSenderKey` and
+`fedcon:emailMarkupTrust`. Verified assertions can update either trust level at the same
+identity; unverified assertions can update only unverified resources. Older receiver times
+are rejected; verified evidence may promote an unverified assertion regardless of its old time.
+
+Gmail raw and Takeout mbox imports accept Google's `Authentication-Results` only by position.
+The receiver walks the header block top-down. Every `Received` header above the assertion must
+be a Google hop: `by <host>.google.com` with `SMTP`, `ESMTP`, `ESMTPS`, `SMTPS`, `UTF8SMTP` or
+`UTF8SMTPS`, or Google's internal `by <IP literal> with SMTP id` form. Authenticated
+submission (`ESMTPA`, `ESMTPSA`, `UTF8SMTPA`) marks where client-written headers enter, and
+`LMTP` appears in no genuine Google layout, so neither is accepted. The last hop must be the
+inbound MX receipt, `Received: from ... by mx.google.com with ESMTP|ESMTPS|SMTPS|UTF8SMTP|UTF8SMTPS`
+(UTF8 forms carry internationalized mail), and the first assertion with
+authserv-id `mx.google.com` must follow it with no other `Received` in between. A non-Google
+hop, a Google POP3/IMAP/HTTP receipt (mail fetch, IMAP append, API insertion), an unparseable
+trace, or an assertion above the receipt leaves the message unverified. This covers
+migrated or appended mail that carries a sender-forged `mx.google.com` assertion without
+Google's own. Later duplicate headers and all other authserv-ids are ignored. A message
+appended with no Google trace at all whose sender wrote a complete Google-shaped block on top
+is indistinguishable from received mail. Result clauses are split per RFC 8601 after CFWS
+tokenization, so semicolons inside quoted strings or comments cannot start a clause. An
+ambiguous header fails closed: a `"` inside a comment, or `(`, `)` or `;` inside a quoted
+string (for example a quoted MAIL FROM local part echoed in Google's spf comment). The same
+tokenization applies to `Received` headers. A single
+`dmarc=pass` clause, with an optional `reason` and `ptype.property=value` properties only,
+must include one unquoted aligned `header.from` domain matching the From domain exactly or
+containing it as a subdomain. Missing, mismatched, ambiguous or
+failed evidence stays unverified. Unsupported syntax in that first Google header also stays
+unverified and never authorizes a later duplicate. The host can still supply trusted receiver evidence through
+`MailItem.authentication`, `MailMarkupSource.authentication` or the re-scan lookup, including
+`alignedDomain`; the existing explicitly aligned SPF+DKIM host evidence is also accepted.
+Verified means only that Google reported DMARC alignment for the From domain: any sender
+whose own domain passes DMARC counts as verified for that domain, including a domain an
+attacker registered. It verifies sender authentication, not the truth of a booking; the
+sender key keeps each domain's assertions apart. Message RDF retains the
+sender key, trust and receiver modification time for later HTML-only re-scans.
+
+`schema:dateModified` uses only receiver time: Gmail `internalDate`; Takeout's mbox `From `
+separator timestamp, which Google writes (zone-less separator times are interpreted as UTC),
+falling back only when the separator has no valid date to Google's inbound MX receipt under
+the positional rule above. Future receiver times are clamped to
+import time. Missing time is omitted and compares as epoch; neither MIME `Date` nor markup
+modification times can pin a record. Re-scan uses only the dedicated receiver modification
+time persisted by the writer; legacy sent/received fields are not treated as trusted evidence.
+
+The source message's `fedcon:emailMarkupSlug` literals index accepted markup resources only.
+The inventory is committed once before item PUTs, is skipped entirely when no item is
+accepted, and is preserved on replay. Removal checks each
+indexed resource's current derivation before deleting it, so removing an earlier email keeps
+a newer booking update. Gmail 404, SPAM and full-sync sweep deletions use this cleanup;
+moving a message to Trash retires its markup while retaining the message in the Trash folder.
+Cleanup works even when extraction is opted out. Direct markup-writer callers supply `MailMarkupSource.sender` as the From mailbox (plain
+address or `mailto:`) and store the source EmailMessage first so its cleanup inventory can be
+persisted. If the source message read returns nothing, every item write for that message is
+skipped with `markup-source-missing`, so no item lacks a cleanup index.
+`removeMailMarkupResources(ctx, account, messageIri, slugs)` exposes the same
+guarded cleanup for hosts. `MailItem.trashed` retires markup while keeping the source message;
+its Trash folder membership also prevents re-scan from recreating assertions.
+
+Re-scan reads only stored `schema:EmailMessage` HTML from the account's messages listing;
+`maxMessages` bounds visited entries (10,000 default, 100,000 hard ceiling). It returns
+`{ messages, items, errors? }`. `maxTotalItems` defaults to 2,000 (100,000 hard ceiling).
+Re-scan stops early once the writer's budgets are exhausted.
+`prune: true` additionally checks purchases/trips resources, removes those whose sole current
+source message no longer exists, and returns `pruned`. Each run checks at most
+`maxPruneItems` resources (2,000 by default, 100,000 hard ceiling; separate from the item
+budget) in slug order after a continuation cursor. The cursor is persisted in
+`markupStateSlug(account)` (`mail/<account>/markup-state.ttl`, `fedcon:emailMarkupPruneCursor`),
+which inherits the mail account's owner-only access and is never registered in a type index.
+A capped run advances the cursor; a run that reaches the end clears it, so successive runs
+page through every resource and then start again. A malformed cursor restarts from the
+beginning. Pruning requires
+`ctx.remove`; external, malformed or ambiguous source links are retained. Supply serialized
+import-session ports to preserve ETags, provenance, cancellation and registration.
+`ctx.releaseRead(slug)` releases read-only datasets/preconditions; runners provide it and
+custom ports that cache reads must implement it. Re-scan requires no provider API access.
+`NormalisedDoc.maxSerializedBytes` optionally applies a post-provenance UTF-8 Turtle cap, including the Pod writer's vocabulary prefixes, in
+the shared session; markup writes set it to 64 KiB.
+
 ## Google Takeout
 
 `./adapters/google-takeout` accepts the downloaded `.zip` directly, plus legacy single

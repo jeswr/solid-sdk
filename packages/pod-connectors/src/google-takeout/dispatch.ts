@@ -10,11 +10,13 @@ import { DEFAULT_MAX_BYTES } from "../google-drive/adapter.js";
 import { binaryType } from "../google-drive/content.js";
 import { DriveMetadata } from "../google-drive/vocab.js";
 import { pathId } from "../mail/paths.js";
+import { googleReceivedTime } from "../mail/receiver.js";
 import {
   createMailWriter,
   type MailFolder,
   MailParseError,
   type MailWriter,
+  type MailWriterOptions,
 } from "../mail/writer.js";
 import { parseMyActivity, writeActivities } from "./file-adapter.js";
 import { mailHeaders, mailLabels, mboxSink, sha256 } from "./mbox.js";
@@ -221,7 +223,7 @@ const MIME: Record<string, string> = {
   jsonld: "application/ld+json",
 };
 
-export interface ArchiveOptions {
+export interface ArchiveOptions extends MailWriterOptions {
   inflationBudget?: InflationBudget;
   maxReconciliationSubjects?: number;
   maxReconciliationBytes?: number;
@@ -330,7 +332,7 @@ export async function importArchive(
     const product = path?.split("/")[0] ?? "(invalid path)";
     unsupported.add(reason ? `${product}: ${reason}` : product);
   };
-  const addMessage = async (raw: Uint8Array) => {
+  const addMessage = async (raw: Uint8Array, separatorDate?: Date) => {
     if (mailCount++ >= ctx.maxRows) {
       skipped++;
       return;
@@ -341,13 +343,17 @@ export async function importArchive(
       skipped++;
       return;
     }
-    mail ??= createMailWriter(ctx, account);
+    mail ??= createMailWriter(ctx, account, options);
     for (const folder of labels.folders) folders.set(folder.key, folder);
     const thrid = headers.get("x-gm-thrid");
     const fallbackId = `takeout-${(await sha256(raw)).slice(0, 32)}`;
     try {
       await mail.add({
         raw,
+        googleReceiver: true,
+        trashed: labels.folders.some((folder) => folder.key === "Trash"),
+        // Google writes the mbox From_ separator; Received headers are positional fallbacks only.
+        receivedAt: separatorDate ?? googleReceivedTime(raw),
         ...labels,
         fallbackId,
         threadKey: thrid && /^\d+$/.test(thrid) ? `gmail-${BigInt(thrid).toString(16)}` : undefined,
@@ -542,6 +548,7 @@ export async function importArchive(
   return {
     skipped: skipped || undefined,
     unsupported: unsupported.size ? [...unsupported].sort() : undefined,
+    errors: mail?.errors.length ? mail.errors : undefined,
   };
 }
 
