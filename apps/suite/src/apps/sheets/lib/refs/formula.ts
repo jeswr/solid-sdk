@@ -32,6 +32,35 @@ const referencePatterns = {
   R1C1: new RegExp(`^${sheetPattern}(?:${rc})(?![A-Za-z0-9_.])`, "i"),
 };
 
+/** Locate A1 references without imposing the structural editor's formula dialect. */
+export function formulaReferences(
+  formula: string,
+): { text: string; start: number; ref: Reference }[] {
+  const references: { text: string; start: number; ref: Reference }[] = [];
+  let start = 1;
+  while (start < formula.length) {
+    const rest = formula.slice(start);
+    // Consume strings, function names and numeric literals as whole tokens. In
+    // particular LOG10(...) and the E10 in 1E10 must never become cell references.
+    const literal = /^(?:"(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_.]*(?=\s*\())/.exec(rest);
+    const reference = literal ? null : referencePatterns.A1.exec(rest);
+    if (reference) {
+      const text = reference[0];
+      try {
+        references.push({ text, start, ref: parseA1(text) });
+      } catch {
+        // Preserve syntax outside the rectangular references supported here.
+      }
+    }
+    const other =
+      /^(?:[A-Za-z_][A-Za-z0-9_.]*|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?)/.exec(
+        rest,
+      );
+    start += (literal?.[0] ?? reference?.[0] ?? other?.[0] ?? (rest[0] as string)).length;
+  }
+  return references;
+}
+
 function fail(): never {
   throw new SheetReferenceError("unsupported", "Unsupported or malformed formula syntax");
 }

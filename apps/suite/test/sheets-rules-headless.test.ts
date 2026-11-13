@@ -99,18 +99,27 @@ import { CellCommentStore } from "../src/apps/sheets/lib/comments/store";
 import { mountUniver } from "../src/apps/sheets/lib/engine/univer";
 import { harness, snapshot, WEBID } from "./sheets-workbook-helpers";
 
-it.each([
-  "insert",
-  "undo-redo",
-  "delete",
-  "redo-delete",
-  "undo-delete",
-  "unrelated-insert",
-  "slow-retry",
-  "csv-import",
-  "permissions",
-  "late-list",
-] as const)("rebases unseen comments after a failed first load (%s)", async (scenario) => {
+it.each(
+  [false, true].flatMap((collaborative) =>
+    (
+      [
+        "insert",
+        "undo-redo",
+        "delete",
+        "redo-delete",
+        "undo-delete",
+        "unrelated-insert",
+        "slow-retry",
+        "csv-import",
+        "permissions",
+        "late-list",
+      ] as const
+    ).map((scenario) => ({ collaborative, scenario })),
+  ),
+)("rebases unseen comments after a failed first load ($scenario, collaboration=$collaborative)", async ({
+  scenario,
+  collaborative,
+}) => {
   const pod = await harness();
   const anchor = { sheetId: "data", cell: "B3", deleted: false };
   const book = await pod.service.create({
@@ -145,7 +154,11 @@ it.each([
   else if (scenario !== "permissions") list.mockRejectedValueOnce(new Error("Listing failed"));
   if (scenario === "permissions" || scenario === "late-list")
     vi.spyOn(store, "permissions").mockRejectedValueOnce(new Error("Permissions failed"));
+  const collaboration = collaborative
+    ? await pod.service.collaborate?.(book.container, book.snapshot, false)
+    : undefined;
   const engine = await mountUniver({} as HTMLElement, {
+    collaboration,
     snapshot: book.snapshot,
     workbookRevision: book.version.snapshotEtag,
     dark: false,
@@ -234,7 +247,9 @@ it.each([
     }
     if (scenario === "csv-import")
       await act(async () =>
-        expect(engine.importCsv("Imported", { mode: "new-sheet" })).toEqual({ status: "imported" }),
+        expect(engine.importCsv("Imported", { mode: "new-sheet" })).toEqual({
+          status: "imported",
+        }),
       );
     if (scenario === "slow-retry") {
       list.mockReturnValueOnce(pending.promise);
@@ -281,6 +296,7 @@ it.each([
     await act(async () => panel.unmount());
     dom.close();
     engine.dispose();
+    await collaboration?.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }

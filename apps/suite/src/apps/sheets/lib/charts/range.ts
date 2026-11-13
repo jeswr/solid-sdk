@@ -8,7 +8,8 @@ import type { ChartSpec } from "./spec";
 /** Rectangular chart references, independent of the rendering budget. */
 export function parseChartRange(text: string) {
   const ref = parseA1(text.trim());
-  if (!ref.rows || !ref.columns) throw new Error("Use a cell range such as A1:C10");
+  if (!ref.rows || !ref.columns || ref.rows.reversed || ref.columns.reversed)
+    throw new Error("Use a cell range such as A1:C10");
   const startRow = ref.rows.start.index - 1;
   const endRow = ref.rows.end.index - 1;
   const startColumn = ref.columns.start.index - 1;

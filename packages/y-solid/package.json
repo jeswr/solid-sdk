@@ -33,6 +33,10 @@
     "./store": {
       "types": "./dist/store.d.ts",
       "import": "./dist/store.js"
+    },
+    "./local": {
+      "types": "./dist/local.d.ts",
+      "import": "./dist/local.js"
     }
   },
   "files": [
@@ -54,7 +58,8 @@
   },
   "peerDependencies": {
     "@rdfjs/types": "^2.0.1",
-    "yjs": "^13.6.0"
+    "yjs": "^13.6.0",
+    "y-indexeddb": "9.0.12"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
@@ -63,9 +68,15 @@
     "@types/node": "^20",
     "typescript": "^5",
     "vitest": "^4.1.8",
-    "yjs": "^13.6.0"
+    "yjs": "13.6.27",
+    "y-indexeddb": "9.0.12"
   },
   "engines": {
     "node": ">=20"
+  },
+  "peerDependenciesMeta": {
+    "y-indexeddb": {
+      "optional": true
+    }
   }
 }

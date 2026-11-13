@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 
 import { RedirectRefusedError } from "@jeswr/guarded-fetch";
+import type { WorkbookCollaboration } from "../collaboration/persistence";
 import { validateCommentSnapshot } from "../comments/anchors";
 import type {
   CreateWorkbookInput,
@@ -24,6 +25,10 @@ import type { ProjectedSheet } from "./projection";
 import { registration } from "./registration";
 import { hasStatus, resources, strongEtag } from "./resources";
 
+function isInstanceId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value !== "." && value !== "..";
+}
+
 export function createWorkbookService(options: WorkbookServiceOptions): WorkbookService {
   const root = new URL("sheets/", options.podRoot).href;
   const storage = createSheetStorage(options.fetch, options.podRoot);
@@ -32,6 +37,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
   const now = options.now ?? (() => new Date());
   const register = registration(options, root);
   const checked = (container: string) => assertWorkbook(root, container);
+  const collaborations = new Map<string, WorkbookCollaboration>();
 
   async function writeSheets(
     container: string,
@@ -148,6 +154,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     container: string,
     source = storage,
     readOnly = false,
+    attempt = 0,
   ): Promise<OpenedWorkbook> {
     const layout = workbookLayout(container);
     try {
@@ -155,15 +162,29 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
         source.loadIndex(container),
         source.loadSnapshot(container),
       ]);
+      const viewOnly = readOnly || index.readOnly === true || snapshot.readOnly === true;
+      // Creation already assigns a UUID. Give snapshots without an ID one before the first
+      // collaborative mount, with the exact snapshot validator we just read.
+      let snapshotEtag = strongEtag(snapshot.etag, layout.snapshot);
+      if (!viewOnly && !isInstanceId(snapshot.value.id)) {
+        const value = { ...snapshot.value, id: crypto.randomUUID() };
+        try {
+          const published = await storage.saveSnapshot(container, value, { ifMatch: snapshotEtag });
+          snapshotEtag = await io.snapshotEtag(container, value, published);
+          snapshot.value = value;
+        } catch (error) {
+          if (hasStatus(error, 412) && attempt < 3)
+            return read(container, source, readOnly, attempt + 1);
+          throw error;
+        }
+      }
       return {
         container,
         metadata: index.value,
         snapshot: snapshot.value,
-        ...(readOnly || index.readOnly === true || snapshot.readOnly === true
-          ? { readOnly: true }
-          : {}),
+        ...(viewOnly ? { readOnly: true } : {}),
         version: {
-          snapshotEtag: strongEtag(snapshot.etag, layout.snapshot),
+          snapshotEtag,
           indexEtag: strongEtag(index.etag, layout.index),
           derived: {},
         },
@@ -209,6 +230,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     saveOptions: { force?: boolean; title?: string } = {},
   ): Promise<SaveResult> {
     container = checked(container);
+    await collaborations.get(container)?.flush();
     snapshot = validateCommentSnapshot(snapshot);
     if (snapshot.charts !== undefined)
       snapshot = (await import("../charts/spec")).validateChartSnapshot(snapshot);
@@ -349,7 +371,14 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
       }
       await io.remove(url);
     }
+    // Close this browser's publisher before deleting its log or durable mirror.
+    await collaborations
+      .get(container)
+      ?.destroy()
+      .catch(() => {});
     await descend(container);
+    const { clearWorkbookMirrors } = await import("../collaboration/persistence");
+    await clearWorkbookMirrors(options.webId, container);
   }
 
   async function list(): Promise<WorkbookSummary[]> {
@@ -389,6 +418,47 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
 
   return {
     root,
+    async collaborate(container, snapshot, readOnly) {
+      const own = container.startsWith(root) && directChild(root, container);
+      container = own ? checked(container) : assertSharedWorkbook(root, container);
+      if (own && !readOnly && !isInstanceId(snapshot.id)) {
+        const opened = await open(container);
+        snapshot = { ...snapshot, id: opened.snapshot.id as string };
+      }
+      const { WorkbookCollaboration } = await import("../collaboration/persistence");
+      const transport: typeof fetch = own
+        ? options.fetch
+        : (input, init) => publicFetch(input, { ...init, credentials: "omit" });
+      const instanceId = isInstanceId(snapshot.id) ? snapshot.id : undefined;
+      const collaboration = new WorkbookCollaboration(
+        new URL(instanceId ? `collab/${encodeURIComponent(instanceId)}/` : "collab/", container)
+          .href,
+        transport,
+        readOnly || !own,
+        undefined,
+        own ? options.webId : undefined,
+        {
+          workbook: container,
+          async isCurrent() {
+            try {
+              return (await storage.loadSnapshot(container)).value.id === instanceId;
+            } catch (error) {
+              if (hasStatus(error, 404) || hasStatus(error, 410)) return false;
+              throw error;
+            }
+          },
+        },
+      );
+      await collaboration.open(snapshot);
+      collaborations.set(container, collaboration);
+      const destroy = collaboration.destroy.bind(collaboration);
+      collaboration.destroy = async () => {
+        if (collaborations.get(container) === collaboration) collaborations.delete(container);
+        await destroy();
+      };
+      if (typeof window !== "undefined") collaboration.watch(options.subscribe ?? (() => () => {}));
+      return collaboration;
+    },
     list,
     create,
     async createFromCsv({ title, csv, sheetName = "Sheet1" }) {

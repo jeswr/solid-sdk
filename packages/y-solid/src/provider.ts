@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `SolidPersistence` — a Yjs persistence provider that binds a `Y.Doc` to a Solid
@@ -138,11 +139,11 @@ export class SolidPersistence {
    */
   private async load(): Promise<void> {
     const stored = await this.store.loadUpdates();
-    for (const { url } of stored) this.knownUrls.add(url);
     // Apply each update RESILIENTLY: the bytes come from a pod that may be
     // hostile or buggy, so one corrupt/forged update must be skipped + reported,
     // never abort the whole load.
-    this.applyStored(stored.map((s) => s.update));
+    const result = this.applyStored(stored.map((s) => s.update));
+    if (result.complete) for (const { url } of stored) this.knownUrls.add(url);
     this.synced = true;
     this.emit("synced");
   }
@@ -171,10 +172,11 @@ export class SolidPersistence {
    * succeeds, so on any throw the live doc is untouched and the batch is reported
    * on `"error"` with `applied === 0`.
    *
-   * @returns the count folded into the live doc (0 if the batch failed closed).
+   * @returns the applied count and whether the validated batch integrated. Corrupt
+   * updates are consumed; failed integration leaves the batch retryable.
    */
-  private applyStored(updates: readonly Uint8Array[]): number {
-    if (updates.length === 0) return 0;
+  private applyStored(updates: readonly Uint8Array[]): { applied: number; complete: boolean } {
+    if (updates.length === 0) return { applied: 0, complete: true };
     const errors: Error[] = [];
     // Phase 1: decode-validate each untrusted update on a fresh throwaway doc.
     const valid: Uint8Array[] = [];
@@ -221,7 +223,7 @@ export class SolidPersistence {
     // Emit AFTER the transaction commits so an error listener cannot reentrantly
     // mutate the doc mid-transaction.
     for (const error of errors) this.emit("error", error);
-    return applied;
+    return { applied, complete: applied === valid.length };
   }
 
   /**
@@ -235,16 +237,20 @@ export class SolidPersistence {
     if (this.destroyed || !this.synced) return 0;
     const urls = await this.store.listUpdateUrls();
     const fresh: Uint8Array[] = [];
+    const fetched: string[] = [];
     for (const url of urls) {
       if (this.knownUrls.has(url)) continue;
       const update = await this.store.readUpdate(url);
-      this.knownUrls.add(url);
+      fetched.push(url);
       if (update) fresh.push(update);
     }
     // Resilient per-update application (a hostile pod could serve a corrupt
     // update between loads). Returns the count actually applied (skipped-corrupt
-    // updates are consumed — their URLs are marked known above — but not counted).
-    return this.applyStored(fresh);
+    // updates are consumed but not counted). A failed read or integration leaves
+    // the entire batch available for retry, including earlier successful reads.
+    const result = this.applyStored(fresh);
+    if (result.complete) for (const url of fetched) this.knownUrls.add(url);
+    return result.applied;
   }
 
   /** Enqueue a persist of `update`, serialised behind any in-flight write. */

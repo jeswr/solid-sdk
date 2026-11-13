@@ -389,7 +389,7 @@ export class SolidUpdateStore {
  * request body never aliases a buffer Yjs may mutate/reuse, and is never backed
  * by a `SharedArrayBuffer` (not a valid `BodyInit`). Returns a `BodyInit`.
  */
-function toBody(update: Uint8Array): Uint8Array {
+function toBody(update: Uint8Array) {
   const copy = new Uint8Array(update.byteLength);
   copy.set(update);
   return copy;

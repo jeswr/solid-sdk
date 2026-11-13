@@ -18,6 +18,8 @@ export interface Axis {
   readonly absolute: boolean;
 }
 export interface AxisRange {
+  /** Text direction; endpoints themselves are always the min/max bounds. */
+  readonly reversed?: true;
   readonly start: Axis;
   readonly end: Axis;
 }
@@ -34,9 +36,11 @@ export interface CellPosition {
 export interface StructuralEdit {
   readonly sheet: string;
   readonly axis: "row" | "column";
-  readonly kind: "insert" | "delete";
+  readonly kind: "insert" | "delete" | "reorder";
   readonly index: number;
   readonly count: number;
+  /** One-based destination in the original order, for whole-row/column moves. */
+  readonly destination?: number;
 }
 
 export function positiveIndex(value: number): number {

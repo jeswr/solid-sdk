@@ -119,6 +119,20 @@ it("decodes the engine's row/column insert/delete mutations and rejects malforme
   ])
     expect(commentStructuralEdit("sheet.mutation.insert-row", params)).toBeUndefined();
   expect(commentStructuralEdit("sheet.other", { subUnitId: "s", range })).toBeUndefined();
+  for (const operation of ["move-rows", "move-columns"]) {
+    for (const params of [
+      null,
+      undefined,
+      1,
+      {},
+      { subUnitId: "s" },
+      { subUnitId: "s", sourceRange: range },
+      { subUnitId: "s", sourceRange: { ...range, endRow: -1, endColumn: -1 }, targetRange: range },
+      { subUnitId: "s", sourceRange: range, targetRange: { startRow: NaN, startColumn: -1 } },
+    ]) {
+      expect(commentStructuralEdit(`sheet.mutation.${operation}`, params)).toBeUndefined();
+    }
+  }
 });
 it("round-trips threads, replies, TextualBody, dates and hostile plain text through real RDF I/O", async () => {
   expect(await store.list()).toEqual([]);
