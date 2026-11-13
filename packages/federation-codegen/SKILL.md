@@ -28,7 +28,9 @@ const result = generateModel({ ontologyTtl, shapesTtl, config });
 ```
 
 CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --out <dir>`
-(`--update-lock` accepts a reviewed input change).
+(`--update-lock` accepts a reviewed input change). `gen` passes an existing
+`<out>/model.json` to `generateModel` as `previousManifest`, which pins concept-enum
+strictness across regenerations.
 
 A workspace package that commits generated output must pass the root `check:codegen` guard.
 It needs a `codegen` script writing to `src/generated`, a `workspace:*` devDependency on this
@@ -47,6 +49,52 @@ package, and a drift test running `pnpm run codegen --out <tmp>` with a byte com
 - Reject multiple property shapes sharing a path within one NodeShape, including
   canonical/alternativePath-member overlaps, in either order. Do not conjoin them
   or overwrite one shape's constraints with another's.
+- Multiple NodeShapes with the same canonical target class and identical target alias
+  sets form one entity under its class config. Merge in shape-IRI order; conjoin matching
+  paths only under one unambiguous entity config. Competing flat configs, or flat and
+  composite claims to the same class, reject before compilation; never first-pick a config.
+  Merge paths by intersecting cardinalities, numeric bounds and enums and taking the greatest
+  minimum length. Different explicit datatype, class, nodeKind, node, name or pattern,
+  incompatible alternative paths, and empty intersections fail with both source shapes
+  named. A source `sh:in` is decoded with that source's value kind, so the merge rejects
+  any source enum whose kind or datatype differs from the conjoined field (an implicit-IRI
+  `sh:in` merged with an `xsd:string` or `sh:Literal` source); never re-decode or
+  intersect IRIs and literals by JS value. Fidelity re-checks every merged property
+  against each source shape (kind, datatype, class, node, pattern, bounds, enum subset),
+  not only against the merged constraint. Preserve original property severities/messages in SHACL; presence is a MUST
+  only if a source property requires presence at Violation grade. Inspect every original
+  graph constraint: a second safety shape containing `sh:not` still rejects the entity.
+  A shared anonymous property shape keeps one skolem identity within its class group;
+  reusing it across different classes retains the identity-collision rejection.
+- A `sh:class C` property becomes a closed concept IRI enum when the ontology contains
+  direct named `rdf:type C` individuals and C is not a shape target, target alias or
+  configured entity/node target. Ignore blank individuals and inferred subclasses.
+  Explicit `sh:node` and configured composite links retain link semantics. Zero named
+  individuals retain the existing class behavior. A reusable property shape used as a
+  link by any owner is never lowered for another owner.
+  Only used concept classes gain the
+  NodeShape-coverage exemption; their labels/definitions remain mandatory.
+  Compile sorted exact identities into `in` plus `guards.iriEnum: true`, intersecting
+  explicit `sh:in`. Fidelity checks both membership and the strict-write marker.
+  Emit a literal-union TS type and lower those class constraints to closed `sh:in`
+  lists in emitted SHACL; never require concept `rdf:type` assertions in pod data.
+  Invalid supplied concept writes throw the existing `TypeError`; reads retain normal
+  severity-graded drops. Ordinary `sh:in` writes retain their drop-invalid contract.
+  A Warning-graded concept `sh:class` still becomes a strict runtime enum: supplied
+  nonmember writes throw and reads drop nonmembers. Emitted `sh:in` retains
+  `sh:Warning`, so runtime membership enforcement is stricter than the advisory SHACL.
+  Strictness must never flip silently: an advisory `sh:class` on a projected class
+  with named individuals fails (`unstable-concept-enum`), and the CLI passes the
+  committed `model.json` as `previousManifest` so a field that was an `iriEnum` and
+  would become unenforced fails generation. Remove the committed `model.json` to
+  accept such a loosening deliberately.
+  A concept member that the property's `^https?://` / `^https://` pattern (or the
+  derived scheme guard) excludes fails generation (`concept-enum-scheme-conflict`);
+  an explicit `sh:in` may intersect it away.
+  Lowering makes emitted `shapes.ttl` diverge from the sector profile in both
+  directions (no pod `rdf:type C` required; typed non-individuals and subclass
+  instances excluded). Consumers MUST validate against the emitted `shapes.ttl`,
+  never the sector SHACL, for concept-lowered fields.
 - Prefix names must match Turtle `PN_PREFIX` (including the empty default prefix).
   Config loading rejects an unsafe or relative `shapesBase`. Every Turtle/N-Triples
   emission goes through `serializeCanonicalTurtle`, checking all NamedNodes,
@@ -147,8 +195,11 @@ package, and a drift test running `pnpm run codegen --out <tmp>` with a byte com
 - Composite nodes and derived views support aliases on types/flat fields. Structural
   `nested` links explicitly reject aliases; an aliased shape field cannot be omitted.
 - `parseShapes` needs the adapter's normalized ontology as its third argument for aliases;
-  its fourth argument carries raw ontology quads for composite subclass ancestry checks.
-  `generateModel` supplies both (legacy third-argument quads use the OWL/RDFS adapter).
+  its fourth argument carries raw ontology quads for composite subclass ancestry and
+  concept individuals. An optional fifth config argument identifies projected targets
+  and composite links before concept-enum selection. Resolve that selection after
+  merging properties, since another shape can supply the link's name or `sh:node`.
+  `generateModel` supplies all three (legacy third-argument quads use the OWL/RDFS adapter).
   Preserve complex-path roots as blank nodes with deterministic
   labels: skolemizing a path root silently changes its SHACL meaning to a predicate.
 - Mint skolem IRIs from full shape/class/path identities using stable hashes and

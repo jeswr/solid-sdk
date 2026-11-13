@@ -139,6 +139,16 @@ function planField(field: ManifestField): FieldPlan {
   return { field, mapper };
 }
 
+/** Concept identities cannot be repaired by normalization or silently discarded on writes. */
+function assertIriEnumValue(field: ManifestField, value: unknown, allowAbsent = true): void {
+  if (
+    field.guards?.iriEnum &&
+    !(allowAbsent && value === undefined) &&
+    (typeof value !== "string" || !field.in?.includes(value))
+  )
+    throw new TypeError(`field ${field.name} requires a member of its closed IRI enumeration`);
+}
+
 /** Enum reads compare RDF identity BEFORE conversion can erase lexical spelling. */
 function enumTermMatches(doc: TermWrapper, plan: FieldPlan, term: Term): boolean {
   const { field, mapper } = plan;
@@ -360,6 +370,7 @@ function makeGuardedSet(
   };
   const guarded: Set<unknown> = {
     add(value: unknown) {
+      assertIriEnumValue(field, value, false);
       const g = guard(value);
       if (g !== undefined) base.add(g);
       return guarded;
@@ -543,6 +554,7 @@ function fieldSet(
   };
   const union: Set<unknown> = {
     add(value) {
+      assertIriEnumValue(plan.field, value, false);
       beforeWrite();
       // Only the explicitly supplied API value goes through the JS write path.
       writeFlatField(
@@ -589,6 +601,7 @@ function fieldSet(
 /** Write a single (non-set) field's value, applying write-side guards, fail-closed. */
 function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
   const { field, mapper } = plan;
+  assertIriEnumValue(field, value);
   if (!isSafeAbsoluteIri(field.predicate)) throw new TypeError("unsafe field predicate");
   clearAliases(doc, field);
   let v = value;
@@ -682,6 +695,7 @@ function makeWrapperClass(
           return readSingle(this, plan);
         },
         set(this: TermWrapper, value: unknown) {
+          assertIriEnumValue(field, value);
           beforeWrite(this, field);
           writeSingle(this, plan, value);
         },
@@ -703,6 +717,8 @@ function writeFlatField(doc: TermWrapper, plan: FieldPlan, data: EntityData): vo
   const { field } = plan;
   const raw = data[field.name];
   if (field.collection === "set") {
+    if (field.guards?.iriEnum && raw !== undefined && !Array.isArray(raw))
+      throw new TypeError(`field ${field.name} requires an array of IRI enumeration members`);
     const set = fieldSet(doc, plan);
     const members = Array.isArray(raw) ? raw : [];
     for (const member of members) {

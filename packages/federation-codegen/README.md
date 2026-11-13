@@ -21,7 +21,7 @@ only in the inlined JSON).
 
 ## What it generates
 
-For each `sh:NodeShape` in a domain's SHACL profile:
+For the configured entities in a domain's SHACL profile (grouping NodeShapes by target class):
 
 | Artifact | What it is |
 |---|---|
@@ -66,6 +66,28 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
   mutation makes it throw (proven in the test suite).
 - **Determinism (§5):** `(generator artifact, input bytes) → output bytes`. Double-build + permuted
   input-order byte-equality is tested.
+
+Unprojected vocabulary concept classes with direct named ontology instances compile to
+closed, sorted IRI enumerations. The manifest uses `in` plus `guards.iriEnum: true`, the
+TypeScript field is a union of exact IRI strings, and emitted SHACL lowers `sh:class` to
+`sh:in`. Concepts need no `rdf:type` assertions in pod data. Explicit `sh:in` intersects
+the vocabulary set; zero named individuals and projected composite links retain the
+existing class/link behavior. Supplied nonmember writes throw the runtime's `TypeError`;
+reads retain severity-graded drops. Ordinary `sh:in` writes still drop invalid values.
+This also applies to a Warning-graded `sh:class` on a concept class: the runtime enum
+is strict, so supplied nonmember writes throw and reads drop nonmembers. The emitted
+`sh:in` retains `sh:Warning`; runtime membership enforcement is stricter than that
+advisory SHACL severity. Strictness cannot weaken silently: an advisory `sh:class` on a
+projected class that has named individuals fails generation, and `gen` compares against
+the committed `model.json` so a field that was a concept enum and would become
+unenforced fails (delete the committed `model.json` to accept that deliberately).
+Concept members excluded by the property's http(s) `sh:pattern` fail generation.
+
+**Validate against the emitted `shapes.ttl`, not the sector profile.** Lowering
+`sh:class C` to `sh:in` diverges from the sector SHACL in both directions: a
+runtime-written member with no `rdf:type C` fails the sector shape, while an IRI typed
+`C` in the pod that is not a named ontology individual (or a subclass instance) passes
+the sector shape but is dropped by the runtime.
 
 ### Date datatype admission
 
@@ -112,7 +134,10 @@ No config or `skos:closeMatch` / `skos:exactMatch` annotation grants a read alia
 - One NodeShape can have several `sh:targetClass` IRIs when exactly one is explicitly
   declared `owl:Class` in the ontology. It becomes the canonical `typeIris` member; extra
   targets become sorted `aliasTypeIris` (at most four). Zero or several declared OWL
-  classes, non-IRI targets, and duplicate canonical shapes fail admission. A single target
+  classes and non-IRI targets fail admission. Shapes sharing a canonical target and the
+  same target alias set merge in shape-IRI order; conflicting property constraints fail
+  admission with both shapes named, including a source `sh:in` decoded with a value kind
+  or datatype that differs from the conjoined field. A single target
   retains the existing OWL/RDFS behavior.
 - `sh:path [ sh:alternativePath ( p1 … pn ) ]` accepts 2–4 distinct IRI members when exactly
   one is declared as a property by the ontology adapter. That member becomes `predicate`;
@@ -145,9 +170,10 @@ projections and reached children; any changed recognition or parsed result throw
 `MigrationError` before emission. It includes unreached typed nodes, and shares a 10,000
 read/visit budget across scanning, class walks and re-parsing. The input store is unchanged.
 
-`parseShapes(ttl, shapesBase, ontology?, ontologyQuads?)` uses the adapter's normalized ontology
-to resolve aliases and raw ontology quads to check composite subclass ancestry. `generateModel`
-supplies both automatically; the legacy third-argument quad form uses the OWL/RDFS adapter.
+`parseShapes(ttl, shapesBase, ontology?, ontologyQuads?, config?)` uses the adapter's normalized ontology
+to resolve aliases and raw ontology quads for composite subclass ancestry and concept individuals.
+The optional config identifies projected targets and composite links before selecting enums.
+`generateModel` supplies these automatically; the legacy third-argument quad form uses the OWL/RDFS adapter.
 Shapes stay deterministic
 under triple permutation and blank-node relabelling. SHACL complex-path roots **remain blank
 nodes with deterministic labels**: turning one into an IRI would change its meaning to a
