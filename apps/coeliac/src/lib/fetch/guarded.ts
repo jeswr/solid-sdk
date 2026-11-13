@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * The foreign-origin fetch boundary. Every request to a THIRD-PARTY origin
@@ -23,6 +24,8 @@ import { createGuardedFetch } from "@jeswr/guarded-fetch";
 export function foreignFetch(base: typeof globalThis.fetch): typeof globalThis.fetch {
   const guarded = createGuardedFetch({
     fetch: base,
+    // Browser-owned DNS and this Fetch-only transport cannot use a Node dispatcher.
+    requireDnsPinning: false,
     dnsLookup: null,
     allowUnresolvedHosts: true,
     maxBytes: 2 * 1024 * 1024,

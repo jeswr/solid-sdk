@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * LDN inbox WRITES (#75 / 5u9) — POST an ActivityStreams 2.0 `as:Announce`
@@ -170,6 +171,8 @@ export async function resolveCollaboratorInbox(
   // the authenticated profile fetch at an internal target — closing the discovery
   // redirect-SSRF that a bare `assertSafeUrl` on only the initial URL would leave.
   const discoveryFetch = createGuardedFetch({
+    // This browser's auth-patched fetch cannot pin sockets; retain the browser DNS residual.
+    requireDnsPinning: false,
     ...options.guardOptions,
     ...(options.fetch ? { fetch: options.fetch } : {}),
   });
