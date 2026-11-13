@@ -278,8 +278,9 @@ read test does not establish mutation coverage or a benchmark score.
 `test/support/admin-product.ts` is a UI demonstration for the local Magento fixture, outside
 production source. It creates `SAB Test Widget <random>` with unique SKU, price 12.34 and
 quantity 5, changes the price to 23.45, then deletes its verified row through the grid action.
-It blocks background preference/bookmark writes. Cleanup checks the response's name, SKU and
-created ID before selecting its checkbox, including when saved columns hide those fields.
+It blocks background preference/bookmark writes. Cleanup requires exactly one complete match
+and checks the response's name, exact SKU and created ID before selecting its checkbox,
+including when saved columns hide those fields.
 
 ```sh
 SAB_LIVE_SITE_URL=http://127.0.0.1:7780/admin \
@@ -290,10 +291,14 @@ SAB_LIVE_SITE_URL=http://127.0.0.1:7780/admin \
 The switch and credential overrides match the existing read test. The test learns with
 `profileSite({ demonstrations })`, round-trips the actual model, logs in afresh, and runs
 `createTaskExecutor`/`runTask` with a scripted planner and recorded approvals. Each action is
-first denied (zero additional traffic), then approved. Exactly one create POST, one update
-POST and one delete POST are required; an identical repeated create is blocked within the
-task. Grid reads search the unique SKU and check both prices and disappearance. Browser cleanup
-runs after execution, including failure using only the test's session and verified own item. Optional artifacts stay
+first denied (zero additional traffic after the prompt), then approved. The test also creates
+a similarly named neighbour with a distinct SKU. A broad name search matching both refuses
+before write approval. The delete Flow resolves the intended SKU and names that product in
+its approval, re-resolves on retry, deletes it, then confirms the neighbour still exists.
+Exactly two create POSTs, one update POST and one delete POST are required; an identical
+repeated create is blocked within the task. Grid reads check both prices and disappearance.
+Browser cleanup covers both products after execution, including failure, using only the test's
+session and verified own items. Optional artifacts stay
 outside the repository. No LLM/planner CLI, benchmark task, evaluator or real catalogue fixture
 is used. The profile has a four-minute deadline; the whole live write test has six minutes.
 

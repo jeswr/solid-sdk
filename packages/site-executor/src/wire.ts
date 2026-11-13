@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // Rule W sees concrete fields, including model constants and CSRF decoration.
 import type { CsrfRule } from "@jeswr/site-model";
 import { type CompiledRequest, normaliseFormFieldName } from "./compile.js";
@@ -60,4 +61,37 @@ export function effectiveWireFields(compiled: CompiledRequest): WireField[] {
   } else if (compiled.body)
     for (const [name, value] of compiled.body.fields) add(name, value, "body");
   return fields;
+}
+
+/** Token values after decoration and the send path's body/header normalization. */
+export function transmittedCsrfSecrets(compiled: CompiledRequest): string[] {
+  const fields = effectiveWireFields(compiled);
+  return compiled.csrf.flatMap((rule) => {
+    const location =
+      rule.target.kind === "header"
+        ? "header"
+        : rule.target.kind === "form"
+          ? "body"
+          : compiled.pathTokens?.names.includes(rule.target.name)
+            ? "path"
+            : "query";
+    return fields
+      .filter(
+        (field) => field.location === location && field.name === csrfFieldName(compiled, rule),
+      )
+      .flatMap((field) => [
+        field.value,
+        // Retain the encoded spelling from the actual final URL as well as the
+        // decoded slot. No parallel implementation of URL encoding is needed.
+        ...(location === "path"
+          ? compiled.url.pathname.split("/").filter((part) => {
+              try {
+                return decodeURIComponent(part) === field.value;
+              } catch {
+                return false;
+              }
+            })
+          : []),
+      ]);
+  });
 }

@@ -26,6 +26,7 @@ export interface CaptureView {
   warning: boolean;
   cleanupFailed: boolean;
   lease?: number;
+  armedLease?: number;
   site?: string;
   choices?: CaptureChoices;
   preview?: { count: number; persona: string; profile: string };

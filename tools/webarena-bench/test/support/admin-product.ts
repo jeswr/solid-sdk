@@ -49,12 +49,15 @@ export async function deleteOwnProduct(
   ]);
   const data = (await response.json()) as {
     items: Array<{ entity_id: string; name: string; sku: string }>;
+    totalRecords: number;
   };
-  const record = data.items.find((row) => row.name === item.name && row.sku.endsWith(item.sku));
+  const record = data.items.find((row) => row.name === item.name && row.sku === item.sku);
   if (!record) {
     if (mustExist) throw new Error("Created product missing from grid");
     return;
   }
+  if (data.items.length !== 1 || data.totalRecords !== 1)
+    throw new Error("Cleanup refused: the SKU search must match exactly this test product");
   if (!/^\d+$/.test(record.entity_id)) throw new Error("Cleanup refused: invalid product ID");
   if (editUrl && /\/id\/(\d+)/.exec(editUrl)?.[1] !== record.entity_id)
     throw new Error("Cleanup refused: row ID does not match the created product");

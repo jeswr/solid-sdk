@@ -137,7 +137,7 @@ describe("money from trusted reads in the same flow", () => {
     expect(result.approval).toMatchObject({
       amount: "20",
       currency: "GBP",
-      summary: "Buy Trail Runner sneakers for GBP 20.00 on shop.test",
+      summary: 'Buy "Trail Runner sneakers" for GBP 20.00 on shop.test',
     });
   });
 

@@ -12,6 +12,7 @@ import { responseIdentity } from "@jeswr/site-model";
 import type { BrowserContext } from "playwright";
 import { applyExtraction, type Item } from "./extraction.js";
 import type { Recorder } from "./recorder.js";
+import type { LearnedSelection } from "./selection.js";
 import type { Demonstration, RecordedRequest } from "./types.js";
 import { EFFECT_RANK, s, sab, slug } from "./util.js";
 
@@ -55,6 +56,7 @@ export interface FlowContext {
   learnedAt: string;
   derivedFrom: string[];
   usedIds: Set<string>;
+  selections?: Map<string, LearnedSelection>;
 }
 
 function lastSegment(v: string): string {
@@ -108,9 +110,32 @@ export function buildFlow(
     return applyExtraction(ex, body, st.request.url)[0];
   });
   const required = new Set<number>();
+  const selectionReads = new Map<number, { step: number; selection: LearnedSelection }>();
   steps.forEach((st, i) => {
     if (st.operation.effect !== "read") required.add(i);
+    const selection = ctx.selections?.get(st.operation.id);
+    if (selection) {
+      const n = steps
+        .slice(0, i)
+        .findLastIndex(
+          (read) =>
+            read.operation.id === selection.read.id &&
+            Object.entries(selection.filters).every(
+              ([writeName, readName]) => st.values[writeName] === read.values[readName],
+            ),
+        );
+      if (n >= 0) {
+        required.add(n);
+        selectionReads.set(i, { step: n, selection });
+      }
+    }
   });
+  if (steps.some((st, i) => ctx.selections?.has(st.operation.id) && !selectionReads.has(i)))
+    return {
+      warnings: [
+        `demonstration ${demo.name}: compound flow omitted; use the filter selection flow`,
+      ],
+    };
   // A demonstrated basket/order total is evidence even when checkout sends no price.
   steps.forEach((st, payment) => {
     if (st.operation.effect !== "payment") return;
@@ -133,7 +158,7 @@ export function buildFlow(
     return { warnings };
   }
 
-  type Source = { step: number; property: string } | { input: Parameter };
+  type Source = { step: number; property: string } | { input: Parameter; operation: Operation };
   // Where a value came from. A write binds to the latest earlier step showing it (the page the
   // person acted on); a read binds to the earliest (the shortest chain back to the flow inputs).
   // Exact matches win over an IRI whose last path segment equals the value.
@@ -162,6 +187,11 @@ export function buildFlow(
     const st = steps[i] as DemoStep;
     const binds = new Map<string, Source>();
     for (const param of st.operation.inputs) {
+      const selected = selectionReads.get(i);
+      if (selected && param.name === selected.selection.witness) {
+        binds.set(param.name, { step: selected.step, property: selected.selection.property });
+        continue;
+      }
       const v = st.values[param.name];
       if (v === undefined || v === "[redacted]") continue;
       let found: Source | undefined;
@@ -171,10 +201,17 @@ export function buildFlow(
         if (!done.has(found.step)) work.push(found.step);
         work.sort((a, b) => b - a);
       }
-      binds.set(param.name, found ?? { input: param });
+      binds.set(param.name, found ?? { input: param, operation: st.operation });
     }
     sources.set(i, binds);
   }
+  // The write and resolver must share their original filter source, even when that
+  // value also happens to equal an earlier item's SKU or name.
+  for (const [i, { step, selection }] of selectionReads)
+    for (const [writeName, readName] of Object.entries(selection.filters)) {
+      const source = sources.get(step)?.get(readName);
+      if (source) sources.get(i)?.set(writeName, source);
+    }
 
   const kept = [...required].sort((a, b) => a - b);
   const renumber = new Map(kept.map((old, idx) => [old, idx]));
@@ -188,7 +225,7 @@ export function buildFlow(
         const p = src.input;
         let inputName = p.name;
         const clash = inputs.find((x) => x.name === inputName);
-        if (clash && clash.path.join() !== flowInputPath(p, st.operation).join())
+        if (clash && clash.path.join() !== flowInputPath(p, src.operation).join())
           inputName = `${p.name}_${renumber.get(old)}`;
         const shared = inputs.find((x) => x.name === inputName);
         if (shared) {
@@ -203,7 +240,7 @@ export function buildFlow(
           const value = st.values[name] as string;
           const input: Parameter = {
             name: inputName,
-            path: flowInputPath(p, st.operation),
+            path: flowInputPath(p, src.operation),
             range: p.range,
             required: p.default === undefined && p.required,
             location: p.location,

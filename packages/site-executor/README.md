@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/site-executor
 
@@ -160,6 +161,40 @@ excluded. The remaining observations retain their original step order and untrus
    `datatype: "iri"` are WHATWG-normalized before storage, binding and fingerprinting, even
    when bound into an `xsd:string` parameter. Literal text stays verbatim.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Filter selections and target summaries
+
+A learned filter-selected write is available through a resolve/read → write Flow. Its
+required, empty-path identity parameter is absent from the explicit body template and
+bound to a trusted identity property of the resolver. Both steps bind each search/filter
+to the same flow input. These existing Parameter/Flow structures survive RDF round trips;
+parameter names and descriptions do not activate this behavior. The underlying write
+cannot be invoked directly from an ActionRequest.
+
+Before approval, the executor checks the resolver's complete result and the concrete filter
+fields of both requests. Zero matches, partial/truncated results, missing identities and
+multiple matches return `refused` with `errorKind: "ambiguous-target"`. To deliberately
+select every matching item, omit `schema:object` and put `sab:all true` on the action
+(`sab:` is `https://jeswr.org/ns/site-action#`; exactly one lexical `true` is required).
+This does not permit partial or empty selections or bypass payment checks.
+
+Approvals show up to five resolved names/identifiers, followed by `and N more`. Their
+digest includes the full identity set. Approval retries authorize and repeat the resolver
+in the current session, using the same filters; a changed identity set refuses the write.
+Response ordering does not change the identity set. Completed writes remain single-use.
+The exact vault session is checked before revalidation. The executor's own reads may renew
+expiry metadata and storage revisions with unchanged credentials; external revision changes
+or changed cookie/header credentials require fresh consent. Resolver and write remain separate
+HTTP requests, so sites without atomic selection semantics retain a read/write race.
+The resolver uses the ordinary origin, session, read gate, extraction and redaction paths;
+the write retains Rule W, repeat protection and Uncertain handling.
+
+Every write summary prefers the request's object name, then a bound item's trusted name
+or identifier, then the operation label and concrete identifying inputs. Filter selection
+summaries also show the resolved targets when a request name was supplied. Display strings
+are quoted, controls and bidi characters escaped, and capped with `(truncated)`, after
+redacting the complete value.
+
 ## Security invariants
 
 - **Site-model trust.** A site model is trusted input on a par with code. It comes from the
@@ -184,8 +219,13 @@ excluded. The remaining observations retain their original step order and untrus
   and retains an immutable model snapshot.
 - **No secrets out.** Results, errors and extracted RDF never carry cookies, session headers or
   CSRF tokens. Errors name only the origin and path, never the query string or the response
-  body. Every nonempty secret is registered. Raw, mixed percent-encoded and nested encoded echoes
-  are redacted before truncation. Every complete summary display value, including unmapped object
+  body. Both source secrets and their effective transmitted values are registered after request
+  decoration, using the compiled wire inventory and final Fetch headers. This includes multipart
+  CRLF normalization, USVString conversion, header trimming and percent-encoded path slots.
+  Redaction matches only forms of at least **8 characters**; empty and shorter forms stay unchanged
+  to avoid erasing ordinary text. Raw, trimmed, mixed/nested percent-encoded (including form `+`
+  spaces), JSON-escaped and HTML-entity-escaped echoes are redacted before truncation.
+  Every complete summary display value, including unmapped object
   names and model labels, is redacted before whitespace normalization, formatting or truncation. Every return path renders all observations against the final
   secret set, including secrets discovered by later steps.
 - **Money.** A site that displays one price and charges another cannot be stopped by any client;
@@ -363,6 +403,12 @@ headers through all three routes, static/direct-buy/header-parameter Accept and 
 derived extraction Accept, actual serialized form inventories, multipart newline mismatches,
 and path tokens on payment, total, both, and direct buys with collision refusals. Shared validation
 also tests the one unbound whole-segment CSRF slot and every other undeclared-variable refusal.
+
+Review r8 regressions are in `test/review-r8.test.ts`: source and serialized token echoes across
+header, form/multipart, JSON, query and path targets; trusted and untrusted RDF; approval summaries,
+results and errors; observations retained across approval pauses; vault headers; common echo
+encodings and the eight-character redaction threshold. Transports inspect serialized `Request`
+objects to verify the effective token values.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 `secretRedactor(secrets)` is also exported as a read-only utility for browser snapshot consumers.
