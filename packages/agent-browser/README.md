@@ -153,3 +153,10 @@ untrusted review wrapping. It fails if those facilities are unavailable; it does
 response-bound write checks and missing-input recovery. Session bundles accept an opaque
 `revision`; the executor advances it after accepted updates. Rejected updates stop persistence while the
 in-memory jar continues; void updates retain the prior token.
+
+For administrative list models, a host may construct a request with `sab:operation` set to a known
+catalogue fragment (or full operation IRI); the executor retains its ordinary approval and input
+checks. Explicit object types can also narrow read candidates. Bracketed credential fields and
+path-scoped session cookies work through the learned login route. The read-only live acceptance
+in `tools/webarena-bench/test/live.test.ts` exercises fresh host login and execution without
+calling a planner CLI; see the harness README for opt-in settings.

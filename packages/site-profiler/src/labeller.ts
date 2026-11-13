@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 6: labelling. The Labeller seam names what an endpoint does in schema.org terms and its
 // effect class. The default is deterministic heuristics; an LLM labeller can implement the same
@@ -18,6 +19,12 @@ function pathWords(c: EndpointCandidate): string[] {
 
 function noun(c: EndpointCandidate, fallback: string): string {
   const words = pathWords(c).filter((w) => !/^(search|find|query)$/.test(w));
+  const template = c.urlTemplate.replace(/\{[^}]*\}/g, "");
+  const query = new URL(template).searchParams;
+  const dispatch = [...query].find(([k]) =>
+    /^(namespace|resource|collection|dataset)$/i.test(k),
+  )?.[1];
+  if (dispatch) return dispatch.replace(/[_-]+(?:grid|listing|list)$/, "").replace(/[_-]+/g, " ");
   const last = words[words.length - 1];
   return last ? singular(last).replace(/[-_]+/g, " ") : fallback;
 }
@@ -52,7 +59,12 @@ export class HeuristicLabeller implements Labeller {
       }
       const search = c.params.find((p) => p.location === "query" && SEARCH_PARAM.test(p.name));
       if (search) {
-        const what = c.responseKind === "json" ? "products (JSON)" : "products";
+        const dispatched = /[?&](?:namespace|resource|collection|dataset)=/.test(c.urlTemplate);
+        const what = dispatched
+          ? `${noun(c, "items")} (JSON)`
+          : c.responseKind === "json"
+            ? "products (JSON)"
+            : "products";
         return {
           actionType: s("SearchAction"),
           label: `Search ${what}`,

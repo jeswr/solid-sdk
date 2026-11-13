@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 3: form analysis. Reads every form on a page (method, action, fields, select options, hidden
 // fields) and turns hidden anti-forgery fields and csrf meta tags into CsrfRules. Never submits.
@@ -16,7 +17,8 @@ import {
 import type { FormField, FormInfo } from "./types.js";
 import { normaliseUrl } from "./util.js";
 
-const CSRF_NAME = /csrf|xsrf|authenticity|anti-?forgery|_token$|^token$|nonce|requestverification/i;
+const CSRF_NAME =
+  /csrf|xsrf|authenticity|anti-?forgery|_token$|^token$|nonce|requestverification|form[_-]?key/i;
 
 export function isCsrfFieldName(name: string): boolean {
   return CSRF_NAME.test(name);

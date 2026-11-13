@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 8: login route. Signs in once with the credentials the user gave (the only non-GET the
 // profiler sends outside a demonstration), notes which cookies the site set, and finds a probe URL
@@ -36,6 +37,15 @@ export function findLoginLink(html: string, pageUrl: string): string | undefined
   return undefined;
 }
 
+/** Treat a non-root start path as the application base, including after redirects. */
+export function loginFallbackUrl(startUrl: string): string {
+  const base = new URL(startUrl);
+  base.search = "";
+  base.hash = "";
+  if (!base.pathname.endsWith("/")) base.pathname += "/";
+  return new URL("login", base).href;
+}
+
 /** The username field of a password form: an email/text field named like a user, else the first visible text field. */
 export function usernameField(form: FormInfo): string | undefined {
   const visible = form.fields.filter((f) => !f.hidden && ["text", "email", "tel"].includes(f.type));
@@ -61,15 +71,29 @@ export async function performLogin(
   const page = await context.newPage();
   const prevPhase = recorder.phase;
   recorder.phase = "login";
-  const origin = new URL(startUrl).origin;
+
   try {
     await page.goto(startUrl, { waitUntil: "load" });
-    let loginPageUrl = findLoginLink(await page.content(), page.url()) ?? `${origin}/login`;
-    await page.goto(loginPageUrl, { waitUntil: "load" });
-    loginPageUrl = page.url();
-    const form = parseForms(await page.content(), loginPageUrl).find((f) => f.hasPassword);
+    let loginPageUrl = page.url();
+    let html = await page.content();
+    let form = parseForms(html, loginPageUrl).find((f) => f.hasPassword);
+    if (!form) {
+      const target = findLoginLink(html, loginPageUrl) ?? loginFallbackUrl(loginPageUrl);
+      await page.goto(target, { waitUntil: "load" });
+      loginPageUrl = page.url();
+      html = await page.content();
+      form = parseForms(html, loginPageUrl).find((f) => f.hasPassword);
+    }
     if (!form)
       return { success: false, loginPageUrl, sessionCookies: [], error: "no password form found" };
+    if (!sameOrigin(form.action, startUrl))
+      return {
+        success: false,
+        loginPageUrl,
+        sessionCookies: [],
+        error: "password form leaves the site",
+      };
+    recorder.loginTarget = form.action;
     const user = usernameField(form);
     const pass = form.fields.find((f) => f.type === "password")?.name;
     if (!user || !pass)
@@ -77,7 +101,7 @@ export async function performLogin(
     const scope = page.locator(form.selector).first();
     await scope.locator(`[name=${cssString(user)}]`).fill(credentials.username);
     await scope.locator(`[name=${cssString(pass)}]`).fill(credentials.password);
-    const before = await context.cookies(origin);
+    const before = await context.cookies(loginPageUrl);
     const navigated = page
       .waitForEvent("framenavigated", { predicate: (f) => f === page.mainFrame(), timeout: 15_000 })
       .catch(() => undefined);
@@ -89,7 +113,7 @@ export async function performLogin(
     await navigated;
     await page.waitForLoadState("load").catch(() => undefined);
     await recorder.flush();
-    const after = await context.cookies(origin);
+    const after = await context.cookies(page.url());
     const changed = changedCookies(before, after);
     const httpOnly = changed.filter((c) => c.httpOnly).map((c) => c.name);
     const stillForm = parseForms(await page.content(), page.url()).some((f) => f.hasPassword);
@@ -105,6 +129,7 @@ export async function performLogin(
     return obs;
   } finally {
     recorder.phase = prevPhase;
+    recorder.loginTarget = undefined;
     await page.close();
   }
 }

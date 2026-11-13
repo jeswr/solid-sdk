@@ -278,3 +278,24 @@ quoted options and checked identities, static shadowing across JSON/query/form/m
 direct-buy quantities, and allowed unrelated submit literals (#1); contradictory identity-only
 order records, evidence-digest inclusion and revalidation of identity-only sources (#2).
 Unsafe payment configurations now return `refused` before payment approval or transmission.
+
+## Session-protected JSON lists
+
+Read actions may include `sab:operation "search-people-json"` (or a full operation IRI) to select a
+known catalogue entry. `schema:object [ a schema:Person ]` also narrows reads by extraction type.
+No selector means the existing match-count and ambiguity behavior. This local request convention
+uses the existing ActionRequest.values API; no shared contract change is required.
+
+CSRF query targets also support an existing-contract convention for tokens in URL paths: when the
+target name identifies exactly one otherwise-unbound simple `{name}` occupying a whole path
+segment, compilation reserves that slot and session decoration fills it after authorization.
+It is not a planner input. Embedded/reserved/duplicate slots, collisions with inputs, route
+separators (including nested encodings), and dot segments refuse. Cookie, HTML, meta and JSON
+sources use the existing origin-guarded machinery. Tokens remain excluded from fingerprints and
+results. A first-class path target could replace this convention in a future coordinated contract
+revision; this implementation leaves the contract unchanged.
+
+Form field names encoded as RFC 6570 variable names are decoded once on the form wire, preserving
+bracketed credential fields. A signed-in operation that receives an HTML password form with HTTP
+200 returns `errorKind: "no-session"`, rather than an empty successful observation. Unit and
+adversarial cases are in `test/session-reads.test.ts`.

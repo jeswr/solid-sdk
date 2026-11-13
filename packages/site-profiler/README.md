@@ -18,7 +18,9 @@ const { model, trace, warnings } = await profileSite({
 });
 ```
 
-Options: `startUrl`, `maxPages` (default 40), `login`, `demonstrations`, `labeller` (default
+Options: `startUrl`, `maxPages` (default 40 attempted pages, including failures),
+`maxProfileMs` (hard deadline, default 180000), `navigationTimeoutMs` (15000),
+`networkIdleTimeoutMs` (5000), `login`, `demonstrations`, `labeller` (default
 `heuristicLabeller`), `browser` (else headless Chromium is launched; `SAB_CHROMIUM_PATH`
 overrides the executable), `now`, `modelId` (default `urn:sab:model:<host>`), `verify`
 (default true), `version`.
@@ -27,13 +29,13 @@ overrides the executable), `now`, `modelId` (default `urn:sab:model:<host>`), `v
 
 | Step | Module | What it does |
 | --- | --- | --- |
-| Login | `login.ts` | Signs in through the password form, records the cookies the login set (HttpOnly first) and finds a probe URL that is 200 signed in and refused signed out. Bearer token endpoints in scripts give `refresh` info. |
-| Crawl | `crawl.ts` | Breadth-first over same-origin links and GET forms (free text gets a word seen on the site). Skips logout/delete-like links and static files. |
+| Login | `login.ts` | Uses a password form on the redirected start page first, then a sign-in link, then a path-relative login fallback. Signs in through the password form, records the cookies the login set (HttpOnly first) and finds a probe URL that is 200 signed in and refused signed out. Bearer token endpoints in scripts give `refresh` info. |
+| Crawl | `crawl.ts` | Navigation menu anchors first, then other same-origin links and GET forms (free text gets a word seen on the site). Skips logout/delete-like links and static files. |
 | Guard and trace | `recorder.ts` | Records same-origin requests without cookies, authorization or credential-like body fields. Aborts every non-GET request outside the login and demonstrations. |
 | Scripts | `scripts.ts` | acorn analysis of same-origin JS: `fetch`, fetch wrappers, `XMLHttpRequest`, axios, jQuery; URL patterns from literals and concatenation; CSRF headers read from `document.cookie` or a meta tag. |
 | Templates | `templates.ts` | Clusters requests into RFC 6570 templates (numeric, uuid, sku-like and known-id path variables; query and body parameters) and merges crawl, form and script evidence. |
 | Forms | `forms.ts` | Fields, select options, hidden fields; hidden csrf/token/authenticity fields become html CsrfRules. |
-| Extraction | `extraction.ts` | JSON arrays (or one product-like object) and repeated HTML cards (link plus price) or product detail pages, mapped to schema.org by key name. Descriptions and reviews are `untrusted`. |
+| Extraction | `extraction.ts` | JSON arrays (including administrative row envelopes; Product, Person or Order where evidenced) or one product-like object and repeated HTML cards (link plus price) or product detail pages, mapped to schema.org by key name. Descriptions and reviews are `untrusted`. |
 | Labelling | `labeller.ts` | `Labeller` seam with deterministic heuristics; unknown writes are `irreversible-write`. |
 | Operations | `operations.ts` | Parameters mapped onto property paths of the action node, request template, CSRF, session. |
 | Demonstrations | `demonstrations.ts` | Runs scripted sessions, turns their writes into operations and the session into a Flow with inferred bindings. |
@@ -79,3 +81,47 @@ way. `:scope` selects the item element itself (for `data-*` attributes on the ca
   five) because `FieldRule.path` is a single pointer.
 - HTML prices without a numeric attribute are extracted as text.
 - Path variables are only inferred for id-like segments; slugs need an id seen in a response.
+
+## JSON list applications
+
+Rendered administrative grids commonly GET their rows after the document loads. The crawler waits
+for network idle (bounded), visits hidden submenu anchors without clicking action buttons, and
+stops after 120 seconds of crawling or the page budget. The whole profile has a separate hard
+`maxProfileMs` deadline, including probes, demonstrations and verification; timeout rejects and
+closes the profiling context. A supplied browser stays open. Script probes are capped at 30.
+Only the chosen same-origin password form may POST during login. Other writes are blocked outside
+demonstrations, including background requests; known destructive GET routes are also blocked.
+
+Observed `namespace`, `resource`, `collection` and `dataset` query selectors distinguish resources
+sharing a dispatcher URL. They become fixed URL fields. Observed paging, sorting, search and filter
+values stay separate inputs, preserving percent-encoded bracket names under RFC 6570. A JSON list
+with a search input produces both SearchAction and ViewAction. Lists retain observed non-search
+defaults, with page sizes capped at 25 for execution. Native forms containing only hidden fields
+are not treated as search controls. Empty/config-only JSON with no extraction is omitted.
+
+A witnessed nested `filter[...]` or `filters[...]` parameter also allows named controls outside
+native forms on that request's referring page to propose individual filter members. This is an
+inference: verification checks the recorded endpoint tuple, not every possible filter. Use the
+site's actual filter semantics and page through large results explicitly; no automatic pagination.
+
+Known JSON keys map to schema.org (including identifiers, names, email, order numbers, totals,
+statuses and creation dates). Unknown scalar keys map to `sab:` plus the percent-encoded original
+key; unknown text is untrusted. Nested objects, nulls and credential-like fields are not flattened.
+Formatted monetary strings remain strings, with a separate currency field when available.
+
+Opaque URL values (16–256 characters) repeated in at least two requests and supplied by a hidden
+HTML input, meta tag or cookie become session/CSRF sources, never planner inputs or constants.
+Cookie sources take precedence. Query tokens are decorated at replay time; path tokens use the
+executor's documented whole-segment convention. Returned traces redact these values, cookie
+values, hidden form keys and passwords, including their occurrences in response samples.
+Route-specific tokens computed only by script are not inferred by this rule.
+
+Analysis tries classic script syntax before module syntax. Scripts above 512 KiB, recorder-truncated
+scripts (256 KiB body bound), and parse failures are skipped with one summarized warning per run.
+Verification retains observed XHR headers and resolves session tokens afresh. HTTP 200 password
+pages and JSON error/redirect envelopes are refused as data; a password page can establish a
+signed-out probe even when the server uses HTTP 200.
+
+The opt-in live acceptance test lives in `tools/webarena-bench/test/live.test.ts`, where the profiler,
+executor and host login dependencies already exist. See that tool's README for the command and
+artifact option. It performs only GETs and sign-in, without a planner or mutation demonstration.

@@ -87,10 +87,13 @@ function pick(candidates: Candidate[]): MatchResult | undefined {
 
 export function matchRequest(model: SiteModel, request: ActionRequest): MatchResult {
   const types = new Set(request.types.map(normaliseIri));
+  const selected = request.values(["https://jeswr.org/ns/site-action#operation"]);
+  const permits = (id: string) =>
+    !selected.length || selected.some((value) => value === id || value === id.split("#").at(-1));
   const flows: Candidate[] = [];
   const incomplete: { missing: string[]; matched: number }[] = [];
   for (const flow of model.flows) {
-    if (!types.has(normaliseIri(flow.actionType))) continue;
+    if (!types.has(normaliseIri(flow.actionType)) || !permits(flow.id)) continue;
     const r = inspectInputs(flow.inputs, request);
     if (r.missing.length) {
       incomplete.push(r);
@@ -112,7 +115,17 @@ export function matchRequest(model: SiteModel, request: ActionRequest): MatchRes
   if (flowMatch) return flowMatch;
   const ops: Candidate[] = [];
   for (const operation of model.operations) {
-    if (!types.has(normaliseIri(operation.actionType))) continue;
+    if (!types.has(normaliseIri(operation.actionType)) || !permits(operation.id)) continue;
+    // Explicit requested object classes distinguish otherwise identical list/search actions.
+    const objectTypes = request
+      .values(["https://schema.org/object", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"])
+      .map(normaliseIri);
+    if (
+      operation.effect === "read" &&
+      objectTypes.length &&
+      (!operation.extraction || !objectTypes.includes(normaliseIri(operation.extraction.itemType)))
+    )
+      continue;
     const r = inspectInputs(operation.inputs, request);
     if (r.missing.length) {
       incomplete.push(r);

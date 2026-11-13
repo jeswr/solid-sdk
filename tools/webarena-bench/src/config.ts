@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -6,6 +7,7 @@ import { SITES, type Site } from "./types.js";
 
 export interface SiteConfig {
   baseUrl: string;
+  startPath?: string;
   login: { username: string; password: string } | null;
   /** A site-generic recording, resolved relative to bench.config.json. */
   demonstrations?: string;
@@ -17,6 +19,7 @@ export interface BenchConfig {
   maxSteps: number;
   taskTimeoutMs: number;
   maxPages: number;
+  profileTimeoutMs?: number;
 }
 
 export function isSite(value: unknown): value is Site {
@@ -49,9 +52,17 @@ export async function loadConfig(path: string, env = process.env): Promise<Bench
         );
       login = { username, password };
     }
+    if (value.startPath !== undefined) {
+      if (typeof value.startPath !== "string")
+        throw new Error(`sites.${site}.startPath must be a string.`);
+      const start = new URL(value.startPath, `${url.href.replace(/\/$/, "")}/`);
+      if (start.origin !== url.origin || start.username || start.password)
+        throw new Error(`sites.${site}.startPath must stay on site.`);
+    }
     sites[site] = {
       baseUrl: url.href.replace(/\/$/, ""),
       login,
+      ...(value.startPath !== undefined ? { startPath: value.startPath } : {}),
       ...(value.demonstrations ? { demonstrations: resolve(directory, value.demonstrations) } : {}),
     };
   }
@@ -63,6 +74,7 @@ export async function loadConfig(path: string, env = process.env): Promise<Bench
     maxSteps: positiveInteger(raw.maxSteps ?? 30, "maxSteps"),
     taskTimeoutMs: positiveInteger(raw.taskTimeoutMs ?? 300_000, "taskTimeoutMs"),
     maxPages: positiveInteger(raw.maxPages ?? 40, "maxPages"),
+    profileTimeoutMs: positiveInteger(raw.profileTimeoutMs ?? 180_000, "profileTimeoutMs"),
   };
 }
 

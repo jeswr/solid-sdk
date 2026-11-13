@@ -8,22 +8,33 @@
   "sites": {
     "shopping": {
       "baseUrl": "http://127.0.0.1:7770",
-      "login": { "usernameEnv": "WA_SHOPPING_USERNAME", "passwordEnv": "WA_SHOPPING_PASSWORD" }
+      "login": {
+        "usernameEnv": "WA_SHOPPING_USERNAME",
+        "passwordEnv": "WA_SHOPPING_PASSWORD"
+      }
     },
     "shopping_admin": {
-      "baseUrl": "http://127.0.0.1:7780/admin",
+      "baseUrl": "http://127.0.0.1:7780",
       "login": {
         "usernameEnv": "WA_SHOPPING_ADMIN_USERNAME",
         "passwordEnv": "WA_SHOPPING_ADMIN_PASSWORD"
-      }
+      },
+      "startPath": "/admin"
     },
     "reddit": {
       "baseUrl": "http://127.0.0.1:9999",
-      "login": { "usernameEnv": "WA_REDDIT_USERNAME", "passwordEnv": "WA_REDDIT_PASSWORD" }
+      "login": {
+        "usernameEnv": "WA_REDDIT_USERNAME",
+        "passwordEnv": "WA_REDDIT_PASSWORD"
+      }
     },
     "gitlab": {
       "baseUrl": "http://127.0.0.1:8023",
-      "login": { "usernameEnv": "WA_GITLAB_USERNAME", "passwordEnv": "WA_GITLAB_PASSWORD" }
+      "login": {
+        "usernameEnv": "WA_GITLAB_USERNAME",
+        "passwordEnv": "WA_GITLAB_PASSWORD"
+      }
     }
-  }
+  },
+  "profileTimeoutMs": 180000
 }

@@ -590,6 +590,29 @@ export function createExecutor(options: ExecutorOptions): Executor {
     if (res.status >= 400) {
       throw new HttpError(`${operation.label}: ${describeUrl(res.url)} answered ${res.status}`);
     }
+    if (
+      operation.session === "signed-in" &&
+      /^\s*</.test(res.body) &&
+      selectElement('form input[type="password"]', parseHtml(res.body))
+    )
+      throw new SessionError("The site requires sign-in again");
+    if (operation.session === "signed-in" && /^\s*\{/.test(res.body)) {
+      let response: unknown;
+      try {
+        response = JSON.parse(res.body);
+      } catch {
+        /* extraction reports invalid JSON */
+      }
+      if (
+        response &&
+        typeof response === "object" &&
+        Object.entries(response).some(
+          ([key, value]) =>
+            /^(redirect|ajaxRedirect)$/i.test(key) && typeof value === "string" && value.length > 0,
+        )
+      )
+        throw new SessionError("The site requires sign-in again");
+    }
     if (!operation.extraction) {
       return {
         observation: {
