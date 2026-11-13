@@ -2,13 +2,26 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import type { Mandate } from "@jeswr/agent-mandate";
-import { defaultMandate, limitConstraint } from "@jeswr/agent-mandate/issue";
+import {
+  defaultMandate,
+  limitConstraint,
+  removePermission as reduce,
+} from "@jeswr/agent-mandate/issue";
 import { AGENT, evaluateIntent } from "@jeswr/agent-mandate/verify";
 import type { Account, ActionProposal } from "@jeswr/agent-model";
 import { z } from "zod";
 import { accountBinding } from "./accounts";
 
 export const DAY = 86400000;
+export const MEMORY_CATEGORIES = [
+  { id: "https://w3id.org/dpv/pd#Preference", label: "Preferences" },
+  { id: "https://w3id.org/dpv/pd#Health", label: "Health" },
+  { id: "https://w3id.org/dpv/pd#Financial", label: "Finances" },
+] as const;
+export const memoryScope = (m: Mandate): readonly string[] =>
+  m.memoryScope ?? [MEMORY_CATEGORIES[0].id];
+export const memoryCategoryLabel = (id: string): string =>
+  MEMORY_CATEGORIES.find((category) => category.id === id)?.label ?? "Other saved information";
 export const actionNames = {
   SendMessage: "send messages",
   BookAppointment: "book appointments",
@@ -30,6 +43,7 @@ export const editorSchema = z
     currency: z.string().regex(/^[A-Z]{3}$/, "Use a three-letter currency"),
     until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose an expiry date"),
     confirm: z.string(),
+    memoryScope: z.array(z.enum(MEMORY_CATEGORIES.map((category) => category.id))),
   })
   .superRefine((v, ctx) => {
     const date = Date.parse(`${v.until}T23:59:59.999Z`);
@@ -52,7 +66,7 @@ export const editorSchema = z
       ctx.addIssue({ code: "custom", path: ["confirm"], message: "Type CONFIRM to allow this" });
   });
 export type EditorValues = z.infer<typeof editorSchema>;
-export function editorDefaults(now = new Date()): EditorValues {
+export function editorDefaults(now = new Date(), current?: Mandate): EditorValues {
   return {
     bindings: [],
     recipients: [],
@@ -66,6 +80,11 @@ export function editorDefaults(now = new Date()): EditorValues {
     currency: "GBP",
     until: new Date(now.getTime() + 30 * DAY).toISOString().slice(0, 10),
     confirm: "",
+    memoryScope: current
+      ? MEMORY_CATEGORIES.filter((category) => memoryScope(current).includes(category.id)).map(
+          (category) => category.id,
+        )
+      : [MEMORY_CATEGORIES[0].id],
   };
 }
 export function testsTemplate(options: Parameters<typeof defaultMandate>[0]): Mandate {
@@ -133,6 +152,7 @@ export function buildEditorMandate(
     ...base,
     // Signed with the agreement: the executor counts spend limits only in an authenticated currency.
     currency: v.currency,
+    memoryScope: v.memoryScope,
     validUntil: new Date(`${v.until}T23:59:59.999Z`).toISOString(),
     autonomous: {
       ...base.autonomous,
@@ -181,6 +201,31 @@ export async function describeMandate(
   const rules: string[] = [];
   const own = accounts.filter((account) => account.channelHandleHash).slice(0, 32);
   const bindings = [...new Set(own.map(accountBinding))];
+  if (
+    m.prohibitions.some(
+      (rule) =>
+        rule.action === `${AGENT}BookAppointment` &&
+        !rule.target &&
+        !rule.assignee &&
+        rule.constraints?.length === 1 &&
+        rule.constraints.some(
+          (constraint) =>
+            constraint.leftOperand === `${AGENT}costExceeds` &&
+            constraint.operator === "gt" &&
+            constraint.rightOperand === 0,
+        ),
+    ) &&
+    (
+      await evaluateIntent(m, {
+        agent: m.subject,
+        action: `${AGENT}BookAppointment`,
+        target: m.subject,
+        at: now.toISOString(),
+        attributes: { [`${AGENT}costExceeds`]: 1 },
+      })
+    ).decision === "prohibited"
+  )
+    rules.push("Never: book anything that costs money");
   for (const [action, label] of Object.entries(actionNames)) {
     let confirmed = false;
     for (const binding of bindings) {
@@ -227,10 +272,31 @@ export async function describeMandate(
     if (l.leftOperand === `${AGENT}perRecipientPerDay`)
       rules.push(`Contact the same person at most ${l.rightOperand} times a day`);
   }
+  if (!m.limits.some((limit) => limit.leftOperand === `${AGENT}spendPerDay`))
+    rules.push("Daily spend limit: not set");
+  if (!m.limits.some((limit) => limit.leftOperand === `${AGENT}perRecipientPerDay`))
+    rules.push("Per-person limit: not set");
+  rules.push("Must ask me before: anything else. Bans still apply.");
   rules.push(
     `Valid until ${new Date(m.validUntil).toLocaleDateString("en-GB", { timeZone: "UTC" })}`,
+    `Memory it may use: ${memoryScope(m).map(memoryCategoryLabel).join(", ") || "none"}`,
   );
   return [...new Set(rules)];
+}
+
+export { reissueMandate } from "@jeswr/agent-mandate/issue";
+/** Turn one rule off; the shared reduction lives in @jeswr/agent-mandate. */
+export function removePermission(
+  m: Mandate,
+  set: "autonomous" | "withApproval",
+  index: number,
+  id: string,
+  now = new Date(),
+): Promise<Mandate> {
+  return reduce(m, set, index, id, {
+    knownActions: Object.keys(actionNames).map((action) => `${AGENT}${action}`),
+    now,
+  });
 }
 
 function accountIntent(m: Mandate, binding: string, recipient: Account, action: string, now: Date) {
