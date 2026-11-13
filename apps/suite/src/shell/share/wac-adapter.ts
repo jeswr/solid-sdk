@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
+import { assertWithinPodScope, isContainerUrl, refuseRedirects } from "@jeswr/guarded-fetch";
 import { escapeIri, safeHttpIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Term } from "@rdfjs/types";
-import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
+import { NamedNodeAs, NamedNodeFrom, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
 import {
@@ -48,7 +49,9 @@ interface Snapshot {
   state: SharingState;
 }
 
-/** Own WAC documents only. Missing/inherited/unsupported ACLs fail closed; never create a new ACL. */
+/** Own WAC documents only. Missing/inherited/unsupported ACLs fail closed; never create a new ACL.
+ * Commenters can create comments but cannot edit them yet.
+ */
 export class WacSharingAdapter implements SharingAdapter {
   readonly caps = wacShareCapabilities;
   readonly supportsCommenter: boolean;
@@ -60,6 +63,9 @@ export class WacSharingAdapter implements SharingAdapter {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private options: { fetch?: typeof fetch; webId: string; commentsUrl?: string }) {
     this.fetch = refuseRedirects(options.fetch ?? globalThis.fetch);
+    // Commenter Append is safe only on a container whose members inherit Read alone.
+    if (options.commentsUrl !== undefined && !isContainerUrl(this.url(options.commentsUrl)))
+      throw new ShareError("unsupported");
     this.supportsCommenter = !!options.commentsUrl;
   }
   private url(value: string) {
@@ -130,6 +136,8 @@ export class WacSharingAdapter implements SharingAdapter {
     this.url(url);
     if (this.options.commentsUrl) {
       if (this.boundUrl !== undefined && this.boundUrl !== url) throw new ShareError("unsupported");
+      // The comments container lives in the document's storage, never on another origin.
+      assertWithinPodScope(new URL("/", url).href, this.options.commentsUrl);
       this.boundUrl = url;
     }
     try {
@@ -180,20 +188,59 @@ export class WacSharingAdapter implements SharingAdapter {
       // widens at least one principal/scope, even if an earlier read called it a revocation.
       if (opts?.narrowOnly && changes.some((change) => change.add.length > 0))
         throw new ShareError("would-grant");
-      if (!changes.length) return;
+      // No early return on an empty plan: legacy comment rules may still need narrowing.
       const next = snapshot.documents.map((doc) => ({
         ...doc,
         dataset: new Store([...doc.dataset]),
       }));
+      const dirty = new Set<string>();
       for (const change of changes) {
         const doc = next.find((entry) => entry.source === change.source);
-        if (!doc?.etag || !/^"[^"\r\n]*"$/.test(doc.etag)) throw new ShareError("unsupported");
+        if (!doc) throw new ShareError("unsupported");
         this.apply(doc.dataset, change.resource, change.principal, change.add, change.remove);
+        dirty.add(doc.source);
       }
+      // Never write a state the sharing dialog cannot read back.
+      const readable = (documents: LoadedDocument[]) => {
+        try {
+          return readSharing(this.input(documents));
+        } catch {
+          return undefined;
+        }
+      };
+      const planned = readable(next);
+      if (!planned) throw new ShareError("unsupported");
+      const comments = next[1];
+      // Best-effort narrowing of the comments ACL, which only ever removes access:
+      // legacy member Append, and Read/Append left behind for people who no longer
+      // have the document (say, after a revocation's second write failed). It rides
+      // this plan's conditional write and is dropped when the result would not read
+      // back, so it never blocks an unrelated change.
+      if (comments && strongEtag(comments.etag)) {
+        const trial = { ...comments, dataset: new Store([...comments.dataset]) };
+        const people = new Set(planned.people.map((person) => person.webId));
+        const narrowed = this.narrowLegacyAppend(trial);
+        if (
+          (this.dropOrphanComments(trial, people) || narrowed) &&
+          readable([next[0] as LoadedDocument, trial])
+        ) {
+          next[1] = trial;
+          dirty.add(trial.source);
+        }
+      }
+      if (!dirty.size) return;
+      for (const doc of next)
+        if (dirty.has(doc.source) && !strongEtag(doc.etag)) throw new ShareError("unsupported");
+      // A partial failure must never leave hidden access. Remove comment access before the
+      // document grant it belongs to, and grant the document before its comment access.
+      const grantsComments = changes.some(
+        (change) => change.source === comments?.source && change.add.length > 0,
+      );
+      if (comments && !grantsComments) next.reverse();
       // Prepare every body before the first write. Never leave half a plan due to local validation.
       const writes = await Promise.all(
         next
-          .filter((doc) => changes.some((change) => change.source === doc.source))
+          .filter((doc) => dirty.has(doc.source))
           .map(async (doc) => ({ doc, body: await this.serialize(doc.dataset) })),
       );
       try {
@@ -274,13 +321,10 @@ export class WacSharingAdapter implements SharingAdapter {
   ) {
     const predicate = principal.kind === "public" ? `${ACL}agentClass` : `${ACL}agent`;
     const identifier = principal.kind === "public" ? PUBLIC : principal.webId;
-    // A container (the comments container) is governed by accessTo for itself and default
-    // for its members; they must move together or a downgrade leaves member access behind.
-    // Only symmetric authorizations are changed; any other shape fails closed. Known cost:
-    // a commenter's Append also reaches existing comment resources through acl:default (they
-    // could add triples to another person's comment). Narrowing members to Read needs an
-    // asymmetric shape this projection does not read yet; tracked in the tracker.
-    const container = new URL(resource).pathname.endsWith("/");
+    // The projection has validated effective scopes. Comments may use split container
+    // and member grants; ordinary folders still require symmetric authorizations.
+    const container = isContainerUrl(resource);
+    const comments = container && resource === this.options.commentsUrl;
     const modes = new Set<string>();
     for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
       const scoped = new ScopedAuthorization(auth as Term, dataset, DataFactory);
@@ -290,18 +334,17 @@ export class WacSharingAdapter implements SharingAdapter {
         container &&
         (scoped.values(`${ACL}default`).has(resource) ||
           scoped.values(`${ACL}defaultForNew`).has(resource));
-      if (container && own !== members) throw new ShareError("unsupported");
-      if (!own) continue;
-      for (const mode of auth.mode) modes.add(mode);
+      if (container && !comments && own !== members) throw new ShareError("unsupported");
+      if (!own && !members) continue;
+      if (own) for (const mode of auth.mode) modes.add(mode);
       // Split the principal away from ALL other principals before changing its target scope.
-      const subject = DataFactory.blankNode();
-      const isolated = new ScopedAuthorization(subject, dataset, DataFactory);
-      for (const quad of [...dataset.match(auth as Term)]) {
-        dataset.add(DataFactory.quad(subject, quad.predicate, quad.object));
-      }
+      const isolated = this.copyAuthorization(auth);
       scoped.values(predicate).delete(identifier);
+      if (!scoped.agent.size && !scoped.agentClass.size && !scoped.values(`${ACL}agentGroup`).size)
+        this.dropAuthorization(scoped);
       isolated.values(`${ACL}agent`).clear();
       isolated.values(`${ACL}agentClass`).clear();
+      isolated.values(`${ACL}agentGroup`).clear();
       isolated.values(predicate).add(identifier);
       isolated.values(`${ACL}accessTo`).delete(resource);
       if (container) {
@@ -313,7 +356,7 @@ export class WacSharingAdapter implements SharingAdapter {
         !isolated.values(`${ACL}default`).size &&
         !isolated.values(`${ACL}defaultForNew`).size
       ) {
-        for (const quad of [...dataset.match(isolated as Term)]) dataset.delete(quad);
+        this.dropAuthorization(isolated);
       }
     }
     for (const mode of remove) modes.delete(ACL + mode);
@@ -322,9 +365,93 @@ export class WacSharingAdapter implements SharingAdapter {
     const grant = new ScopedAuthorization(DataFactory.blankNode(), dataset, DataFactory);
     grant.type.add(`${ACL}Authorization`);
     grant.values(`${ACL}accessTo`).add(resource);
-    if (container) grant.values(`${ACL}default`).add(resource);
     grant.values(predicate).add(identifier);
     for (const mode of modes) grant.mode.add(mode);
+    const memberModes = [...modes].filter((mode) => !comments || mode !== `${ACL}Append`);
+    if (container && memberModes.length) {
+      if (memberModes.length === modes.size) grant.values(`${ACL}default`).add(resource);
+      else {
+        const members = new ScopedAuthorization(DataFactory.blankNode(), dataset, DataFactory);
+        members.type.add(`${ACL}Authorization`);
+        members.values(`${ACL}default`).add(resource);
+        members.values(predicate).add(identifier);
+        for (const mode of memberModes) members.mode.add(mode);
+      }
+    }
+  }
+  private copyAuthorization(auth: Authorization): ScopedAuthorization {
+    const copy = new ScopedAuthorization(DataFactory.blankNode(), auth.dataset, DataFactory);
+    for (const quad of [...auth.dataset.match(auth as Term)])
+      SetFrom.subjectPredicate(copy, quad.predicate.value, TermAs.term, TermFrom.itself).add(
+        quad.object,
+      );
+    return copy;
+  }
+  private dropAuthorization(auth: Authorization): void {
+    for (const quad of [...auth.dataset.match(auth as Term)]) auth.dataset.delete(quad);
+  }
+  private narrowLegacyAppend(doc: LoadedDocument): boolean {
+    let changed = false;
+    for (const auth of [...new AclResource(doc.dataset, DataFactory).authorizations]) {
+      const scoped = new ScopedAuthorization(auth as Term, doc.dataset, DataFactory);
+      // Only Read/Append rules are legacy commenter shapes. Write already reaches members
+      // as Append, and Control holders can rewrite this ACL; leave both unchanged.
+      if (
+        !auth.mode.has(`${ACL}Append`) ||
+        [...auth.mode].some((mode) => mode !== `${ACL}Read` && mode !== `${ACL}Append`) ||
+        !["default", "defaultForNew"].some((p) => scoped.values(ACL + p).has(doc.resource))
+      )
+        continue;
+      // Split only the mode and target placement, retaining every principal and
+      // unrelated scope. Never add a target when narrowing a defaults-only rule.
+      const append = this.copyAuthorization(auth);
+      append.mode.clear();
+      append.mode.add(`${ACL}Append`);
+      append.values(`${ACL}default`).delete(doc.resource);
+      append.values(`${ACL}defaultForNew`).delete(doc.resource);
+      if (
+        !append.values(`${ACL}accessTo`).size &&
+        !append.values(`${ACL}default`).size &&
+        !append.values(`${ACL}defaultForNew`).size
+      )
+        this.dropAuthorization(append);
+      scoped.mode.delete(`${ACL}Append`);
+      if (!scoped.mode.size) this.dropAuthorization(scoped);
+      changed = true;
+    }
+    return changed;
+  }
+  /** Remove Read/Append comment rules for agents with no access to the document. Rules
+   * carrying Write or Control are not the dialog's commenter shape; leave them unchanged. */
+  private dropOrphanComments(doc: LoadedDocument, people: Set<string>): boolean {
+    let changed = false;
+    const targets = ["accessTo", "default", "defaultForNew"].map((p) => ACL + p);
+    for (const auth of [...new AclResource(doc.dataset, DataFactory).authorizations]) {
+      const scoped = new ScopedAuthorization(auth as Term, doc.dataset, DataFactory);
+      if (
+        [...auth.mode].some((mode) => mode !== `${ACL}Read` && mode !== `${ACL}Append`) ||
+        !targets.some((target) => scoped.values(target).has(doc.resource))
+      )
+        continue;
+      for (const agent of [...scoped.values(`${ACL}agent`)]) {
+        if (people.has(agent)) continue;
+        // Keep any unrelated scopes on a private copy; drop only this container's targets.
+        const rest = this.copyAuthorization(auth);
+        for (const p of ["agent", "agentClass", "agentGroup"]) rest.values(ACL + p).clear();
+        rest.values(`${ACL}agent`).add(agent);
+        for (const target of targets) rest.values(target).delete(doc.resource);
+        if (!targets.some((target) => rest.values(target).size)) this.dropAuthorization(rest);
+        scoped.values(`${ACL}agent`).delete(agent);
+        changed = true;
+      }
+      if (
+        !scoped.values(`${ACL}agent`).size &&
+        !scoped.values(`${ACL}agentClass`).size &&
+        !scoped.values(`${ACL}agentGroup`).size
+      )
+        this.dropAuthorization(scoped);
+    }
+    return changed;
   }
   private serialize(dataset: DatasetCore): Promise<string> {
     for (const quad of dataset)
@@ -346,4 +473,8 @@ export class WacSharingAdapter implements SharingAdapter {
       writer.end((error, body) => (error ? reject(error) : resolve(body)));
     });
   }
+}
+
+function strongEtag(etag: string | null | undefined): etag is string {
+  return !!etag && /^"[^"\r\n]*"$/.test(etag);
 }
