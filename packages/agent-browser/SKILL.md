@@ -127,3 +127,8 @@ Fallback review invariants:
 - Bind grants to document/frame generation and the exact pending request; recheck immediately
   before dispatch. Approval text quotes page strings, escapes controls/newlines, marks truncation,
   shows method/path and uses the actual visible enabled submitter and its form.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The opt-in HTML forum cycle in webarena-bench uses SAB_LIVE_FORUM_URL, learned operations,
+scripted planning, twelve deny/approve decisions, repeat refusal and ownership-checked cleanup.
+Keep this fixture in test support; forum page names and credentials never belong in src/.

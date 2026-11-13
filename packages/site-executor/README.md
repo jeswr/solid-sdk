@@ -413,3 +413,12 @@ objects to verify the effective token values.
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 `secretRedactor(secrets)` is also exported as a read-only utility for browser snapshot consumers.
 This exposes the existing mixed/nested percent-encoding redactor; executor behavior is unchanged.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+HTML form templates also allow numeric identity placeholders in URL-encoded form field names
+and form CSRF target names. HTML CSRF selectors allow placeholders containing only ASCII letters,
+digits, underscores and hyphens, so learned route slugs cannot introduce CSS syntax. Missing or
+invalid substitutions refuse before transmission. The expanded names enter the ordinary wire
+inventory, fingerprint, token collision checks and approval binding; form values remain encoded
+structurally. This small compiler extension supports forms whose names contain an item ID.
+`test/form-identities.test.ts` covers denial, one approved POST, repeat protection and injection.

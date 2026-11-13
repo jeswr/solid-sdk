@@ -178,20 +178,41 @@ export function fillJsonTemplate(
   return result === DROP ? null : result;
 }
 
+/** Numeric form-name and ASCII selector slots cannot introduce fields or CSS syntax. */
+function identitySlots(
+  template: string,
+  values: Readonly<Record<string, string>>,
+  selector = false,
+  placeholders: ReadonlySet<string> = new Set(),
+): string {
+  return template.replace(INNER_PLACEHOLDER, (_all, name: string) => {
+    const value = Object.hasOwn(values, name) ? values[name] : undefined;
+    if (value !== undefined && placeholders.has(name)) return value;
+    if (value === undefined || !(selector ? /^[A-Za-z0-9_-]+$/ : /^\d+$/).test(value))
+      throw new BindingError(
+        selector
+          ? "CSRF selector slot requires an ASCII slug"
+          : "form identity slot requires a numeric identifier",
+      );
+    return value;
+  });
+}
+
 function fillFormTemplate(
   template: string,
   values: Readonly<Record<string, string>>,
+  placeholders: ReadonlySet<string>,
 ): [string, string][] {
   const fields: [string, string][] = [];
   for (const [k, v] of new URLSearchParams(template)) {
     const m = WHOLE_PLACEHOLDER.exec(v);
     if (m) {
       const value = Object.hasOwn(values, m[1] as string) ? values[m[1] as string] : undefined;
-      if (value !== undefined) fields.push([k, value]);
+      if (value !== undefined) fields.push([identitySlots(k, values, false, placeholders), value]);
       continue;
     }
     fields.push([
-      k,
+      identitySlots(k, values, false, placeholders),
       v.replace(INNER_PLACEHOLDER, (_all, name: string) =>
         Object.hasOwn(values, name) ? (values[name] as string) : "",
       ),
@@ -326,7 +347,20 @@ export function compileOperation(
     method: request.method,
     url,
     headers,
-    csrf: operation.csrf ?? [],
+    csrf: (operation.csrf ?? []).map((rule) => ({
+      ...rule,
+      target:
+        rule.target.kind === "form"
+          ? { ...rule.target, name: identitySlots(rule.target.name, present, false, placeholders) }
+          : rule.target,
+      source:
+        rule.source.kind === "html"
+          ? {
+              ...rule.source,
+              selector: identitySlots(rule.source.selector, present, true, placeholders),
+            }
+          : rule.source,
+    })),
     modelHeaders: Object.keys(headers),
     pathFields: pathFields(request.urlTemplate, present, url),
   };
@@ -367,7 +401,7 @@ export function compileOperation(
   ) {
     const fields =
       request.bodyTemplate !== undefined
-        ? fillFormTemplate(request.bodyTemplate, present)
+        ? fillFormTemplate(request.bodyTemplate, present, placeholders)
         : bodyParams.map((p): [string, string] => [
             decodeURIComponent(p.name),
             present[p.name] as string,

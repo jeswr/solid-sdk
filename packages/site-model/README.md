@@ -267,3 +267,9 @@ customers → Person, products → Product, orders → Order. Credit memo/refund
 with textual additionalType because schema.org supplies no corresponding document class.
 `responseIdentity(location)` recognizes explicit `/id/<id>` routes or terminal numeric/UUID
 segments in server redirects. Executors additionally enforce origin and secret checks.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Response identities also recognize a numeric segment immediately before a hyphenated canonical
+slug (for example `/topics/42/a-test-story`). Origin and secret checks still belong to the caller;
+queries/fragments are stripped. HTML documents with several record classes use separate operations,
+each with its own existing Extraction. No shared contract extension is required.

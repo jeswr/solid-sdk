@@ -19,3 +19,13 @@ it.each([
 });
 it("ignores user search words", () =>
   expect(endpointItemType("https://shop.test/data?search=invoice")).toBeUndefined());
+
+it("extracts server redirect identities with a canonical display slug, without keeping its query", async () => {
+  const { responseIdentity } = await import("../src/response-identity.js");
+  expect(responseIdentity("https://forum.test/topics/42/a-test-story?tracking=1#reply")).toEqual({
+    url: "https://forum.test/topics/42/a-test-story",
+    identifier: "42",
+  });
+  expect(responseIdentity("https://forum.test/topics/a-test-story")).toBeUndefined();
+  expect(responseIdentity("https://forum.test/topics/42/edit")).toBeUndefined();
+});

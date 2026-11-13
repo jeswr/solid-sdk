@@ -10,7 +10,8 @@ import type { CsrfRule, LearnMethod } from "@jeswr/site-model";
 import { isExecutorOwnedHeader } from "@jeswr/site-model";
 import { formFields } from "./form-body.js";
 import { formCsrfRules, isCsrfFieldName } from "./forms.js";
-import { descendants, parseHtml } from "./html.js";
+import { attr, descendants, parseHtml } from "./html.js";
+import { sortLinks } from "./navigation-inputs.js";
 import type { SessionTokens } from "./session-tokens.js";
 import type {
   CandidateParam,
@@ -56,6 +57,21 @@ export function collectKnownIds(requests: RecordedRequest[]): Set<string> {
       for (const el of descendants(parseHtml(r.bodySample))) {
         for (const [name, value] of Object.entries(el.attribs)) {
           if (/^data-(?:.*-)?(?:id|sku|slug)$/.test(name) && value) ids.add(value);
+        }
+        // Link-owned slugs in record headings and author/profile links are identifiers,
+        // unlike arbitrary words in search parameters or navigation button labels.
+        if (
+          el.name === "a" &&
+          ((el.parent?.type === "tag" && /^h[1-6]$/.test(el.parent.name)) ||
+            /(?:author|submitter|forum)/.test(attr(el, "class") ?? ""))
+        ) {
+          try {
+            const link = new URL(attr(el, "href") ?? "", r.url);
+            const tail = decodeURIComponent(link.pathname.split("/").filter(Boolean).at(-1) ?? "");
+            if (link.origin === new URL(r.url).origin && tail && !link.search) ids.add(tail);
+          } catch {
+            /* malformed links are not identity evidence */
+          }
         }
       }
     }
@@ -191,6 +207,27 @@ export function clusterRequests(
 ): EndpointCandidate[] {
   const groups = new Map<string, RecordedRequest[]>();
   const segmentsOf = new Map<RecordedRequest, string[]>();
+  const sortPaths = new Set<string>();
+  for (const r of requests) {
+    if (!r.bodySample || !isHtmlType(r.contentType)) continue;
+    const groups = new Map<string, Set<string>>();
+    for (const link of sortLinks(r.bodySample)) {
+      try {
+        const url = new URL(attr(link, "href") ?? "", r.url);
+        const segments = url.pathname.split("/").filter(Boolean);
+        if (url.origin !== siteOrigin || segments.length < 2) continue;
+        const prefix = segments.slice(0, -1).join("/");
+        const group = groups.get(prefix) ?? new Set<string>();
+        group.add(url.pathname);
+        groups.set(prefix, group);
+      } catch {
+        /* malformed navigation */
+      }
+    }
+    for (const group of groups.values())
+      if (group.size >= 2) for (const path of group) sortPaths.add(path);
+  }
+  const sortPositions = new Map<RecordedRequest, number>();
   for (const r of requests) {
     if (
       r.blocked ||
@@ -216,13 +253,20 @@ export function clusterRequests(
       }
     });
     segmentsOf.set(r, segments);
+    const sortAt =
+      method === "GET" && sortPaths.has(url.pathname)
+        ? segments.findLastIndex((v) => v !== "")
+        : -1;
+    if (sortAt >= 0) sortPositions.set(r, sortAt);
     const shape = segments
       .map((seg, i) =>
-        i > 0 && seg && tokens.has(seg)
-          ? "{session}"
-          : valueKind(seg, knownIds) !== "text"
-            ? "{}"
-            : seg,
+        i === sortAt
+          ? "{navigation}"
+          : i > 0 && seg && tokens.has(seg)
+            ? "{session}"
+            : valueKind(seg, knownIds) !== "text"
+              ? "{}"
+              : seg,
       )
       .join("/");
     // Dispatch selectors identify different resources sharing one URL; search/filter/page
@@ -243,13 +287,21 @@ export function clusterRequests(
     const segs = segmentsOf.get(first) as string[];
     const varPositions: Array<{ index: number; kind: ParamKind; prev: string }> = [];
     segs.forEach((seg, i) => {
-      if (i === 0 || !seg || tokens.has(seg) || valueKind(seg, knownIds) === "text") return;
+      if (
+        i === 0 ||
+        !seg ||
+        tokens.has(seg) ||
+        (valueKind(seg, knownIds) === "text" && sortPositions.get(first) !== i)
+      )
+        return;
       const values = samples.map((s) => segmentsOf.get(s)?.[i] ?? "");
       const prev =
         [...segs.slice(0, i)].reverse().find((x) => x && valueKind(x, knownIds) === "text") ?? "";
       varPositions.push({ index: i, kind: strongestKind(values, knownIds), prev });
     });
     const names = nameVars(varPositions);
+    const sortAt = sortPositions.get(first);
+    if (sortAt !== undefined) names.set(sortAt, "sort");
     // Failed probes are guesses, not usable examples. Keep them as trace/shape evidence only.
     const successful = samples.filter(
       (s) =>
@@ -342,7 +394,7 @@ export function clusterRequests(
     const queryVars = params.filter((p) => p.location === "query").map((p) => p.name);
     const urlTemplate = `${siteOrigin}${path}${fixed.size ? `?${fixed}` : ""}${queryVars.length ? `{${fixed.size ? "&" : "?"}${queryVars.join(",")}}` : ""}`;
     const candidate: EndpointCandidate = {
-      key: templateShape(method, urlTemplate),
+      key: templateShape(method, urlTemplate) + (sortAt === undefined ? "" : "|navigation"),
       method,
       urlTemplate,
       params,
@@ -607,7 +659,11 @@ export function matchRequest(
   if (candidate.bodyTemplate)
     for (const [wireName, placeholder] of new URLSearchParams(candidate.bodyTemplate)) {
       const name = /^\{([A-Za-z0-9_]+)\}$/.exec(placeholder)?.[1];
-      const value = rv.body.find(([key]) => key === wireName)?.[1];
+      const boundName = wireName.replace(
+        /\{([A-Za-z0-9_]+)\}/g,
+        (_match, name: string) => values[name] ?? "",
+      );
+      const value = rv.body.find(([key]) => key === boundName)?.[1];
       if (name && value !== undefined) values[name] = value;
     }
   return values;

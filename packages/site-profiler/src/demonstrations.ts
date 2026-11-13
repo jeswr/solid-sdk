@@ -107,7 +107,11 @@ export function buildFlow(
       if (identity) return { [s("identifier")]: [identity.identifier], [s("url")]: [identity.url] };
     }
     if (!ex || body === undefined) return undefined;
-    return applyExtraction(ex, body, st.request.url)[0];
+    return applyExtraction(
+      { ...ex, fields: ex.fields.filter((f) => !f.untrusted) },
+      body,
+      st.request.url,
+    )[0];
   });
   const required = new Set<number>();
   const selectionReads = new Map<number, { step: number; selection: LearnedSelection }>();

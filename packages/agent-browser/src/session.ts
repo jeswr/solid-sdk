@@ -6,6 +6,7 @@ import {
   createExecutor,
   type ExecutorOptions,
   type SessionProvider,
+  secretRedactor,
   siteOrigin,
 } from "@jeswr/site-executor";
 import { type ActionRequest, type Operation, SCHEMA, type SiteModel } from "@jeswr/site-model";
@@ -29,17 +30,7 @@ function secretSet(sessions: SessionProvider, site: string, persona?: string): S
 }
 
 function redact(values: Set<string>, text: string): string {
-  let out = text;
-  for (const value of [...values].filter(Boolean).sort((a, b) => b.length - a.length)) {
-    for (const form of new Set([
-      value,
-      encodeURIComponent(value),
-      JSON.stringify(value).slice(1, -1),
-    ])) {
-      out = out.split(form).join("[redacted]");
-    }
-  }
-  return out;
+  return secretRedactor(values)(text);
 }
 
 export interface ExecutorFetchOptions {

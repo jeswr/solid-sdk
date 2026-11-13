@@ -68,3 +68,9 @@ Created identities may come from checked on-origin 301/302/303 redirects and sup
 bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
 The harness's opt-in live test creates and cleans up only its own product, blocks background
 preference writes and uses a scripted planner. Never invoke a planner/model CLI for acceptance.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+A canonical redirect may append a hyphenated display slug to a numeric identity. Keep response
+identity parsing shared by demonstration bindings and executor receipts, with origin/secret
+checks at the executor boundary. Mixed HTML record classes need separate operations, not changes
+to the Extraction contract.

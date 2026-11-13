@@ -42,6 +42,17 @@ const site = createServer((req, res) => {
     );
     return;
   }
+  if (path === "/demo-form") {
+    html(
+      '<form method="post" action="/demo-save"><textarea name="entry[body]"></textarea><input type="hidden" name="entry[_token]" value="demonstration-only-csrf-secret"><button>Save</button></form>',
+    );
+    return;
+  }
+  if (path === "/demo-save" && req.method === "POST") {
+    res.writeHead(303, { location: "/demo-start" });
+    res.end();
+    return;
+  }
   if (path === "/stall") return;
   if (path === "/entry") {
     res.writeHead(302, { location: "/portal" });
@@ -198,4 +209,27 @@ it("bounds large demonstrated request bodies and structurally redacts multipart 
   } finally {
     await context.close();
   }
+});
+
+it("redacts a bracketed CSRF token first encountered on a demonstration-only page", async () => {
+  const result = await profileSite({
+    startUrl: `${origin}/demo-start`,
+    browser,
+    maxPages: 1,
+    demonstrations: [
+      {
+        name: "own-entry",
+        async run(page) {
+          await page.goto(`${origin}/demo-form`);
+          await page.locator("textarea").fill("Example entry");
+          await Promise.all([page.waitForNavigation(), page.locator("button").click()]);
+        },
+      },
+    ],
+  });
+  expect(result.warnings.filter((w) => w.startsWith("demonstration"))).toEqual([]);
+  expect(JSON.stringify(result.trace)).not.toContain("demonstration-only-csrf-secret");
+  expect(
+    result.model.operations.find((o) => o.request.method === "POST")?.csrf?.[0]?.target.name,
+  ).toBe("entry[_token]");
 });

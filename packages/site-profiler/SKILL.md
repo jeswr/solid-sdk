@@ -78,3 +78,13 @@ site submits no explicit selected IDs. Never drop or fix that selector to a demo
   header parameters or CSRF header targets. Keep body encoding in request.contentType. Verification
   derives Accept from extraction format; recorded JSON Accept is not a model header. Vendor-specific
   Accept requires a future first-class, inventoried field.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+HTML record learning uses structural evidence, never theme names or site routes. Keep text
+untrusted, nested comment selectors bounded to their own article, parent links explicit, and
+record classes separate when one document contains several. Sort options and paging cursors
+come from visible navigation; do not default to a next-page cursor. Demonstrated form tokens
+must belong to the particular action/form. Numeric IDs in names and token selectors are slots,
+not demonstration constants. Only witnessed redirect aliases may shorten a CSRF source route.
+Never infer a write or reversible vote from page controls alone. The opt-in forum acceptance is
+in webarena-bench (SAB_LIVE_FORUM_URL); reads also run with no demonstrations.

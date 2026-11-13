@@ -220,3 +220,24 @@ describe("host login and real executor composition (in-process transport)", () =
     ).rejects.toThrow("no password login");
   });
 });
+
+it("keeps numeric identities intact when a preference cookie has a one-character value", async () => {
+  const model = modelFixture(),
+    sessions = new InMemorySessions();
+  sessions.set(model.site, undefined, {
+    cookies: [
+      { name: "preference", value: "1", domain: "shop.test", path: "/" },
+      { name: "session", value: "fictional-session-secret", domain: "shop.test", path: "/" },
+    ],
+  });
+  const executor = createTaskExecutor({ model, sessions });
+  // Loading a session refreshes the host's known secret set even for a nonmatching request.
+  await executor.execute({
+    node: "urn:request",
+    types: ["https://schema.org/UnknownAction"],
+    values: () => [],
+  });
+  expect(executor.redact?.("http://127.0.0.1:9999/items/18 fictional-session-secret")).toBe(
+    "http://127.0.0.1:9999/items/18 [redacted]",
+  );
+});

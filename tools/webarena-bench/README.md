@@ -312,3 +312,30 @@ rules use the witnessed hidden input. Cookie sources still take precedence when 
 The grid deletion submits `excluded=false` with the unique-SKU search rather than selected IDs;
 that search is required and dynamic in the learned DeleteAction. Generic script-only CSRF sources
 are reported and excluded instead of inventing a new contract source kind.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Opt-in disposable HTML forum acceptance
+
+```sh
+SAB_LIVE_FORUM_URL=http://127.0.0.1:9999 \
+  SAB_CHROMIUM_PATH=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome \
+  pnpm -w exec vitest run --root tools/webarena-bench test/live-forum.test.ts
+```
+
+This separate switch targets the disposable WebArena Postmill fixture and verifies the sandbox
+account MarvelsGrantMan136 / test1234. Two read-only seed profiles (a thread and a sorted forum)
+cover the read acceptance without demonstrations: forum lists,
+sorted/paged posts, comments, search and a profile replay as typed RDF, with user text untrusted.
+The UI recording in test/support/forum.ts creates its own random SAB test post and comment,
+edits/votes, then deletes both. It records native HTML votes and omits the unused upload control.
+The executor acceptance learns and RDF-round-trips that actual model, signs in afresh through
+its cookie-check route, and uses a scripted planner. Each of six writes is first denied, then
+approved; all twelve summaries are recorded. Reads verify changes/deletion, and repeating the
+same comment in the task sends nothing. Cleanup checks the random title and author before
+removing the test post, including failure recovery. No model CLI, evaluator, API documentation
+or benchmark task is used; no site-specific constants are added to production source.
+
+The create request obtains its forum ID from an earlier learned options read. New post/comment
+identities come from executor receipts. Forum verification uses the learned exclusive ID cursor,
+so imports whose existing IDs exceed the fresh sequence still show the created item. Optional
+SAB_LIVE_OUTPUT_DIR stores a compact forum-acceptance.json with operations and approval summaries.

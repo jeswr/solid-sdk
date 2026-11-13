@@ -253,3 +253,12 @@ model/executor pair stays available when admission fails.
 reapproval; wire-only fingerprints and the one-POST constructor regression; learning/construction
 and task-processing failures; first-use meta/script tokens; encoded snapshot secrets and URL
 credentials; navigation during approval; and quoted, submitter-specific approval summaries.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`tools/webarena-bench/test/live-forum.test.ts` additionally exercises a disposable HTML forum.
+A scripted planner creates a post, comments, edits, votes, deletes the comment and deletes the
+post, with deny/approve decisions recorded at every write and an identical-comment repeat refusal.
+The host logs in through the learned cookie-check login route; page HTML stays outside planner
+history. Enable with SAB_LIVE_FORUM_URL; see the harness README for the command.
+Host trace redaction shares the executor's eight-character minimum and encoded-secret matching.
+Short preference-cookie values such as `1` therefore cannot corrupt RDF namespaces or item IDs.

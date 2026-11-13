@@ -179,3 +179,25 @@ it("keeps a login page source to bootstrap cookies in a fresh host session", () 
   );
   expect(c.csrf[0]?.source.kind).toBe("html");
 });
+
+it("preserves independently learned URL session decoration when scoping a demonstrated form token", () => {
+  const r = request();
+  const c = required(clusterRequests([r], origin)[0]);
+  const decoration = {
+    source: {
+      kind: "html" as const,
+      urlTemplate: `${origin}/account`,
+      selector: 'input[name="ticket"]',
+      attribute: "value",
+    },
+    target: { kind: "query" as const, name: "sessionPath" },
+  };
+  c.csrf.push(decoration);
+  const learned = learnDemonstratedForm(c, [
+    {
+      url: `${origin}/products/new`,
+      html: `<form action="/products/save" method="post"><input type="hidden" name="form_key" value="fixture-form-token"></form>`,
+    },
+  ]);
+  expect(learned.csrf).toContainEqual(decoration);
+});

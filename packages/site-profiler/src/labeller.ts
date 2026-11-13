@@ -151,7 +151,21 @@ export class HeuristicLabeller implements Labeller {
         confidence: 0.7,
       };
     }
-    if (c.method === "DELETE" || /(?:^|\/)(?:mass[-_]?)?(?:delete|remove)(?:\/|$)/.test(joined)) {
+    if (
+      c.params.some((p) => p.name === "choice") &&
+      /vote/i.test(`${c.form?.selector ?? ""} ${c.form?.submitLabels.join(" ") ?? ""}`)
+    ) {
+      return {
+        actionType: s("VoteAction"),
+        label: "Vote on item",
+        effect: "irreversible-write",
+        confidence: 0.7,
+      };
+    }
+    if (
+      c.method === "DELETE" ||
+      /(?:^|\/)(?:mass[-_]?)?(?:delete|remove)(?:[_-][a-z]+)?(?:\/|$)/.test(joined)
+    ) {
       return {
         actionType: s("DeleteAction"),
         label: `Delete ${noun(c, "item")}`,
@@ -174,9 +188,20 @@ export class HeuristicLabeller implements Labeller {
         confidence: 0.5,
       };
     }
+    if (c.params.some((p) => p.name === "text") && /(?:comment|reply)/.test(joined)) {
+      return {
+        actionType: s("CommentAction"),
+        label: "Comment on discussion",
+        effect: "irreversible-write",
+        confidence: 0.7,
+      };
+    }
     return {
       actionType: s("CreateAction"),
-      label: `Create ${noun(c, "item")}`,
+      label:
+        c.params.some((p) => p.name === "title") && c.params.some((p) => p.name === "body")
+          ? "Create discussion"
+          : `Create ${noun(c, "item")}`,
       effect: "irreversible-write",
       confidence: 0.4,
     };

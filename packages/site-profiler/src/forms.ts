@@ -21,7 +21,15 @@ const CSRF_NAME =
   /csrf|xsrf|authenticity|anti-?forgery|_token$|^token$|nonce|requestverification|form[_-]?key/i;
 
 export function isCsrfFieldName(name: string): boolean {
-  return CSRF_NAME.test(name);
+  return (
+    CSRF_NAME.test(name) ||
+    CSRF_NAME.test(
+      name
+        .split(/[[\].]/)
+        .filter(Boolean)
+        .at(-1) ?? "",
+    )
+  );
 }
 
 function formSelector(form: Element, all: Element[]): string {
@@ -133,7 +141,11 @@ export function parseForms(html: string, pageUrl: string): FormInfo[] {
           (el.name === "button" && (attr(el, "type") ?? "submit") === "submit") ||
           (el.name === "input" && attr(el, "type") === "submit"),
       )
-      .map((el) => (el.name === "input" ? (attr(el, "value") ?? "Submit") : text(el)));
+      .map((el) =>
+        el.name === "input"
+          ? (attr(el, "value") ?? "Submit")
+          : text(el) || attr(el, "aria-label") || attr(el, "title") || "Submit",
+      );
     out.push({
       pageUrl,
       method,

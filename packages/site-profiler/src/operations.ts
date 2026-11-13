@@ -70,6 +70,7 @@ export function toParameter(
     label.actionType === sab("LoginAction") &&
     (VAULT_PARAM.test(
       decodeURIComponent(p.name)
+        .replace(/^_+/, "")
         .split(/[[\].]/)
         .filter(Boolean)
         .at(-1) ?? "",
@@ -83,10 +84,31 @@ export function toParameter(
       required: true,
       description: "Supplied by the credential vault, never by the planner.",
     };
+  } else if (p.location === "path" && p.name === "forumName") {
+    param = {
+      ...base,
+      path: [s("object"), s("isPartOf"), s("name")],
+      range: xsd("string"),
+      required: true,
+    };
   } else if (p.location === "path" && p.kind !== "text" && /sku/i.test(p.name)) {
     param = { ...base, path: [s("object"), s("sku")], range: xsd("string"), required: true };
   } else if (p.location === "path" && /\/(?:id|identifier)\/\{/.test(c.urlTemplate)) {
     param = { ...base, path: [s("object"), s("identifier")], range: xsd("string"), required: true };
+  } else if (p.location === "path" && c.params.filter((q) => q.location === "path").length > 1) {
+    const numeric = c.params.filter((q) => q.location === "path" && q.kind === "numeric");
+    const target = numeric.at(-1);
+    param = {
+      ...base,
+      path:
+        p === target
+          ? [s("object"), s("identifier")]
+          : numeric.includes(p)
+            ? [s("about"), s("identifier")]
+            : [sab(p.name)],
+      range: xsd("string"),
+      required: true,
+    };
   } else if (p.location === "path") {
     param = {
       ...base,
@@ -95,8 +117,25 @@ export function toParameter(
       required: true,
       description: "The object's identifier (last path segment of its IRI).",
     };
-  } else if (SEARCH_PARAM.test(p.name) && (p.location === "query" || p.location === "form")) {
+  } else if (
+    SEARCH_PARAM.test(p.name) &&
+    (p.location === "query" ||
+      (p.location === "form" && (p.name !== "text" || label.actionType === s("SearchAction"))))
+  ) {
     param = { ...base, path: [s("query")], range: xsd("string"), required: true };
+  } else if (/^(title|body|text|forum)$/i.test(p.name) && c.method !== "GET") {
+    const props: Record<string, string> = {
+      title: "headline",
+      body: "text",
+      text: "text",
+      forum: "isPartOf",
+    };
+    param = {
+      ...base,
+      path: p.name === "text" ? [s("text")] : [s("object"), s(props[p.name] ?? p.name)],
+      range: xsd("string"),
+      required: p.required,
+    };
   } else if (/^(name|price)$/i.test(p.name) && c.method !== "GET") {
     param = {
       ...base,
@@ -149,6 +188,14 @@ export function toParameter(
     param.options = p.options;
     const dflt = p.selected ?? p.options[0];
     if (dflt !== undefined && param.default === undefined) param.default = dflt;
+    param.required = false;
+  }
+  if (
+    ["checkbox", "radio"].includes(p.formType ?? "") &&
+    example !== undefined &&
+    param.default === undefined
+  ) {
+    param.default = example;
     param.required = false;
   }
   if (p.hidden && p.examples[0] !== undefined && param.default === undefined) {

@@ -15,8 +15,10 @@ import { emptyListProbe } from "./empty-list-probe.js";
 import { applyExtraction, proposeHtmlExtraction, proposeJsonExtraction } from "./extraction.js";
 import { addFilterInputs } from "./filters.js";
 import { isCsrfFieldName, parseForms } from "./forms.js";
+import { htmlRecordExtractions } from "./html-records.js";
 import { heuristicLabeller, isLoginCandidate } from "./labeller.js";
 import { type LoginObservation, performLogin, probeCandidates, refreshInfo } from "./login.js";
+import { addNavigationInputs } from "./navigation-inputs.js";
 import { buildOperation } from "./operations.js";
 import { Recorder } from "./recorder.js";
 import { analyseScripts } from "./scripts.js";
@@ -78,7 +80,7 @@ export function proposeExtraction(c: EndpointCandidate): Extraction | undefined 
     if (!body || sample.bodyTruncated || (sample.status ?? 0) >= 400) continue;
     let ex: Extraction | undefined;
     if (isJsonType(sample.contentType)) ex = proposeJsonExtraction(body, c.urlTemplate);
-    else if (isHtmlType(sample.contentType)) ex = proposeHtmlExtraction(body);
+    else if (isHtmlType(sample.contentType)) ex = proposeHtmlExtraction(body, sample.url);
     if (!ex) continue;
     const items = applyExtraction(ex, body, sample.url).filter((i) => Object.keys(i).length);
     const score = items.length * 10 + ex.fields.length;
@@ -303,6 +305,14 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         formPages.push({ url: r.url, html: r.bodySample });
       }
     }
+    // Redirect aliases are witnessed GET routes to the same form, useful when a
+    // canonical URL appends an item-specific display slug after its identity.
+    for (const r of recorder.trace) {
+      if (r.method !== "GET" || !r.redirectedTo || ![301, 302, 303].includes(r.status ?? 0))
+        continue;
+      const destination = formPages.find((p) => p.url === r.redirectedTo);
+      if (destination) formPages.push({ url: r.url, html: destination.html });
+    }
     if (login?.form)
       formCandidates.push(
         candidateFromForm(login.form, templateForPage(clusters, login.form.pageUrl)),
@@ -314,11 +324,25 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
           (form.method === "GET" && form.fields.every((f) => f.hidden))
         )
           continue;
-        formCandidates.push(candidateFromForm(form, templateForPage(clusters, page.url)));
+        const candidate = candidateFromForm(form, templateForPage(clusters, page.url));
+        const observed = clusters.find((c) =>
+          matchRequest(c, {
+            method: form.method,
+            url: form.action,
+            requestHeaders: {},
+          } as RecordedRequest),
+        );
+        if (observed) {
+          candidate.key = observed.key;
+          candidate.urlTemplate = observed.urlTemplate;
+          candidate.params.unshift(...observed.params.filter((p) => p.location === "path"));
+        }
+        formCandidates.push(candidate);
       }
     }
     const candidates = mergeCandidates([...clusters, ...formCandidates, ...scriptCandidates])
       .map((c) => addFilterInputs(c, formPages))
+      .map((c) => addNavigationInputs(c, formPages))
       .map((c) => learnDemonstratedForm(c, formPages));
 
     // 5 + 6. Extraction proposals and labels; decide what enters the model.
@@ -424,6 +448,33 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       });
       operations.push(op);
       opCandidate.set(op.id, c);
+      // The contract has one extraction per operation. Additional record classes get
+      // their own read, preserving the same observed request and verification path.
+      if (extraction?.format === "html") {
+        const seenTypes = new Set([extraction.itemType]);
+        for (const sample of c.samples) {
+          if (!sample.bodySample || sample.bodyTruncated || sample.status !== 200) continue;
+          for (const extra of htmlRecordExtractions(sample.bodySample, sample.url)) {
+            if (seenTypes.has(extra.itemType)) continue;
+            seenTypes.add(extra.itemType);
+            const view = buildOperation(
+              c,
+              { ...label, label: `${label.label} ${extra.itemType?.split("/").at(-1)}` },
+              {
+                modelId,
+                learnedAt,
+                derivedFrom: [runId],
+                method,
+                usedIds,
+                sessionCookies,
+                extraction: extra,
+              },
+            );
+            operations.push(view);
+            opCandidate.set(view.id, c);
+          }
+        }
+      }
     }
 
     // 9. Verify reads.
@@ -505,7 +556,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     if (!verifiedOps.some((op) => op.actionType === s("SearchAction")))
       warnings.push("no search operation learned");
     const tokenFields = [
-      ...crawled.pages.flatMap((p) => p.forms),
+      ...formPages.flatMap((page) => parseForms(page.html, page.url)),
       ...(login?.form ? [login.form] : []),
     ].flatMap((f) =>
       f.fields.filter((p) => p.hidden && isCsrfFieldName(p.name)).map((p) => p.value ?? ""),
@@ -513,7 +564,9 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     const secrets = [
       ...tokens.keys(),
       ...tokenFields,
-      ...(await context.cookies().then((cs) => cs.map((c) => c.value))),
+      ...(await context
+        .cookies()
+        .then((cs) => cs.map((c) => c.value).filter((value) => value.length >= 8))),
       ...(options.login ? [options.login.password] : []),
     ];
     return {

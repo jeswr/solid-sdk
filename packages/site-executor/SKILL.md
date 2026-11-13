@@ -157,3 +157,8 @@ preference writes and uses a scripted planner. Never invoke a planner/model CLI 
   get the unique CSRF exemption, never collision exemption; total tokens get reverse-coverage
   exemption only. Shared validation admits one otherwise-unbound whole simple segment per query
   CSRF target, keeping all other undeclared endpoint/body/source variables invalid.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Form-name identity slots must be numeric; HTML CSRF selector slots must be ASCII slug characters
+only. Expand before wire inventory and token insertion. Never interpolate arbitrary CSS or raw
+form bodies. Keep denial and repeat protection before any HTTP, and test syntax injection.

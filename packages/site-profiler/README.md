@@ -189,3 +189,24 @@ supported CSRF sources independently of repetition. Meta/hidden token fields and
 supply session slots; recognised script credential literals are secrets only, since script
 variables are outside CsrfSource. The fallback uses this stricter credential boundary alongside
 `discoverSessionTokens`; ordinary opaque-value repetition discovery is unchanged.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## HTML discussions and demonstrated form identities
+
+Repeated semantic HTML articles can teach DiscussionForumPosting, Comment and CreativeWork
+collections without a demonstration. Headings, author links, machine dates, comment-count
+attributes and permalinks supply the evidence; a profile's own heading link teaches Person.
+Headlines, bodies, author labels and profile/collection names are untrusted. Child selector
+chains keep nested comments separate; visible parent links become parentItem. Different record
+classes on one document get separate read operations using the same HTTP request. Counts are
+not inferred from the number of visible cards. Explicit sort menus supply path options and
+next links supply optional cursor inputs; a cursor is never a starting-page default.
+
+Demonstrated bracketed text forms expose title, body, forum and comment text inputs. A forum
+selector's witnessed labels can identify a path context input (forumName); its numeric option
+values remain the create form's forum input. Item IDs embedded in field names and CSRF selectors
+become numeric slots. Tokens are scoped to the actually demonstrated form, including repeated
+row tokens. Witnessed redirect aliases let a CSRF page use an identity route rather than a
+particular title slug. Delete variants still target explicit path identities. Votes and unknown
+writes stay irreversible-write; a displayed retract button alone does not establish reversibility.
+Only trusted extracted fields can teach flow bindings.

@@ -62,7 +62,8 @@ export function chooseSampleWord(html: string): string {
     }
   };
   for (const a of descendants(doc)) {
-    if (a.name === "a" && /\/[^/]*\d[^/]*\/?$/.test(attr(a, "href") ?? "")) add(text(a));
+    if (a.name === "a" && /\/[^/]*\d[^/]*(?:\/[^/]+)?\/?$/.test(attr(a, "href") ?? ""))
+      add(text(a));
   }
   if (counts.size === 0)
     for (const h of descendants(doc)) if (/^h[1-3]$/.test(h.name)) add(text(h));
@@ -141,7 +142,6 @@ export async function crawl(
         seen.add(next);
         queue.push(next);
       };
-      for (const [href, label] of navigationLinks(html)) enqueue(href, label);
       for (const form of forms) {
         if (form.method !== "GET") continue;
         const sig = `${form.action}|${form.fields.map((f) => f.name).join(",")}`;
@@ -150,6 +150,7 @@ export async function crawl(
         const filled = sampleGetUrl(form, sampleWord);
         if (filled) enqueue(filled);
       }
+      for (const [href, label] of navigationLinks(html)) enqueue(href, label);
     }
   } finally {
     await recorder.flush();

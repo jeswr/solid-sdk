@@ -19,6 +19,7 @@ import {
   simpleSelector,
   text,
 } from "./html.js";
+import { htmlRecordExtractions } from "./html-records.js";
 import { jsonPointer, pointerEscape, s, sab, tryJson, xsd } from "./util.js";
 
 interface KeyRule {
@@ -442,7 +443,9 @@ function detailExtraction(doc: Document): Extraction | undefined {
 }
 
 /** Propose an Extraction for an HTML page: repeated items first, else a product detail layout. */
-export function proposeHtmlExtraction(html: string): Extraction | undefined {
+export function proposeHtmlExtraction(html: string, endpoint?: string): Extraction | undefined {
+  const records = htmlRecordExtractions(html, endpoint);
+  if (records.length) return records[0];
   const doc = parseHtml(html);
   const lists = findLists(doc);
   const best = lists[0];
