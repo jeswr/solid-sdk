@@ -37,7 +37,12 @@ async function tabTo(page: Page, target: Locator, limit = 30) {
   }
   await expect(target).toBeFocused();
 }
-const alert = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
+// Next's route announcer is also role="alert" and gains text after a client navigation.
+const alert = (page: Page) =>
+  page
+    .getByRole("alert")
+    .filter({ hasText: /\S/ })
+    .and(page.locator(":not(#__next-route-announcer__)"));
 
 test("signup is hidden and redirects to sign-in when registration is off", async ({ page }) => {
   await page.goto("/welcome");
