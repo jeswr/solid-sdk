@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Datatype → `@rdfjs/wrapper` mapper resolution. The manifest names a field's RDF
  * datatype (or IRI term kind); this module resolves it to a strict term reader and
@@ -208,12 +209,29 @@ function daysInMonth(year: number, month: number): number {
   return [4, 6, 9, 11].includes(month) ? 30 : 31;
 }
 
-// XSD lexical structure. Year is 4+ digits (optionally negative); month/day/hour/
+// XSD lexical structure. Year follows the XSD 1.1 yearFrag grammar: optionally
+// negative, four or more digits, and a leading zero only in a four-digit year
+// (`0123` is valid, `02026` is not). Month/day/hour/
 // minute/second are exactly two digits; fractional seconds optional; timezone is
 // `Z` or `±HH:MM`. Semantic (calendar / range) validity is checked separately.
 const XSD_DATETIME_RE =
-  /^(-?\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
-const XSD_DATE_RE = /^(-?\d{4,})-(\d{2})-(\d{2})(Z|[+-]\d{2}:\d{2})?$/;
+  /^(-?(?:[1-9]\d{3,}|0\d{3}))-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
+const XSD_DATE_RE = /^(-?(?:[1-9]\d{3,}|0\d{3}))-(\d{2})-(\d{2})(Z|[+-]\d{2}:\d{2})?$/;
+
+// Backward compatibility: runtime versions before the xsd:dateTime write fix wrote
+// negative years in ECMAScript's six-digit form (`Date#toISOString`, e.g.
+// `-000001-01-01T00:00:00.000Z`), which XSD forbids. A stored xsd:dateTime in
+// exactly that shape is read as its XSD equivalent (`-0001-…`). Writes never emit
+// it, the XSD validators reject it, and no other datatype accepts it.
+const LEGACY_NEGATIVE_YEAR_RE = /^-(\d{6})(-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)$/;
+
+function legacyDateTimeAsXsd(value: string): string | undefined {
+  const m = LEGACY_NEGATIVE_YEAR_RE.exec(value);
+  if (m === null) return undefined;
+  const year = Number(m[1]);
+  if (year === 0) return undefined;
+  return `-${String(year).padStart(4, "0")}${m[2]}`;
+}
 
 /** True for a legal `±HH:MM` / `Z` timezone designator (|offset| ≤ 14:00). */
 function timezoneValid(tz: string | undefined): boolean {
@@ -251,6 +269,12 @@ export function isXsdDateTime(value: string): boolean {
   return timezoneValid(tz);
 }
 
+/** True for an `xsd:dateTimeStamp`: a valid dateTime with a mandatory timezone. */
+export function isXsdDateTimeStamp(value: string): boolean {
+  const m = XSD_DATETIME_RE.exec(value);
+  return m !== null && m[0] === value && m[8] !== undefined && isXsdDateTime(value);
+}
+
 /** True for a lexically-valid `xsd:date` (XSD 1.1) — calendar-checked like dateTime. */
 export function isXsdDate(value: string): boolean {
   const m = XSD_DATE_RE.exec(value);
@@ -264,7 +288,8 @@ export function isXsdDate(value: string): boolean {
 }
 
 /**
- * A datatype-EXACT, lexically-validated reader for `xsd:dateTime` / `xsd:date` —
+ * A datatype-EXACT, lexically-validated reader for `xsd:dateTime`, `xsd:dateTimeStamp`
+ * and `xsd:date` —
  * the date counterpart of {@link floatingAs}. The term must be a `Literal` typed
  * EXACTLY the field's declared datatype (an `xsd:date` literal does not surface
  * through a dateTime field, nor a look-alike `xsd:string`), its lexical form must
@@ -275,6 +300,9 @@ export function isXsdDate(value: string): boolean {
  * malformed dateTime literals with every other malformed-literal drop; the field's
  * `requiredFailClosed` grading then decides admit/reject as usual.
  *
+ * A zoneless dateTime is read as UTC, never in the host's local time zone, so the
+ * same pod data yields the same instant on every machine.
+ *
  * A lexically-valid value JS `Date` cannot represent (outside its time range, or an
  * offset-timezoned `xsd:date`) also drops fail-closed:
  * `Date` is the surface type, and a value it cannot faithfully carry must never
@@ -282,28 +310,37 @@ export function isXsdDate(value: string): boolean {
  */
 function dateAs(datatypeIri: string): (term: TermWrapper) => Date {
   const isDate = datatypeIri === `${XSD}date`;
-  const lexicalValid = isDate ? isXsdDate : isXsdDateTime;
+  const lexicalValid = isDate
+    ? isXsdDate
+    : datatypeIri === `${XSD}dateTimeStamp`
+      ? isXsdDateTimeStamp
+      : isXsdDateTime;
   return (term) => {
     const t = term as unknown as { termType: string; value: string; datatype?: { value: string } };
     if (t.termType !== "Literal") throw new Error("date/dateTime: term is not a Literal");
     if (t.datatype?.value !== datatypeIri) {
       throw new Error("date/dateTime: term datatype does not match the field datatype");
     }
-    if (!lexicalValid(t.value)) throw new Error("date/dateTime: invalid XSD lexical");
+    const value =
+      datatypeIri === `${XSD}dateTime` ? (legacyDateTimeAsXsd(t.value) ?? t.value) : t.value;
+    if (!lexicalValid(value)) throw new Error("date/dateTime: invalid XSD lexical");
     // Translate ONLY the validated XSD year into ECMAScript's expanded-year
     // syntax; V8 otherwise refuses wide dateTimes and misreads negative dates.
-    const m = (isDate ? XSD_DATE_RE : XSD_DATETIME_RE).exec(t.value);
+    const m = (isDate ? XSD_DATE_RE : XSD_DATETIME_RE).exec(value);
     if (!m) throw new Error("date/dateTime: invalid XSD lexical");
-    const year = Number(m[1]);
-    if (!Number.isSafeInteger(year) || Math.abs(year) > 275760 || Object.is(year, -0))
+    // XSD 1.1 permits `-0000`; it denotes year zero, so normalise the signed zero.
+    const year = Number(m[1]) || 0;
+    if (!Number.isSafeInteger(year) || Math.abs(year) > 275760)
       throw new Error("date year out of range");
     const jsYear =
       year < 0 || year > 9999
         ? `${year < 0 ? "-" : "+"}${String(Math.abs(year)).padStart(6, "0")}`
         : String(year).padStart(4, "0");
+    // A zoneless XSD value has no timezone; read it as UTC (as the xsd:date branch
+    // always has) so the instant never depends on the host's time zone.
     const lexical = isDate
       ? `${jsYear}-${m[2]}-${m[3]}T00:00:00${m[4] ?? "Z"}`
-      : jsYear + t.value.slice((m[1] as string).length);
+      : `${jsYear}${value.slice((m[1] as string).length)}${m[8] === undefined ? "Z" : ""}`;
     const d = new Date(lexical);
     if (!Number.isFinite(d.getTime())) {
       throw new Error("date/dateTime: value not representable as a JS Date");
@@ -363,7 +400,7 @@ function dateFrom(value: Date, factory: DataFactory): Term {
 }
 
 /**
- * A datatype-preserving `from` for `xsd:dateTime`: writes the UTC instant
+ * A datatype-preserving `from` for `xsd:dateTime` / `xsd:dateTimeStamp`: writes the UTC instant
  * (`year-MM-DDTHH:MM:SS.mmmZ`, the year in XSD form via {@link utcDateLexical}) — a
  * VALID `xsd:dateTime` lexical for EVERY time-valid `Date`. `LiteralFrom.dateTime`
  * (a bare `toISOString()`) emits the ECMAScript expanded-year form for a wide or
@@ -375,15 +412,17 @@ function dateFrom(value: Date, factory: DataFactory): Term {
  * `toISOString()`. The reader translates the validated XSD year to ECMAScript
  * syntax, allowing expanded and negative years to round-trip too.
  */
-function dateTimeFrom(value: Date, factory: DataFactory): Term {
-  const hours = String(value.getUTCHours()).padStart(2, "0");
-  const minutes = String(value.getUTCMinutes()).padStart(2, "0");
-  const seconds = String(value.getUTCSeconds()).padStart(2, "0");
-  const millis = String(value.getUTCMilliseconds()).padStart(3, "0");
-  return factory.literal(
-    `${utcDateLexical(value)}T${hours}:${minutes}:${seconds}.${millis}Z`,
-    factory.namedNode(`${XSD}dateTime`),
-  );
+function dateTimeFrom(datatypeIri: string): (value: Date, factory: DataFactory) => Term {
+  return (value, factory) => {
+    const hours = String(value.getUTCHours()).padStart(2, "0");
+    const minutes = String(value.getUTCMinutes()).padStart(2, "0");
+    const seconds = String(value.getUTCSeconds()).padStart(2, "0");
+    const millis = String(value.getUTCMilliseconds()).padStart(3, "0");
+    return factory.literal(
+      `${utcDateLexical(value)}T${hours}:${minutes}:${seconds}.${millis}Z`,
+      factory.namedNode(datatypeIri),
+    );
+  };
 }
 
 /** The largest finite magnitude representable as an IEEE-754 single (`xsd:float`). */
@@ -502,13 +541,14 @@ export function literalMapper(datatypeIri: string): DatatypeMapper {
     case `${XSD}boolean`:
       return { as: booleanAs, from: LiteralFrom.boolean, jsType: "boolean" };
     case `${XSD}dateTime`:
+    case `${XSD}dateTimeStamp`:
       // Datatype-CHECKED + XSD-lexically-validated read (a malformed literal DROPS
       // fail-closed via tryRead — never an `Invalid Date`); the write emits a valid
       // xsd:dateTime lexical for EVERY time-valid Date (LiteralFrom.dateTime's bare
       // toISOString emits the malformed `+`-signed ECMAScript expanded-year form).
       return {
         as: dateAs(iri),
-        from: dateTimeFrom as DatatypeMapper["from"],
+        from: dateTimeFrom(iri) as DatatypeMapper["from"],
         jsType: "date",
       };
     case `${XSD}date`:
@@ -626,6 +666,7 @@ export const VALIDATED_DATATYPES: readonly string[] = Object.freeze([
   `${XSD}language`,
   `${XSD}boolean`,
   `${XSD}dateTime`,
+  `${XSD}dateTimeStamp`,
   `${XSD}date`,
   `${XSD}integer`,
   `${XSD}int`,

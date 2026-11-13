@@ -181,6 +181,20 @@ and does not accept a scope; scopes are for `parse` on existing datasets.
 
 ## Exports
 
+### Date datatype mappings
+
+| Exact datatype | JS surface | Read / write policy |
+|---|---|---|
+| `xsd:date` | `Date` | Calendar-checked; nonzero timezone offsets drop. Writes UTC calendar date + `Z`. |
+| `xsd:dateTime` | `Date` | Zone optional; absent zone means UTC. Writes UTC instant + `Z`. |
+| `xsd:dateTimeStamp` | `Date` | Zone mandatory, at most ±14:00. Same dateTime conversion and UTC `Z` writer, typed dateTimeStamp. |
+
+Use exported `isXsdDateTimeStamp` / `isXsdDateTime` for lexical checks. Stamp reads
+retain dateTime's expanded/negative-year conversion and JS Date range drops. Exact
+datatype identity applies in both directions; never coerce a dateTime literal into a
+dateTimeStamp field. Zoneless/malformed/unrepresentable stamps follow the field's
+required/optional failure grading. Invalid Date writes drop, including set additions.
+
 `defineModel`, `createParseScope`, `ParseScope`, `ParseScopeOptions`, `ParseOptions`,
 `validateManifest`, `ManifestError`, `MigrationError`, `MANIFEST_VERSION`, `RUNTIME_MAJOR`,
 manifest types, and the shared guards `httpIriOrUndefined`, `isHttpIri`, `sanitizeText`,
