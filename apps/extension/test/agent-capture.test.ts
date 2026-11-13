@@ -31,78 +31,74 @@ function restored(h: Harness) {
 }
 const types = (h: Harness) => h.native.mock.calls.map(([r]) => r.type);
 
-describe('interrupted capture recovery', () => {
-  it('persists the cleanup marker before arming the permission click', async () => {
+describe('global idle cookie cleanup', () => {
+  it('arms without an ownership marker or session storage', async () => {
     const h = captureHarness();
-    const a = h.popup();
-    a.load();
-    await phase(a, 'ready');
-    const written = deferred<void>();
-    const set = h.browser.storage.session.set.getMockImplementation()!;
-    h.browser.storage.session.set.mockImplementationOnce(async (value) => {
-      await written.promise;
-      await set(value);
-    });
-    a.start();
-    await vi.waitFor(() => expect(h.browser.storage.session.set).toHaveBeenCalled());
-    expect(a.view.phase).toBe('reviewing');
-    expect(a.view.armedLease).toBeUndefined();
-    expect(h.browser.permissions.request).not.toHaveBeenCalled();
-    written.resolve();
-    await phase(a, 'permission');
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toEqual({
-      leaseId: a.view.lease,
-      requestedAt: expect.any(Number),
-    });
+    h.browser.storage.session.set.mockRejectedValue(new Error('fixture-secret'));
+    h.browser.storage.local.set.mockRejectedValue(new Error('fixture-secret'));
+    const a = await reviewing(h);
     expect(a.view.armedLease).toBe(a.view.lease);
+    expect(h.browser.storage.session.set).not.toHaveBeenCalled();
+    expect(h.browser.storage.local.set).not.toHaveBeenCalled();
     a.cancel();
-    await vi.waitFor(() =>
-      expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined(),
+    await vi.waitFor(() => expect(h.state.cookies).toBe(false));
+  });
+  it('automatically removes an unmarked grant at worker start before popup intents', async () => {
+    const h = captureHarness();
+    h.state.cookies = true;
+    const a = h.popup();
+    a.load();
+    await phase(a, 'ready');
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+    expect(a.view.warning).toBe(false);
+    restored(h);
+  });
+  it.each([
+    'onStartup',
+    'onInstalled',
+  ] as const)('automatically removes idle cookie access on runtime.%s without a popup', async (event) => {
+    const h = captureHarness();
+    const a = h.popup();
+    a.load();
+    await phase(a, 'ready');
+    h.state.cookies = true;
+    h.browser.runtime[event].emit(undefined);
+    await vi.waitFor(() => expect(h.state.cookies).toBe(false));
+    await vi.waitFor(() => expect(a.view.warning).toBe(false));
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+    restored(h);
+  });
+  it.each([
+    'cookies',
+    'unrelated permission',
+  ])('automatically removes idle cookie access onAdded for %s without a popup', async (change) => {
+    const h = captureHarness();
+    const a = h.popup();
+    a.load();
+    await phase(a, 'ready');
+    a.client.disconnect();
+    h.state.cookies = true;
+    h.browser.permissions.onAdded.emit(
+      change === 'cookies'
+        ? { permissions: ['cookies'] }
+        : { origins: ['https://other.test:443/*'] },
     );
+    await vi.waitFor(() => expect(h.state.cookies).toBe(false));
+    restored(h);
   });
-  it('never arms after authorization changes during the cleanup marker write', async () => {
-    const h = captureHarness();
-    const a = h.popup();
-    a.load();
-    await phase(a, 'ready');
-    const written = deferred<void>();
-    const set = h.browser.storage.session.set.getMockImplementation()!;
-    h.browser.storage.session.set.mockImplementationOnce(async (value) => {
-      await written.promise;
-      await set(value);
-    });
-    h.native.mockClear();
-    a.start();
-    await vi.waitFor(() => expect(h.browser.storage.session.set).toHaveBeenCalled());
-    h.state.origins.shift();
-    h.browser.permissions.onRemoved.emit({ origins: [`${site}:443/*`] });
-    written.resolve();
-    await phase(a, 'failed');
-    expect(a.states.some((view) => view.armedLease !== undefined)).toBe(false);
-    expect(h.browser.permissions.request).not.toHaveBeenCalled();
-    expect(h.native).not.toHaveBeenCalled();
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
-  });
-  it('refuses to arm when neither cleanup store can persist the marker', async () => {
-    const h = captureHarness();
-    const a = h.popup();
-    a.load();
-    await phase(a, 'ready');
-    h.native.mockClear();
-    h.browser.storage.session.set.mockRejectedValueOnce(new Error('fixture-secret'));
-    h.browser.storage.local.set.mockRejectedValueOnce(new Error('fixture-secret'));
-    a.start();
-    await phase(a, 'failed');
-    expect(a.view.armedLease).toBeUndefined();
-    expect(h.browser.permissions.request).not.toHaveBeenCalled();
-    expect(h.native).not.toHaveBeenCalled();
-    expect(a.view.message).not.toContain('fixture-secret');
-  });
-  it('recovers a grant after worker termination with exactly one removal and verified absence', async () => {
+  it.each([
+    'worker restart',
+    'browser restart',
+  ])('removes a granted capture at start after %s with no ownership marker', async (kind) => {
     vi.useFakeTimers();
     const h = captureHarness();
     await confirming(h);
     expect(h.state.cookies).toBe(true);
+    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    if (kind === 'browser restart') {
+      for (const key of Object.keys(h.browser.storage.session.data))
+        delete h.browser.storage.session.data[key];
+    }
     h.native.mockClear();
     h.browser.cookies.getAll.mockClear();
     h.restart();
@@ -111,7 +107,7 @@ describe('interrupted capture recovery', () => {
     a.load();
     await phase(a, 'ready');
     expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
     expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
     expect(types(h)).toEqual(['list']);
     restored(h);
@@ -120,11 +116,9 @@ describe('interrupted capture recovery', () => {
     'remove rejects',
     'still present',
     'verification rejects',
-  ])('keeps the recovery marker and popup warning when %s', async (failure) => {
-    vi.useFakeTimers();
+  ])('keeps the local display marker and warning when automatic removal fails: %s', async (failure) => {
     const h = captureHarness();
-    await confirming(h);
-    const marker = h.browser.storage.session.data[CAPTURE_CLEANUP_KEY];
+    h.state.cookies = true;
     if (failure === 'remove rejects')
       h.browser.permissions.remove.mockRejectedValueOnce(new Error('fixture-secret'));
     if (failure === 'still present') h.browser.permissions.remove.mockResolvedValueOnce(false);
@@ -134,80 +128,49 @@ describe('interrupted capture recovery', () => {
         h.browser.permissions.contains.mockRejectedValueOnce(new Error('fixture-secret'));
         return true;
       });
-    h.native.mockClear();
-    h.restart();
     const a = h.popup();
     a.load();
     await phase(a, 'failed');
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toEqual(marker);
+    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBe(true);
+    expect(h.browser.storage.session.set).not.toHaveBeenCalled();
     expect(a.view.warning).toBe(true);
     expect(a.view.cleanupFailed).toBe(true);
     expect(h.browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: '!' });
     expect(h.native).not.toHaveBeenCalled();
+    expect(a.view.message).not.toContain('fixture-secret');
+    a.send({ type: 'removeCookieAccess' });
+    await phase(a, 'ready');
+    restored(h);
   });
-  it('clears a recovery failure warning when startup retry verifies an absent grant', async () => {
-    vi.useFakeTimers();
+  it.each([
+    'read',
+    'write',
+  ])('removes authority even when the display marker cannot be accessed: %s', async (operation) => {
     const h = captureHarness();
-    await confirming(h);
-    h.browser.permissions.remove.mockRejectedValueOnce(new Error('fixture-secret'));
-    h.restart();
+    h.state.cookies = true;
+    if (operation === 'write')
+      h.browser.storage.local.set.mockRejectedValueOnce(new Error('fixture-secret'));
+    else h.browser.storage.local.get.mockRejectedValueOnce(new Error('fixture-secret'));
     const a = h.popup();
     a.load();
-    await phase(a, 'failed');
-    expect(a.view.cleanupFailed).toBe(true);
-    h.state.cookies = false;
-    h.browser.runtime.onStartup.emit(undefined);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(a.view.warning).toBe(false);
-    expect(a.view.cleanupFailed).toBe(false);
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
-    expect(h.browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: '' });
-    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+    await phase(a, 'ready');
+    restored(h);
   });
-  it('clears a recovery marker without a grant after verifying absence', async () => {
-    vi.useFakeTimers();
+  it('clears an old local display marker after verifying absence without removal', async () => {
     const h = captureHarness();
-    await reviewing(h);
-    h.browser.permissions.contains.mockClear();
-    h.restart();
+    h.browser.storage.local.data[CAPTURE_CLEANUP_KEY] = { leaseId: 99, requestedAt: 1 };
     const a = h.popup();
     a.load();
     await phase(a, 'ready');
     expect(h.browser.permissions.remove).not.toHaveBeenCalled();
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
-    expect(h.browser.storage.session.remove.mock.invocationCallOrder[0]).toBeGreaterThan(
+    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    expect(h.browser.storage.local.remove.mock.invocationCallOrder[0]).toBeGreaterThan(
       h.browser.permissions.contains.mock.invocationCallOrder[0],
     );
-    restored(h);
   });
-  it.each([
-    'missing',
-    'rejecting',
-    'unavailable',
-  ])('recovers the local fallback when session storage is %s', async (kind) => {
-    vi.useFakeTimers();
+  it('serializes cleanup and new leases, showing cleanup until verified absence', async () => {
     const h = captureHarness();
-    const session = h.browser.storage.session;
-    if (kind === 'missing')
-      Object.defineProperty(h.browser.storage, 'session', { value: undefined, configurable: true });
-    else session.set.mockRejectedValueOnce(new Error('fixture-secret'));
-    if (kind === 'unavailable') session.get.mockRejectedValue(new Error('fixture-secret'));
-    await confirming(h);
-    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeDefined();
-    // Session storage may become available again on the replacement worker.
-    Object.defineProperty(h.browser.storage, 'session', { value: session, configurable: true });
-    h.restart();
-    const a = h.popup();
-    a.load();
-    await phase(a, 'ready');
-    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
-    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
-    restored(h);
-  });
-  it('serializes startup recovery and a new lease through removal and verification', async () => {
-    vi.useFakeTimers();
-    const h = captureHarness();
-    await confirming(h);
+    h.state.cookies = true;
     const removed = deferred<boolean>();
     const absent = deferred<boolean>();
     h.browser.permissions.remove.mockImplementationOnce(async () => {
@@ -216,49 +179,56 @@ describe('interrupted capture recovery', () => {
       h.browser.permissions.contains.mockImplementationOnce(() => absent.promise);
       return true;
     });
-    h.native.mockClear();
-    h.restart();
     const a = h.popup();
     a.load();
     a.start();
     await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1));
+    expect(a.view.warning).toBe(true);
+    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBe(true);
     expect(h.native).not.toHaveBeenCalled();
-    expect(h.browser.permissions.request).toHaveBeenCalledTimes(1);
     removed.resolve(true);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(a.view).toBeUndefined();
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeDefined();
+    await vi.waitFor(() => expect(h.browser.permissions.contains).toHaveBeenCalledTimes(2));
+    expect(a.view.warning).toBe(true);
+    expect(h.native).not.toHaveBeenCalled();
     absent.resolve(false);
     await phase(a, 'permission');
-    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toMatchObject({
-      leaseId: a.view.lease,
-    });
-    h.browser.runtime.onStartup.emit(undefined);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
-    expect(a.view.phase).toBe('permission');
+    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
     a.cancel();
-    await vi.advanceTimersByTimeAsync(0);
   });
-  it('retains the marker for an unresolved cancelled prompt across worker termination', async () => {
-    vi.useFakeTimers();
+  it.each([
+    'acquiring',
+    'confirming',
+    'sending',
+  ])('preserves a live %s window on startup and installation events', async (stage) => {
     const h = captureHarness();
     const a = await reviewing(h);
-    h.browser.permissions.request.mockImplementationOnce(() => new Promise(() => {}));
-    void a.allow();
-    await phase(a, 'prompt');
-    a.cancel();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(h.state.cookies).toBe(false);
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeDefined();
-    h.state.cookies = true;
-    h.restart();
-    const b = h.popup();
-    b.load();
-    await phase(b, 'ready');
-    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
-    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    const prompt = deferred<boolean>();
+    const reply = deferred<Awaited<ReturnType<typeof h.native>>>();
+    if (stage === 'acquiring')
+      h.browser.permissions.request.mockImplementationOnce(() => prompt.promise);
+    const allowed = a.allow();
+    await phase(a, stage === 'acquiring' ? 'prompt' : 'confirming');
+    if (stage === 'sending') {
+      h.native.mockImplementationOnce(() => reply.promise);
+      a.confirm();
+      await vi.waitFor(() => expect(types(h)).toContain('capture'));
+    }
+    h.browser.runtime.onStartup.emit(undefined);
+    h.browser.runtime.onInstalled.emit(undefined);
+    expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+    if (stage === 'acquiring') {
+      h.state.cookies = true;
+      h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
+      prompt.resolve(true);
+    }
+    reply.resolve({ type: 'capture' });
+    await allowed;
+    if (stage === 'sending') await phase(a, 'shared');
+    else {
+      await phase(a, 'confirming');
+      a.cancel();
+      await vi.waitFor(() => expect(h.state.cookies).toBe(false));
+    }
     restored(h);
   });
 });
@@ -331,7 +301,9 @@ describe('worker capture lease', () => {
     await phase(a, 'prompt');
     if (exit === 'cancel') a.cancel();
     else a.client.disconnect();
-    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(h.browser.permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] }),
+    );
     b.start();
     await phase(b, 'busy');
     h.state.cookies = true;
@@ -358,10 +330,12 @@ describe('worker capture lease', () => {
     const allowed = a.allow();
     await phase(a, 'prompt');
     a.cancel();
-    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(h.browser.permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] }),
+    );
     h.state.cookies = true;
     h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
-    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1));
     const b = await confirming(h);
     prompt.resolve(true);
     await allowed;
@@ -418,6 +392,7 @@ describe('worker capture lease', () => {
     expect(a.view.message).toContain("Chrome's extension menu");
     expect(h.browser.permissions.contains.mock.calls).toEqual([
       [{ permissions: ['cookies'] }],
+      [{ permissions: ['cookies'] }],
       [{ origins: [`${site}:443/*`] }],
     ]);
     expect(h.native).not.toHaveBeenCalled();
@@ -429,7 +404,7 @@ describe('worker capture lease', () => {
     'withheld',
     'invalid',
     'uncheckable',
-  ])('blocks a pre-existing or uncheckable grant on every load: %s', async (kind) => {
+  ])('automatically removes a pre-existing grant before site validation: %s', async (kind) => {
     const h = captureHarness();
     h.state.cookies = true;
     if (kind === 'withheld') h.state.origins.shift();
@@ -441,14 +416,15 @@ describe('worker capture lease', () => {
       h.browser.permissions.contains.mockRejectedValueOnce(new Error('fixture-secret'));
     const a = h.popup();
     a.load();
-    await phase(a, 'failed');
-    expect(a.view.warning).toBe(true);
-    expect(h.native).not.toHaveBeenCalled();
+    await phase(a, kind === 'withheld' || kind === 'invalid' ? 'failed' : 'ready');
+    expect(a.view.warning).toBe(false);
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
     expect(h.browser.permissions.request).not.toHaveBeenCalled();
-    expect(h.browser.permissions.remove).not.toHaveBeenCalled();
-    expect(h.state.cookies).toBe(true);
+    if (kind === 'withheld' || kind === 'invalid') expect(h.native).not.toHaveBeenCalled();
+    expect(h.state.cookies).toBe(false);
+    expect(a.view.message).not.toContain('fixture-secret');
   });
-  it('requires explicit removal of a grant appearing between load and review', async () => {
+  it('automatically removes a grant appearing between load and review', async () => {
     const h = captureHarness();
     const a = h.popup();
     a.load();
@@ -456,13 +432,12 @@ describe('worker capture lease', () => {
     h.native.mockClear();
     h.state.cookies = true;
     a.start();
-    await phase(a, 'failed');
-    expect(a.view.warning).toBe(true);
+    await phase(a, 'permission');
+    expect(a.view.warning).toBe(false);
     expect(h.native).not.toHaveBeenCalled();
-    expect(h.browser.permissions.remove).not.toHaveBeenCalled();
-    a.send({ type: 'removeCookieAccess' });
-    await phase(a, 'ready');
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
     restored(h);
+    a.cancel();
   });
   it.each([
     'denial',
@@ -521,7 +496,8 @@ describe('worker capture lease', () => {
       a.confirm();
     }
     await phase(a, exit === 'success' ? 'shared' : exit === 'cancel' ? 'cancelled' : 'failed');
-    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalled());
+    if (exit !== 'cookies absent')
+      await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalled());
     if (exit !== 'host withdrawn') restored(h);
     else expect(h.state.cookies).toBe(false);
     expect(types(h).filter((t) => t === 'capture')).toHaveLength(exit === 'success' ? 1 : 0);
@@ -610,7 +586,7 @@ describe('worker capture lease', () => {
     'confirming',
     'sending',
     'cleaning',
-  ])('cleans only its own grant on port disconnect in %s', async (stage) => {
+  ])('verifies absence and cleans any grant on port disconnect in %s', async (stage) => {
     const h = captureHarness();
     const a = h.popup();
     a.load();
@@ -650,7 +626,7 @@ describe('worker capture lease', () => {
       cleanup.resolve(true);
     }
     native.resolve({ type: 'capture' });
-    if (['prompt', 'confirming', 'sending', 'cleaning'].includes(stage))
+    if (['confirming', 'sending', 'cleaning'].includes(stage))
       await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalled());
     await vi.waitFor(() => expect(h.state.cookies).toBe(false));
     restored(h);
@@ -735,6 +711,102 @@ it.each([
   host.resolve(true);
   await allowed;
   expect(a.view.phase).toBe('cancelled');
+  expect(types(h)).not.toContain('capture');
+  restored(h);
+});
+
+it.each([
+  'navigate to a withheld site',
+  'switch to a withheld tab',
+  'same-site URL change',
+  'window focus change',
+  'permission removal',
+  'permission addition',
+  'cookie permission addition',
+])('latches %s while confirmation final host validation is paused and never dispatches capture', async (change) => {
+  const h = captureHarness();
+  const a = await confirming(h);
+  const host = deferred<boolean>();
+  h.browser.permissions.contains
+    .mockResolvedValueOnce(true) // Cookie authority.
+    .mockResolvedValueOnce(true) // Initial host validation.
+    .mockImplementationOnce(() => host.promise); // Final host validation of the original tab.
+  const checks = h.browser.permissions.contains.mock.calls.length;
+  a.confirm();
+  await vi.waitFor(() => expect(h.browser.permissions.contains).toHaveBeenCalledTimes(checks + 3));
+  expect(a.view.phase).toBe('sending');
+  if (change === 'navigate to a withheld site') {
+    h.browser.tabs.query.mockResolvedValue([
+      { id: 7, url: 'https://withheld.test', incognito: false },
+    ]);
+    h.browser.tabs.onUpdated.emit(7, { url: 'https://withheld.test' });
+  }
+  if (change === 'switch to a withheld tab') {
+    h.browser.tabs.query.mockResolvedValue([
+      { id: 8, url: 'https://withheld.test', incognito: false },
+    ]);
+    h.browser.tabs.onActivated.emit({ tabId: 8, windowId: 1 });
+  }
+  if (change === 'same-site URL change') h.browser.tabs.onUpdated.emit(7, { url: `${site}/new` });
+  if (change === 'window focus change') h.browser.windows.onFocusChanged.emit(2);
+  if (change === 'permission removal')
+    h.browser.permissions.onRemoved.emit({ origins: [`${site}:443/*`] });
+  if (change === 'permission addition')
+    h.browser.permissions.onAdded.emit({ origins: ['https://other.test:443/*'] });
+  if (change === 'cookie permission addition')
+    h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
+  // The old Chrome check can truthfully return true for its earlier origin.
+  host.resolve(true);
+  await phase(a, 'failed');
+  await vi.waitFor(() => expect(h.state.cookies).toBe(false));
+  expect(types(h)).not.toContain('capture');
+  restored(h);
+});
+
+it.each([
+  'preview',
+  'cookie check',
+  'tab query',
+  'host check',
+  'cookie read',
+])('invalidates confirmation at its %s await boundary even if authorization is immediately restored', async (stage) => {
+  const h = captureHarness();
+  const a = await confirming(h);
+  const paused = deferred<boolean>();
+  const tab = deferred<{ id: number; url: string; incognito: boolean }[]>();
+  const cookies = deferred<chrome.cookies.Cookie[]>();
+  if (stage === 'cookie check')
+    h.browser.permissions.contains.mockImplementationOnce(() => paused.promise);
+  if (stage === 'tab query') h.browser.tabs.query.mockImplementationOnce(() => tab.promise);
+  if (stage === 'host check')
+    h.browser.permissions.contains
+      .mockResolvedValueOnce(true)
+      .mockImplementationOnce(() => paused.promise);
+  if (stage === 'cookie read')
+    h.browser.cookies.getAll.mockImplementationOnce(() => cookies.promise);
+  if (stage !== 'preview') {
+    const checks = h.browser.permissions.contains.mock.calls.length;
+    const queries = h.browser.tabs.query.mock.calls.length;
+    a.confirm();
+    await phase(a, 'sending');
+    await vi.waitFor(() => {
+      if (stage === 'cookie read') expect(h.browser.cookies.getAll).toHaveBeenCalledTimes(2);
+      else if (stage === 'tab query')
+        expect(h.browser.tabs.query).toHaveBeenCalledTimes(queries + 1);
+      else
+        expect(h.browser.permissions.contains).toHaveBeenCalledTimes(
+          checks + (stage === 'host check' ? 2 : 1),
+        );
+    });
+  }
+  h.browser.tabs.onActivated.emit({ tabId: 8, windowId: 1 });
+  h.browser.tabs.onActivated.emit({ tabId: 7, windowId: 1 });
+  paused.resolve(true);
+  tab.resolve([{ id: 7, url: `${site}/account`, incognito: false }]);
+  cookies.resolve([cookie()]);
+  a.confirm();
+  await phase(a, 'failed');
+  await vi.waitFor(() => expect(h.state.cookies).toBe(false));
   expect(types(h)).not.toContain('capture');
   restored(h);
 });

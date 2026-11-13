@@ -102,6 +102,7 @@ export function captureHarness() {
     getURL: (path: string) => `chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/${path}`,
     onConnect: event<chrome.runtime.Port>(),
     onStartup: event<undefined>(),
+    onInstalled: event<undefined>(),
     onMessage: { addListener: vi.fn() },
     connectNative: vi.fn(() => nativePort),
     lastError: undefined,
@@ -193,6 +194,7 @@ export function captureHarness() {
     for (const terminate of terminated.splice(0)) terminate();
     runtime.onConnect.clear();
     runtime.onStartup.clear();
+    runtime.onInstalled.clear();
     runtime.onMessage.addListener.mockClear();
     nativePort.onMessage.clear();
     nativePort.onDisconnect.clear();
