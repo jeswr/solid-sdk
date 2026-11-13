@@ -6,8 +6,8 @@
 // <DocumentBrowser> pointed at the user's pod. The browser gets pod-auth's
 // `auth.fetch` explicitly; global fetch is never patched.
 
-import { LoginScreen, useSession } from "@jeswr/app-session/react";
-import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import { LoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
+import { AccountControl, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
 // Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
 // element (spinner + polite-live label, prefers-reduced-motion aware) wrapped by
@@ -31,63 +31,51 @@ export const FEEDBACK_REPO = "jeswr/pod-docs";
 export const FEEDBACK_APP_NAME = "Pod Docs";
 
 export function App() {
-  const { webId, session, logout, fetch, restoringSession, ready, error } = useSession();
-
-  if (!webId || !session) {
-    // Restoring a remembered session (or loading the signed-in profile) shows a brief wait
-    // instead of the sign-in card.
-    if (restoringSession || (!ready && !error) || (webId && !session)) {
-      return (
-        <main className="login-screen" aria-busy="true">
-          <section className="login-card">
-            <h1>Pod Docs</h1>
-            <p className="login-sub">
-              <Loading
-                label={restoringSession ? "Restoring your session…" : "Loading your account…"}
-              />
-            </p>
-          </section>
-        </main>
-      );
-    }
-    return <AppLoginScreen />;
-  }
+  const { logout, fetch } = useSession();
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <span className="app-brand">Pod Docs</span>
-        <div className="app-header-actions">
-          <FeedbackButton
-            repo={FEEDBACK_REPO}
-            appName={FEEDBACK_APP_NAME}
-            appVersion={__APP_VERSION__}
-            webId={webId}
-          />
-          <ThemeToggle />
-          <AccountMenu
-            webId={webId}
-            displayName={session.displayName}
-            avatarUrl={session.avatarUrl}
-            onSignOut={logout}
-          />
+    <SessionGate
+      appName="Pod Docs"
+      login={<AppLoginScreen />}
+      renderLoading={(label) => <Loading label={label} />}
+    >
+      {({ webId, session }) => (
+        <div className="app-shell">
+          <header className="app-header">
+            <span className="app-brand">Pod Docs</span>
+            <div className="app-header-actions">
+              <FeedbackButton
+                repo={FEEDBACK_REPO}
+                appName={FEEDBACK_APP_NAME}
+                appVersion={__APP_VERSION__}
+                webId={webId}
+              />
+              <ThemeToggle />
+              <AccountControl
+                webId={webId}
+                displayName={session.displayName}
+                avatarUrl={session.avatarUrl}
+                onSignOut={logout}
+              />
+            </div>
+          </header>
+          {session.podRootIsFallback ? (
+            <p className="app-note" role="note">
+              Your profile doesn't list a storage address, so Docs can only show public documents at{" "}
+              {session.podRoot}.
+            </p>
+          ) : null}
+          <main className="app-main">
+            <CollectionBrowser
+              key={JSON.stringify([session.webId, session.podRoot])}
+              podRoot={session.podRoot}
+              webId={session.webId}
+              fetch={fetch}
+            />
+          </main>
         </div>
-      </header>
-      {session.podRootIsFallback ? (
-        <p className="app-note" role="note">
-          Your profile doesn't list a storage address, so Docs can only show public documents at{" "}
-          {session.podRoot}.
-        </p>
-      ) : null}
-      <main className="app-main">
-        <CollectionBrowser
-          key={JSON.stringify([session.webId, session.podRoot])}
-          podRoot={session.podRoot}
-          webId={session.webId}
-          fetch={fetch}
-        />
-      </main>
-    </div>
+      )}
+    </SessionGate>
   );
 }
 

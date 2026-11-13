@@ -96,6 +96,16 @@ function mount(fake = fakePodAuth(), supplied = true) {
 async function ready() {
   await waitFor(() => expect(session.ready).toBe(true));
 }
+
+it("resets the sign-in fieldset without host CSS", async () => {
+  mount();
+  await ready();
+  const { style } = screen.getByRole("group", { name: "Test App sign-in" });
+  expect(style.width).toBe("100%");
+  for (const property of ["min-width", "margin", "padding", "border-width"]) {
+    expect(Number.parseFloat(style.getPropertyValue(property))).toBe(0);
+  }
+});
 async function chooseProvider() {
   await ready();
   fireEvent.click(screen.getByRole("button", { name: "Home provider" }));

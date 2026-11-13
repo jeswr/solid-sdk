@@ -1,17 +1,26 @@
 // AUTHORED-BY Codex GPT-6
+import type { SignedInSession } from "@jeswr/app-session/react";
 import type { DocumentBrowserProps } from "@jeswr/pod-docs/ui";
 import { act, cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 const fixtures = vi.hoisted(() => ({
-  session: { webId: "https://alice.example/#me", podRoot: "https://storage.example/pod/" },
+  session: {
+    webId: "https://alice.example/#me",
+    podRoot: "https://storage.example/pod/",
+    podRootIsFallback: false,
+  },
   browser: undefined as DocumentBrowserProps | undefined,
   loopback: false,
   fetch: (async () => new Response()) as typeof fetch,
 }));
 vi.mock("@jeswr/app-session/react", async (original) => ({
   ...(await original<typeof import("@jeswr/app-session/react")>()),
+  // These tests supply a signed-in fixture; the gate is exercised in App.header.test.tsx.
+  SessionGate: ({ children }: { children: (signedIn: SignedInSession) => ReactNode }) =>
+    children({ webId: fixtures.session.webId, session: fixtures.session }),
   useSession: () => ({
     webId: fixtures.session.webId,
     session: fixtures.session,
@@ -21,7 +30,7 @@ vi.mock("@jeswr/app-session/react", async (original) => ({
 }));
 vi.mock("@jeswr/app-session", () => ({ allowInsecureLoopback: () => fixtures.loopback }));
 vi.mock("@jeswr/app-shell", () => ({
-  AccountMenu: () => null,
+  AccountControl: () => null,
   FeedbackButton: () => null,
   ThemeToggle: () => null,
 }));
@@ -38,6 +47,7 @@ beforeEach(() => {
   fixtures.session = {
     webId: "https://alice.example/#me",
     podRoot: "https://storage.example/pod/",
+    podRootIsFallback: false,
   };
 });
 

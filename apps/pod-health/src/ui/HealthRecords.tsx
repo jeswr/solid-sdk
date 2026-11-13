@@ -29,9 +29,8 @@ export interface HealthRecordsProps {
   /** The health resource URL to read (e.g. `https://carol.example/health/record.ttl`). */
   resourceUrl: string;
   /**
-   * The authenticated fetch for pod reads. Omit to use the ambient global fetch
-   * (patched by @solid/reactive-authentication in a real session). The
-   * injectable auth seam — unit tests pass a stub here.
+   * The bounded pod-auth fetch for pod reads, threaded through the hook to the store.
+   * Omit to use the unauthenticated global fetch; tests can inject a stub.
    */
   fetch?: typeof fetch;
   /** Optional heading rendered above the list. */

@@ -22,7 +22,7 @@ Claude Opus 4.8` marker at the top of each source file).
 | `public/clientid.jsonld` | Claude Opus 4.8 | federation-ready Client-ID doc (the `fedapp:` block) |
 | test suite (`test/*.test.{ts,tsx}`) | Claude Opus 4.8 | ~100 % data-layer + view coverage |
 | `suite.json` | Claude Opus 4.8 | 3-ring suite tracking entry |
-| `web/` static host shell | Claude Opus 4.8 | Vite + React static SPA wrapping the `./ui` `<HealthRecords>` with standalone Solid login; `web/src/auth/*` is the hardened auth seam copied VERBATIM from the pod-docs host (two roborev rounds) — re-review those upstream, not here |
+| `web/` static host shell | Claude Opus 4.8 | Vite + React static SPA wrapping the `./ui` `<HealthRecords>` with standalone Solid login; `web/src/auth/*` follows the Pod Docs pod-auth + shared SignInCard port, with Pod Health-specific legacy cleanup and explicit fetch wiring (GPT-6.1 Sol) |
 | `web/src/App.tsx`, `web/src/LoginScreen.tsx`, `web/src/main.tsx` | Claude Opus 4.8 | host root, WebID login screen, client entry |
 | `web/src/health-resource.ts` | Claude Opus 4.8 | Type-Index discovery of the `health:HealthRecord` resource (else `${podRoot}health/` fallback) |
 | `web/scripts/gen-clientid.mjs` | Claude Opus 4.8 | per-origin `clientid.jsonld` + `callback.html` generator |
