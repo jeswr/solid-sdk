@@ -15,7 +15,10 @@ Without `dir`, the default is `~/Library/Application Support/jeswr-agent` on mac
 path without accessing it. Relative XDG paths are ignored. Directories and files must belong
 to the current user and refuse group/world permissions and symbolic links. Writes use an
 exclusive temporary file inside the store, fsync and atomic rename. The store creates
-`clients`, `profiles`, `grants`, `providers`, `locks` and `ledger`; the daemon owns `HALT`.
+`clients`, `profiles`, `grants`, `providers`, `locks`, `ledger`, `matrix` and `vault`; the daemon owns `HALT`.
+`privateRecord(name, schema)` and `putPrivateRecord(name, schema, value)` expose the same
+validated atomic discipline for host-only records in `vault/` (maximum 64 KiB serialized).
+Callers such as agent-vault encrypt secret-bearing records before supplying them here.
 
 Register client records with `putClient`, then a profile with `putProfile`. Profiles require
 `provider`, `account` (the exact address verified at consent), `connectionId` (registry id),
