@@ -1,9 +1,10 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store, Writer } from "n3";
 import { expect, it, vi } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
+import { RDF, serialize } from "../../src/engine/rdf.js";
 import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
 
 function rdf(body: string, type = "text/turtle"): Response {
@@ -196,3 +197,5 @@ it("retains the data fallback for length-free Unicode source container listings"
   expect(conversions).toHaveBeenCalledTimes(1);
   expect((await executeMigration(finalizePlan(plan, resolve(plan)), options)).verified).toBe(true);
 });
+
+import { RdfNode } from "./rdf-node.js";

@@ -1,6 +1,9 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
+import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  callbackHtml,
   clientDocumentPlugin,
   clientIdDocument,
   deploymentBasePath,
@@ -30,8 +33,8 @@ describe("static client identifier document", () => {
       client_name: "Pod Migrator",
       client_uri: "https://jeswr.github.io/solid-sdk/pod-migrator/",
       redirect_uris: [
-        "https://jeswr.github.io/solid-sdk/pod-migrator/callback/source",
-        "https://jeswr.github.io/solid-sdk/pod-migrator/callback/target",
+        "https://jeswr.github.io/solid-sdk/pod-migrator/callback/source/",
+        "https://jeswr.github.io/solid-sdk/pod-migrator/callback/target/",
       ],
       scope: "openid webid offline_access",
       grant_types: ["authorization_code", "refresh_token"],
@@ -90,7 +93,7 @@ describe("static client identifier document", () => {
       expect(emitFile).toHaveBeenCalledWith({
         type: "asset",
         fileName: `callback/${id}/index.html`,
-        source: html,
+        source: callbackHtml("https://jeswr.github.io"),
       });
     const cid = emitFile.mock.calls.find(([asset]) => asset.fileName === "clientid.jsonld")?.[0];
     expect(JSON.parse(cid.source)).toEqual(
@@ -98,4 +101,22 @@ describe("static client identifier document", () => {
     );
     expect(() => run.call({ emitFile }, {}, {})).toThrow("Missing built index.html");
   });
+});
+
+it.each([
+  "source",
+  "target",
+])("the %s popup posts the complete callback to the exact opener origin", (id) => {
+  const origin = "https://jeswr.github.io";
+  const href = `${origin}/solid-sdk/pod-migrator/callback/${id}/?code=code&state=state&iss=https%3A%2F%2Fprovider.example%2F`;
+  const html = callbackHtml(origin);
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  if (!script) throw new Error("Missing callback script");
+  const postMessage = vi.fn();
+  runInNewContext(script, { window: { opener: { postMessage } }, location: { href } });
+  expect(postMessage).toHaveBeenCalledExactlyOnceWith(href, origin);
+  runInNewContext(script, { window: { opener: null }, location: { href } });
+  expect(postMessage).toHaveBeenCalledOnce();
+  expect(html).not.toContain("assets/");
+  expect(html).not.toContain('id="root"');
 });

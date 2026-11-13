@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY GPT-6.1 Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
@@ -26,17 +27,20 @@ agreement alone is not a cryptographic snapshot or proof against a lying server.
 
 ## 1. Two sessions, two fences
 
-The app holds two independent `createSolidAuth()` instances from `@jeswr/solid-auth-core`,
-`source` and `target`. Each has its own `dbName`, `rememberedAccountsKey`, `recentAccountsKey`,
-`redirectFlowKey`, `redirectSentinelKey` and `redirectUri` (`<base>callback/source`,
-`<base>callback/target`, with `APP_BASE_PATH` defaulting to `/`), and `patchGlobalFetch: false`, so neither touches the global fetch and the
-two credentials can never be confused.
+The app holds two independent page-lifetime `createPodAuth()` instances configured through
+`@jeswr/app-session`'s `createAppPodAuth`, `source` and `target`. Their distinct popup redirect
+URIs (`<base>callback/source/`, `<base>callback/target/`) namespace pod-auth's persisted stores
+by `[clientId, redirectUri]`. Each connection's shared `SessionProvider` restores once and stays
+mounted through every migration step. Login calls share a synchronous guard so the package's
+popup holder is used sequentially. Global fetch is never patched.
 
-Each instance is armed with `includeIssuerOrigin: false`. After login the app reads the
-authenticated WebID profile, takes `pim:storage` (asking the user to choose when there are
-several), and calls `reArmAllowedOrigins([storageOrigin])`.
+pod-auth owns the automatic boundary from the authenticated WebID's verified `pim:storage`
+roots; issuer origins never grant storage credentials. The app separately parses the WebID
+profile with its complete-graph checks and requires a choice when several storage roots exist.
+This read cannot widen credential authority. Each side passes `auth.fetch` explicitly to its
+private reads, server/access probes and migration adapters; public reads use pristine fetch.
 
-The migration engine never sees `authenticatedFetch` directly. It gets a `PodHttp` per side
+The migration engine receives the side’s `auth.fetch` through a scoped adapter. It gets a `PodHttp` per side
 (`src/engine/pod-http.ts`), which:
 
 - accepts only a string URL (never a `Request`, never a `URL` subclass), parses it, and requires
@@ -576,6 +580,9 @@ a live run.
 HTTPS. `APP_BASE_PATH` defaults to `/` and is an absolute path ending in `/`. Vite assets,
 icons, the Client Identifier Document, both registered redirect URIs and callback detection
 share this base. `build:pages` builds for `https://jeswr.github.io/solid-sdk/pod-migrator/`.
-The client document's URL equals its `client_id`. Emit `404.html` and static callback entry
-pages as copies of the built index, keeping absolute base-prefixed assets. Callback directory
-trailing slashes are accepted without changing the redirect URI persisted for token exchange.
+The client document's URL equals its `client_id`. Emit `404.html` as the built app entry.
+The only registered redirects are the two popup callback directories with trailing slashes;
+their standalone HTML posts `location.href` to `window.opener` at the deployment's exact origin.
+They contain no application entry or full-page login handling. Vercel's SPA rewrite excludes
+these callback paths. Dynamic registration and insecure HTTP authentication require both a
+development build and a loopback page host.

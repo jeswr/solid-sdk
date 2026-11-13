@@ -1,6 +1,7 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 // Only loaded by Vite's explicit --mode screens development server.
-import type { SolidAuth } from "@jeswr/solid-auth-core";
+import type { AuthEvent, AuthEventType, Identity, PodAuth } from "@jeswr/pod-auth";
 import { PodConnection } from "../src/auth/connections.js";
 
 export function createConnections(): [PodConnection, PodConnection] {
@@ -21,23 +22,44 @@ export function createConnections(): [PodConnection, PodConnection] {
           ...(side === "source" ? { "x-powered-by": "Community Solid Server" } : {}),
         },
       });
-    const auth = {
-      webId: signedOut ? null : webId,
-      issuer: side === "target" ? "https://login.inrupt.com/" : "https://identity.example",
-      publicFetch,
-      authenticatedFetch: publicFetch,
-      restore: async () =>
-        auth.webId
-          ? { outcome: "restored" as const, webId: auth.webId }
-          : { outcome: "login" as const },
-      handleRedirect: async () => ({ outcome: "none" as const }),
-      beginRedirectLogin: async () => ({ authorizationUrl: "https://identity.example/authorize" }),
-      logout: async () => {
-        auth.webId = null;
+    let identity: Identity | null = signedOut
+      ? null
+      : {
+          webId,
+          subject: webId,
+          issuer: side === "target" ? "https://login.inrupt.com/" : "https://identity.example/",
+          clientId: "https://app.example/clientid.jsonld",
+          protocol: "solid-oidc",
+          storages: [
+            side === "source"
+              ? "https://alice.solidcommunity.net/"
+              : "https://storage.example/pods/alice/",
+          ],
+        };
+    const listeners = new Map<AuthEventType, Set<(event: AuthEvent) => void>>();
+    const auth: PodAuth = {
+      fetch: publicFetch,
+      restore: async () => identity,
+      remembered: async () => [],
+      identity: async () => identity,
+      login: async () => {
+        throw new Error("Screenshot accounts do not sign in");
       },
-      reArmAllowedOrigins: () => true,
+      logout: async () => {
+        identity = null;
+        for (const handler of listeners.get("logout") ?? [])
+          handler({ type: "logout", identity: null, timestamp: Date.now() });
+      },
+      on: (type, handler) => {
+        const handlers = listeners.get(type) ?? new Set();
+        listeners.set(type, handlers);
+        handlers.add(handler);
+        return () => {
+          handlers.delete(handler);
+        };
+      },
     };
-    return new PodConnection(side, auth as unknown as SolidAuth);
+    return new PodConnection(side, async () => auth, publicFetch);
   };
   return [make("source"), make("target")];
 }

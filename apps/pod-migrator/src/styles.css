@@ -2,6 +2,7 @@
 @import "tailwindcss";
 @import "@jeswr/app-shell/styles.css";
 @source "../node_modules/@jeswr/app-shell/dist";
+@source "../../../packages/suite-ui/dist";
 @custom-variant dark (&:where(.dark, .dark *));
 
 body {
@@ -322,30 +323,6 @@ abbr {
   color: var(--muted-foreground);
   opacity: 0.8;
 }
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-.quick-pick-label {
-  font-size: 0.75rem;
-  margin: 0.3rem 0 -0.5rem;
-}
-.quick-picks {
-  display: flex;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-.quick-picks button {
-  flex: 1;
-  font-size: 0.72rem;
-  padding: 0.55rem 0.7rem;
-  white-space: nowrap;
-}
-.quick-picks button span {
-  color: var(--muted-foreground);
-  margin-left: auto;
-}
 .muted {
   color: var(--muted-foreground);
   font-weight: 400;
@@ -643,9 +620,6 @@ footer {
   .connections-grid {
     grid-template-columns: minmax(0, 1fr) 1.75rem minmax(0, 1fr);
   }
-  .quick-picks {
-    flex-direction: column;
-  }
 }
 @media (max-width: 550px) {
   .app-shell {
@@ -701,9 +675,6 @@ footer {
   .direction {
     transform: rotate(90deg);
   }
-  .quick-picks {
-    flex-direction: row;
-  }
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -737,4 +708,27 @@ footer {
   footer {
     margin-top: 3rem;
   }
+}
+
+/* AUTHORED-BY GPT-6.1 Sol */
+/* Keep both session providers mounted while planning/running; only their cards are hidden. */
+.connection-sign-in {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.connection-card .login-screen {
+  padding: 0;
+  min-height: 0;
+}
+.connection-card .login-sign-in {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.connection-card .su-sign-in-card {
+  width: 100%;
+  max-width: 100%;
 }

@@ -1,8 +1,9 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { ACL, ACP, RdfNode, serialize } from "../../src/engine/rdf.js";
+import { ACL, ACP, serialize } from "../../src/engine/rdf.js";
 import { readAcp } from "../../src/engine/systems/acp.js";
 import type { Mode } from "../../src/engine/types.js";
 import { cssAccess } from "./css-oracle.js";
@@ -453,3 +454,5 @@ describe("round 10: auxiliary ACR nodes", () => {
       ).toBe(false);
   });
 });
+
+import { RdfNode } from "./rdf-node.js";

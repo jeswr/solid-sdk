@@ -1824,6 +1824,9 @@ importers:
 
   apps/pod-migrator:
     dependencies:
+      '@jeswr/app-session':
+        specifier: workspace:*
+        version: link:../../packages/app-session
       '@jeswr/app-shell':
         specifier: workspace:*
         version: link:../../packages/app-shell
@@ -1836,9 +1839,9 @@ importers:
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
-      '@jeswr/solid-auth-core':
+      '@jeswr/pod-auth':
         specifier: workspace:*
-        version: link:../../packages/solid-auth-core
+        version: link:../../packages/pod-auth
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../../packages/storage-capabilities
