@@ -13,7 +13,7 @@
   },
   {
    "id": "receiver",
-   "name": "The delivery partner"
+   "name": "The tax authority"
   },
   {
    "id": "customer",
@@ -69,17 +69,13 @@
   }
  ],
  "generated": {
-  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
   "core": "scripted"
  },
  "standIns": [
   {
-   "what": "Outside organizations and data sources",
-   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
-  },
-  {
-   "what": "Handoff-free marketing refusal",
-   "replacedBy": "The original customer-signed address restrictions are checked under the local signed binding before any A2A delegation or partner marketing transfer"
+   "what": "Retailer delegation and delivery service",
+   "replacedBy": "Separately keyed local parties using direct signed messages. This is a local authority-chain run, not an A2A transport implementation."
   }
  ],
  "events": [
@@ -273,7 +269,7 @@
     }
    ],
    "reason": "within-mandate",
-   "caption": "The delivery partner's mandate covers this action."
+   "caption": "The tax authority's mandate covers this action."
   },
   {
    "seq": 10,
@@ -299,7 +295,7 @@
     "question": "Is The retailer a party I can send Request the needed information to?",
     "path": [
      {
-      "at": "The delivery partner's own list",
+      "at": "The tax authority's own list",
       "kind": "own-list",
       "says": "The retailer is accepted for Request the needed information."
      }
@@ -361,7 +357,7 @@
     }
    ],
    "reason": "within-limits",
-   "caption": "Inside what the agent may do on its own, and within The delivery partner's limits."
+   "caption": "Inside what the agent may do on its own, and within The tax authority's limits."
   },
   {
    "seq": 14,
@@ -463,7 +459,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): The delivery partner says The delivery partner's agent acts for it.",
+      "summary": "1 representation statement(s): The tax authority says The delivery partner's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -582,7 +578,7 @@
      },
      "authority": {
       "present": true,
-      "summary": "1 representation statement(s): The delivery partner says The delivery partner's agent acts for it.",
+      "summary": "1 representation statement(s): The tax authority says The delivery partner's agent acts for it.",
       "raw": [
        {
         "type": "RepresentationStatement",
@@ -734,9 +730,9 @@
    "reason": "authority-valid",
    "rule": {
     "id": "urn:awp:representation:28927a3fe88eea3fa520b329a46d5341:1794560400000",
-    "text": "A representation statement signed with The delivery partner's pinned key must name this agent, this operation and a current validity period."
+    "text": "A representation statement signed with The tax authority's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "The delivery partner signed a statement that The delivery partner's agent acts for them in this operation."
+   "caption": "The tax authority signed a statement that The delivery partner's agent acts for them in this operation."
   },
   {
    "seq": 22,
@@ -795,7 +791,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:agent handoff with The delivery partner."
+   "caption": "The core proposes to share urn:op:agent handoff with The tax authority."
   },
   {
    "seq": 26,
@@ -841,18 +837,18 @@
     }
    ],
    "resolution": {
-    "question": "Is The delivery partner a party I can send A service agent hands a customer to a partner's agent to?",
+    "question": "Is The tax authority a party I can send A service agent hands a customer to a partner's agent to?",
     "path": [
      {
       "at": "The retailer's own list",
       "kind": "own-list",
-      "says": "The delivery partner is accepted for A service agent hands a customer to a partner's agent."
+      "says": "The tax authority is accepted for A service agent hands a customer to a partner's agent."
      }
     ],
     "answer": "Accepted, for A service agent hands a customer to a partner's agent only."
    },
    "reason": "recipient-established",
-   "caption": "The delivery partner: Accepted, for A service agent hands a customer to a partner's agent only."
+   "caption": "The tax authority: Accepted, for A service agent hands a customer to a partner's agent only."
   },
   {
    "seq": 28,

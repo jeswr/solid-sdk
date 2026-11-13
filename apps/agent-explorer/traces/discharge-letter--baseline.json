@@ -83,7 +83,7 @@
   }
  ],
  "generated": {
-  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
   "core": "scripted"
  },
  "standIns": [
@@ -1251,7 +1251,7 @@
     }
    ],
    "reason": "structured-form-required",
-   "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3."
+   "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3. Required claim: clinical.diagnosis. Accepted sources: urn:fictional:hospital. Accepted methods: recorded-by-authority."
   },
   {
    "seq": 42,
@@ -1853,7 +1853,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:2e2c58aa95b…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:42fb97aba8c…; never trusted."
     },
     "layers": {
      "header": {
@@ -1882,7 +1882,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:bdeb9a9ef7e717ccbc82476e179ffe88a8ac0e0e0fc399f97d62faef42a43e16"
+      "digest": "sha-256:ccf547f79fa57672036278077da8aa2252bb4a73658bfef9c931af878e1faaa8"
      },
      "authority": {
       "present": false,
@@ -1954,6 +1954,7 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
           "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
           "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
           "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
@@ -2042,7 +2043,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:a27e8bd0ab397cd5d9d0a5729a6d313cc64f7212e6c800d6adb17813ba018299"
+      "digest": "sha-256:3680de42e4aabf7a472aaa388e7af39b0c5efade2f6d46870e2a113f0a81c88b"
      },
      "evidence": {
       "present": false,
@@ -2091,7 +2092,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:2e2c58aa95b…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:42fb97aba8c…; never trusted."
     },
     "layers": {
      "header": {
@@ -2120,7 +2121,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:bdeb9a9ef7e717ccbc82476e179ffe88a8ac0e0e0fc399f97d62faef42a43e16"
+      "digest": "sha-256:ccf547f79fa57672036278077da8aa2252bb4a73658bfef9c931af878e1faaa8"
      },
      "authority": {
       "present": false,
@@ -2128,7 +2129,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"urn:fictional:hospital-agent:agent\"; \"urn:fictional:hospital\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"urn:op:letter\"; \"0.1\"; \"urn:op:letter\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"urn:op:structured-form\"; \"0.1\"; \"urn:op:structured-form\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"urn:op:clinical-record\"; \"0.1\"; \"urn:op:clinical-record\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
+      "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"urn:fictional:hospital-agent:agent\"; \"urn:fictional:hospital\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/local-record-forum/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"urn:op:letter\"; \"0.1\"; \"urn:op:letter\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"urn:op:structured-form\"; \"0.1\"; \"urn:op:structured-form\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"urn:op:clinical-record\"; \"0.1\"; \"urn:op:clinical-record\"; \"invoke\"; \"represented\"; \"urn:purpose:discharge-letter\"; \"initiator\"; \"responder\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
       "raw": {
        "description": {
         "type": "ImplementationDescription",
@@ -2192,6 +2193,7 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
           "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
           "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
           "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
@@ -2280,7 +2282,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:a27e8bd0ab397cd5d9d0a5729a6d313cc64f7212e6c800d6adb17813ba018299",
+      "digest": "sha-256:3680de42e4aabf7a472aaa388e7af39b0c5efade2f6d46870e2a113f0a81c88b",
       "untrusted": [
        {
         "path": "description.type",
@@ -2400,38 +2402,42 @@
        },
        {
         "path": "description.configurations.implemented.0",
-        "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
        },
        {
         "path": "description.configurations.implemented.1",
-        "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
        },
        {
         "path": "description.configurations.implemented.2",
-        "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
        },
        {
         "path": "description.configurations.implemented.3",
-        "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
        },
        {
         "path": "description.configurations.implemented.4",
-        "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
        },
        {
         "path": "description.configurations.implemented.5",
-        "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
        },
        {
         "path": "description.configurations.implemented.6",
-        "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
        },
        {
         "path": "description.configurations.implemented.7",
-        "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
        },
        {
         "path": "description.configurations.implemented.8",
+        "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+       },
+       {
+        "path": "description.configurations.implemented.9",
         "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
        },
        {
@@ -3003,7 +3009,7 @@
     }
    ],
    "reason": "structured-form-required",
-   "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3."
+   "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3. Required claim: clinical.diagnosis. Accepted sources: urn:fictional:hospital. Accepted methods: recorded-by-authority."
   },
   {
    "seq": 84,
@@ -3022,7 +3028,7 @@
    "agent": "practice-agent",
    "part": "record",
    "kind": "record",
-   "caption": "18 entries in this agent's hash-chained record; the chain verifies."
+   "caption": "51 entries in this agent's hash-chained record; the chain verifies."
   }
  ]
 }

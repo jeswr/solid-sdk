@@ -1,0 +1,873 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "carer-acts-for-parent",
+ "path": {
+  "index": 2,
+  "what": "The power is revoked"
+ },
+ "parties": [
+  {
+   "id": "subject",
+   "name": "A parent"
+  },
+  {
+   "id": "holder",
+   "name": "An adult child"
+  },
+  {
+   "id": "receiver",
+   "name": "A care provider"
+  },
+  {
+   "id": "register",
+   "name": "The local authority register"
+  },
+  {
+   "id": "second-holder",
+   "name": "The second registered holder"
+  },
+  {
+   "id": "owner-agent",
+   "name": "The representative's agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The receiving agent"
+  }
+ ],
+ "scenario": {
+  "id": "carer-acts-for-parent--branch-2",
+  "title": "An adult child acts for a parent: The power is revoked",
+  "steps": {
+   "1": "Request.",
+   "2": "Receive."
+  }
+ },
+ "configuration": {
+  "id": "carer-acts-for-parent-local",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-credential",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "owner-agent",
+   "name": "The representative's agent",
+   "actsFor": "subject",
+   "role": "agent"
+  },
+  {
+   "id": "receiver-agent",
+   "name": "The receiving agent",
+   "actsFor": "receiver",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Public authority register and care/tax/school endpoints",
+   "replacedBy": "Declared fictional parties with independent introduced keys and local signed current-status documents; no live service or legal authority claim."
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in An adult child acts for a parent with A care provider."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-credential",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "A parent's mandate covers this action."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is A care provider a party I can send An adult child acts for a parent to?",
+    "path": [
+     {
+      "at": "A parent's own list",
+      "kind": "own-list",
+      "says": "A care provider is accepted for An adult child acts for a parent."
+     }
+    ],
+    "answer": "Accepted, for An adult child acts for a parent only."
+   },
+   "reason": "recipient-established",
+   "caption": "A care provider: Accepted, for An adult child acts for a parent only."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-credential",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within A parent's limits."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 8,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The representative's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 9,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The receiving agent."
+  },
+  {
+   "seq": 10,
+   "step": 1,
+   "agent": "owner-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002",
+    "from": "The representative's agent",
+    "to": "The receiving agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:1e63b2eb86f…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The representative's agent to The receiving agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+       "id": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002",
+       "conversation": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:carer-acts-for-parent:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:carer-acts-for-parent:subject"
+       },
+       "to": {
+        "actor": "urn:fictional:carer-acts-for-parent:receiver-agent:actor",
+        "party": "urn:fictional:carer-acts-for-parent:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:c255e68f7d29750458ac4960123166bca6a6d80ade097f4b9d0ee4fff7994fe8"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): A parent says A parent acts for it.",
+      "raw": [
+       {
+        "id": "urn:fictional:carer-acts-for-parent:power",
+        "issuer": "urn:fictional:carer-acts-for-parent:register",
+        "subject": "urn:fictional:carer-acts-for-parent:holder",
+        "entity": "urn:fictional:carer-acts-for-parent:subject",
+        "actions": [
+         "organise-care"
+        ],
+        "scope": {
+         "operations": [
+          "urn:op:carer-acts-for-parent"
+         ],
+         "subjects": [
+          "urn:fictional:carer-acts-for-parent:subject"
+         ],
+         "purposes": [
+          "urn:purpose:carer-acts-for-parent"
+         ]
+        },
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "status": {
+         "ref": "urn:fictional:carer-acts-for-parent:register-status",
+         "id": "power"
+        },
+        "mayDelegate": {
+         "depth": 2
+        },
+        "type": "MandateLink",
+        "subjectKey": "4536x475OtEuqMCHt01BySXG6-z7YV9PonSakTzVjeo"
+       }
+      ],
+      "digest": "sha-256:b2164f339b7f1a538fc274c06d8d71bb24c25eb93e08bf99810769b1cc100c6c"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:carer-acts-for-parent",
+        "version": "0.1"
+       },
+       "input": {
+        "subject": "urn:fictional:carer-acts-for-parent:subject",
+        "request": "organise-care"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:carer-acts-for-parent"
+      },
+      "digest": "sha-256:90d388c18fbe2ca345480adb7fa49120f3d4913739254406588f31a81f308f8a"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The representative's agent sends an invoke message to The receiving agent."
+  },
+  {
+   "seq": 11,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002",
+    "from": "The representative's agent",
+    "to": "The receiving agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:1e63b2eb86f…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The representative's agent to The receiving agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+       "id": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002",
+       "conversation": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:carer-acts-for-parent:owner-agent:actor",
+        "onBehalfOf": "urn:fictional:carer-acts-for-parent:subject"
+       },
+       "to": {
+        "actor": "urn:fictional:carer-acts-for-parent:receiver-agent:actor",
+        "party": "urn:fictional:carer-acts-for-parent:receiver"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:c255e68f7d29750458ac4960123166bca6a6d80ade097f4b9d0ee4fff7994fe8"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): A parent says A parent acts for it.",
+      "raw": [
+       {
+        "id": "urn:fictional:carer-acts-for-parent:power",
+        "issuer": "urn:fictional:carer-acts-for-parent:register",
+        "subject": "urn:fictional:carer-acts-for-parent:holder",
+        "entity": "urn:fictional:carer-acts-for-parent:subject",
+        "actions": [
+         "organise-care"
+        ],
+        "scope": {
+         "operations": [
+          "urn:op:carer-acts-for-parent"
+         ],
+         "subjects": [
+          "urn:fictional:carer-acts-for-parent:subject"
+         ],
+         "purposes": [
+          "urn:purpose:carer-acts-for-parent"
+         ]
+        },
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "status": {
+         "ref": "urn:fictional:carer-acts-for-parent:register-status",
+         "id": "power"
+        },
+        "mayDelegate": {
+         "depth": 2
+        },
+        "type": "MandateLink",
+        "subjectKey": "4536x475OtEuqMCHt01BySXG6-z7YV9PonSakTzVjeo"
+       }
+      ],
+      "digest": "sha-256:b2164f339b7f1a538fc274c06d8d71bb24c25eb93e08bf99810769b1cc100c6c"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:carer-acts-for-parent\"; \"urn:fictional:carer-acts-for-parent:subject\"; \"urn:purpose:carer-acts-for-parent\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:carer-acts-for-parent",
+        "version": "0.1"
+       },
+       "input": {
+        "subject": "urn:fictional:carer-acts-for-parent:subject",
+        "request": "organise-care"
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:carer-acts-for-parent"
+      },
+      "digest": "sha-256:90d388c18fbe2ca345480adb7fa49120f3d4913739254406588f31a81f308f8a",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:carer-acts-for-parent"
+       },
+       {
+        "path": "input.subject",
+        "text": "urn:fictional:carer-acts-for-parent:subject"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:carer-acts-for-parent"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from The representative's agent reaches the inbound gate."
+  },
+  {
+   "seq": 12,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The representative's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 13,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 14,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "fail",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-credential",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "mandate-withdrawn",
+   "rule": {
+    "id": "urn:op:carer-acts-for-parent",
+    "text": "A representation statement signed with A parent's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "The sender has not shown that it acts for A parent here."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "fail",
+   "outcome": "refuse",
+   "reason": "mandate-withdrawn",
+   "caption": "The message is refused (mandate-withdrawn: representation not accepted); the core never sees it."
+  },
+  {
+   "seq": 16,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-credential",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
+  },
+  {
+   "seq": 17,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is A parent a party I can send An adult child acts for a parent to?",
+    "path": [
+     {
+      "at": "A care provider's own list",
+      "kind": "own-list",
+      "says": "A parent is accepted for An adult child acts for a parent."
+     }
+    ],
+    "answer": "Accepted, for An adult child acts for a parent only."
+   },
+   "reason": "recipient-established",
+   "caption": "A parent: Accepted, for An adult child acts for a parent only."
+  },
+  {
+   "seq": 18,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no personal data in this protocol message."
+  },
+  {
+   "seq": 19,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no data terms to apply."
+  },
+  {
+   "seq": 20,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-credential",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 21,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The receiving agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 22,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The refuse message goes to The representative's agent."
+  },
+  {
+   "seq": 23,
+   "step": 2,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-carer-acts-for-parent-branch-2:receiver-agent:0001",
+    "from": "The receiving agent",
+    "to": "The representative's agent",
+    "kind": "refuse",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:aa88ca24efe…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The receiving agent to The representative's agent; refuse; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-carer-acts-for-parent-branch-2:receiver-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+       "id": "urn:awp:engine-carer-acts-for-parent-branch-2:receiver-agent:0001",
+       "conversation": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0001",
+       "kind": "refuse",
+       "from": {
+        "actor": "urn:fictional:carer-acts-for-parent:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:carer-acts-for-parent:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:carer-acts-for-parent:owner-agent:actor",
+        "party": "urn:fictional:carer-acts-for-parent:subject"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:641bed8c687a1999b042f32ab8c4a75e2065cd23d06865de7e76d58e7c80d577"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Closes the conversation (refuse): mandate-withdrawn.",
+      "raw": {
+       "ref": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002",
+       "reason": "mandate-withdrawn"
+      },
+      "digest": "sha-256:575f38e887bcd802753c80cef733e0067b15aee101861f1d7e2539a8695df84d"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002.",
+      "raw": {
+       "conversation": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0001",
+       "inReplyTo": "urn:awp:engine-carer-acts-for-parent-branch-2:owner-agent:0002"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The receiving agent sends a refuse message to The representative's agent."
+  }
+ ]
+}

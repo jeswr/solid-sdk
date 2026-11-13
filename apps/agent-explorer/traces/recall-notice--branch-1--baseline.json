@@ -72,7 +72,7 @@
   }
  ],
  "generated": {
-  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
   "core": "scripted"
  },
  "standIns": [
@@ -83,6 +83,10 @@
   {
    "what": "Manufacturer registration and recall delivery",
    "replacedBy": "A reviewed manufacturer-specific source rule accepts only its recall notices; the attacker's real signature establishes authorship but not recall authority. No link is opened."
+  },
+  {
+   "what": "Unregistered notice author",
+   "replacedBy": "An intact signature identifies the notice key, but the receiver's product-safety root has no delegated register for it; key attribution does not supply an authority chain"
   }
  ],
  "events": [
@@ -129,7 +133,23 @@
      "clause": "CORE-IN-4"
     }
    ],
-   "reason": "source-not-authoritative",
+   "reason": "source-unknown",
+   "resolution": {
+    "question": "Is The fictional attacker an authority for product.recall claims about The manufacturer?",
+    "path": [
+     {
+      "at": "The product owner's own list",
+      "kind": "own-list",
+      "says": "No entry for The fictional attacker for this kind of claim."
+     },
+     {
+      "at": "The product safety root",
+      "kind": "root",
+      "says": "No register it delegates to lists The fictional attacker."
+     }
+    ],
+    "answer": "No register answers for this source."
+   },
    "caption": "The fictional attacker's product.recall statement: The fictional attacker is not accepted as a source for this kind of claim."
   },
   {
@@ -158,7 +178,7 @@
    "kind": "decision",
    "verdict": "fail",
    "outcome": "refuse",
-   "reason": "source-not-authoritative",
+   "reason": "source-unknown",
    "caption": "The fictional attacker's product.recall statement is refused and kept out of memory."
   },
   {
@@ -207,8 +227,8 @@
      "clause": "CORE-IN-13"
     }
    ],
-   "reason": "source-not-authoritative",
-   "caption": "Required product.recall was refused: source-not-authoritative."
+   "reason": "source-unknown",
+   "caption": "Required product.recall was refused: source-unknown."
   },
   {
    "seq": 8,
@@ -218,7 +238,7 @@
    "kind": "decision",
    "verdict": "fail",
    "outcome": "stop",
-   "reason": "source-not-authoritative",
+   "reason": "source-unknown",
    "caption": "A refused source cannot authorize the action."
   }
  ]

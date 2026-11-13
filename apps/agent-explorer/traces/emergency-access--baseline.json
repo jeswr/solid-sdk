@@ -102,7 +102,7 @@
   }
  ],
  "generated": {
-  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
   "core": "scripted"
  },
  "standIns": [
@@ -2912,7 +2912,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:551feeacafd…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:40061c494d3…; never trusted."
     },
     "layers": {
      "header": {
@@ -2941,7 +2941,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:1e66a9a765c5f54ac8c5df8d0172046e159a81520ad101f8bb6fddaaee5fe0e5"
+      "digest": "sha-256:337d2a5217202896bd5f19eab834302d275f7b58268a8ef2ee6733fba3682b4d"
      },
      "authority": {
       "present": false,
@@ -3013,6 +3013,7 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
           "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
           "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
           "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
@@ -3083,7 +3084,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:da4467c1123f5dfd267567357bff61d9278b2c55658f8e3619ba5f934589ee6f"
+      "digest": "sha-256:248e4dc612d01c20b9cbd7073dee60cd1c8e13b9842ca42dc09ed34c8f3941b2"
      },
      "evidence": {
       "present": false,
@@ -3474,7 +3475,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:3df1e2df687…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:9ee6e2e1f58…; never trusted."
     },
     "layers": {
      "header": {
@@ -3503,7 +3504,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:97fad95a405655aaae1aad703e3fbddc9da682816ee13e1c409a8c4f2b5c9aa8"
+      "digest": "sha-256:3369eba7eab64037ab3e04ffe2a229e5e2c11827f2e7eb1eccb29205dce6934c"
      },
      "authority": {
       "present": false,
@@ -3575,6 +3576,7 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
           "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
           "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
           "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
@@ -3645,7 +3647,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:e4a049bca871194041442bfd70c0579a40afa9e77326e07360cd744867daceca"
+      "digest": "sha-256:d15fb893856b73e0c16563e02f9c9d6945ba7fcd1df628c289ec3fe82778157d"
      },
      "evidence": {
       "present": false,

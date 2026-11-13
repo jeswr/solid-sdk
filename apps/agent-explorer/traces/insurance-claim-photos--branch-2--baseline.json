@@ -78,7 +78,7 @@
   }
  ],
  "generated": {
-  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
   "core": "scripted"
  },
  "standIns": [
@@ -3024,74 +3024,269 @@
    "agent": "receiver-agent",
    "part": "inbound-gate",
    "kind": "decision",
-   "verdict": "pass",
-   "outcome": "admit",
-   "caption": "The message is admitted; statements that did not pass are labelled as not admitted."
+   "verdict": "ask-more",
+   "outcome": "ask-more",
+   "reason": "source-not-authoritative",
+   "caption": "Required claim: repair.estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority."
   },
   {
    "seq": 99,
    "step": 6,
    "agent": "receiver-agent",
-   "part": "memory",
-   "kind": "store",
-   "fact": {
-    "id": "urn:scenario:insurance-claim-photos:original",
-    "label": "The policyholder's unstructured-content statement",
-    "claimType": "unstructured-content",
-    "subject": "urn:fictional:insurance-claim-photos:owner",
-    "value": null,
-    "source": "urn:fictional:insurance-claim-photos:owner",
-    "method": "recorded-by-authority",
-    "asOf": "2026-11-13T09:00:00.000Z",
-    "terms": {
-     "id": "urn:terms:insurance-claim-photos:original",
-     "summary": "use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos"
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
     },
-    "provenance": "signed by The policyholder"
-   },
-   "caption": "The policyholder's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
   },
   {
    "seq": 100,
    "step": 6,
    "agent": "receiver-agent",
-   "part": "memory",
-   "kind": "store",
-   "fact": {
-    "id": "urn:scenario:insurance-claim-photos:photo",
-    "label": "The policyholder's unstructured-content statement",
-    "claimType": "unstructured-content",
-    "subject": "urn:fictional:insurance-claim-photos:owner",
-    "value": null,
-    "source": "urn:fictional:insurance-claim-photos:owner",
-    "method": "recorded-by-authority",
-    "asOf": "2026-11-13T09:00:00.000Z",
-    "terms": {
-     "id": "urn:terms:insurance-claim-photos:photo",
-     "summary": "use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos"
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
     },
-    "provenance": "signed by The policyholder"
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The policyholder a party I can send An insurance claim with photographs to?",
+    "path": [
+     {
+      "at": "The insurer's own list",
+      "kind": "own-list",
+      "says": "The policyholder is accepted for An insurance claim with photographs."
+     }
+    ],
+    "answer": "Accepted, for An insurance claim with photographs only."
    },
-   "caption": "The policyholder's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+   "reason": "recipient-established",
+   "caption": "The policyholder: Accepted, for An insurance claim with photographs only."
   },
   {
    "seq": 101,
    "step": 6,
    "agent": "receiver-agent",
-   "part": "memory",
-   "kind": "store",
-   "caption": "Unstructured data sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14; not instructions; source urn:fictional:insurance-claim-photos:owner."
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "No restricted item entered this task's context."
   },
   {
    "seq": 102,
    "step": 6,
    "agent": "receiver-agent",
-   "part": "memory",
-   "kind": "store",
-   "caption": "Unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; not instructions; source urn:fictional:insurance-claim-photos:owner."
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "terms-allow",
+   "caption": "The context rule permits this text."
   },
   {
    "seq": 103,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 104,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The insurer's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 105,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The challenge message goes to The policyholder's agent."
+  },
+  {
+   "seq": 106,
+   "step": 6,
+   "agent": "receiver-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-insurance-claim-photos-branch-2:receiver-agent:0005",
+    "from": "The insurer's agent",
+    "to": "The policyholder's agent",
+    "kind": "challenge",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:3ed2084f7d5…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The insurer's agent to The policyholder's agent; challenge; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-insurance-claim-photos-branch-2:receiver-agent:0005.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+       "id": "urn:awp:engine-insurance-claim-photos-branch-2:receiver-agent:0005",
+       "conversation": "urn:awp:engine-insurance-claim-photos-branch-2:owner-agent:0001",
+       "kind": "challenge",
+       "from": {
+        "actor": "urn:fictional:insurance-claim-photos:receiver-agent:actor",
+        "onBehalfOf": "urn:fictional:insurance-claim-photos:receiver"
+       },
+       "to": {
+        "actor": "urn:fictional:insurance-claim-photos:owner-agent:actor",
+        "party": "urn:fictional:insurance-claim-photos:owner"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-insurance-claim-photos-branch-2:owner-agent:0002",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:eac4d19ffc0a84bdbc52fd4210a1644dcb8d18ad231e956427b37a785a2469b3"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "A message. It also carries free text, marked as untrusted content (data, never an instruction): \"Required claim: repair.estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority.\"; \"Required claim: repair.estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority.\"",
+      "raw": {
+       "ref": "urn:awp:engine-insurance-claim-photos-branch-2:owner-agent:0002",
+       "reason": "source-not-authoritative",
+       "detail": "Required claim: repair.estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority.",
+       "needs": {
+        "claim": "Required claim: repair.estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority.",
+        "id": "urn:awp:engine-insurance-claim-photos-branch-2:receiver-agent:0003",
+        "nonce": "urn:awp:engine-insurance-claim-photos-branch-2:receiver-agent:0004",
+        "expiresAt": "2026-11-13T09:05:00.000Z"
+       }
+      },
+      "digest": "sha-256:9ae8aed95f10eb1f7cc6e302b39e7bed8f8cbf5070b26f5a5603023439b40b05",
+      "untrusted": [
+       {
+        "path": "detail",
+        "text": "Required claim: repair.estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority."
+       },
+       {
+        "path": "needs.claim",
+        "text": "Required claim: repair.estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority."
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-insurance-claim-photos-branch-2:owner-agent:0002.",
+      "raw": {
+       "conversation": "urn:awp:engine-insurance-claim-photos-branch-2:owner-agent:0001",
+       "inReplyTo": "urn:awp:engine-insurance-claim-photos-branch-2:owner-agent:0002"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade"
+    }
+   ],
+   "caption": "The insurer's agent sends a challenge message to The policyholder's agent."
+  },
+  {
+   "seq": 107,
    "step": 7,
    "agent": "receiver-agent",
    "part": "core",
@@ -3099,7 +3294,7 @@
    "caption": "The core proposes to take the next step in A person decides on the original content with The insurer."
   },
   {
-   "seq": 104,
+   "seq": 108,
    "step": 7,
    "agent": "receiver-agent",
    "part": "outbound-gate",
@@ -3122,38 +3317,33 @@
    "caption": "The insurer's mandate covers this action."
   },
   {
-   "seq": 105,
+   "seq": 109,
    "step": 7,
    "agent": "receiver-agent",
    "part": "outbound-gate",
    "kind": "check",
-   "check": "evidence",
+   "check": "fitness",
    "verdict": "fail",
    "refs": [
     {
-     "layer": "authenticity",
-     "suite": "jws",
-     "clause": "CORE-OUT-9"
-    },
-    {
-     "layer": "accountability",
-     "suite": "local-ledger",
-     "clause": "CORE-OUT-9"
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
     }
    ],
-   "reason": "evidence-invalid",
-   "caption": "The proposed action relies on a statement that was not admitted."
+   "reason": "source-not-authoritative",
+   "caption": "Required repair.estimate was refused: source-not-authoritative."
   },
   {
-   "seq": 106,
+   "seq": 110,
    "step": 7,
    "agent": "receiver-agent",
    "part": "outbound-gate",
    "kind": "decision",
    "verdict": "fail",
    "outcome": "stop",
-   "reason": "evidence-invalid",
-   "caption": "Unaccepted support cannot authorize an action."
+   "reason": "source-not-authoritative",
+   "caption": "A refused source cannot authorize the action."
   }
  ]
 }

@@ -404,7 +404,7 @@
   }
  ],
  "generated": {
-  "commit": "715021520c07c25190f9d745d3a00ed46181e233",
+  "commit": "f5d4ac54a70b1b0ae03185437853332cc40336d8",
   "core": "scripted"
  },
  "standIns": [
@@ -25141,7 +25141,7 @@
    "agent": "owner-agent",
    "part": "record",
    "kind": "record",
-   "caption": "104 entries in this agent's hash-chained record; the chain verifies."
+   "caption": "450 entries in this agent's hash-chained record; the chain verifies."
   }
  ]
 }

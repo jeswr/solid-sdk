@@ -668,17 +668,8 @@
     {
      "path": "branch-1",
      "label": "One applicant withdraws their mandate mid-way",
-     "status": "disagrees",
-     "scenario": "joint-mortgage--branch-1",
-     "actual": {
-      "outcome": "stop",
-      "reason": "mandate-invalid",
-      "check": "mandate"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "mandate-withdrawn"
-     }
+     "status": "runs",
+     "scenario": "joint-mortgage--branch-1"
     },
     {
      "path": "branch-2",
@@ -806,32 +797,14 @@
     {
      "path": "branch-1",
      "label": "The director's role does not cover borrowing",
-     "status": "disagrees",
-     "scenario": "small-business-loan--branch-1",
-     "actual": {
-      "outcome": "stop",
-      "reason": "not-authorised",
-      "check": "limits-approval"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "representation-out-of-scope"
-     }
+     "status": "runs",
+     "scenario": "small-business-loan--branch-1"
     },
     {
      "path": "branch-2",
      "label": "Management accounts are self-reported, not filed",
-     "status": "disagrees",
-     "scenario": "small-business-loan--branch-2",
-     "actual": {
-      "outcome": "ask-more",
-      "reason": "structured-form-required",
-      "check": "fitness"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "method-not-accepted"
-     }
+     "status": "runs",
+     "scenario": "small-business-loan--branch-2"
     }
    ],
    "runState": "all"
@@ -956,32 +929,14 @@
     {
      "path": "branch-1",
      "label": "The insurer's model reads the photo as minor damage; the garage says otherwise",
-     "status": "disagrees",
-     "scenario": "insurance-claim-photos--branch-1",
-     "actual": {
-      "outcome": "stop",
-      "reason": "method-not-accepted",
-      "check": "fitness"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "structured-form-required"
-     }
+     "status": "runs",
+     "scenario": "insurance-claim-photos--branch-1"
     },
     {
      "path": "branch-2",
      "label": "The estimate is from a garage the insurer does not accept",
-     "status": "disagrees",
-     "scenario": "insurance-claim-photos--branch-2",
-     "actual": {
-      "outcome": "stop",
-      "reason": "evidence-invalid",
-      "check": "evidence"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "source-not-authoritative"
-     }
+     "status": "runs",
+     "scenario": "insurance-claim-photos--branch-2"
     }
    ],
    "runState": "all"
@@ -1037,7 +992,8 @@
      "path": "branch-1",
      "label": "The agent would send a diagnosis to explain the request",
      "status": "runs",
-     "scenario": "hardship-request--branch-1"
+     "scenario": "hardship-request--branch-1",
+     "corrected": true
     }
    ],
    "runState": "all"
@@ -1074,8 +1030,8 @@
    "fit": "fits",
    "fitNote": "Precedence is a rule: the creditor's statement outranks the agency's copy of it. The route when the agency refuses is the accountability layer.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "credit-file-dispute",
    "strains": [
     "truth"
    ],
@@ -1083,17 +1039,17 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs source-precedence conflict resolution, a deadline-bound correction agreement and regulator-claim evidence exchange; signatures and a local ledger do not implement that dispute workflow."
+     "status": "runs",
+     "scenario": "credit-file-dispute"
     },
     {
      "path": "branch-1",
      "label": "The agency does not answer by its deadline",
-     "status": "blocked",
-     "reason": "Needs source-precedence conflict resolution, a deadline-bound correction agreement and regulator-claim evidence exchange; signatures and a local ledger do not implement that dispute workflow."
+     "status": "runs",
+     "scenario": "credit-file-dispute--branch-1"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "health-referral",
@@ -1151,7 +1107,8 @@
      "path": "branch-1",
      "label": "The clinic asks for the full record",
      "status": "runs",
-     "scenario": "health-referral--branch-1"
+     "scenario": "health-referral--branch-1",
+     "corrected": true
     },
     {
      "path": "branch-2",
@@ -1193,24 +1150,33 @@
    "fit": "fits",
    "fitNote": "Each entry keeps its method. The patient can mark a note as \"take the clinician's word over mine\".",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "records-to-new-practice",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs Solid protected-reference transport for a record preserving original clinical, patient and estimate provenance; the local holder only re-signs its own statements. Conflict precedence is also not implemented."
+     "status": "runs",
+     "scenario": "records-to-new-practice"
     },
     {
      "path": "branch-1",
      "label": "The patient's note of an allergy differs from the clinical entry",
-     "status": "blocked",
-     "reason": "Needs Solid protected-reference transport for a record preserving original clinical, patient and estimate provenance; the local holder only re-signs its own statements. Conflict precedence is also not implemented."
+     "status": "disagrees",
+     "scenario": "records-to-new-practice--branch-1",
+     "actual": {
+      "outcome": "admit",
+      "reason": "superseded-by-better-source",
+      "check": "fitness"
+     },
+     "expected": {
+      "outcome": "ask-more",
+      "reason": "superseded-by-better-source"
+     }
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "prescription-dispensing",
@@ -1248,30 +1214,30 @@
    "fit": "fits",
    "fitNote": "Single use is a status question, answered by a register, not by the signature.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "prescription-dispensing",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently."
+     "status": "runs",
+     "scenario": "prescription-dispensing"
     },
     {
      "path": "branch-1",
      "label": "The same prescription is presented at a second pharmacy",
-     "status": "blocked",
-     "reason": "Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently."
+     "status": "runs",
+     "scenario": "prescription-dispensing--branch-1"
     },
     {
      "path": "branch-2",
      "label": "The prescriber's registration lapsed last month",
-     "status": "blocked",
-     "reason": "Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently."
+     "status": "runs",
+     "scenario": "prescription-dispensing--branch-2"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "discharge-letter",
@@ -1430,7 +1396,8 @@
      "path": "branch-1",
      "label": "The request comes from a registered clinician with an emergency flag",
      "status": "runs",
-     "scenario": "emergency-access--branch-1"
+     "scenario": "emergency-access--branch-1",
+     "corrected": true
     },
     {
      "path": "branch-2",
@@ -1478,8 +1445,8 @@
    "fit": "fits",
    "fitNote": "A chain of delegation names every link. Each link can only narrow.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "carer-acts-for-parent",
    "strains": [
     "many"
    ],
@@ -1487,23 +1454,23 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs attenuating multi-hop personal delegation with current power-of-attorney register status; the organization credential checks only one entity-to-agent link."
+     "status": "runs",
+     "scenario": "carer-acts-for-parent"
     },
     {
      "path": "branch-1",
      "label": "The agent tries to change where the father lives, outside the power",
-     "status": "blocked",
-     "reason": "Needs attenuating multi-hop personal delegation with current power-of-attorney register status; the organization credential checks only one entity-to-agent link."
+     "status": "runs",
+     "scenario": "carer-acts-for-parent--branch-1"
     },
     {
      "path": "branch-2",
      "label": "The power is revoked",
-     "status": "blocked",
-     "reason": "Needs attenuating multi-hop personal delegation with current power-of-attorney register status; the organization credential checks only one entity-to-agent link."
+     "status": "runs",
+     "scenario": "carer-acts-for-parent--branch-2"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "fit-note-to-employer",
@@ -1550,8 +1517,7 @@
      "path": "branch-1",
      "label": "The employer's agent asks what the condition is",
      "status": "runs",
-     "scenario": "fit-note-to-employer--branch-1",
-     "corrected": true
+     "scenario": "fit-note-to-employer--branch-1"
     }
    ],
    "runState": "all"
@@ -1713,17 +1679,8 @@
     {
      "path": "branch-1",
      "label": "The insurer's terms allow use in underwriting",
-     "status": "disagrees",
-     "scenario": "wearable-data--branch-1",
-     "actual": {
-      "outcome": "stop",
-      "reason": "not-authorised",
-      "check": "mandate"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "terms-not-acceptable"
-     }
+     "status": "runs",
+     "scenario": "wearable-data--branch-1"
     }
    ],
    "runState": "all"
@@ -1834,7 +1791,8 @@
      "path": "branch-1",
      "label": "An agent scores the reference and rejects the candidate on the score",
      "status": "runs",
-     "scenario": "employment-reference--branch-1"
+     "scenario": "employment-reference--branch-1",
+     "corrected": true
     }
    ],
    "runState": "all"
@@ -1889,32 +1847,14 @@
     {
      "path": "branch-1",
      "label": "The message is unsigned email",
-     "status": "disagrees",
-     "scenario": "salary-account-change--branch-1",
-     "actual": {
-      "outcome": "stop",
-      "reason": "evidence-invalid",
-      "check": "evidence"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "unsigned-not-allowed"
-     }
+     "status": "runs",
+     "scenario": "salary-account-change--branch-1"
     },
     {
      "path": "branch-2",
      "label": "It is signed, but not under the employee's mandate",
-     "status": "disagrees",
-     "scenario": "salary-account-change--branch-2",
-     "actual": {
-      "outcome": "stop",
-      "reason": "evidence-invalid",
-      "check": "evidence"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "representation-missing"
-     }
+     "status": "runs",
+     "scenario": "salary-account-change--branch-2"
     }
    ],
    "runState": "all"
@@ -2134,7 +2074,8 @@
      "path": "branch-1",
      "label": "One side's identity cannot be tied to any source the other accepts",
      "status": "runs",
-     "scenario": "flat-share--branch-1"
+     "scenario": "flat-share--branch-1",
+     "corrected": true
     }
    ],
    "runState": "all"
@@ -2304,17 +2245,8 @@
     {
      "path": "branch-1",
      "label": "Household composition is self-reported only",
-     "status": "disagrees",
-     "scenario": "benefit-claim--branch-1",
-     "actual": {
-      "outcome": "ask-more",
-      "reason": "structured-form-required",
-      "check": "fitness"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "method-not-accepted"
-     }
+     "status": "runs",
+     "scenario": "benefit-claim--branch-1"
     }
    ],
    "runState": "all"
@@ -2351,24 +2283,24 @@
    "fit": "fits",
    "fitNote": "",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "tax-agent",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs client-to-accountant-to-agent delegation bound to the selected taxpayer account and current professional-register authority. A single owner mandate or organization credential is not that chain."
+     "status": "runs",
+     "scenario": "tax-agent"
     },
     {
      "path": "branch-1",
      "label": "The agent reads another client's account by mistake",
-     "status": "blocked",
-     "reason": "Needs client-to-accountant-to-agent delegation bound to the selected taxpayer account and current professional-register authority. A single owner mandate or organization credential is not that chain."
+     "status": "runs",
+     "scenario": "tax-agent--branch-1"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "change-of-address",
@@ -2516,17 +2448,8 @@
     {
      "path": "branch-1",
      "label": "No chain links the two national registers",
-     "status": "disagrees",
-     "scenario": "degree-recognition--branch-1",
-     "actual": {
-      "outcome": "refuse",
-      "reason": "source-unknown",
-      "check": "source"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "source-unknown"
-     }
+     "status": "runs",
+     "scenario": "degree-recognition--branch-1"
     }
    ],
    "runState": "some"
@@ -2560,8 +2483,8 @@
    "fit": "strains",
    "fitNote": "Who may consent for a child is law, and differs by place and by family. The profile can encode the common case only.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "consent-for-a-child",
    "strains": [
     "judgement",
     "many"
@@ -2570,17 +2493,17 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs child-to-parent authority, current objections and a policy for whose consent is sufficient; organization roles do not establish parental power or resolve conflicting parents."
+     "status": "runs",
+     "scenario": "consent-for-a-child"
     },
     {
      "path": "branch-1",
      "label": "The second parent has objected",
-     "status": "blocked",
-     "reason": "Needs child-to-parent authority, current objections and a policy for whose consent is sufficient; organization roles do not establish parental power or resolve conflicting parents."
+     "status": "runs",
+     "scenario": "consent-for-a-child--branch-1"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "shopping-agent",
@@ -2891,17 +2814,8 @@
     {
      "path": "branch-1",
      "label": "The notice is not signed by the registered manufacturer",
-     "status": "disagrees",
-     "scenario": "recall-notice--branch-1",
-     "actual": {
-      "outcome": "stop",
-      "reason": "source-not-authoritative",
-      "check": "fitness"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "source-unknown"
-     }
+     "status": "runs",
+     "scenario": "recall-notice--branch-1"
     }
    ],
    "runState": "all"
@@ -2958,8 +2872,17 @@
     {
      "path": "branch-1",
      "label": "A hotel listing contains text telling the agent to book a different, dearer hotel",
-     "status": "runs",
-     "scenario": "trip-booking--branch-1"
+     "status": "disagrees",
+     "scenario": "trip-booking--branch-1",
+     "actual": {
+      "outcome": "ask-principal",
+      "reason": "context-not-clear",
+      "check": "data-terms"
+     },
+     "expected": {
+      "outcome": "stop",
+      "reason": "not-authorised"
+     }
     },
     {
      "path": "branch-2",
@@ -3068,17 +2991,8 @@
     {
      "path": "branch-1",
      "label": "The consulate cannot verify the foreign bank",
-     "status": "disagrees",
-     "scenario": "visa-application--branch-1",
-     "actual": {
-      "outcome": "refuse",
-      "reason": "source-unknown",
-      "check": "source"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "source-unknown"
-     }
+     "status": "runs",
+     "scenario": "visa-application--branch-1"
     }
    ],
    "runState": "some"
@@ -3262,8 +3176,8 @@
    "fit": "strains",
    "fitNote": "The receipt is a signed statement that deletion happened. It makes a false statement actionable; it does not make deletion certain.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "erasure-request",
    "strains": [
     "after"
    ],
@@ -3271,17 +3185,17 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs a general erasure/onward-notification duty executor and agreement-chain discovery. The engine only has assessment-specific local erasure and emergency notification duties."
+     "status": "runs",
+     "scenario": "erasure-request"
     },
     {
      "path": "branch-1",
      "label": "The company passed the data on with no duty to inform",
-     "status": "blocked",
-     "reason": "Needs a general erasure/onward-notification duty executor and agreement-chain discovery. The engine only has assessment-specific local erasure and emergency notification duties."
+     "status": "runs",
+     "scenario": "erasure-request--branch-1"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "fee-dispute",
@@ -3313,24 +3227,24 @@
    "fit": "fits",
    "fitNote": "",
    "benchmarks": [],
-   "status": "specified",
-   "trace": "mortgage-claim",
+   "status": "worked",
+   "trace": "fee-dispute",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs regulator-claim exchange of both parties' signed record segments, continuity/gap verification and a forum decision gate. checkRecord only validates the local ledger and is not that evidential workflow."
+     "status": "runs",
+     "scenario": "fee-dispute"
     },
     {
      "path": "branch-1",
      "label": "The lender's record has a gap",
-     "status": "blocked",
-     "reason": "Needs regulator-claim exchange of both parties' signed record segments, continuity/gap verification and a forum decision gate. checkRecord only validates the local ledger and is not that evidential workflow."
+     "status": "runs",
+     "scenario": "fee-dispute--branch-1"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "contract-wording",
@@ -3379,7 +3293,8 @@
      "path": "branch-1",
      "label": "An agent accepts a clause its principal's policy does not cover",
      "status": "runs",
-     "scenario": "contract-wording--branch-1"
+     "scenario": "contract-wording--branch-1",
+     "corrected": true
     }
    ],
    "runState": "all"
@@ -3553,17 +3468,8 @@
     {
      "path": "branch-1",
      "label": "One tier's input is self-declared",
-     "status": "disagrees",
-     "scenario": "recycled-content--branch-1",
-     "actual": {
-      "outcome": "refuse",
-      "reason": "method-not-accepted",
-      "check": "fitness"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "method-not-accepted"
-     }
+     "status": "runs",
+     "scenario": "recycled-content--branch-1"
     }
    ],
    "runState": "some"
@@ -3597,8 +3503,8 @@
    "fit": "fits",
    "fitNote": "It fits where a register of financed invoices exists. Where none does, no proof can stand in for it.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "invoice-finance",
    "strains": [
     "absence"
    ],
@@ -3606,17 +3512,17 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs a shared authoritative invoice-financing register with atomic reservation/redemption and current cross-financier status. An issuer-signed static active/withdrawn flag is not single financing."
+     "status": "runs",
+     "scenario": "invoice-finance"
     },
     {
      "path": "branch-1",
      "label": "The same invoice is offered to a second financier",
-     "status": "blocked",
-     "reason": "Needs a shared authoritative invoice-financing register with atomic reservation/redemption and current cross-financier status. An issuer-signed static active/withdrawn flag is not single financing."
+     "status": "runs",
+     "scenario": "invoice-finance--branch-1"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "salary-benchmark",
@@ -3759,24 +3665,24 @@
    "fit": "fits",
    "fitNote": "Duties in agreements are checked by rule, and each notice and receipt is in the record.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "incident-notice",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs general agreement-bound fan-out notification duties, acknowledgement tracking and deadline/timeout audit. Emergency-only notification records do not implement customer incident notices or result-uncertain acknowledgement recovery."
+     "status": "runs",
+     "scenario": "incident-notice"
     },
     {
      "path": "branch-1",
      "label": "A customer's agent does not acknowledge receipt",
-     "status": "blocked",
-     "reason": "Needs general agreement-bound fan-out notification duties, acknowledgement tracking and deadline/timeout audit. Emergency-only notification records do not implement customer incident notices or result-uncertain acknowledgement recovery."
+     "status": "runs",
+     "scenario": "incident-notice--branch-1"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "master-data-change",
@@ -3880,8 +3786,7 @@
      "path": "branch-1",
      "label": "The request would reveal one named person's salary",
      "status": "runs",
-     "scenario": "cross-department-request--branch-1",
-     "corrected": true
+     "scenario": "cross-department-request--branch-1"
     }
    ],
    "runState": "all"
@@ -3986,14 +3891,14 @@
     "a2asecbench"
    ],
    "status": "worked",
-   "trace": "agent-handoff--branch-1",
+   "trace": "agent-handoff",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs an A2A handoff binding and attenuating retailer-to-partner delegated authority; the data runner's local binding does not implement this delegation chain."
+     "status": "runs",
+     "scenario": "agent-handoff"
     },
     {
      "path": "branch-1",
@@ -4004,11 +3909,11 @@
     {
      "path": "branch-2",
      "label": "The handoff passes on more than the retailer holds",
-     "status": "blocked",
-     "reason": "Needs verification of the complete retailer-to-partner authority chain and its attenuation; a one-link representation cannot test authority greater than the delegator holds."
+     "status": "runs",
+     "scenario": "agent-handoff--branch-2"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "meeting-notes",
@@ -4141,7 +4046,7 @@
    "fitNote": "",
    "benchmarks": [],
    "status": "worked",
-   "trace": "sell-a-car--branch-1",
+   "trace": "sell-a-car",
    "strains": [
     "absence"
    ],
@@ -4149,8 +4054,8 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs escrow reservation/release tied to current vehicle ownership and a complete finance-register search; a bank-submission stand-in is not escrow."
+     "status": "runs",
+     "scenario": "sell-a-car"
     },
     {
      "path": "branch-1",
@@ -4159,7 +4064,7 @@
      "scenario": "sell-a-car--branch-1"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "introduction",
@@ -4206,17 +4111,8 @@
     {
      "path": "branch-1",
      "label": "One side can show only a self-made profile",
-     "status": "disagrees",
-     "scenario": "introduction--branch-1",
-     "actual": {
-      "outcome": "refuse",
-      "reason": "source-not-authoritative",
-      "check": "source"
-     },
-     "expected": {
-      "outcome": "ask-principal",
-      "reason": "method-not-accepted"
-     }
+     "status": "runs",
+     "scenario": "introduction--branch-1"
     }
    ],
    "runState": "some"
@@ -4313,17 +4209,8 @@
     {
      "path": "branch-1",
      "label": "The fetching agent has no rule for \"training\"",
-     "status": "disagrees",
-     "scenario": "no-training-terms--branch-1",
-     "actual": {
-      "outcome": "go",
-      "reason": "within-limits",
-      "check": "limits-approval"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "unsupported-term"
-     }
+     "status": "runs",
+     "scenario": "no-training-terms--branch-1"
     }
    ],
    "runState": "all"
@@ -4379,8 +4266,17 @@
     {
      "path": "tenth-request",
      "label": "The tenth request, like the first, is outside the mandate",
-     "status": "runs",
-     "scenario": "probing-counterparty--tenth-request"
+     "status": "disagrees",
+     "scenario": "probing-counterparty--tenth-request",
+     "actual": {
+      "outcome": "refuse",
+      "reason": "representation-missing",
+      "check": "authority"
+     },
+     "expected": {
+      "outcome": "stop",
+      "reason": "not-authorised"
+     }
     },
     {
      "path": "round-limit",
@@ -4438,7 +4334,8 @@
      "path": "branch-1",
      "label": "Nothing fails",
      "status": "runs",
-     "scenario": "false-but-signed--branch-1"
+     "scenario": "false-but-signed--branch-1",
+     "corrected": true
     }
    ],
    "runState": "all"
@@ -4472,7 +4369,7 @@
    "fitNote": "Inside an agent built to this design the transfer is stopped. Outside one, the signed acceptance of the terms is evidence for a regulator.",
    "benchmarks": [],
    "status": "worked",
-   "trace": "onward-leak--branch-1",
+   "trace": "onward-leak",
    "strains": [
     "after"
    ],
@@ -4480,8 +4377,8 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Needs observation of a receiver's system copying outside its own gate and a regulator claim over its signed acceptance; the honest runtime cannot emit that bypass as a gated success."
+     "status": "runs",
+     "scenario": "onward-leak"
     },
     {
      "path": "branch-1",
@@ -4490,7 +4387,7 @@
      "scenario": "onward-leak--branch-1"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "no-agent-on-the-other-side",
