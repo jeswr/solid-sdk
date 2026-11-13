@@ -4306,6 +4306,33 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/site-model: {}
+
+  packages/site-profiler:
+    dependencies:
+      '@jeswr/site-model':
+        specifier: workspace:*
+        version: link:../site-model
+      acorn:
+        specifier: ^8.17.0
+        version: 8.17.0
+      domhandler:
+        specifier: ^5.0.3
+        version: 5.0.3
+      domutils:
+        specifier: ^3.2.2
+        version: 3.2.2
+      htmlparser2:
+        specifier: ^10.1.0
+        version: 10.1.0
+      playwright:
+        specifier: 1.61.1
+        version: 1.61.1
+    devDependencies:
+      '@jeswr/test-shop':
+        specifier: workspace:*
+        version: link:../../tools/test-shop
+
   packages/solid-a2a:
     dependencies:
       '@jeswr/rdf-serialize':
