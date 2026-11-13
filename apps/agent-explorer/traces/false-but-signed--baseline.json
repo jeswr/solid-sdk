@@ -1,0 +1,381 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "scenario": {
+  "id": "false-but-signed",
+  "title": "A registered source signs something false",
+  "steps": {
+   "1": "Admit false income true income",
+   "2": "Record"
+  }
+ },
+ "configuration": {
+  "id": "false-but-signed-local",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "corroboration",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "lender-agent",
+   "name": "The lender's agent",
+   "actsFor": "lender",
+   "role": "agent"
+  },
+  {
+   "id": "employer-agent",
+   "name": "Employer agent",
+   "actsFor": "employer",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Employer records",
+   "replacedBy": "Fictional employer agent with its own keys and gates"
+  },
+  {
+   "what": "Tax register",
+   "replacedBy": "Fictional tax-register, issuer-only key"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "employer's annual-income statement is intact and signed with employer's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source-rule:employer",
+    "text": "employer is accepted for annual-income claims."
+   },
+   "resolution": {
+    "question": "Is employer an authority for annual-income claims about employee?",
+    "path": [
+     {
+      "at": "lender's own list",
+      "kind": "own-list",
+      "says": "employer is accepted for annual-income."
+     }
+    ],
+    "answer": "Accepted, for annual-income claims only."
+   },
+   "caption": "employer's annual-income statement: employer is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "employer's annual-income statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:income",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "employer's annual-income statement: its terms allow this: ."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "corroboration",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:false-but-signed:annual-income",
+    "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "employer's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "ask-more",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "corroboration",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "completeness-not-established",
+   "caption": "Need 2 accepted independent sources for annual-income."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "ask-more",
+   "outcome": "ask-more",
+   "reason": "completeness-not-established",
+   "caption": "employer's annual-income statement is refused and kept out of memory."
+  },
+  {
+   "seq": 8,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "tax-register's annual-income statement is intact and signed with tax-register's pinned key."
+  },
+  {
+   "seq": 9,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source-rule:tax-register",
+    "text": "tax-register is accepted for annual-income claims."
+   },
+   "resolution": {
+    "question": "Is tax-register an authority for annual-income claims about employee?",
+    "path": [
+     {
+      "at": "lender's own list",
+      "kind": "own-list",
+      "says": "tax-register is accepted for annual-income."
+     }
+    ],
+    "answer": "Accepted, for annual-income claims only."
+   },
+   "caption": "tax-register's annual-income statement: tax-register is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 10,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "tax-register's annual-income statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 11,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "default-terms",
+    "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   },
+   "caption": "tax-register's annual-income statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+  },
+  {
+   "seq": 12,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "corroboration",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:false-but-signed:annual-income",
+    "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "tax-register's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 13,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "ask-more",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "corroboration",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "completeness-not-established",
+   "caption": "Need 2 accepted independent sources for annual-income."
+  },
+  {
+   "seq": 14,
+   "step": 1,
+   "agent": "lender-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "ask-more",
+   "outcome": "ask-more",
+   "reason": "completeness-not-established",
+   "caption": "tax-register's annual-income statement is refused and kept out of memory."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "lender-agent",
+   "part": "record",
+   "kind": "record",
+   "caption": "6 entries in this agent's hash-chained record; the chain verifies."
+  }
+ ],
+ "useCase": "false-but-signed"
+}

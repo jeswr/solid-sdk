@@ -577,7 +577,39 @@
    ],
    "status": "worked",
    "trace": "mortgage-main",
-   "strains": []
+   "strains": [],
+   "runs": [
+    {
+     "path": "main",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "The core flow",
+     "status": "runs",
+     "scenario": "mortgage-core"
+    },
+    {
+     "path": "main",
+     "label": "The lender asks for more than the mandate allows",
+     "status": "runs",
+     "scenario": "mortgage-over-ask"
+    },
+    {
+     "path": "main",
+     "label": "The lender's terms are outside the limits",
+     "status": "runs",
+     "scenario": "mortgage-out-of-limit"
+    },
+    {
+     "path": "main",
+     "label": "A message carries an instruction to pay a fee",
+     "status": "runs",
+     "scenario": "mortgage-injected-fee"
+    }
+   ]
   },
   {
    "id": "joint-mortgage",
@@ -619,7 +651,8 @@
    "trace": null,
    "strains": [
     "many"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "pay-an-invoice",
@@ -660,9 +693,29 @@
    "benchmarks": [
     "agentdojo"
    ],
-   "status": "specified",
-   "trace": null,
-   "strains": []
+   "status": "worked",
+   "trace": "pay-an-invoice",
+   "strains": [],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "pay-an-invoice"
+    },
+    {
+     "path": "branch-1",
+     "label": "A message gives new bank details for a known supplier",
+     "status": "runs",
+     "scenario": "pay-an-invoice--branch-1"
+    },
+    {
+     "path": "branch-2",
+     "label": "An invoice is above the limit",
+     "status": "runs",
+     "scenario": "pay-an-invoice--branch-2"
+    }
+   ]
   },
   {
    "id": "small-business-loan",
@@ -706,7 +759,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "insurance-quote",
@@ -753,7 +807,8 @@
    "trace": null,
    "strains": [
     "absence"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "insurance-claim-photos",
@@ -796,7 +851,8 @@
    "trace": null,
    "strains": [
     "pictures"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "hardship-request",
@@ -837,7 +893,8 @@
    "strains": [
     "words",
     "judgement"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "credit-file-dispute",
@@ -875,7 +932,8 @@
    "trace": null,
    "strains": [
     "truth"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "health-referral",
@@ -917,10 +975,30 @@
    "benchmarks": [
     "medagentbench"
    ],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "health-referral",
    "strains": [
     "judgement"
+   ],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "health-referral"
+    },
+    {
+     "path": "branch-1",
+     "label": "The clinic asks for the full record",
+     "status": "runs",
+     "scenario": "health-referral--branch-1"
+    },
+    {
+     "path": "branch-2",
+     "label": "The referrer is not on the professional register",
+     "status": "runs",
+     "scenario": "health-referral--branch-2"
+    }
    ]
   },
   {
@@ -956,7 +1034,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "prescription-dispensing",
@@ -996,7 +1075,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "discharge-letter",
@@ -1030,10 +1110,24 @@
    "benchmarks": [
     "medagentbench"
    ],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "discharge-letter",
    "strains": [
     "words"
+   ],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "discharge-letter"
+    },
+    {
+     "path": "branch-1",
+     "label": "An agent turns \"cannot be ruled out\" into a coded diagnosis",
+     "status": "runs",
+     "scenario": "discharge-letter--branch-1"
+    }
    ]
   },
   {
@@ -1072,7 +1166,8 @@
    "trace": null,
    "strains": [
     "absence"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "emergency-access",
@@ -1109,10 +1204,30 @@
    "fit": "strains",
    "fitNote": "The mandate carries a break-glass rule written in advance: a registered emergency clinician may read a named summary, and the patient and a trusted contact are told afterwards. It is a rule, so it can be abused by anyone who meets it; the record is the remedy.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "emergency-access",
    "strains": [
     "time"
+   ],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "emergency-access"
+    },
+    {
+     "path": "branch-1",
+     "label": "The request comes from a registered clinician with an emergency flag",
+     "status": "runs",
+     "scenario": "emergency-access--branch-1"
+    },
+    {
+     "path": "branch-2",
+     "label": "The same flag is used by someone not on the register",
+     "status": "runs",
+     "scenario": "emergency-access--branch-2"
+    }
    ]
   },
   {
@@ -1156,7 +1271,8 @@
    "trace": null,
    "strains": [
     "many"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "fit-note-to-employer",
@@ -1191,7 +1307,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "care-abroad",
@@ -1228,7 +1345,8 @@
    "trace": null,
    "strains": [
     "meaning"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "cohort-count",
@@ -1268,7 +1386,8 @@
    "trace": null,
    "strains": [
     "repeat"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "wearable-data",
@@ -1303,7 +1422,8 @@
    "trace": null,
    "strains": [
     "after"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "right-to-work",
@@ -1339,9 +1459,29 @@
    "benchmarks": [
     "agentdam"
    ],
-   "status": "specified",
-   "trace": null,
-   "strains": []
+   "status": "worked",
+   "trace": "right-to-work",
+   "strains": [],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "right-to-work"
+    },
+    {
+     "path": "branch-1",
+     "label": "The employer asks for a passport scan",
+     "status": "runs",
+     "scenario": "right-to-work--branch-1"
+    },
+    {
+     "path": "hidden-validity-proof",
+     "label": "Showing the permit is still valid without showing its date",
+     "status": "blocked",
+     "reason": "Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates."
+    }
+   ]
   },
   {
    "id": "employment-reference",
@@ -1378,7 +1518,8 @@
    "strains": [
     "words",
     "judgement"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "salary-account-change",
@@ -1419,7 +1560,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "expenses",
@@ -1456,7 +1598,8 @@
    "trace": null,
    "strains": [
     "pictures"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "platform-income",
@@ -1493,7 +1636,8 @@
    "trace": null,
    "strains": [
     "absence"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "tenancy-application",
@@ -1537,7 +1681,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "flat-share",
@@ -1569,10 +1714,24 @@
    "fit": "strains",
    "fitNote": "With no register, the trust lookup stops at the principal's own list. The agent can show what is and is not established; the decision to trust a stranger stays with the person.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "flat-share",
    "strains": [
     "no-register"
+   ],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "flat-share"
+    },
+    {
+     "path": "branch-1",
+     "label": "One side's identity cannot be tied to any source the other accepts",
+     "status": "runs",
+     "scenario": "flat-share--branch-1"
+    }
    ]
   },
   {
@@ -1610,7 +1769,8 @@
    "strains": [
     "pictures",
     "low-stakes"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "home-purchase",
@@ -1657,7 +1817,8 @@
    "trace": null,
    "strains": [
     "many"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "benefit-claim",
@@ -1693,7 +1854,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "tax-agent",
@@ -1729,7 +1891,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "change-of-address",
@@ -1762,7 +1925,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "permit-application",
@@ -1800,7 +1964,8 @@
    "strains": [
     "words",
     "pictures"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "degree-recognition",
@@ -1836,7 +2001,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "consent-for-a-child",
@@ -1872,7 +2038,8 @@
    "strains": [
     "judgement",
     "many"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "shopping-agent",
@@ -1916,7 +2083,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "price-negotiation",
@@ -1954,7 +2122,8 @@
    "strains": [
     "meaning",
     "own-words"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "cancel-subscription",
@@ -1988,7 +2157,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "return-and-refund",
@@ -2022,7 +2192,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "age-check",
@@ -2057,7 +2228,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "recall-notice",
@@ -2091,7 +2263,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "trip-booking",
@@ -2134,7 +2307,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "disruption-rebooking",
@@ -2170,7 +2344,8 @@
    "trace": null,
    "strains": [
     "time"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "visa-application",
@@ -2208,7 +2383,8 @@
    "trace": null,
    "strains": [
     "words"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "energy-switch",
@@ -2244,7 +2420,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "telecom-fault",
@@ -2281,7 +2458,8 @@
    "strains": [
     "own-words",
     "low-stakes"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "subject-access-request",
@@ -2314,7 +2492,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "erasure-request",
@@ -2348,7 +2527,8 @@
    "trace": null,
    "strains": [
     "after"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "fee-dispute",
@@ -2382,7 +2562,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": "mortgage-claim",
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "contract-wording",
@@ -2419,7 +2600,8 @@
    "trace": null,
    "strains": [
     "meaning"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "supplier-onboarding",
@@ -2460,9 +2642,29 @@
    "fit": "fits",
    "fitNote": "",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
-   "strains": []
+   "status": "worked",
+   "trace": "supplier-onboarding",
+   "strains": [],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "supplier-onboarding"
+    },
+    {
+     "path": "branch-1",
+     "label": "A certificate was withdrawn last week",
+     "status": "runs",
+     "scenario": "supplier-onboarding--branch-1"
+    },
+    {
+     "path": "branch-2",
+     "label": "The account belongs to a different legal entity",
+     "status": "runs",
+     "scenario": "supplier-onboarding--branch-2"
+    }
+   ]
   },
   {
    "id": "request-for-quotes",
@@ -2502,7 +2704,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "recycled-content",
@@ -2537,7 +2740,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "invoice-finance",
@@ -2572,7 +2776,8 @@
    "trace": null,
    "strains": [
     "absence"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "salary-benchmark",
@@ -2607,7 +2812,8 @@
    "trace": null,
    "strains": [
     "repeat"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "research-data-access",
@@ -2649,7 +2855,8 @@
    "trace": null,
    "strains": [
     "repeat"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "incident-notice",
@@ -2681,7 +2888,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "master-data-change",
@@ -2718,9 +2926,29 @@
    "fit": "fits",
    "fitNote": "Separation of duties is a rule over who approved what, and the record is the audit trail.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
-   "strains": []
+   "status": "worked",
+   "trace": "master-data-change",
+   "strains": [],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "master-data-change"
+    },
+    {
+     "path": "branch-1",
+     "label": "The same role requests and approves",
+     "status": "runs",
+     "scenario": "master-data-change--branch-1"
+    },
+    {
+     "path": "branch-2",
+     "label": "The new details come from an email",
+     "status": "runs",
+     "scenario": "master-data-change--branch-2"
+    }
+   ]
   },
   {
    "id": "cross-department-request",
@@ -2752,7 +2980,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "production-change",
@@ -2792,7 +3021,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "agent-handoff",
@@ -2834,7 +3064,8 @@
    ],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "meeting-notes",
@@ -2865,7 +3096,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "find-a-time",
@@ -2901,7 +3133,8 @@
    "strains": [
     "own-words",
     "low-stakes"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "sell-a-car",
@@ -2940,7 +3173,8 @@
    "trace": null,
    "strains": [
     "absence"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "introduction",
@@ -2976,7 +3210,8 @@
    "trace": null,
    "strains": [
     "no-register"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "content-licence",
@@ -3010,7 +3245,8 @@
    "benchmarks": [],
    "status": "specified",
    "trace": null,
-   "strains": []
+   "strains": [],
+   "runs": []
   },
   {
    "id": "no-training-terms",
@@ -3044,7 +3280,8 @@
    "trace": null,
    "strains": [
     "after"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "probing-counterparty",
@@ -3082,10 +3319,30 @@
     "converse",
     "a2asecbench"
    ],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "probing-counterparty",
    "strains": [
     "repeat"
+   ],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "probing-counterparty"
+    },
+    {
+     "path": "tenth-request",
+     "label": "The tenth request, like the first, is outside the mandate",
+     "status": "runs",
+     "scenario": "probing-counterparty--tenth-request"
+    },
+    {
+     "path": "round-limit",
+     "label": "The conversation passes the round limit",
+     "status": "runs",
+     "scenario": "probing-counterparty--round-limit"
+    }
    ]
   },
   {
@@ -3119,10 +3376,24 @@
    "fit": "breaks",
    "fitNote": "The gates check who said it, not whether it is true. What the design adds is that the false statement is signed, kept and attributable. Corroboration from a second source is the only defense in advance.",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "false-but-signed",
    "strains": [
     "truth"
+   ],
+   "runs": [
+    {
+     "path": "main",
+     "label": "The main path",
+     "status": "runs",
+     "scenario": "false-but-signed"
+    },
+    {
+     "path": "branch-1",
+     "label": "Nothing fails",
+     "status": "runs",
+     "scenario": "false-but-signed--branch-1"
+    }
    ]
   },
   {
@@ -3157,7 +3428,8 @@
    "trace": null,
    "strains": [
     "after"
-   ]
+   ],
+   "runs": []
   },
   {
    "id": "no-agent-on-the-other-side",
@@ -3198,7 +3470,8 @@
    "strains": [
     "no-register",
     "own-words"
-   ]
+   ],
+   "runs": []
   }
  ]
 }

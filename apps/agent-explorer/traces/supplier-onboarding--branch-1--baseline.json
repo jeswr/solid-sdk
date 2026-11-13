@@ -1,0 +1,520 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "scenario": {
+  "id": "supplier-onboarding--branch-1",
+  "title": "Taking on a new supplier: a certificate was withdrawn last week",
+  "steps": {
+   "1": "Supplier evidence",
+   "2": "Supplier applies"
+  }
+ },
+ "configuration": {
+  "id": "supplier-onboarding-local",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "organization-document-local",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-credential",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "supplier-agent",
+   "name": "The supplier's agent",
+   "actsFor": "supplier",
+   "role": "agent"
+  },
+  {
+   "id": "buyer-agent",
+   "name": "The buyer's agent",
+   "actsFor": "buyer",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Organization identifier resolution and company registrar",
+   "replacedBy": "Fictional registrar party serves signed current-key and delegated-agent documents through a local resolver; no live DID method"
+  },
+  {
+   "what": "Issuer credential and certificate status services",
+   "replacedBy": "Fictional organizations publish signed status lists through the local resolver"
+  },
+  {
+   "what": "Company register, bank and certificate authority",
+   "replacedBy": "Separately keyed fictional issuer-only sources"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "organization-document-local",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "company-register's company.exists statement is intact and signed with company-register's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:company-register",
+    "text": "company-register is accepted for company.exists claims."
+   },
+   "resolution": {
+    "question": "Is company-register an authority for company.exists claims about supplier?",
+    "path": [
+     {
+      "at": "supplier's own list",
+      "kind": "own-list",
+      "says": "company-register is accepted for company.exists."
+     }
+    ],
+    "answer": "Accepted, for company.exists claims only."
+   },
+   "caption": "company-register's company.exists statement: company-register is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-credential",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "company-register's company.exists statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:company",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "company-register's company.exists statement: its terms allow this: ."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:supplier-onboarding:company.exists",
+    "text": "Accept company.exists from urn:fictional:company-register by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "company-register's company.exists statement is fit for urn:scenario:supplier-onboarding:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "company-register's company.exists statement is admitted."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:supplier-onboarding:company",
+    "label": "company-register's company.exists statement",
+    "claimType": "company.exists",
+    "subject": "urn:fictional:supplier",
+    "value": null,
+    "source": "urn:fictional:company-register",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:company",
+     "summary": ""
+    },
+    "provenance": "signed by company-register"
+   },
+   "caption": "company-register's company.exists statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 8,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "organization-document-local",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "supplier-bank's bank.account-owner statement is intact and signed with supplier-bank's pinned key."
+  },
+  {
+   "seq": 9,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:supplier-bank",
+    "text": "supplier-bank is accepted for bank.account-owner claims."
+   },
+   "resolution": {
+    "question": "Is supplier-bank an authority for bank.account-owner claims about supplier?",
+    "path": [
+     {
+      "at": "supplier's own list",
+      "kind": "own-list",
+      "says": "supplier-bank is accepted for bank.account-owner."
+     }
+    ],
+    "answer": "Accepted, for bank.account-owner claims only."
+   },
+   "caption": "supplier-bank's bank.account-owner statement: supplier-bank is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 10,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-credential",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "supplier-bank's bank.account-owner statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 11,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:account",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "supplier-bank's bank.account-owner statement: its terms allow this: ."
+  },
+  {
+   "seq": 12,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:supplier-onboarding:bank.account-owner",
+    "text": "Accept bank.account-owner from urn:fictional:supplier-bank by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "supplier-bank's bank.account-owner statement is fit for urn:scenario:supplier-onboarding:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 13,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "supplier-bank's bank.account-owner statement is admitted."
+  },
+  {
+   "seq": 14,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:supplier-onboarding:account",
+    "label": "supplier-bank's bank.account-owner statement",
+    "claimType": "bank.account-owner",
+    "subject": "urn:fictional:supplier",
+    "value": null,
+    "source": "urn:fictional:supplier-bank",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:account",
+     "summary": ""
+    },
+    "provenance": "signed by supplier-bank"
+   },
+   "caption": "supplier-bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 15,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "organization-document-local",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "certifier's certificate statement is intact and signed with certifier's pinned key."
+  },
+  {
+   "seq": 16,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "fail",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "status-withdrawn",
+   "caption": "certifier's certificate statement: certifier is not accepted as a source for this kind of claim."
+  },
+  {
+   "seq": 17,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-credential",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "certifier's certificate statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 18,
+   "step": 1,
+   "agent": "supplier-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "fail",
+   "outcome": "refuse",
+   "reason": "status-withdrawn",
+   "caption": "certifier's certificate statement is refused and kept out of memory."
+  },
+  {
+   "seq": 19,
+   "step": 2,
+   "agent": "supplier-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to use urn:op:onboard supplier with buyer."
+  },
+  {
+   "seq": 20,
+   "step": 2,
+   "agent": "supplier-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-credential",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "supplier's mandate covers this action."
+  },
+  {
+   "seq": 21,
+   "step": 2,
+   "agent": "supplier-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "fail",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "status-withdrawn",
+   "caption": "Required certificate was refused: status-withdrawn."
+  },
+  {
+   "seq": 22,
+   "step": 2,
+   "agent": "supplier-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "fail",
+   "outcome": "stop",
+   "reason": "status-withdrawn",
+   "caption": "A refused source cannot authorize the action."
+  }
+ ],
+ "useCase": "supplier-onboarding"
+}

@@ -1,0 +1,678 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "scenario": {
+  "id": "master-data-change--branch-2",
+  "title": "Changing a supplier's bank details in a business system: the new details come from an email",
+  "steps": {
+   "1": "Admit account role controller one role controller two role requester",
+   "2": "Perform"
+  }
+ },
+ "configuration": {
+  "id": "baseline",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "finance-agent",
+   "name": "The finance's agent",
+   "actsFor": "business",
+   "role": "agent"
+  },
+  {
+   "id": "erp-agent",
+   "name": "Fictional ERP agent",
+   "actsFor": "erp",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Organization directory",
+   "replacedBy": "Fictional directory, issuer-only key"
+  },
+  {
+   "what": "Supplier bank",
+   "replacedBy": "Fictional supplier-bank, issuer-only key"
+  },
+  {
+   "what": "Enterprise master-data system",
+   "replacedBy": "Fictional ERP agent with its own key, inbound and outbound gates, and local update ledger"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "email's bank.account-owner statement is intact and signed with email's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "fail",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-not-authoritative",
+   "caption": "email's bank.account-owner statement: email is not accepted as a source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "email's bank.account-owner statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "fail",
+   "outcome": "refuse",
+   "reason": "source-not-authoritative",
+   "caption": "email's bank.account-owner statement is refused and kept out of memory."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "directory's organization.role statement is intact and signed with directory's pinned key."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source-rule:directory",
+    "text": "directory is accepted for organization.role claims."
+   },
+   "resolution": {
+    "question": "Is directory an authority for organization.role claims about controller-one?",
+    "path": [
+     {
+      "at": "business's own list",
+      "kind": "own-list",
+      "says": "directory is accepted for organization.role."
+     }
+    ],
+    "answer": "Accepted, for organization.role claims only."
+   },
+   "caption": "directory's organization.role statement: directory is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "directory's organization.role statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 8,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "default-terms",
+    "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   },
+   "caption": "directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+  },
+  {
+   "seq": 9,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:master-data-change:organization.role",
+    "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 10,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "directory's organization.role statement is admitted."
+  },
+  {
+   "seq": 11,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:master-data-change:role-controller-one",
+    "label": "directory's organization.role statement",
+    "claimType": "organization.role",
+    "subject": "urn:fictional:controller-one",
+    "value": null,
+    "source": "urn:fictional:directory",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "provenance": "signed by directory"
+   },
+   "caption": "directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 12,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "directory's organization.role statement is intact and signed with directory's pinned key."
+  },
+  {
+   "seq": 13,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source-rule:directory",
+    "text": "directory is accepted for organization.role claims."
+   },
+   "resolution": {
+    "question": "Is directory an authority for organization.role claims about controller-two?",
+    "path": [
+     {
+      "at": "business's own list",
+      "kind": "own-list",
+      "says": "directory is accepted for organization.role."
+     }
+    ],
+    "answer": "Accepted, for organization.role claims only."
+   },
+   "caption": "directory's organization.role statement: directory is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 14,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "directory's organization.role statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 15,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "default-terms",
+    "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   },
+   "caption": "directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+  },
+  {
+   "seq": 16,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:master-data-change:organization.role",
+    "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 17,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "directory's organization.role statement is admitted."
+  },
+  {
+   "seq": 18,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:master-data-change:role-controller-two",
+    "label": "directory's organization.role statement",
+    "claimType": "organization.role",
+    "subject": "urn:fictional:controller-two",
+    "value": null,
+    "source": "urn:fictional:directory",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "provenance": "signed by directory"
+   },
+   "caption": "directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 19,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "directory's organization.role statement is intact and signed with directory's pinned key."
+  },
+  {
+   "seq": 20,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source-rule:directory",
+    "text": "directory is accepted for organization.role claims."
+   },
+   "resolution": {
+    "question": "Is directory an authority for organization.role claims about requester?",
+    "path": [
+     {
+      "at": "business's own list",
+      "kind": "own-list",
+      "says": "directory is accepted for organization.role."
+     }
+    ],
+    "answer": "Accepted, for organization.role claims only."
+   },
+   "caption": "directory's organization.role statement: directory is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 21,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "directory's organization.role statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 22,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "default-terms",
+    "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+   },
+   "caption": "directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+  },
+  {
+   "seq": 23,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:master-data-change:organization.role",
+    "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 24,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "directory's organization.role statement is admitted."
+  },
+  {
+   "seq": 25,
+   "step": 1,
+   "agent": "finance-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:master-data-change:role-requester",
+    "label": "directory's organization.role statement",
+    "claimType": "organization.role",
+    "subject": "urn:fictional:requester",
+    "value": null,
+    "source": "urn:fictional:directory",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "provenance": "signed by directory"
+   },
+   "caption": "directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 26,
+   "step": 2,
+   "agent": "finance-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to use urn:op:master data change with erp."
+  },
+  {
+   "seq": 27,
+   "step": 2,
+   "agent": "finance-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "rule": {
+    "id": "urn:rule:authorised",
+    "text": "business's mandate lets the agent use urn:op:master data change, on its own."
+   },
+   "reason": "within-mandate",
+   "caption": "business's mandate covers this action."
+  },
+  {
+   "seq": 28,
+   "step": 2,
+   "agent": "finance-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "fail",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "reason": "evidence-invalid",
+   "caption": "The proposed action relies on a statement that was not admitted."
+  },
+  {
+   "seq": 29,
+   "step": 2,
+   "agent": "finance-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "fail",
+   "outcome": "stop",
+   "reason": "evidence-invalid",
+   "caption": "Unaccepted support cannot authorize an action."
+  }
+ ],
+ "useCase": "master-data-change"
+}

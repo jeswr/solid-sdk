@@ -205,7 +205,11 @@ Checks that carry the weight, by number of use cases: source 32, limits-approval
 
 Use cases that convey a derived answer instead of records: 23 (by-source 9, proved 9, joint 3, attested 2).
 
-Use cases with a real run: 1 of 70. The rest are specified and not yet run.
+Use cases with a real run: 11 of 70. The rest are specified and not yet run.
+
+Run so far: A mortgage in principle (5 of 5 paths); Paying a supplier's invoice (3 of 3 paths); A referral from a family doctor to a specialist (3 of 3 paths); A discharge letter in a doctor's own words (2 of 2 paths); Access to allergies in an emergency (3 of 3 paths); Hiring: right to work and qualifications (2 of 3 paths); Two people agree to share a flat (2 of 2 paths); Taking on a new supplier (3 of 3 paths); Changing a supplier's bank details in a business system (3 of 3 paths); A service agent that keeps asking (3 of 3 paths); A registered source signs something false (2 of 2 paths).
+
+Paths written and not run: Hiring: right to work and qualifications, Showing the permit is still valid without showing its date: Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates.
 
 ## 7. What is missing
 

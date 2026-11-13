@@ -1,0 +1,3646 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "scenario": {
+  "id": "emergency-access--branch-1",
+  "title": "Access to allergies in an emergency: the request comes from a registered clinician with an emergency flag",
+  "steps": {
+   "1": "Clinician evidence",
+   "2": "Patient summary",
+   "3": "Request",
+   "4": "Record answers",
+   "5": "Release summary",
+   "6": "Summary received",
+   "7": "Notify",
+   "8": "Patient told",
+   "9": "Contact told",
+   "10": "Duties",
+   "11": "Two duties",
+   "12": "Second duty"
+  }
+ },
+ "configuration": {
+  "id": "baseline",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "clinician-agent",
+   "name": "The clinician's agent",
+   "actsFor": "clinician",
+   "role": "agent"
+  },
+  {
+   "id": "record-agent",
+   "name": "The record's agent",
+   "actsFor": "patient",
+   "role": "agent"
+  },
+  {
+   "id": "patient-agent",
+   "name": "The patient's agent",
+   "actsFor": "patient",
+   "role": "agent"
+  },
+  {
+   "id": "contact-agent",
+   "name": "The contact's agent",
+   "actsFor": "contact",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Professional register",
+   "replacedBy": "Fictional issuer-only register signing current clinician roles"
+  },
+  {
+   "what": "Patient's clinical record",
+   "replacedBy": "Fictional issuer-only practice signs the summary; a patient-owned record agent enforces the patient-signed standing mandate"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "register's organization.role statement is intact and signed with register's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:register",
+    "text": "register is accepted for organization.role claims."
+   },
+   "resolution": {
+    "question": "Is register an authority for organization.role claims about clinician?",
+    "path": [
+     {
+      "at": "clinician's own list",
+      "kind": "own-list",
+      "says": "register is accepted for organization.role."
+     }
+    ],
+    "answer": "Accepted, for organization.role claims only."
+   },
+   "caption": "register's organization.role statement: register is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "register's organization.role statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:role",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "register's organization.role statement: its terms allow this: ."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:emergency-access:organization.role",
+    "text": "Accept organization.role from urn:fictional:register by recorded-by-authority, at most 1 days old."
+   },
+   "caption": "register's organization.role statement is fit for urn:scenario:emergency-access:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "register's organization.role statement is admitted."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:emergency-access:role",
+    "label": "register's organization.role statement",
+    "claimType": "organization.role",
+    "subject": "urn:fictional:clinician",
+    "value": null,
+    "source": "urn:fictional:register",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:role",
+     "summary": ""
+    },
+    "provenance": "signed by register"
+   },
+   "caption": "register's organization.role statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 8,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "clinician's emergency.declaration statement is intact and signed with clinician's pinned key."
+  },
+  {
+   "seq": 9,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:clinician",
+    "text": "clinician is accepted for emergency.declaration claims."
+   },
+   "resolution": {
+    "question": "Is clinician an authority for emergency.declaration claims about clinician?",
+    "path": [
+     {
+      "at": "clinician's own list",
+      "kind": "own-list",
+      "says": "clinician is accepted for emergency.declaration."
+     }
+    ],
+    "answer": "Accepted, for emergency.declaration claims only."
+   },
+   "caption": "clinician's emergency.declaration statement: clinician is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 10,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "clinician's emergency.declaration statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 11,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:emergency",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "clinician's emergency.declaration statement: its terms allow this: ."
+  },
+  {
+   "seq": 12,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:emergency-access:emergency.declaration",
+    "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
+   },
+   "caption": "clinician's emergency.declaration statement is fit for urn:scenario:emergency-access:task: self-reported, 0 days old."
+  },
+  {
+   "seq": 13,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "clinician's emergency.declaration statement is admitted."
+  },
+  {
+   "seq": 14,
+   "step": 1,
+   "agent": "clinician-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:emergency-access:emergency",
+    "label": "clinician's emergency.declaration statement",
+    "claimType": "emergency.declaration",
+    "subject": "urn:fictional:clinician",
+    "value": null,
+    "source": "urn:fictional:clinician",
+    "method": "self-reported",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:emergency",
+     "summary": ""
+    },
+    "provenance": "signed by clinician"
+   },
+   "caption": "clinician's emergency.declaration statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "practice's clinical.summary statement is intact and signed with practice's pinned key."
+  },
+  {
+   "seq": 16,
+   "step": 2,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:practice",
+    "text": "practice is accepted for clinical.summary claims."
+   },
+   "resolution": {
+    "question": "Is practice an authority for clinical.summary claims about patient?",
+    "path": [
+     {
+      "at": "patient's own list",
+      "kind": "own-list",
+      "says": "practice is accepted for clinical.summary."
+     }
+    ],
+    "answer": "Accepted, for clinical.summary claims only."
+   },
+   "caption": "practice's clinical.summary statement: practice is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 17,
+   "step": 2,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "practice's clinical.summary statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 18,
+   "step": 2,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:summary",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "practice's clinical.summary statement: its terms allow this: ."
+  },
+  {
+   "seq": 19,
+   "step": 2,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:emergency-access:clinical.summary",
+    "text": "Accept clinical.summary from urn:fictional:practice by recorded-by-authority, at most 1 days old."
+   },
+   "caption": "practice's clinical.summary statement is fit for urn:scenario:emergency-access:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 20,
+   "step": 2,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "practice's clinical.summary statement is admitted."
+  },
+  {
+   "seq": 21,
+   "step": 2,
+   "agent": "record-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:emergency-access:summary",
+    "label": "practice's clinical.summary statement",
+    "claimType": "clinical.summary",
+    "subject": "urn:fictional:patient",
+    "value": null,
+    "source": "urn:fictional:practice",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:summary",
+     "summary": ""
+    },
+    "provenance": "signed by practice"
+   },
+   "caption": "practice's clinical.summary statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 22,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to use urn:op:emergency read with patient."
+  },
+  {
+   "seq": 23,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "clinician's mandate covers this action."
+  },
+  {
+   "seq": 24,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is patient a party I can send urn:op:emergency read to?",
+    "path": [
+     {
+      "at": "clinician's own list",
+      "kind": "own-list",
+      "says": "patient is accepted for urn:op:emergency read."
+     }
+    ],
+    "answer": "Accepted, for urn:op:emergency read only."
+   },
+   "reason": "recipient-established",
+   "caption": "patient: Accepted, for urn:op:emergency read only."
+  },
+  {
+   "seq": 25,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 26,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 27,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within clinician's limits."
+  },
+  {
+   "seq": 28,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 29,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:terms:role",
+    "text": "The issuer's terms: . They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "register's organization.role statement: its terms allow this: ."
+  },
+  {
+   "seq": 30,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 31,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:terms:emergency",
+    "text": "The issuer's terms: . They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "clinician's emergency.declaration statement: its terms allow this: ."
+  },
+  {
+   "seq": 32,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 33,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with clinician-agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 34,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to record-agent."
+  },
+  {
+   "seq": 35,
+   "step": 3,
+   "agent": "clinician-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002",
+    "from": "clinician-agent",
+    "to": "record-agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:8ea08cef3c7…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From clinician-agent to record-agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:clinician-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002",
+       "conversation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:clinician-agent:agent",
+        "onBehalfOf": "urn:fictional:clinician"
+       },
+       "to": {
+        "actor": "urn:fictional:record-agent:agent",
+        "party": "urn:fictional:patient"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:3e951df3c6d09768f78bab4f862f3656997c88909d371ebf3446dc5a5fe0a2d0"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): clinician says clinician-agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:a56efa2d525e5cd9261e087555671049:1794560400000",
+        "party": "urn:fictional:clinician",
+        "actor": "urn:fictional:clinician-agent:agent",
+        "actorKid": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw",
+        "operations": [
+         "urn:op:emergency-read",
+         "urn:op:duty-notification"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:e076d75c2e720b6cb39f4b55cb9e66daaf440d87651ed9906e7631384dac3f98"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:emergency-read",
+        "version": "0.1"
+       },
+       "input": {
+        "items": [
+         "allergies",
+         "current-medicines"
+        ]
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:emergency-access"
+      },
+      "digest": "sha-256:00b77ed63ff2e4cd22bf2a49a9bbcbdc59ebeac359b902427e48ddc159d51a51"
+     },
+     "evidence": {
+      "present": true,
+      "summary": "2 statement(s) signed by their sources: organization.role from register; emergency.declaration from clinician.",
+      "raw": [
+       {
+        "role": "registered-emergency-clinician",
+        "organization": "urn:fictional:register",
+        "validUntil": "2026-11-14T00:00:00.000Z",
+        "status": "active",
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "id": "urn:scenario:emergency-access:role",
+        "issuer": "urn:fictional:register",
+        "subject": "urn:fictional:clinician",
+        "claimType": "organization.role",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:role",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:emergency-access:role"
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:emergency-access:role"
+           }
+          ]
+         }
+        },
+        "subjectKey": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw"
+       },
+       {
+        "declared": "emergency",
+        "id": "urn:scenario:emergency-access:emergency",
+        "issuer": "urn:fictional:clinician",
+        "subject": "urn:fictional:clinician",
+        "claimType": "emergency.declaration",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:emergency",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:emergency-access:emergency"
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:emergency-access:emergency"
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:651724a85e3f78906a044fa8f32269aed0b164ef50de40d516e799389bc8d30f"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by clinician-agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:emergency-access:role",
+         "issuer": "urn:fictional:register",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        },
+        {
+         "id": "urn:scenario:emergency-access:emergency",
+         "issuer": "urn:fictional:clinician",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "clinician-agent sends an invoke message to record-agent."
+  },
+  {
+   "seq": 36,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002",
+    "from": "clinician-agent",
+    "to": "record-agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:8ea08cef3c7…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From clinician-agent to record-agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:clinician-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002",
+       "conversation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:clinician-agent:agent",
+        "onBehalfOf": "urn:fictional:clinician"
+       },
+       "to": {
+        "actor": "urn:fictional:record-agent:agent",
+        "party": "urn:fictional:patient"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:3e951df3c6d09768f78bab4f862f3656997c88909d371ebf3446dc5a5fe0a2d0"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): clinician says clinician-agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:a56efa2d525e5cd9261e087555671049:1794560400000",
+        "party": "urn:fictional:clinician",
+        "actor": "urn:fictional:clinician-agent:agent",
+        "actorKid": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw",
+        "operations": [
+         "urn:op:emergency-read",
+         "urn:op:duty-notification"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:e076d75c2e720b6cb39f4b55cb9e66daaf440d87651ed9906e7631384dac3f98"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:emergency-read\"; \"urn:purpose:emergency-access\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:emergency-read",
+        "version": "0.1"
+       },
+       "input": {
+        "items": [
+         "allergies",
+         "current-medicines"
+        ]
+       },
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:emergency-access"
+      },
+      "digest": "sha-256:00b77ed63ff2e4cd22bf2a49a9bbcbdc59ebeac359b902427e48ddc159d51a51",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:emergency-read"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:emergency-access"
+       }
+      ]
+     },
+     "evidence": {
+      "present": true,
+      "summary": "2 statement(s) signed by their sources: organization.role from register; emergency.declaration from clinician.",
+      "raw": [
+       {
+        "role": "registered-emergency-clinician",
+        "organization": "urn:fictional:register",
+        "validUntil": "2026-11-14T00:00:00.000Z",
+        "status": "active",
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "id": "urn:scenario:emergency-access:role",
+        "issuer": "urn:fictional:register",
+        "subject": "urn:fictional:clinician",
+        "claimType": "organization.role",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:role",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:emergency-access:role"
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:emergency-access:role"
+           }
+          ]
+         }
+        },
+        "subjectKey": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw"
+       },
+       {
+        "declared": "emergency",
+        "id": "urn:scenario:emergency-access:emergency",
+        "issuer": "urn:fictional:clinician",
+        "subject": "urn:fictional:clinician",
+        "claimType": "emergency.declaration",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:emergency",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:emergency-access:emergency"
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:emergency-access:emergency"
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:651724a85e3f78906a044fa8f32269aed0b164ef50de40d516e799389bc8d30f"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by clinician-agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:emergency-access:role",
+         "issuer": "urn:fictional:register",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        },
+        {
+         "id": "urn:scenario:emergency-access:emergency",
+         "issuer": "urn:fictional:clinician",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from clinician-agent reaches the inbound gate."
+  },
+  {
+   "seq": 37,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with clinician-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 38,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:register",
+    "text": "register is accepted for organization.role claims."
+   },
+   "resolution": {
+    "question": "Is register an authority for organization.role claims about clinician?",
+    "path": [
+     {
+      "at": "patient's own list",
+      "kind": "own-list",
+      "says": "register is accepted for organization.role."
+     }
+    ],
+    "answer": "Accepted, for organization.role claims only."
+   },
+   "caption": "register's organization.role statement: register is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 39,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:clinician",
+    "text": "clinician is accepted for emergency.declaration claims."
+   },
+   "resolution": {
+    "question": "Is clinician an authority for emergency.declaration claims about clinician?",
+    "path": [
+     {
+      "at": "patient's own list",
+      "kind": "own-list",
+      "says": "clinician is accepted for emergency.declaration."
+     }
+    ],
+    "answer": "Accepted, for emergency.declaration claims only."
+   },
+   "caption": "clinician's emergency.declaration statement: clinician is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 40,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:a56efa2d525e5cd9261e087555671049:1794560400000",
+    "text": "A representation statement signed with clinician's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "clinician signed a statement that clinician-agent acts for them in this operation."
+  },
+  {
+   "seq": 41,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:role",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "register's organization.role statement: its terms allow this: ."
+  },
+  {
+   "seq": 42,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:emergency",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "clinician's emergency.declaration statement: its terms allow this: ."
+  },
+  {
+   "seq": 43,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:emergency-access:organization.role",
+    "text": "Accept organization.role from urn:fictional:register by recorded-by-authority, at most 1 days old."
+   },
+   "caption": "register's organization.role statement is fit for a mortgage application: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 44,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:emergency-access:emergency.declaration",
+    "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
+   },
+   "caption": "clinician's emergency.declaration statement is fit for a mortgage application: self-reported, 0 days old."
+  },
+  {
+   "seq": 45,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 46,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:emergency-access:role",
+    "label": "register's organization.role statement",
+    "claimType": "organization.role",
+    "subject": "urn:fictional:clinician",
+    "value": null,
+    "source": "urn:fictional:register",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:role",
+     "summary": ""
+    },
+    "provenance": "signed by register"
+   },
+   "caption": "register's organization.role statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 47,
+   "step": 4,
+   "agent": "record-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:emergency-access:emergency",
+    "label": "clinician's emergency.declaration statement",
+    "claimType": "emergency.declaration",
+    "subject": "urn:fictional:clinician",
+    "value": null,
+    "source": "urn:fictional:clinician",
+    "method": "self-reported",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:emergency",
+     "summary": ""
+    },
+    "provenance": "signed by clinician"
+   },
+   "caption": "clinician's emergency.declaration statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 48,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to read urn:op:emergency read with clinician."
+  },
+  {
+   "seq": 49,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "patient's mandate covers this action."
+  },
+  {
+   "seq": 50,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is clinician a party I can send urn:op:emergency read to?",
+    "path": [
+     {
+      "at": "patient's own list",
+      "kind": "own-list",
+      "says": "clinician is accepted for urn:op:emergency read."
+     }
+    ],
+    "answer": "Accepted, for urn:op:emergency read only."
+   },
+   "reason": "recipient-established",
+   "caption": "clinician: Accepted, for urn:op:emergency read only."
+  },
+  {
+   "seq": 51,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 52,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 53,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within patient's limits."
+  },
+  {
+   "seq": 54,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "terms-allow",
+   "caption": "practice's clinical.summary statement: Its terms allow this: ."
+  },
+  {
+   "seq": 55,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The vocabulary identifies only the necessary claims: clinical.summary."
+  },
+  {
+   "seq": 56,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with record-agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 57,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The deliver message goes to clinician-agent."
+  },
+  {
+   "seq": 58,
+   "step": 5,
+   "agent": "record-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0001",
+    "from": "record-agent",
+    "to": "clinician-agent",
+    "kind": "deliver",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:2e26c27c103…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From record-agent to clinician-agent; deliver; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0001",
+       "conversation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0001",
+       "kind": "deliver",
+       "from": {
+        "actor": "urn:fictional:record-agent:agent",
+        "onBehalfOf": "urn:fictional:patient"
+       },
+       "to": {
+        "actor": "urn:fictional:clinician-agent:agent",
+        "party": "urn:fictional:clinician"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "LzMGhcykb0YsblWr9SIqvP7vR2ai4IQ7sPK4wgb2nsc",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:a53d97f379b90326a1d8f6c60f49aefe7b71b59d5213ff4936a3081dd4a9c1c2"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Delivers the result under the agreement.",
+      "raw": {
+       "ref": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002",
+       "basis": {
+        "kind": "invocation",
+        "invocation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002"
+       },
+       "operation": {
+        "id": "urn:op:emergency-read",
+        "version": "0.1"
+       },
+       "output": {
+        "items": {
+         "allergies": "none-known",
+         "current-medicines": "none-known"
+        }
+       }
+      },
+      "digest": "sha-256:937c5c96a3787c4458df8ac7aa19a5dae00ee8bcb4cc6aea6ac8e44af75d3f58"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "invocation",
+       "invocation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002"
+      },
+      "digest": "sha-256:417ad430bd0c6c9aa02adb61decc09ab97553aef29fd0f6b2d8a1dd2ca022625"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "record-agent sends a deliver message to clinician-agent."
+  },
+  {
+   "seq": 59,
+   "step": 6,
+   "agent": "clinician-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0001",
+    "from": "record-agent",
+    "to": "clinician-agent",
+    "kind": "deliver",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:2e26c27c103…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From record-agent to clinician-agent; deliver; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0001",
+       "conversation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0001",
+       "kind": "deliver",
+       "from": {
+        "actor": "urn:fictional:record-agent:agent",
+        "onBehalfOf": "urn:fictional:patient"
+       },
+       "to": {
+        "actor": "urn:fictional:clinician-agent:agent",
+        "party": "urn:fictional:clinician"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "LzMGhcykb0YsblWr9SIqvP7vR2ai4IQ7sPK4wgb2nsc",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:a53d97f379b90326a1d8f6c60f49aefe7b71b59d5213ff4936a3081dd4a9c1c2"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-emergency-access-branch-1:clinician-agent:0002\"; \"urn:awp:engine-emergency-access-branch-1:clinician-agent:0002\"; \"urn:op:emergency-read\"",
+      "raw": {
+       "ref": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002",
+       "basis": {
+        "kind": "invocation",
+        "invocation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002"
+       },
+       "operation": {
+        "id": "urn:op:emergency-read",
+        "version": "0.1"
+       },
+       "output": {
+        "items": {
+         "allergies": "none-known",
+         "current-medicines": "none-known"
+        }
+       }
+      },
+      "digest": "sha-256:937c5c96a3787c4458df8ac7aa19a5dae00ee8bcb4cc6aea6ac8e44af75d3f58",
+      "untrusted": [
+       {
+        "path": "ref",
+        "text": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002"
+       },
+       {
+        "path": "basis.invocation",
+        "text": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002"
+       },
+       {
+        "path": "operation.id",
+        "text": "urn:op:emergency-read"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "invocation",
+       "invocation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0002"
+      },
+      "digest": "sha-256:417ad430bd0c6c9aa02adb61decc09ab97553aef29fd0f6b2d8a1dd2ca022625"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-emergency-access-branch-1:clinician-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "A deliver message from record-agent reaches the inbound gate."
+  },
+  {
+   "seq": 60,
+   "step": 6,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with record-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 61,
+   "step": 6,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 62,
+   "step": 6,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This message asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 63,
+   "step": 6,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 64,
+   "step": 6,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 65,
+   "step": 6,
+   "agent": "clinician-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 66,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
+  },
+  {
+   "seq": 67,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is patient a party I can send urn:op:duty notification to?",
+    "path": [
+     {
+      "at": "patient's own list",
+      "kind": "own-list",
+      "says": "patient is accepted for urn:op:duty notification."
+     }
+    ],
+    "answer": "Accepted, for urn:op:duty notification only."
+   },
+   "reason": "recipient-established",
+   "caption": "patient: Accepted, for urn:op:duty notification only."
+  },
+  {
+   "seq": 68,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no personal data in this protocol message."
+  },
+  {
+   "seq": 69,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no data terms to apply."
+  },
+  {
+   "seq": 70,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 71,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with record-agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 72,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The describe message goes to patient-agent."
+  },
+  {
+   "seq": 73,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0002",
+    "from": "record-agent",
+    "to": "patient-agent",
+    "kind": "describe",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:0c9205d094b…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From record-agent to patient-agent; describe; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0002",
+       "conversation": "urn:awp:notification:282e2c0d34e784b444c851fec9b88dda",
+       "kind": "describe",
+       "from": {
+        "actor": "urn:fictional:record-agent:agent",
+        "onBehalfOf": "urn:fictional:patient"
+       },
+       "to": {
+        "actor": "urn:fictional:patient-agent:agent",
+        "party": "urn:fictional:patient"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "LzMGhcykb0YsblWr9SIqvP7vR2ai4IQ7sPK4wgb2nsc",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:776685ca0afbff54951c04334f6ed72a9de2e9eb54a4ffb880f3b8a5fa76f313"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Asks the other agent to describe itself: configurations, operations and models.",
+      "raw": {},
+      "digest": "sha-256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:notification:282e2c0d34e784b444c851fec9b88dda"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "record-agent sends a describe message to patient-agent."
+  },
+  {
+   "seq": 74,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "record",
+   "kind": "record",
+   "caption": "Notification duty sha-256:296181d537a447e3fade89e46573db390d27b6b1241c2d6d021656825319eaf7 discharged at 2026-11-13T09:00:00.000Z by message urn:awp:engine-emergency-access-branch-1:record-agent:0002."
+  },
+  {
+   "seq": 75,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
+  },
+  {
+   "seq": 76,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is contact a party I can send urn:op:duty notification to?",
+    "path": [
+     {
+      "at": "patient's own list",
+      "kind": "own-list",
+      "says": "contact is accepted for urn:op:duty notification."
+     }
+    ],
+    "answer": "Accepted, for urn:op:duty notification only."
+   },
+   "reason": "recipient-established",
+   "caption": "contact: Accepted, for urn:op:duty notification only."
+  },
+  {
+   "seq": 77,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no personal data in this protocol message."
+  },
+  {
+   "seq": 78,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no data terms to apply."
+  },
+  {
+   "seq": 79,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 80,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with record-agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 81,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The describe message goes to contact-agent."
+  },
+  {
+   "seq": 82,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0003",
+    "from": "record-agent",
+    "to": "contact-agent",
+    "kind": "describe",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:99c72b1acf3…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From record-agent to contact-agent; describe; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0003.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0003",
+       "conversation": "urn:awp:notification:bd44fd8b714060b8572f7845aec1dd48",
+       "kind": "describe",
+       "from": {
+        "actor": "urn:fictional:record-agent:agent",
+        "onBehalfOf": "urn:fictional:patient"
+       },
+       "to": {
+        "actor": "urn:fictional:contact-agent:agent",
+        "party": "urn:fictional:contact"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "LzMGhcykb0YsblWr9SIqvP7vR2ai4IQ7sPK4wgb2nsc",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:fc6f62ccd04d74c714b7d8688546d45390124babb32fae51fab19bcf4b5a8d6f"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Asks the other agent to describe itself: configurations, operations and models.",
+      "raw": {},
+      "digest": "sha-256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:notification:bd44fd8b714060b8572f7845aec1dd48"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "record-agent sends a describe message to contact-agent."
+  },
+  {
+   "seq": 83,
+   "step": 7,
+   "agent": "record-agent",
+   "part": "record",
+   "kind": "record",
+   "caption": "Notification duty sha-256:9ff0adf1453f9aedba54141b08c0606de817331165c7bc50041f2b0938ecfe3a discharged at 2026-11-13T09:00:00.000Z by message urn:awp:engine-emergency-access-branch-1:record-agent:0003."
+  },
+  {
+   "seq": 84,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0002",
+    "from": "record-agent",
+    "to": "patient-agent",
+    "kind": "describe",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:0c9205d094b…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From record-agent to patient-agent; describe; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0002",
+       "conversation": "urn:awp:notification:282e2c0d34e784b444c851fec9b88dda",
+       "kind": "describe",
+       "from": {
+        "actor": "urn:fictional:record-agent:agent",
+        "onBehalfOf": "urn:fictional:patient"
+       },
+       "to": {
+        "actor": "urn:fictional:patient-agent:agent",
+        "party": "urn:fictional:patient"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "LzMGhcykb0YsblWr9SIqvP7vR2ai4IQ7sPK4wgb2nsc",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:776685ca0afbff54951c04334f6ed72a9de2e9eb54a4ffb880f3b8a5fa76f313"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Asks the other agent to describe itself: configurations, operations and models.",
+      "raw": {},
+      "digest": "sha-256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:notification:282e2c0d34e784b444c851fec9b88dda"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "A describe message from record-agent reaches the inbound gate."
+  },
+  {
+   "seq": 85,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with record-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 86,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 87,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This message asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 88,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 89,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 90,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 91,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
+  },
+  {
+   "seq": 92,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "reason": "recipient-established",
+   "caption": "patient's agent is reached through the key pinned when the two were introduced."
+  },
+  {
+   "seq": 93,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate finds no personal data in this protocol message."
+  },
+  {
+   "seq": 94,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "terms-allow",
+   "caption": "The gate finds no data terms to apply."
+  },
+  {
+   "seq": 95,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 96,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with patient-agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 97,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The description message goes to record-agent."
+  },
+  {
+   "seq": 98,
+   "step": 8,
+   "agent": "patient-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:patient-agent:0001",
+    "from": "patient-agent",
+    "to": "record-agent",
+    "kind": "description",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:564322bb214…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From patient-agent to record-agent; description; signed (JWS EdDSA, pinned key 0ybVTK_b9JwX…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:patient-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:patient-agent:0001",
+       "conversation": "urn:awp:notification:282e2c0d34e784b444c851fec9b88dda",
+       "kind": "description",
+       "from": {
+        "actor": "urn:fictional:patient-agent:agent",
+        "onBehalfOf": "urn:fictional:patient"
+       },
+       "to": {
+        "actor": "urn:fictional:record-agent:agent",
+        "party": "urn:fictional:patient"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-emergency-access-branch-1:record-agent:0002",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "0ybVTK_b9JwXjLfM9MeLpMV6EPAJKwGVTCDFKer47aU",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:039e3867f04b2d9c07483f7af2cc5fa27763d7e9f2d862bed026a6882d413f30"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Describes this agent: the configurations it accepts and the operations it offers.",
+      "raw": {
+       "description": {
+        "type": "ImplementationDescription",
+        "describes": "urn:fictional:patient-agent:agent",
+        "onBehalfOf": "urn:fictional:patient",
+        "profile": {
+         "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+         "version": "0.1.2"
+        },
+        "acceptedProfiles": [
+         {
+          "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+          "versions": "0.1.x"
+         }
+        ],
+        "vocabularies": [
+         {
+          "iri": "http://www.w3.org/ns/prov#Agent",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/prov#actedOnBehalfOf",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/prov#Activity",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/prov#wasDerivedFrom",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/odrl/2/Policy",
+          "relation": "narrower"
+         },
+         {
+          "iri": "http://www.w3.org/ns/odrl/2/Agreement",
+          "relation": "related"
+         },
+         {
+          "iri": "http://www.w3.org/ns/dx/prof/Profile",
+          "relation": "uses"
+         },
+         {
+          "iri": "https://schema.org/Action",
+          "relation": "related"
+         },
+         {
+          "iri": "https://schema.org/Event",
+          "relation": "uses"
+         },
+         {
+          "iri": "https://w3id.org/dpv#hasPurpose",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/dcat#DataService",
+          "relation": "related"
+         }
+        ],
+        "configurations": {
+         "implemented": [
+          "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+          "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
+          "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+          "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
+          "https://w3id.org/jeswr/awp#config/payment-local/0.1",
+          "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+          "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+          "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+          "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
+         ],
+         "accepted": [
+          "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+         ]
+        },
+        "operations": [
+         {
+          "id": "urn:op:emergency-read",
+          "version": "0.1",
+          "label": "urn:op:emergency-read",
+          "pattern": "invoke",
+          "access": "represented",
+          "models": [],
+          "purposes": [
+           "urn:purpose:emergency-access"
+          ],
+          "requiresRepresentation": true,
+          "roles": [
+           "initiator",
+           "responder"
+          ],
+          "effects": [],
+          "outcomes": []
+         },
+         {
+          "id": "urn:op:duty-notification",
+          "version": "0.1",
+          "label": "urn:op:duty-notification",
+          "pattern": "invoke",
+          "access": "represented",
+          "models": [],
+          "purposes": [
+           "urn:purpose:emergency-notification"
+          ],
+          "requiresRepresentation": true,
+          "roles": [
+           "initiator",
+           "responder"
+          ],
+          "effects": [],
+          "outcomes": []
+         }
+        ],
+        "bindings": [
+         {
+          "id": "direct-local/0.1"
+         }
+        ],
+        "policyModule": {
+         "policyProfile": "https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1",
+         "evaluator": {
+          "name": "@jeswr/solid-odrl",
+          "version": "b8fabc729c56245f4b63846261f1f06b6503f1c8",
+          "interface": "evaluate() via awp pilot-subset adapter 0.1 (in-process)"
+         },
+         "status": "ready"
+        },
+        "conformance": [],
+        "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
+       }
+      },
+      "digest": "sha-256:da4467c1123f5dfd267567357bff61d9278b2c55658f8e3619ba5f934589ee6f"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-emergency-access-branch-1:record-agent:0002.",
+      "raw": {
+       "conversation": "urn:awp:notification:282e2c0d34e784b444c851fec9b88dda",
+       "inReplyTo": "urn:awp:engine-emergency-access-branch-1:record-agent:0002"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "patient-agent sends a description message to record-agent."
+  },
+  {
+   "seq": 99,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0003",
+    "from": "record-agent",
+    "to": "contact-agent",
+    "kind": "describe",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:99c72b1acf3…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From record-agent to contact-agent; describe; signed (JWS EdDSA, pinned key LzMGhcykb0Ys…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:record-agent:0003.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0003",
+       "conversation": "urn:awp:notification:bd44fd8b714060b8572f7845aec1dd48",
+       "kind": "describe",
+       "from": {
+        "actor": "urn:fictional:record-agent:agent",
+        "onBehalfOf": "urn:fictional:patient"
+       },
+       "to": {
+        "actor": "urn:fictional:contact-agent:agent",
+        "party": "urn:fictional:contact"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "LzMGhcykb0YsblWr9SIqvP7vR2ai4IQ7sPK4wgb2nsc",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:fc6f62ccd04d74c714b7d8688546d45390124babb32fae51fab19bcf4b5a8d6f"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Asks the other agent to describe itself: configurations, operations and models.",
+      "raw": {},
+      "digest": "sha-256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:notification:bd44fd8b714060b8572f7845aec1dd48"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "A describe message from record-agent reaches the inbound gate."
+  },
+  {
+   "seq": 100,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with record-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 101,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 102,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This message asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 103,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 104,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 105,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 106,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
+  },
+  {
+   "seq": 107,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "reason": "recipient-established",
+   "caption": "patient's agent is reached through the key pinned when the two were introduced."
+  },
+  {
+   "seq": 108,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate finds no personal data in this protocol message."
+  },
+  {
+   "seq": 109,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "terms-allow",
+   "caption": "The gate finds no data terms to apply."
+  },
+  {
+   "seq": 110,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 111,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with contact-agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 112,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The description message goes to record-agent."
+  },
+  {
+   "seq": 113,
+   "step": 9,
+   "agent": "contact-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-emergency-access-branch-1:contact-agent:0001",
+    "from": "contact-agent",
+    "to": "record-agent",
+    "kind": "description",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:b16b36f1b3e…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From contact-agent to record-agent; description; signed (JWS EdDSA, pinned key tqRg0qoxdFxS…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-1:contact-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+       "id": "urn:awp:engine-emergency-access-branch-1:contact-agent:0001",
+       "conversation": "urn:awp:notification:bd44fd8b714060b8572f7845aec1dd48",
+       "kind": "description",
+       "from": {
+        "actor": "urn:fictional:contact-agent:agent",
+        "onBehalfOf": "urn:fictional:contact"
+       },
+       "to": {
+        "actor": "urn:fictional:record-agent:agent",
+        "party": "urn:fictional:patient"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-emergency-access-branch-1:record-agent:0003",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "tqRg0qoxdFxShEr8JpOse7rOK2cbl9g0WqdQzXN6HCA",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:63e0b23911f6ba63a8b5737ac65874e14936937041c4ee76577b34bf34620197"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Describes this agent: the configurations it accepts and the operations it offers.",
+      "raw": {
+       "description": {
+        "type": "ImplementationDescription",
+        "describes": "urn:fictional:contact-agent:agent",
+        "onBehalfOf": "urn:fictional:contact",
+        "profile": {
+         "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+         "version": "0.1.2"
+        },
+        "acceptedProfiles": [
+         {
+          "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+          "versions": "0.1.x"
+         }
+        ],
+        "vocabularies": [
+         {
+          "iri": "http://www.w3.org/ns/prov#Agent",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/prov#actedOnBehalfOf",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/prov#Activity",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/prov#wasDerivedFrom",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/odrl/2/Policy",
+          "relation": "narrower"
+         },
+         {
+          "iri": "http://www.w3.org/ns/odrl/2/Agreement",
+          "relation": "related"
+         },
+         {
+          "iri": "http://www.w3.org/ns/dx/prof/Profile",
+          "relation": "uses"
+         },
+         {
+          "iri": "https://schema.org/Action",
+          "relation": "related"
+         },
+         {
+          "iri": "https://schema.org/Event",
+          "relation": "uses"
+         },
+         {
+          "iri": "https://w3id.org/dpv#hasPurpose",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/dcat#DataService",
+          "relation": "related"
+         }
+        ],
+        "configurations": {
+         "implemented": [
+          "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+          "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
+          "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+          "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
+          "https://w3id.org/jeswr/awp#config/payment-local/0.1",
+          "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+          "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+          "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+          "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
+         ],
+         "accepted": [
+          "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+         ]
+        },
+        "operations": [
+         {
+          "id": "urn:op:emergency-read",
+          "version": "0.1",
+          "label": "urn:op:emergency-read",
+          "pattern": "invoke",
+          "access": "represented",
+          "models": [],
+          "purposes": [
+           "urn:purpose:emergency-access"
+          ],
+          "requiresRepresentation": true,
+          "roles": [
+           "initiator",
+           "responder"
+          ],
+          "effects": [],
+          "outcomes": []
+         },
+         {
+          "id": "urn:op:duty-notification",
+          "version": "0.1",
+          "label": "urn:op:duty-notification",
+          "pattern": "invoke",
+          "access": "represented",
+          "models": [],
+          "purposes": [
+           "urn:purpose:emergency-notification"
+          ],
+          "requiresRepresentation": true,
+          "roles": [
+           "initiator",
+           "responder"
+          ],
+          "effects": [],
+          "outcomes": []
+         }
+        ],
+        "bindings": [
+         {
+          "id": "direct-local/0.1"
+         }
+        ],
+        "policyModule": {
+         "policyProfile": "https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1",
+         "evaluator": {
+          "name": "@jeswr/solid-odrl",
+          "version": "b8fabc729c56245f4b63846261f1f06b6503f1c8",
+          "interface": "evaluate() via awp pilot-subset adapter 0.1 (in-process)"
+         },
+         "status": "ready"
+        },
+        "conformance": [],
+        "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
+       }
+      },
+      "digest": "sha-256:e4a049bca871194041442bfd70c0579a40afa9e77326e07360cd744867daceca"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-emergency-access-branch-1:record-agent:0003.",
+      "raw": {
+       "conversation": "urn:awp:notification:bd44fd8b714060b8572f7845aec1dd48",
+       "inReplyTo": "urn:awp:engine-emergency-access-branch-1:record-agent:0003"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "contact-agent sends a description message to record-agent."
+  }
+ ],
+ "useCase": "emergency-access"
+}

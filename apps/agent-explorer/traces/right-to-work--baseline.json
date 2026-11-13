@@ -1,0 +1,1306 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "scenario": {
+  "id": "right-to-work",
+  "title": "Hiring: right to work and qualifications",
+  "steps": {
+   "1": "Holder admits revealed claims",
+   "2": "Show required claims",
+   "3": "Employer verifies",
+   "4": "Employer record"
+  }
+ },
+ "configuration": {
+  "id": "right-to-work-local",
+  "layers": {
+   "transport": "direct-http",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "selective-disclosure",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "candidate-agent",
+   "name": "The candidate's agent",
+   "actsFor": "candidate",
+   "role": "agent"
+  },
+  {
+   "id": "employer-agent",
+   "name": "The employer's agent",
+   "actsFor": "employer",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "87b695972f328116e4cfc440405c243268beca39",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Immigration authority and university credential issuance",
+   "replacedBy": "Separately keyed fictional issuer-only sources issuing salted-digest credentials; ordinary disclosure only, no hidden-value proofs"
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "selective-disclosure",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "immigration-office's work.entitled statement is intact and signed with immigration-office's pinned key."
+  },
+  {
+   "seq": 2,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "selective-disclosure",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:immigration-office",
+    "text": "immigration-office is accepted for work.entitled claims."
+   },
+   "resolution": {
+    "question": "Is immigration-office an authority for work.entitled claims about candidate?",
+    "path": [
+     {
+      "at": "candidate's own list",
+      "kind": "own-list",
+      "says": "immigration-office is accepted for work.entitled."
+     }
+    ],
+    "answer": "Accepted, for work.entitled claims only."
+   },
+   "caption": "immigration-office's work.entitled statement: immigration-office is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 3,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "immigration-office's work.entitled statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 4,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:entitlement",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "immigration-office's work.entitled statement: its terms allow this: ."
+  },
+  {
+   "seq": 5,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:right-to-work:work.entitled",
+    "text": "Accept work.entitled from urn:fictional:immigration-office by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "immigration-office's work.entitled statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 6,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "immigration-office's work.entitled statement is admitted."
+  },
+  {
+   "seq": 7,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:right-to-work:entitlement",
+    "label": "immigration-office's work.entitled statement",
+    "claimType": "work.entitled",
+    "subject": "urn:fictional:candidate",
+    "value": null,
+    "source": "urn:fictional:immigration-office",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:entitlement",
+     "summary": ""
+    },
+    "provenance": "signed by immigration-office"
+   },
+   "caption": "immigration-office's work.entitled statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 8,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "selective-disclosure",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "university's degree statement is intact and signed with university's pinned key."
+  },
+  {
+   "seq": 9,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "selective-disclosure",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:university",
+    "text": "university is accepted for degree claims."
+   },
+   "resolution": {
+    "question": "Is university an authority for degree claims about candidate?",
+    "path": [
+     {
+      "at": "candidate's own list",
+      "kind": "own-list",
+      "says": "university is accepted for degree."
+     }
+    ],
+    "answer": "Accepted, for degree claims only."
+   },
+   "caption": "university's degree statement: university is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 10,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "university's degree statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 11,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:degree",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "university's degree statement: its terms allow this: ."
+  },
+  {
+   "seq": 12,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:right-to-work:degree",
+    "text": "Accept degree from urn:fictional:university by recorded-by-authority, at most 3650 days old."
+   },
+   "caption": "university's degree statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 13,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "university's degree statement is admitted."
+  },
+  {
+   "seq": 14,
+   "step": 1,
+   "agent": "candidate-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:right-to-work:degree",
+    "label": "university's degree statement",
+    "claimType": "degree",
+    "subject": "urn:fictional:candidate",
+    "value": null,
+    "source": "urn:fictional:university",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:degree",
+     "summary": ""
+    },
+    "provenance": "signed by university"
+   },
+   "caption": "university's degree statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 15,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to use urn:op:right to work with employer."
+  },
+  {
+   "seq": 16,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "candidate's mandate covers this action."
+  },
+  {
+   "seq": 17,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is employer a party I can send urn:op:right to work to?",
+    "path": [
+     {
+      "at": "candidate's own list",
+      "kind": "own-list",
+      "says": "employer is accepted for urn:op:right to work."
+     }
+    ],
+    "answer": "Accepted, for urn:op:right to work only."
+   },
+   "reason": "recipient-established",
+   "caption": "employer: Accepted, for urn:op:right to work only."
+  },
+  {
+   "seq": 18,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 19,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 20,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within candidate's limits."
+  },
+  {
+   "seq": 21,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 22,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:terms:entitlement",
+    "text": "The issuer's terms: . They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "immigration-office's work.entitled statement: its terms allow this: ."
+  },
+  {
+   "seq": 23,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 24,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:terms:degree",
+    "text": "The issuer's terms: . They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "university's degree statement: its terms allow this: ."
+  },
+  {
+   "seq": 25,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 26,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "selective-disclosure",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with candidate-agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 27,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to employer-agent."
+  },
+  {
+   "seq": 28,
+   "step": 2,
+   "agent": "candidate-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
+    "from": "candidate-agent",
+    "to": "employer-agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Handed to the carriage. Carries sha-256:ebce7c4fa4d…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From candidate-agent to employer-agent; invoke; signed (JWS EdDSA, pinned key 7aoE51jwfA-k…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-right-to-work-main:candidate-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
+       "id": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
+       "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:candidate-agent:agent",
+        "onBehalfOf": "urn:fictional:candidate"
+       },
+       "to": {
+        "actor": "urn:fictional:employer-agent:agent",
+        "party": "urn:fictional:employer"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "7aoE51jwfA-k2KurYWnAz9rwd7AVcNtQMRIdcG8-afQ",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:a5c15f529ad3cc48f20814e61d239559589786c7b214a98517bc76c976b6f37a"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): candidate says candidate-agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:7667e114a1553269b2f0276d59a0899e:1794560400000",
+        "party": "urn:fictional:candidate",
+        "actor": "urn:fictional:candidate-agent:agent",
+        "actorKid": "7aoE51jwfA-k2KurYWnAz9rwd7AVcNtQMRIdcG8-afQ",
+        "operations": [
+         "urn:op:right-to-work",
+         "urn:op:employment-evidence-request"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:832dcd7d9c5e4319a94a095ce07a33b2bc6377a4b9fc13bd4d19010fc5ecea69"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "urn:op:right-to-work",
+        "version": "0.1"
+       },
+       "input": {},
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:right-to-work"
+      },
+      "digest": "sha-256:19eaa56020db3e29434c3edbfb82fe7ff2b5b7fe36fefd9e91762038aa2ab5ac"
+     },
+     "evidence": {
+      "present": true,
+      "summary": "2 statement(s) signed by their sources: work.entitled from immigration-office; degree from university.",
+      "raw": [
+       {
+        "issuer": "urn:fictional:immigration-office",
+        "subject": "urn:fictional:candidate",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "id": "urn:scenario:right-to-work:entitlement",
+        "claimType": "work.entitled",
+        "value": true,
+        "terms": {
+         "policy": {
+          "id": "urn:terms:entitlement",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:right-to-work:entitlement"
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:right-to-work:entitlement"
+           }
+          ]
+         }
+        },
+        "selectiveCredentialDigest": "sha-256:302a3c63248802f9f7f5ebf350b47103864df6d248cc966fe5bff0fbfccff2b6"
+       },
+       {
+        "issuer": "urn:fictional:university",
+        "subject": "urn:fictional:candidate",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "id": "urn:scenario:right-to-work:degree",
+        "claimType": "degree",
+        "value": "BSc",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:degree",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:right-to-work:degree"
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:right-to-work:degree"
+           }
+          ]
+         }
+        },
+        "selectiveCredentialDigest": "sha-256:9d113e945e30cdd79dc9b9114fde059a9c028d2a9fd92a4cc1cb06c6d2f3251f"
+       }
+      ],
+      "digest": "sha-256:6061872a8fa36bc50c4e648dcd6de1dab21439c2f9d00bd2bc3e6f40da630f97"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by candidate-agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:right-to-work:entitlement",
+         "issuer": "urn:fictional:immigration-office",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        },
+        {
+         "id": "urn:scenario:right-to-work:degree",
+         "issuer": "urn:fictional:university",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "candidate-agent sends an invoke message to employer-agent."
+  },
+  {
+   "seq": 29,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
+    "from": "candidate-agent",
+    "to": "employer-agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:ebce7c4fa4d…; never trusted."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From candidate-agent to employer-agent; invoke; signed (JWS EdDSA, pinned key 7aoE51jwfA-k…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-right-to-work-main:candidate-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
+       "id": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
+       "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+       "kind": "invoke",
+       "from": {
+        "actor": "urn:fictional:candidate-agent:agent",
+        "onBehalfOf": "urn:fictional:candidate"
+       },
+       "to": {
+        "actor": "urn:fictional:employer-agent:agent",
+        "party": "urn:fictional:employer"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "7aoE51jwfA-k2KurYWnAz9rwd7AVcNtQMRIdcG8-afQ",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:a5c15f529ad3cc48f20814e61d239559589786c7b214a98517bc76c976b6f37a"
+     },
+     "authority": {
+      "present": true,
+      "summary": "1 representation statement(s): candidate says candidate-agent acts for it.",
+      "raw": [
+       {
+        "type": "RepresentationStatement",
+        "id": "urn:awp:representation:7667e114a1553269b2f0276d59a0899e:1794560400000",
+        "party": "urn:fictional:candidate",
+        "actor": "urn:fictional:candidate-agent:agent",
+        "actorKid": "7aoE51jwfA-k2KurYWnAz9rwd7AVcNtQMRIdcG8-afQ",
+        "operations": [
+         "urn:op:right-to-work",
+         "urn:op:employment-evidence-request"
+        ],
+        "validFrom": "2026-11-13T08:59:00.000Z",
+        "validUntil": "2027-01-12T09:00:00.000Z",
+        "issuedAt": "2026-11-13T09:00:00.000Z"
+       }
+      ],
+      "digest": "sha-256:832dcd7d9c5e4319a94a095ce07a33b2bc6377a4b9fc13bd4d19010fc5ecea69"
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:right-to-work\"; \"urn:purpose:right-to-work\"",
+      "raw": {
+       "operation": {
+        "id": "urn:op:right-to-work",
+        "version": "0.1"
+       },
+       "input": {},
+       "basis": {
+        "kind": "represented"
+       },
+       "purpose": "urn:purpose:right-to-work"
+      },
+      "digest": "sha-256:19eaa56020db3e29434c3edbfb82fe7ff2b5b7fe36fefd9e91762038aa2ab5ac",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "urn:op:right-to-work"
+       },
+       {
+        "path": "purpose",
+        "text": "urn:purpose:right-to-work"
+       }
+      ]
+     },
+     "evidence": {
+      "present": true,
+      "summary": "2 statement(s) signed by their sources: work.entitled from immigration-office; degree from university.",
+      "raw": [
+       {
+        "issuer": "urn:fictional:immigration-office",
+        "subject": "urn:fictional:candidate",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "id": "urn:scenario:right-to-work:entitlement",
+        "claimType": "work.entitled",
+        "value": true,
+        "terms": {
+         "policy": {
+          "id": "urn:terms:entitlement",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:right-to-work:entitlement"
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:right-to-work:entitlement"
+           }
+          ]
+         }
+        },
+        "selectiveCredentialDigest": "sha-256:302a3c63248802f9f7f5ebf350b47103864df6d248cc966fe5bff0fbfccff2b6"
+       },
+       {
+        "issuer": "urn:fictional:university",
+        "subject": "urn:fictional:candidate",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "id": "urn:scenario:right-to-work:degree",
+        "claimType": "degree",
+        "value": "BSc",
+        "terms": {
+         "policy": {
+          "id": "urn:terms:degree",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:scenario:right-to-work:degree"
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:scenario:right-to-work:degree"
+           }
+          ]
+         }
+        },
+        "selectiveCredentialDigest": "sha-256:9d113e945e30cdd79dc9b9114fde059a9c028d2a9fd92a4cc1cb06c6d2f3251f"
+       }
+      ],
+      "digest": "sha-256:6061872a8fa36bc50c4e648dcd6de1dab21439c2f9d00bd2bc3e6f40da630f97"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "represented"
+      },
+      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by candidate-agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+       "statements": [
+        {
+         "id": "urn:scenario:right-to-work:entitlement",
+         "issuer": "urn:fictional:immigration-office",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        },
+        {
+         "id": "urn:scenario:right-to-work:degree",
+         "issuer": "urn:fictional:university",
+         "issuedAt": null,
+         "asOf": "2026-11-13T09:00:00.000Z"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from candidate-agent reaches the inbound gate."
+  },
+  {
+   "seq": 30,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "selective-disclosure",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with candidate-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 31,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "selective-disclosure",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:immigration-office",
+    "text": "immigration-office is accepted for work.entitled claims."
+   },
+   "resolution": {
+    "question": "Is immigration-office an authority for work.entitled claims about candidate?",
+    "path": [
+     {
+      "at": "employer's own list",
+      "kind": "own-list",
+      "says": "immigration-office is accepted for work.entitled."
+     }
+    ],
+    "answer": "Accepted, for work.entitled claims only."
+   },
+   "caption": "immigration-office's work.entitled statement: immigration-office is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 32,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "selective-disclosure",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source:university",
+    "text": "university is accepted for degree claims."
+   },
+   "resolution": {
+    "question": "Is university an authority for degree claims about candidate?",
+    "path": [
+     {
+      "at": "employer's own list",
+      "kind": "own-list",
+      "says": "university is accepted for degree."
+     }
+    ],
+    "answer": "Accepted, for degree claims only."
+   },
+   "caption": "university's degree statement: university is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 33,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "authority-valid",
+   "rule": {
+    "id": "urn:awp:representation:7667e114a1553269b2f0276d59a0899e:1794560400000",
+    "text": "A representation statement signed with candidate's pinned key must name this agent, this operation and a current validity period."
+   },
+   "caption": "candidate signed a statement that candidate-agent acts for them in this operation."
+  },
+  {
+   "seq": 34,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:entitlement",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "immigration-office's work.entitled statement: its terms allow this: ."
+  },
+  {
+   "seq": 35,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:degree",
+    "text": "Its terms allow this: ."
+   },
+   "caption": "university's degree statement: its terms allow this: ."
+  },
+  {
+   "seq": 36,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:right-to-work:work.entitled",
+    "text": "Accept work.entitled from urn:fictional:immigration-office by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "immigration-office's work.entitled statement is fit for a mortgage application: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 37,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:right-to-work:degree",
+    "text": "Accept degree from urn:fictional:university by recorded-by-authority, at most 3650 days old."
+   },
+   "caption": "university's degree statement is fit for a mortgage application: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 38,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 39,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:right-to-work:entitlement",
+    "label": "immigration-office's work.entitled statement",
+    "claimType": "work.entitled",
+    "subject": "urn:fictional:candidate",
+    "value": null,
+    "source": "urn:fictional:immigration-office",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:entitlement",
+     "summary": ""
+    },
+    "provenance": "signed by immigration-office"
+   },
+   "caption": "immigration-office's work.entitled statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 40,
+   "step": 3,
+   "agent": "employer-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:right-to-work:degree",
+    "label": "university's degree statement",
+    "claimType": "degree",
+    "subject": "urn:fictional:candidate",
+    "value": null,
+    "source": "urn:fictional:university",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:degree",
+     "summary": ""
+    },
+    "provenance": "signed by university"
+   },
+   "caption": "university's degree statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 41,
+   "step": 4,
+   "agent": "employer-agent",
+   "part": "record",
+   "kind": "record",
+   "caption": "10 entries in this agent's hash-chained record; the chain verifies."
+  }
+ ],
+ "useCase": "right-to-work"
+}

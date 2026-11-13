@@ -1,0 +1,197 @@
+{
+ "note": "Copied from packages/agent-reference/scenario-runs.json by scripts/import-engine-runs.py.",
+ "paths": [
+  {
+   "scenario": "discharge-letter",
+   "path": "main",
+   "status": "runs",
+   "trace": "discharge-letter--baseline.json"
+  },
+  {
+   "scenario": "discharge-letter",
+   "path": "branch-1",
+   "status": "runs",
+   "trace": "discharge-letter--branch-1--baseline.json"
+  },
+  {
+   "scenario": "emergency-access",
+   "path": "main",
+   "status": "runs",
+   "trace": "emergency-access--baseline.json"
+  },
+  {
+   "scenario": "emergency-access",
+   "path": "branch-1",
+   "status": "runs",
+   "trace": "emergency-access--branch-1--baseline.json"
+  },
+  {
+   "scenario": "emergency-access",
+   "path": "branch-2",
+   "status": "runs",
+   "trace": "emergency-access--branch-2--baseline.json"
+  },
+  {
+   "scenario": "false-but-signed",
+   "path": "main",
+   "status": "runs",
+   "trace": "false-but-signed--baseline.json"
+  },
+  {
+   "scenario": "false-but-signed",
+   "path": "branch-1",
+   "status": "runs",
+   "trace": "false-but-signed--branch-1--baseline.json"
+  },
+  {
+   "scenario": "flat-share",
+   "path": "main",
+   "status": "runs",
+   "trace": "flat-share--baseline.json"
+  },
+  {
+   "scenario": "flat-share",
+   "path": "branch-1",
+   "status": "runs",
+   "trace": "flat-share--branch-1--baseline.json"
+  },
+  {
+   "scenario": "health-referral",
+   "path": "main",
+   "status": "runs",
+   "trace": "health-referral--baseline.json"
+  },
+  {
+   "scenario": "health-referral",
+   "path": "branch-1",
+   "status": "runs",
+   "trace": "health-referral--branch-1--baseline.json"
+  },
+  {
+   "scenario": "health-referral",
+   "path": "branch-2",
+   "status": "runs",
+   "trace": "health-referral--branch-2--baseline.json"
+  },
+  {
+   "scenario": "master-data-change",
+   "path": "main",
+   "status": "runs",
+   "trace": "master-data-change--baseline.json"
+  },
+  {
+   "scenario": "master-data-change",
+   "path": "branch-1",
+   "status": "runs",
+   "trace": "master-data-change--branch-1--baseline.json"
+  },
+  {
+   "scenario": "master-data-change",
+   "path": "branch-2",
+   "status": "runs",
+   "trace": "master-data-change--branch-2--baseline.json"
+  },
+  {
+   "scenario": "mortgage-core",
+   "path": "main",
+   "status": "runs",
+   "trace": "mortgage-core--baseline.json"
+  },
+  {
+   "scenario": "mortgage-injected-fee",
+   "path": "main",
+   "status": "runs",
+   "trace": "mortgage-injected-fee--baseline.json"
+  },
+  {
+   "scenario": "mortgage-main",
+   "path": "main",
+   "status": "runs",
+   "trace": "mortgage-main--baseline.json"
+  },
+  {
+   "scenario": "mortgage-out-of-limit",
+   "path": "main",
+   "status": "runs",
+   "trace": "mortgage-out-of-limit--baseline.json"
+  },
+  {
+   "scenario": "mortgage-over-ask",
+   "path": "main",
+   "status": "runs",
+   "trace": "mortgage-over-ask--baseline.json"
+  },
+  {
+   "scenario": "pay-an-invoice",
+   "path": "main",
+   "status": "runs",
+   "trace": "pay-an-invoice--baseline.json"
+  },
+  {
+   "scenario": "pay-an-invoice",
+   "path": "branch-1",
+   "status": "runs",
+   "trace": "pay-an-invoice--branch-1--baseline.json"
+  },
+  {
+   "scenario": "pay-an-invoice",
+   "path": "branch-2",
+   "status": "runs",
+   "trace": "pay-an-invoice--branch-2--baseline.json"
+  },
+  {
+   "scenario": "probing-counterparty",
+   "path": "main",
+   "status": "runs",
+   "trace": "probing-counterparty--baseline.json"
+  },
+  {
+   "scenario": "probing-counterparty",
+   "path": "tenth-request",
+   "status": "runs",
+   "trace": "probing-counterparty--tenth-request--baseline.json"
+  },
+  {
+   "scenario": "probing-counterparty",
+   "path": "round-limit",
+   "status": "runs",
+   "trace": "probing-counterparty--round-limit--baseline.json"
+  },
+  {
+   "scenario": "right-to-work",
+   "path": "main",
+   "status": "runs",
+   "trace": "right-to-work--baseline.json"
+  },
+  {
+   "scenario": "right-to-work",
+   "path": "branch-1",
+   "status": "runs",
+   "trace": "right-to-work--branch-1--baseline.json"
+  },
+  {
+   "scenario": "right-to-work",
+   "path": "hidden-validity-proof",
+   "status": "blocked",
+   "reason": "Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates."
+  },
+  {
+   "scenario": "supplier-onboarding",
+   "path": "main",
+   "status": "runs",
+   "trace": "supplier-onboarding--baseline.json"
+  },
+  {
+   "scenario": "supplier-onboarding",
+   "path": "branch-1",
+   "status": "runs",
+   "trace": "supplier-onboarding--branch-1--baseline.json"
+  },
+  {
+   "scenario": "supplier-onboarding",
+   "path": "branch-2",
+   "status": "runs",
+   "trace": "supplier-onboarding--branch-2--baseline.json"
+  }
+ ]
+}

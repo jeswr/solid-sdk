@@ -280,7 +280,8 @@
   function renderConfig() {
     var t = S.trace;
     root.querySelector('#scenario').value = t.scenario.id;
-    root.querySelector('#scn-summary').textContent = AX.scenarioMeta(t.scenario.id).summary || '';
+    var standIns = (t.standIns || []).map(function (x) { return x.what + ': ' + x.replacedBy; }).join('. ');
+    root.querySelector('#scn-summary').textContent = AX.scenarioMeta(t.scenario.id).summary || (standIns ? 'Local stand-ins in this run. ' + standIns + '.' : '');
     root.querySelector('#cfg-name').textContent = AX.configLabel(t);
     AX.orderedLayers.forEach(function (l) {
       var sel = root.querySelector('#cfg-' + l.id);
@@ -359,11 +360,14 @@
       var e = t.events[k];
       if (!e.chat) continue;
       var who = e.chat.who === 'principal' ? 'principal' : 'agent';
-      var name = who === 'principal' ? principalName() : 'Sam\'s agent';
+      var name = who === 'principal' ? principalName() : chatAgentName();
       html += '<li class="bubble ' + who + (k === last ? ' latest' : '') + (k === S.idx ? ' now' : '') + '"><span class="who">' + esc(name) + '</span>' + esc(e.chat.text) + '</li>';
     }
     var list = root.querySelector('#chat-list');
-    list.innerHTML = html || '<li class="chat-empty">The conversation with Sam appears here as the agent works.</li>';
+    var owner = principalName();
+    var sum = root.querySelector('#chat-details summary');
+    if (sum) sum.textContent = owner === 'Principal' ? 'The principal\'s chat' : owner + '\'s chat';
+    list.innerHTML = html || '<li class="chat-empty">' + esc(owner === 'Principal' ? 'This run has no conversation with a principal.' : 'The conversation with ' + owner.replace(/^The /, 'the ') + ' appears here as the agent works. In this run nothing was put to them.') + '</li>';
     var box = root.querySelector('.chat');
     box.scrollTop = box.scrollHeight;
   }
@@ -372,7 +376,13 @@
     if (a) return a.name;
     var ag = S.trace.agents.filter(function (x) { return x.id === 'sams-agent'; })[0] || S.trace.agents[0];
     var p = ag && AX.partyById[ag.actsFor];
-    return p ? p.name : 'Principal';
+    if (p) return p.name;
+    if (ag && ag.actsFor && /^[a-z0-9-]+$/.test(ag.actsFor)) return 'The ' + ag.actsFor.replace(/-/g, ' ');
+    return (ag && ag.actsFor) || 'Principal';
+  }
+  function chatAgentName() {
+    var ag = S.trace.agents.filter(function (x) { return x.id === 'sams-agent'; })[0] || S.trace.agents[0];
+    return ag ? ag.name : 'The agent';
   }
 
   // ---- Stage --------------------------------------------------------------

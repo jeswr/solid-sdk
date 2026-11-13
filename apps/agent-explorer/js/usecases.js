@@ -84,7 +84,14 @@
     }
     h += '</dl>';
     var t = traceFor(u);
-    if (t) h += '<p><a class="btn" href="' + AX.buildHash('explore', { scenario: t.scenario.id, config: t.configuration.id }) + '">Step through ' + (t.isFixture ? 'the mock-up' : 'the real run') + '</a></p>';
+    var runs = (u.runs || []).filter(function (r) { return r.status !== 'runs' || AX.baselineTrace(r.scenario); });
+    if (runs.length) {
+      h += '<h4>Runs</h4><ul class="run-list">' + runs.map(function (r) {
+        if (r.status !== 'runs') return '<li><span class="tag">Not run</span><span>' + esc(r.label) + '. ' + esc(r.reason) + '</span></li>';
+        var rt = AX.baselineTrace(r.scenario);
+        return '<li><span class="tag ok">Real run</span><a href="' + AX.buildHash('explore', { scenario: rt.scenario.id, config: rt.configuration.id }) + '">' + esc(r.label) + '</a></li>';
+      }).join('') + '</ul>';
+    } else if (t) h += '<p><a class="btn" href="' + AX.buildHash('explore', { scenario: t.scenario.id, config: t.configuration.id }) + '">Step through ' + (t.isFixture ? 'the mock-up' : 'the real run') + '</a></p>';
     h += '</div></details>';
     return h;
   }
@@ -250,7 +257,18 @@
       return '<tr><td><strong>' + esc(ph.id) + '</strong> ' + esc(ph.name) + '</td><td>' + esc(ph.summary) + '</td><td><span class="tag' + (done ? ' ok' : '') + '">' + esc(ph.status === 'next' ? 'Next' : ph.status === 'later' ? 'Later' : ph.status.charAt(0).toUpperCase() + ph.status.slice(1)) + '</span></td></tr>';
     }).join('') + '</tbody></table></div>';
     h += '<p style="margin-top:14px"><a href="' + AX.buildHash('specs', { doc: '60-evaluation' }) + '">The full plan</a>, including what would count against the design.</p>';
-    h += '<h2 id="runs">Runs so far</h2><p style="max-width:72ch"><strong>' + nRun + ' of ' + U.length + '</strong> use cases in the catalogue has a real run. <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'no' }) + '">See the ' + (U.length - nRun) + ' not run yet</a>. The table below is the mortgage example: one cell per scenario and configuration that has been loaded.</p>';
+    var runList = U.filter(isRun);
+    var nPaths = 0, held = [];
+    runList.forEach(function (u) { (u.runs || []).forEach(function (r) { if (r.status === 'runs') nPaths++; else held.push({ u: u, r: r }); }); });
+    h += '<h2 id="runs">Runs so far</h2><p style="max-width:72ch"><strong>' + nRun + ' of ' + U.length + '</strong> use cases in the catalogue ' + (nRun === 1 ? 'has' : 'have') + ' a real run: ' + nPaths + ' paths in all, each one a main path or a thing that goes wrong, run through the real gates from a profile and a scenario file with a scripted core. Outside systems (a bank, a register, a record store) are local stand-ins, named at the top of each run. <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'no' }) + '">See the ' + (U.length - nRun) + ' not run yet</a>; they are being written as data now.</p>';
+    h += '<div class="table-wrap"><table class="data"><thead><tr><th>Use case</th><th>Paths run</th></tr></thead><tbody>' + runList.map(function (u) {
+      return '<tr><td><a href="' + AX.buildHash('usecases', { tab: 'catalogue', at: 'uc-' + u.id }) + '"><strong>' + esc(u.title) + '</strong></a></td><td>' + (u.runs || []).filter(function (r) { return r.status === 'runs' && AX.baselineTrace(r.scenario); }).map(function (r) {
+        var rt = AX.baselineTrace(r.scenario);
+        return '<a class="chip" href="' + AX.buildHash('explore', { scenario: rt.scenario.id, config: rt.configuration.id }) + '">' + esc(r.label) + '</a>';
+      }).join(' ') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    if (held.length) h += '<p style="max-width:72ch;margin-top:12px"><strong>Written and not run.</strong> ' + held.map(function (x) { return esc(x.u.title) + ', ' + esc(x.r.label.toLowerCase()) + ': ' + esc(x.r.reason); }).join(' ') + '</p>';
+    h += '<h3 class="sub">The mortgage example under other configurations</h3><p class="small muted" style="max-width:72ch">One cell per scenario and configuration that has been loaded.</p>';
     page.innerHTML = h + runsHtml;
   };
 })();
