@@ -625,8 +625,8 @@ describe("review r2 execution regressions", () => {
     );
     expect(summary).not.toContain("SECRET");
     expect(summary).not.toContain("20.00");
-    // Currency codes remain readable under the eight-character minimum.
-    expect(summary).toContain("GBP");
+    // Explicitly registered short values are secrets too.
+    expect(summary).not.toContain("GBP");
     expect(summary).toContain("[redacted]");
   });
 

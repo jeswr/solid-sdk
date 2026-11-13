@@ -36,8 +36,8 @@ it("emits one integer ItemList total and marks unseen records as partial", async
   });
   expect(out.truncation.items).toBe(true);
   expect(out.items[0]?.terms?.get(`${s}totalPrice`)?.[0]).toMatchObject({
-    value: "219.40",
-    datatype: { value: `${x}decimal` },
+    value: "$219.40",
+    datatype: { value: `${x}string` },
   });
   expect(out.turtle).toContain('"2023-05-31T02:55:09"^^xsd:dateTime');
 });
@@ -53,9 +53,14 @@ it.each([
       options,
     );
   expect((await run("EUR")).items[0]?.terms?.get(`${s}totalPrice`)?.[0]).toMatchObject({
-    value: numeric,
-    datatype: { value: `${x}decimal` },
+    value: text,
+    datatype: { value: `${x}string` },
   });
+  expect(
+    new Parser()
+      .parse((await run("EUR")).turtle)
+      .find((q) => q.predicate.value === `${s}totalPrice`)?.object,
+  ).toMatchObject({ value: numeric, datatype: { value: `${x}decimal` } });
   expect((await run()).items[0]?.terms?.get(`${s}totalPrice`)?.[0]).toMatchObject({
     value: text,
     datatype: { value: `${x}string` },
@@ -78,10 +83,16 @@ it("validates totals, handles empty lists, and keeps truncation on local limits"
 it("a displayed order list total cannot authorize payment", async () => {
   const output = await extract(
     extraction,
-    '{"totalRecords":40,"items":[{"total":"$12.00","currency":"USD"}]}',
+    '{"totalRecords":1,"items":[{"total":"$12.00","currency":"USD"}]}',
     options,
   );
-  const read = { id: "urn:read", extraction } as Operation;
+  expect(output.truncation.items).toBe(false);
+  const read = {
+    id: "urn:read",
+    extraction,
+    inputs: [],
+    request: { method: "GET", urlTemplate: options.baseUrl },
+  } as unknown as Operation;
   const pay = { inputs: [] } as unknown as Operation;
   expect(() =>
     factsMoney(
@@ -113,7 +124,22 @@ it("a displayed order list total cannot authorize payment", async () => {
       ],
       0,
     ),
-  ).toThrow(/incomplete/);
+  ).toThrow(/invalid site monetary amounts/);
+});
+it("r9 preserves original monetary lexicals, including numeric JSON decimals and exponents", async () => {
+  for (const [wire, lexical] of [
+    ['"0012.00"', "0012.00"],
+    ["12.00", "12.00"],
+    ["1e1", "1e1"],
+  ]) {
+    const out = await extract(
+      extraction,
+      `{"totalRecords":1,"items":[{"total":${wire},"currency":"USD"}]}`,
+      options,
+    );
+    expect(out.items[0]?.values.get(`${s}totalPrice`)).toEqual([lexical]);
+    expect(out.total).toBe(1);
+  }
 });
 it("does not coerce prose, invalid dates, ambiguous currency or secret echoes", async () => {
   const out = await extract(

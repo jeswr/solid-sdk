@@ -41,7 +41,10 @@ function model(): SiteModel {
         actionType: `${s}SearchAction`,
         label: "Search products",
         inputs: [search],
-        request: { method: "GET", urlTemplate: "https://shop.test/products{?search}" },
+        request: {
+          method: "GET",
+          urlTemplate: "https://shop.test/products{?search}&excluded=false",
+        },
         session: "none",
         effect: "read",
         provenance,
@@ -102,7 +105,7 @@ function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Missing fixture value");
   return value;
 }
-function rig(initial = [row("42")], total = initial.length, source = model()) {
+function rig(initial = [row("42")], total = initial.length, source = model(), nextRows = initial) {
   let rows = initial,
     count = total,
     writeStatus = 200,
@@ -115,9 +118,9 @@ function rig(initial = [row("42")], total = initial.length, source = model()) {
       expect(JSON.parse(String(init.body))).toEqual({ search: "EX", excluded: false });
       return Response.json({}, { status: writeStatus });
     }
-    expect(url.searchParams.get("search")).toBe("EX");
+    expect(url.searchParams.get("search") ?? url.searchParams.get("SEARCH")).toBe("EX");
     return Response.json(
-      { items: rows, total: count },
+      { items: url.searchParams.get("page") === "2" ? nextRows : rows, total: count },
       { headers: readCookie ? { "set-cookie": readCookie } : {} },
     );
   };
@@ -154,11 +157,95 @@ async function approval(r: ReturnType<typeof rig>, req = request()) {
 }
 
 describe("filter selection approvals", () => {
+  it.each([
+    "single",
+    "explicit all",
+  ])("r9 refuses unknown completeness for %s without a total or modeled pagination", async (mode) => {
+    const source = model();
+    delete required(source.operations[0]).extraction?.totalPath;
+    const r = rig([row("42")], 1, source);
+    expect(
+      await r.executor.execute(request(mode === "explicit all" ? `; <${sab}all> true` : "")),
+    ).toMatchObject({
+      status: "refused",
+      errorKind: "ambiguous-target",
+      error: expect.stringContaining("completeness unknown"),
+    });
+    expect(r.gate.pending()).toHaveLength(0);
+  });
+  it.each([
+    true,
+    false,
+  ])("r9 probes modeled pagination and requires exhaustion: empty=%s", async (empty) => {
+    const source = model();
+    const read = required(source.operations[0]);
+    delete read.extraction?.totalPath;
+    read.inputs.push(
+      {
+        name: "page",
+        path: [`${sab}page`],
+        location: "query",
+        range: "http://www.w3.org/2001/XMLSchema#integer",
+        required: false,
+        default: "1",
+      },
+      {
+        name: "limit",
+        path: [`${sab}limit`],
+        location: "query",
+        range: "http://www.w3.org/2001/XMLSchema#integer",
+        required: false,
+        default: "1",
+      },
+    );
+    const r = rig([row("42")], 1, source, empty ? [] : [row("43")]);
+    const result = await r.executor.execute(request());
+    expect(result.status).toBe(empty ? "needs-approval" : "refused");
+    expect(r.calls).toEqual(["GET", "GET"]);
+    if (result.approval) {
+      r.gate.approve(result.approval.id);
+      expect((await r.executor.execute(request(), { approvalId: result.approval.id })).status).toBe(
+        "done",
+      );
+      expect(r.calls).toEqual(["GET", "GET", "GET", "GET", "POST"]);
+    } else expect(result.error).toContain("completeness unknown");
+  });
+  it.each([
+    "status",
+    "read-only sort",
+    "case",
+  ])("r9 compares every scope field, preserving names: %s", async (mode) => {
+    const source = model();
+    const read = required(source.operations[0]);
+    if (mode === "case") {
+      read.inputs[0] = { ...required(read.inputs[0]), name: "SEARCH" };
+      read.request.urlTemplate = read.request.urlTemplate.replace("{?search}", "{?SEARCH}");
+      required(required(source.flows[0]).steps[0]).bind = { SEARCH: "$input.search" };
+    } else read.request.urlTemplate += mode === "status" ? "&status=active" : "&sort=name";
+    const r = rig([row("42")], 1, source);
+    expect(await r.executor.execute(request())).toMatchObject({
+      status: "refused",
+      errorKind: "ambiguous-target",
+      error: expect.stringContaining("wire filters differ"),
+    });
+    expect(r.calls).toEqual(["GET"]);
+  });
+  it("r9 refuses a planner name conflicting with a trusted resolved identity", async () => {
+    const r = rig([row("99", "Example Widget 99")]);
+    expect(
+      await r.executor.execute(request('; schema:object [schema:name "Example Widget 42"]')),
+    ).toMatchObject({
+      status: "refused",
+      errorKind: "ambiguous-target",
+      error: expect.stringContaining("name conflicts"),
+    });
+    expect(r.calls).toEqual(["GET"]);
+  });
   it("one match names the target, binds its identity and re-resolves before sending", async () => {
     const source = readSiteModel(await writeSiteModel(model()));
     const r = rig([row("42")], 1, source);
     const a = await approval(r);
-    expect(a.summary).toBe('Delete "Example Widget 42 [42]" on shop.test');
+    expect(a.summary).toBe('Delete "Example Widget 42" (id "42") on shop.test');
     expect(r.calls).toEqual(["GET"]);
     const other = await approval(rig([row("43", "Example Widget 42")]));
     expect(a.digest).not.toBe(other.digest);
@@ -204,8 +291,8 @@ describe("filter selection approvals", () => {
     const r = rig(rows);
     const req = request(`; <${sab}all> true`);
     const a = await approval(r, req);
-    expect(a.summary).toContain('"Example Widget 10 [10]"');
-    expect(a.summary).toContain('"Example Widget 14 [14]" and 2 more');
+    expect(a.summary).toContain('"Example Widget 10" (id "10")');
+    expect(a.summary).toContain('"Example Widget 14" (id "14") and 2 more');
     r.gate.approve(a.id);
     r.change([...rows].reverse());
     // Response order cannot change the selection digest.
@@ -309,6 +396,7 @@ describe("filter selection approvals", () => {
     expect(a.summary).toContain("\\\\u000a");
     expect(a.summary).toContain('\\"Widget\\"');
     expect(a.summary).toContain("(truncated)");
+    expect(a.summary).toContain('(id "42")');
     expect(a.summary.length).toBeLessThan(160);
   });
   it("authorizes the resolver read before transmission and respects read denial on retry", async () => {
@@ -348,7 +436,7 @@ describe("filter selection approvals", () => {
     write.request.bodyTemplate = '{"id":"{id}"}';
     required(required(source.flows[0]).steps[1]).bind = { id: `$step0.${s}identifier` };
     const bound = await approval(rig([row("42")], 1, source));
-    expect(bound.summary).toBe('Delete "Example Widget 42" on shop.test');
+    expect(bound.summary).toBe('Delete "Example Widget 42" ("id"="42") on shop.test');
     const r = rig([row("42")], 1, { ...source, flows: [] });
     const result = await r.executor.execute(
       actionRequest('[] a schema:DeleteAction; schema:object [schema:identifier "42"].'),

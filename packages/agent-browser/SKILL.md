@@ -31,6 +31,8 @@ The shared contract belongs to site-model; keep adaptations local to this packag
   manufacture approvals or replace the gate with unconditional permission.
 - Run `loginWithPassword` only in host code, with `createExecutorFetch` sharing the
   executor's sessions/persona. Neither credentials nor raw login responses enter history.
+- An Uncertain redirected login may establish sign-in only with the learned session cookie
+  and a successful authenticated probe; never replay the login POST or create an identity.
 - CLI planners are opt-in. Use stdin, bounded output, timeout + one retry, no tools and
   an empty working directory. Do not inspect/copy auth files or set API keys. Tests mock
   the process boundary; they never run a real model.
@@ -73,8 +75,8 @@ fall back to Thing/additionalType text rather than Invoice/category.
 Composite write templates must be witnessed by successful demonstrations, size bounded and
 redacted. Prefer witnessed cookie CSRF over hidden/meta sources; script variables require a
 contract discussion, never a hard-coded token. Preserve ordinary flat-form defaults/options.
-Created identities may come from checked on-origin 301/302/303 redirects and supply later flow
-bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
+Redirect identities need an explicit created-location declaration and the executor's first-hop,
+resource, error-page and success-evidence checks. Without them, keep Uncertain and no bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
 The harness's opt-in live test creates and cleans up only its own product, blocks background
 preference writes and uses a scripted planner. Never invoke a planner/model CLI for acceptance.
 
@@ -114,8 +116,9 @@ Fallback review invariants:
   Never give Chromium an unchecked redirect. Off-origin redirects render a navigation error.
   301/302/303 writes continue as GET; 307/308 body resends need a new exact grant/fingerprint.
   Decorate each hop with matching cookies and site-only session headers in the driver.
-- Build fingerprints and learned inputs from the wire inventory. Form evidence can type a sent
-  field or locate its CSRF source, but cannot add unsent controls, examples or defaults.
+- Build fingerprints and learned inputs with the same wire-operation builder over one transmitted
+  request. Form evidence can locate a CSRF source; it cannot type fields or add controls/defaults.
+  Refuse repeated wire names that the scalar-input contract cannot preserve.
 - Remember sent writes before processing learning results. Retain the previous executor/model
   on any admission/construction/processing failure. Clean writes that cannot be learned stay
   completed; uncertain writes stay Uncertain. Dry-construct candidates and reject reserved
@@ -127,6 +130,15 @@ Fallback review invariants:
 - Bind grants to document/frame generation and the exact pending request; recheck immediately
   before dispatch. Approval text quotes page strings, escapes controls/newlines, marks truncation,
   shows method/path and uses the actual visible enabled submitter and its form.
+- Discover credentials from every same-origin HTML/JSON/script response before snapshots, trace
+  exposure or learning/replay; include external scripts and unsuccessful/non-GET sources. Reuse
+  profiler script analysis for token variables/global assignments. Unsupported sources stay secret
+  and unresolved token constants must be rejected with a reason.
+- Trim session headers, canonicalize recognized scheme prefixes case-insensitively, and remember
+  both source and transmitted spellings plus the credential. Share URL scrubbing across snapshot
+  names/values and trace text, covering sensitive query/fragment parameters, opaque bare fragments,
+  userinfo and exact secret path segments. Escape all Unicode formatting/control characters in
+  snapshot and approval strings, including bidi and zero-width characters.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 The opt-in HTML forum cycle in webarena-bench uses SAB_LIVE_FORUM_URL, learned operations,

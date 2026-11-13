@@ -138,6 +138,7 @@ describe("execution outcomes", () => {
     });
     const result = await createExecutor({
       model,
+      writeResponses: { [operation.id]: { createdLocationPattern: "/orders/{id}" } },
       sessions: new InMemorySessions(),
       fetch: async (url, init) =>
         String(url).endsWith("/quote")

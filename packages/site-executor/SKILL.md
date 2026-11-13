@@ -62,7 +62,7 @@ Security review hardening:
   omit executor-owned headers. Vendor-specific Accept needs a future inventoried field.
   Normalize compiled multipart names/values to their serialized fields (CRLF, USVString and name
   quoting), including CSRF insertion. Verify actual Request serialization; LF and CRLF quotes differ.
-  Compare names case-insensitively and canonical values exactly. Refuse duplicate
+  Compare header names case-insensitively, other wire names case-sensitively, and canonical values exactly. Refuse duplicate
   names across any locations within either request.
 - Every payment field must be covered by the total request's same name/value, a whole checked
   order/basket identity equal to the total, or the CSRF target. CSRF names cannot alias anything
@@ -89,8 +89,12 @@ Security review hardening:
   subjects or flow facts.
 - Register source and final transmitted cookie/header/token values after decoration, using the
   compiled wire inventory and final Fetch headers rather than duplicating normalization rules.
-  Redact forms of at least eight characters, including trimmed, mixed/nested percent, form `+`,
-  JSON and HTML entity encodings; keep empty and shorter forms. Redact before truncating, and re-render every observation with the final secret set
+  Redact explicitly registered nonempty secrets at any length; forms shorter than eight
+  characters require token boundaries. The eight-character floor applies only to heuristic,
+  unregistered discoveries. Register cookie wire and logical (unquoted, percent-decoded) payloads.
+  Normalize form `+` to space before percent decoding. Keep trimmed, mixed/nested percent,
+  JSON and HTML entity coverage. For registered secrets shorter than four characters, suppress
+  free-text samples, record `sab:samplesSuppressed true`, and retain safe structured fields. Redact before truncating, and re-render every observation with the final secret set
   on done, error, denial and approval returns. Retain structured values, never re-redact Turtle.
 - Bound extraction before materializing items: 200 items, 100 values per field, 1000 total values,
   3000 quads, 1 MiB output, 4000 emitted characters per value. Value/quad/byte overflow fails closed.
@@ -148,8 +152,11 @@ fall back to Thing/additionalType text rather than Invoice/category.
 Composite write templates must be witnessed by successful demonstrations, size bounded and
 redacted. Prefer witnessed cookie CSRF over hidden/meta sources; script variables require a
 contract discussion, never a hard-coded token. Preserve ordinary flat-form defaults/options.
-Created identities may come from checked on-origin 301/302/303 redirects and supply later flow
-bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
+Created identities from 301/302/303 redirects require a declared first-hop created-location
+pattern, every hop staying on its exact resource, no modeled error destination, and any declared
+final success evidence. Otherwise emit Uncertain without identity bindings and retain the repeat
+guard. Use the executor-local `writeResponses` policy until a coordinated shared-contract
+extension can persist these declarations; see README. An undeclared redirect is Uncertain. Keep every write approval and repeat guard; never replay POST while following redirects.
 The harness's opt-in live test creates and cleans up only its own product, blocks background
 preference writes and uses a scripted planner. Never invoke a planner/model CLI for acceptance.
 
@@ -157,6 +164,15 @@ preference writes and uses a scripted planner. Never invoke a planner/model CLI 
   get the unique CSRF exemption, never collision exemption; total tokens get reverse-coverage
   exemption only. Shared validation admits one otherwise-unbound whole simple segment per query
   CSRF target, keeping all other undeclared endpoint/body/source variables invalid.
+
+Selection completeness requires observed `totalPath` equality or a zero-item next-page probe
+using modeled pagination, unchanged filters and session, through the read gate. Unknown
+completeness refuses with ambiguous-target, including explicit all. Compare every concrete
+selection field on both requests, with only declared paging/sorting and CSRF exemptions.
+Always show sent identifiers beside names in write approvals; refuse planner names conflicting
+with trusted resolved/bound identity names. Keep display-converted money separate from
+structured evidence values/terms; payment and totals accept only original decimal lexicals
+with explicit currency, including complete lists. Round-9 regression files cover each boundary.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Form-name identity slots must be numeric; HTML CSRF selector slots must be ASCII slug characters

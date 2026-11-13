@@ -78,10 +78,11 @@ import {
 } from "./money.js";
 import { describeUrl, guardUrl, OriginError, siteOrigin } from "./origin.js";
 import { outcomeTurtle } from "./outcome.js";
-import { secretRedactor } from "./secrets.js";
+import { cookieSecrets, hasShortSecrets, secretRedactor } from "./secrets.js";
 import {
   assertSelectionFilters,
   itemName,
+  nextSelectionPage,
   requestsAll,
   resolveSelection,
   type SelectionEvidence,
@@ -91,6 +92,11 @@ import {
 import { UriTemplateError } from "./uri-template.js";
 import { BindingError, expandIri, idFromIri, isClassRange } from "./values.js";
 import { csrfFieldName, effectiveWireFields, transmittedCsrfSecrets } from "./wire.js";
+import {
+  validateWriteResponsePolicy,
+  verifiedCreatedLocation,
+  type WriteResponsePolicy,
+} from "./write-response.js";
 
 export type ExecutionStatus =
   | "done"
@@ -162,6 +168,8 @@ export interface ExecutorOptions {
   maxResponseBytes?: number;
   /** Absolute deadline per execute() call, including body reads. Default 30 seconds. */
   maxExecutionMs?: number;
+  /** Trusted per-operation response declarations, stored separately from the unchanged SiteModel contract. */
+  writeResponses?: Record<string, WriteResponsePolicy>;
 }
 
 export interface PlannedRequest {
@@ -250,7 +258,7 @@ interface Response0 {
   status: number;
   url: URL;
   body: string;
-  createdLocation?: string;
+  redirectLocations: string[];
   requestBody?: CompiledRequest["body"];
 }
 
@@ -322,6 +330,7 @@ interface ObservationRecord {
   createdLocation?: string;
   inputs?: Record<string, string>;
   compiled?: CompiledRequest;
+  selectionComplete?: boolean;
 }
 interface Progress {
   index: number;
@@ -347,6 +356,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
   const model = validatedModel(options.model);
   const { sessions } = options;
   const origin = siteOrigin(model.site);
+  const writeResponses = structuredClone(options.writeResponses ?? {});
+  for (const [id, policy] of Object.entries(writeResponses)) {
+    if (!model.operations.some((op) => op.id === id && op.effect !== "read"))
+      throw new BindingError("write response policy needs a known write operation");
+    validateWriteResponsePolicy(policy, origin);
+  }
   const gate = options.gate ?? createApprovalGate();
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const now = options.now ?? (() => new Date());
@@ -364,7 +379,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
   const operations = new Map(model.operations.map((op) => [op.id, op]));
 
   function addSecrets(ctx: RunContext): void {
-    for (const c of ctx.jar) if (c.value.length > 0) ctx.secrets.add(c.value);
+    for (const c of ctx.jar)
+      for (const value of cookieSecrets(c.value)) if (value) ctx.secrets.add(value);
     for (const v of Object.values(ctx.headers)) {
       if (v.length > 0) ctx.secrets.add(v);
       const token = v.trim().split(/\s+/).at(-1);
@@ -454,7 +470,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     let currentMethod = method;
     let currentBody = body;
     const currentHeaders = { ...headers };
-    let createdLocation: string | undefined;
+    const redirectLocations: string[] = [];
     for (let redirects = 0; ; redirects++) {
       checkDeadline(ctx);
       if (ctx.requests >= maxRequests)
@@ -509,8 +525,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
           throw new OriginError("redirect Location is not a valid URL");
         }
         next = guardUrl(next.href, origin);
-        if ([301, 302, 303].includes(res.status) && currentMethod !== "GET")
-          createdLocation = next.href;
+        redirectLocations.push(next.href);
         if (currentMethod !== "GET" && (res.status === 307 || res.status === 308)) {
           throw new HttpError(
             `${currentMethod} ${describeUrl(url)} answered ${res.status}; a redirect that re-sends the body is not followed`,
@@ -531,7 +546,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         url,
         body: await readBody(ctx, res),
         requestBody: currentBody,
-        ...(createdLocation ? { createdLocation } : {}),
+        redirectLocations,
       };
     }
   }
@@ -668,7 +683,19 @@ export function createExecutor(options: ExecutorOptions): Executor {
       )
         throw new SessionError("The site requires sign-in again");
     }
-    const identity = res.createdLocation ? responseIdentity(res.createdLocation) : undefined;
+    const redirectedWrite = operation.effect !== "read" && res.redirectLocations.length > 0;
+    const createdLocation = redirectedWrite
+      ? verifiedCreatedLocation(
+          writeResponses[operation.id],
+          res.redirectLocations,
+          res.url,
+          res.body,
+          origin,
+        )
+      : undefined;
+    if (redirectedWrite && !createdLocation)
+      throw new HttpError("write redirect has no verified created identity; outcome is uncertain");
+    const identity = createdLocation ? responseIdentity(createdLocation) : undefined;
     const safeIdentity =
       identity &&
       redactWith(ctx)(identity.url) === identity.url &&
@@ -682,8 +709,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         ? {
             format: "json" as const,
             itemType:
-              endpointItemType(res.createdLocation ?? compiled.url.href)?.itemType ??
-              `${SCHEMA}Thing`,
+              endpointItemType(createdLocation ?? compiled.url.href)?.itemType ?? `${SCHEMA}Thing`,
             idField: `${SCHEMA}url`,
             fields: [
               { property: `${SCHEMA}url`, path: "/url", datatype: "iri" },
@@ -697,7 +723,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
           operation: operation.id,
           status: res.status,
           url: res.url.href,
-          ...(res.createdLocation ? { createdLocation: res.createdLocation } : {}),
+          ...(createdLocation ? { createdLocation } : {}),
         },
         items: [],
       };
@@ -710,12 +736,25 @@ export function createExecutor(options: ExecutorOptions): Executor {
         redact: redactWith(ctx),
       },
     );
+    if (
+      safeIdentity &&
+      out.items.some(
+        (item) =>
+          (item.iri !== undefined && item.iri !== safeIdentity.url) ||
+          (item.values.get(`${SCHEMA}identifier`) ?? []).some(
+            (value) => value !== safeIdentity.identifier,
+          ),
+      )
+    )
+      throw new HttpError(
+        "created redirect identity conflicts with the final response; outcome is uncertain",
+      );
     return {
       observation: {
         operation: operation.id,
         status: res.status,
         url: res.url.href,
-        ...(res.createdLocation ? { createdLocation: res.createdLocation } : {}),
+        ...(createdLocation ? { createdLocation } : {}),
         output: out,
         inputs: { ...values },
         compiled: {
@@ -910,7 +949,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
         progress.observations.map(async (record) => ({
           operation: record.operation,
           status: record.status,
-          turtle: record.output ? await record.output.render(redactWith(ctx)) : await emptyTurtle(),
+          turtle: record.output
+            ? await record.output.render(redactWith(ctx), hasShortSecrets(ctx.secrets))
+            : await emptyTurtle(),
           itemCount: record.output?.items.length ?? 0,
         })),
       );
@@ -1087,6 +1128,54 @@ export function createExecutor(options: ExecutorOptions): Executor {
       // A different vault revision at entry, or any credential/attribute change during
       // those reads, still requires a fresh approval.
       const resumingSession = pending?.session?.state === sessionFingerprint();
+      const selectionReads = new Set(
+        flow ? steps.flatMap((_op, i) => selectionSources(flow, i, steps).map((s) => s.step)) : [],
+      );
+      const proveSelection = async (
+        index: number,
+        read: Operation,
+        values: Record<string, string>,
+        record: ObservationRecord,
+      ): Promise<void> => {
+        if (!selectionReads.has(index) || !record.output || record.output.total !== undefined)
+          return;
+        const next = nextSelectionPage(read, values);
+        if (!next) return; // resolveSelection reports unknown completeness.
+        const compiled = compileOperation(read, operationValues(read, next), origin);
+        const probeRequest: GateRequest = {
+          site: origin,
+          target: sessionTarget,
+          effect: "read",
+          inputs: next,
+          summary: summarise(request, sessionTarget, origin, {}, redactWith(ctx)),
+          digest: approvalDigest({
+            site: origin,
+            modelVersion: model.version,
+            target: sessionTarget,
+            effect: "read",
+            inputs: next,
+            binding: {
+              operation: read,
+              url: compiled.url.href,
+              session: sessionFingerprint(),
+              selectionProbe: true,
+            },
+          }),
+        };
+        const decision = await budget(ctx, gate.authorize(structuredClone(probeRequest)));
+        if (decision.kind !== "allow")
+          throw new SelectionRefusal(
+            "selection completeness unknown: next-page probe was not authorized",
+          );
+        const before = sessionFingerprint(false);
+        const probe = await runOperation(ctx, read, next, compiled);
+        record.selectionComplete =
+          before === sessionFingerprint(false) &&
+          probe.items.length === 0 &&
+          !!probe.observation.output &&
+          !probe.observation.output.truncation.items &&
+          !probe.observation.output.truncation.values;
+      };
       // Revalidate the fact source, never replay a completed write. Recompiling
       // below binds any changed money, item identity or concrete inputs anew.
       if (flow && pending) {
@@ -1153,6 +1242,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
               error: "evidence revalidation read was not authorized",
             });
           const out = await runOperation(ctx, read, values, compiled);
+          await proveSelection(n, read, values, out.observation);
           progress.stepItems[n] = out.items;
           progress.observations[n] = out.observation;
           progress.requests = ctx.requests;
@@ -1186,7 +1276,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
           const compiled = compileOperation(op, resolved, origin);
           if (flow && selection)
             for (const source of selectionSources(flow, i, steps))
-              assertSelectionFilters(progress.observations[source.step]?.compiled, compiled);
+              assertSelectionFilters(
+                progress.observations[source.step]?.compiled,
+                compiled,
+                steps[source.step] as Operation,
+                op,
+              );
           const sources = stepSources(flow, i);
           // Only strongest-effect steps inherit a stronger declared flow effect.
           // Preparatory writes keep their own class; every payment gate requires evidence.
@@ -1351,6 +1446,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
               url: compiled.url.href,
               headers: compiled.headers,
               body: compiled.body,
+              responsePolicy: writeResponses[op.id],
               ...(evidence ? { evidence } : {}),
               ...(selection ? { selection } : {}),
               session: session.binding,
@@ -1358,6 +1454,46 @@ export function createExecutor(options: ExecutorOptions): Executor {
           });
           const approvalId =
             claimed !== undefined && pending?.digest === digest ? claimed : undefined;
+          const boundItems = flow
+            ? Object.values(flow.steps[i]?.bind ?? {}).flatMap((spec) => {
+                const ref = STEP_REF.exec(spec);
+                if (!ref) return [];
+                const items = progress.stepItems[Number(ref[1])] ?? [];
+                return selection ? items : items.slice(0, 1);
+              })
+            : [];
+          const objectNames = request.values([`${SCHEMA}object`, `${SCHEMA}name`]);
+          if (
+            effect !== "read" &&
+            objectNames.length &&
+            boundItems.some((item) =>
+              (item.values.get(`${SCHEMA}name`) ?? []).some((name) =>
+                objectNames.some((supplied) => supplied !== name),
+              ),
+            )
+          )
+            throw new SelectionRefusal(
+              "planner-supplied name conflicts with trusted resolved identity name",
+            );
+          const identifiers = effectiveWireFields(compiled)
+            .filter(
+              (field) =>
+                !field.sessionToken &&
+                (field.location === "path" ||
+                  /(?:^|[/_[])(?:ids?|sku|identifier|productID|orderNumber)(?:\]|$)/i.test(
+                    field.name,
+                  ) ||
+                  op.inputs.some(
+                    (p) =>
+                      resolved[p.name] === field.value &&
+                      (p.path.some((iri) =>
+                        /(?:identifier|sku|productID|orderNumber)$/.test(iri),
+                      ) ||
+                        (p.path.at(-1) === `${SCHEMA}object` && isClassRange(p.range))),
+                  )) &&
+                !compiled.csrf.some((rule) => field.name === csrfFieldName(compiled, rule)),
+            )
+            .map((field): [string, string] => [field.name.replace(/^\//, ""), field.value]);
           const gateRequest: GateRequest = {
             site: origin,
             target,
@@ -1367,7 +1503,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
             summary: summarise(request, target, origin, authorizedMoney, redactWith(ctx), {
               inputs: resolved,
               operation: op,
+              identifiers,
               selection: Boolean(selection),
+              ...(selection ? { targets: selection.targets } : {}),
               names:
                 selection?.names ??
                 (flow
@@ -1474,6 +1612,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
             payment,
           );
           checkDeadline(ctx);
+          await proveSelection(i, op, resolved, out.observation);
           progress.observations.push(out.observation);
           progress.stepItems.push(out.items);
           progress.index = i + 1;

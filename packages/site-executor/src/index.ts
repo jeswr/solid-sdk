@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // @jeswr/site-executor: run a planner's RDF action request against a site's own
@@ -77,3 +78,4 @@ export {
   UriTemplateError,
 } from "./uri-template.js";
 export { BindingError, idFromIri, resolveParameter, validateValue } from "./values.js";
+export type { WriteResponsePolicy } from "./write-response.js";

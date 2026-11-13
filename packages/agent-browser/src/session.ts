@@ -10,6 +10,7 @@ import {
   siteOrigin,
 } from "@jeswr/site-executor";
 import { type ActionRequest, type Operation, SCHEMA, type SiteModel } from "@jeswr/site-model";
+import { rememberSessionHeader } from "./fallback/redact.js";
 import type { TaskExecutor } from "./types.js";
 
 const secrets = new WeakMap<SessionProvider, Map<string, Set<string>>>();
@@ -93,7 +94,10 @@ export async function loginWithPassword(
       gate.approve(result.approval.id);
       result = await executor.execute(request, { approvalId: result.approval.id });
     }
-    if (result.status !== "done") throw new Error();
+    // Verify sign-in independently after an uncertain login redirect. Never replay
+    // the POST or manufacture a created identity from the landing page.
+    const uncertain = result.outcome?.status === "uncertain" && result.committed.length === 1;
+    if (result.status !== "done" && !(uncertain && route.probeUrl)) throw new Error();
     const bundle = await executorFetch.sessions.get(executorFetch.site, executorFetch.persona);
     for (const c of bundle?.cookies ?? []) values.add(c.value);
     const cookies = cookiesFor(
@@ -145,9 +149,7 @@ export function createTaskExecutor(options: Omit<ExecutorOptions, "gate">): Task
         const bundle = await options.sessions.get(siteOrigin(options.model.site), options.persona);
         for (const c of bundle?.cookies ?? []) values.add(c.value);
         for (const v of Object.values(bundle?.headers ?? {})) {
-          values.add(v);
-          const token = v.trim().split(/\s+/).at(-1);
-          if (token) values.add(token);
+          rememberSessionHeader(values, v);
         }
       };
       await remember();

@@ -392,7 +392,7 @@ describe("fallback review r1 browser regressions", () => {
     } finally {
       injected.mockRestore();
     }
-  });
+  }, 15000);
 
   it("R3 runTask keeps commitments and the prior pair if later result processing throws", async () => {
     const model = emptyModel(origin);

@@ -74,7 +74,12 @@ export async function shopExecutor(
 }> {
   const sessions = new InMemorySessions();
   await loginWithPassword(model, createExecutorFetch({ model, sessions, persona }), SHOP_LOGIN);
-  return { executor: createTaskExecutor({ model, sessions, persona }), sessions };
+  const writeResponses = Object.fromEntries(
+    model.operations
+      .filter((op) => op.effect === "payment")
+      .map((op) => [op.id, { createdLocationPattern: "/orders/{id}" }]),
+  );
+  return { executor: createTaskExecutor({ model, sessions, persona, writeResponses }), sessions };
 }
 
 /** Construct requests through n3.Writer; the product IRI comes exclusively from observed RDF. */

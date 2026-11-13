@@ -112,8 +112,9 @@ Formatted monetary strings keep their text unless a row currency code supports c
 Opaque URL values (16–256 characters) repeated in at least two requests and supplied by a hidden
 HTML input, meta tag or cookie become session/CSRF sources, never planner inputs or constants.
 Cookie sources take precedence. Query tokens are decorated at replay time; path tokens use the
-executor's documented whole-segment convention. Returned traces redact these values, cookie
-values, hidden form keys and passwords, including their occurrences in response samples.
+executor's documented whole-segment convention. Before any trace or sample returns, register every learned hidden/meta credential value from
+both crawl and demonstration pages (including standalone inputs outside forms), alongside
+cookies and passwords, and redact all occurrences in returned samples and warnings.
 Route-specific tokens computed only by script are not inferred by this rule.
 
 Analysis tries classic script syntax before module syntax. Scripts above 512 KiB, recorder-truncated
@@ -147,8 +148,9 @@ are redacted structurally; a witnessed matching cookie is preferred to a hidden 
 sources come from observed pages, including JS-page responses. Script-only token sources are
 unsupported by the current CsrfSource union and are never baked into templates.
 
-Tokens are rediscovered after demonstrations. Server redirect identities can supply later
-flow bindings even when the destination form is rendered by JavaScript. Demonstrated POST
+Tokens are rediscovered after demonstrations. Demonstrated redirects may propose later flow bindings even when the destination form is
+rendered by JavaScript. Execution still requires the executor's declared created-location policy
+and redirect/success checks; undeclared redirects remain Uncertain without identity bindings. Demonstrated POST
 save-with-ID and delete/remove routes are labelled UpdateAction/DeleteAction conservatively;
 unknown writes, including creates, remain irreversible-write. Failed/aborted demonstration
 requests never teach a write. The opt-in harness demonstration and acceptance create and clean
@@ -184,11 +186,18 @@ therefore retain their JSON negotiation without storing Accept in the learned mo
 Accept media types require a future first-class, inventoried field.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-`discoverCredentialSources(pages, cookies)` returns explicit first-use credential secrets and
+`discoverCredentialSources(pages, cookies, responses?)` returns explicit first-use credential secrets and
 supported CSRF sources independently of repetition. Meta/hidden token fields and cookies can
 supply session slots; recognised script credential literals are secrets only, since script
 variables are outside CsrfSource. The fallback uses this stricter credential boundary alongside
 `discoverSessionTokens`; ordinary opaque-value repetition discovery is unchanged.
+The optional same-origin response inventory scans HTML from any method/status, nested JSON
+credential keys and external scripts (including scripts with nonstandard media types). Script
+credential analysis shares the profiler's parser, AST traversal and constant evaluation; variable
+and global-object assignments supply secrets, never invented executable CSRF sources.
+
+Round-9 `test/review-r9.test.ts` profiles fictional standalone hidden `form_key` and meta
+credentials on demonstration-only pages and verifies learning plus redaction before traces return.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 ## HTML discussions and demonstrated form identities

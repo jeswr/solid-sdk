@@ -86,7 +86,9 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
       preview.textContent = `Share ${count} ${count === 1 ? 'cookie' : 'cookies'} for ${view.site} with ${person} (${vault})? This gives your agent this site’s sign-in.`;
     }
     remove.disabled =
-      !view.warning || !['ready', 'failed', 'cancelled', 'shared'].includes(view.phase);
+      !view.warning ||
+      (!['ready', 'failed', 'cancelled', 'shared'].includes(view.phase) &&
+        !(view.phase === 'busy' && view.cleanupFailed));
     cancel.disabled = view.lease === undefined || terminalCapturePhase(view.phase);
   };
   port.onMessage.addListener((next: CaptureView) => {

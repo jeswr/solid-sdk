@@ -2,13 +2,12 @@
 import { compileOperation, requestFingerprint } from "@jeswr/site-executor";
 import { SCHEMA } from "@jeswr/site-model";
 import {
-  buildOperation,
   type FormInfo,
   matchRequest,
   type RecordedRequest,
   type SessionTokens,
 } from "@jeswr/site-profiler";
-import { wireCandidates } from "./wire.js";
+import { buildWireOperation, wireCandidates } from "./wire.js";
 
 /** Compile without sending, using exactly the same canonicalisation as learned executor writes. */
 export function browserWriteFingerprint(
@@ -19,7 +18,7 @@ export function browserWriteFingerprint(
 ): string {
   const candidate = wireCandidates([request], origin, forms, tokens)[0];
   if (!candidate) throw new Error("Unsupported browser write.");
-  const operation = buildOperation(
+  const operation = buildWireOperation(
     candidate,
     {
       actionType: `${SCHEMA}UpdateAction`,
