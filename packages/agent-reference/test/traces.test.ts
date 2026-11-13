@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { readFileSync } from "fs";
@@ -149,4 +150,24 @@ describe("mortgage-main shows the index, the register chain and the stronger app
       for (const e of (await run(scenario)).events)
         if (e.kind === "check" && e.verdict === "pass") expect(e.reason).toBeTruthy();
   });
+});
+
+it("the lender's decision leaves as a deliver in step 13 and reaches Sam's gate there", async () => {
+  for (const scenario of ["mortgage-core", "mortgage-main"] as const) {
+    const trace = await run(scenario);
+    const sent = trace.events.find(
+      (event) =>
+        event.agent === "lender" &&
+        event.kind === "message-out" &&
+        event.packet?.kind === "deliver",
+    );
+    expect(sent?.step).toBe(13);
+    const received = trace.events.find(
+      (event) =>
+        event.agent === "sams-agent" &&
+        event.kind === "message-in" &&
+        event.packet?.id === sent?.packet?.id,
+    );
+    expect(received?.step).toBe(13);
+  }
 });

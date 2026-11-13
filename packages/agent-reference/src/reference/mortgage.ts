@@ -190,7 +190,9 @@ export function stepOf(out: OutboundMessage): number | undefined {
   const m = out.message;
   if (m.kind === "describe" || m.kind === "description") return 4;
   if (m.kind === "propose") return (m.body as { round?: number }).round === 1 ? 5 : 11;
-  if (m.kind === "accept" || m.kind === "deliver") return 12;
+  if (m.kind === "accept") return 12;
+  if (m.kind === "deliver")
+    return m.from.actor === NORTH.actor && m.body.operation.id === PREQUAL_OP.id ? 13 : 12;
   if (m.kind === "receipt") return (m.body as { final?: boolean }).final ? 13 : 12;
   return undefined;
 }

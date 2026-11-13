@@ -216,6 +216,7 @@ type Continuation =
       intent?: ActionIntent;
       force?: boolean;
       conditions?: readonly DisclosureCondition[];
+      after?: { plan: AgreementPlan; agreement: Agreement };
     };
 
 interface StartPlan {
@@ -402,6 +403,7 @@ export class AgentRuntime {
         this.decisions = [];
         this.current = undefined;
         this.carriage = undefined;
+        const outboxBefore = new Set(Object.keys(this.state.outbox));
         return fn().catch((error: unknown) => {
           if (!(error instanceof MessageReleaseError)) throw error;
           if (this.current) {
@@ -410,7 +412,17 @@ export class AgentRuntime {
               this.state.seen[this.current.id] = { ...seen, disposition: error.result.disposition };
           }
           this.persist();
-          return error.result as T;
+          const emitted = Object.values(this.state.outbox)
+            .filter((entry) => !outboxBefore.has(entry.id))
+            .map((entry) => this.outboundFromEntry(entry));
+          const ids = new Set(emitted.map((message) => message.id));
+          return {
+            ...error.result,
+            outbound: [
+              ...emitted,
+              ...error.result.outbound.filter((message) => !ids.has(message.id)),
+            ],
+          } as T;
         });
       });
     const result = this.queue.then(run, run);
@@ -2069,8 +2081,27 @@ export class AgentRuntime {
     // snapshot already contains the whole plan: recover() can finish it after a crash.
     for (const e of plan.effects ?? []) this.planEffect(conversationId, e, agreement.id);
     const outbound: OutboundMessage[] = [];
-    for (const m of plan.messages ?? []) {
-      outbound.push(...(await this.performPlanMessage(conversationId, m)));
+    for (const [index, message] of (plan.messages ?? []).entries()) {
+      try {
+        outbound.push(...(await this.performPlanMessage(conversationId, message)));
+      } catch (error) {
+        if (error instanceof MessageReleaseError && error.result.pendingApproval) {
+          const pending = this.state.pending[error.result.pendingApproval.actionDigest];
+          const continuation = pending?.continuation as unknown as Continuation | undefined;
+          if (pending && continuation?.type === "release-message")
+            this.state.pending[pending.actionDigest] = {
+              ...pending,
+              continuation: structuredClone({
+                ...continuation,
+                after: {
+                  agreement,
+                  plan: { ...plan, messages: (plan.messages ?? []).slice(index + 1) },
+                },
+              }) as unknown as Json,
+            };
+        }
+        throw error;
+      }
     }
     for (const e of plan.effects ?? []) {
       outbound.push(...(await this.runEffect(conversationId, e, agreement.id)));
@@ -3164,8 +3195,20 @@ export class AgentRuntime {
         ...(cont.conditions ? { conditions: cont.conditions } : {}),
       });
       this.state.usedApprovals[a.id] = true;
+      if (cont.message.kind === "receipt")
+        for (const [key, effect] of Object.entries(this.state.effects)) {
+          if (effect.activity === cont.message.body.activity)
+            this.state.effects[key] = { ...effect, receiptSent: true };
+        }
       this.persist();
-      return this.result("accepted", { conversation: conv.id, outbound: [out] });
+      const rest = cont.after
+        ? await this.executeAgreementPlan(conv.id, cont.after.plan, cont.after.agreement)
+        : undefined;
+      this.persist();
+      return this.result("accepted", {
+        conversation: conv.id,
+        outbound: [out, ...(rest?.outbound ?? [])],
+      });
     }
     const resumed = this.apply(conv, { type: "approval-resolved", at: this.now() });
     let outbound: OutboundMessage[] = [];

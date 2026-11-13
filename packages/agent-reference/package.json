@@ -21,10 +21,10 @@
     },
     "./package.json": "./package.json",
     "./traces/*": "./traces/*",
-    "./profiles/*": "./profiles/*",
-    "./scenarios/*": "./scenarios/*",
-    "./schemas/*": "./schemas/*",
-    "./outlines/*": "./outlines/*"
+    "./profiles/*.json": "./profiles/*.json",
+    "./scenarios/*.json": "./scenarios/*.json",
+    "./schemas/*.json": "./schemas/*.json",
+    "./outlines/*.json": "./outlines/*.json"
   },
   "files": [
     "dist",

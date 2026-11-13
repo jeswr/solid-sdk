@@ -63,7 +63,7 @@
     }
   ],
   "generated": {
-    "commit": "unknown",
+    "commit": "27f49668186cf9d030a6ba5d96b5f3c8911c6925",
     "core": "scripted"
   },
   "events": [
@@ -11508,7 +11508,7 @@
     },
     {
       "seq": 307,
-      "step": 12,
+      "step": 13,
       "agent": "sams-agent",
       "part": "transport",
       "kind": "message-in",
@@ -11642,7 +11642,7 @@
     },
     {
       "seq": 308,
-      "step": 12,
+      "step": 13,
       "agent": "sams-agent",
       "part": "inbound-gate",
       "kind": "check",
@@ -11669,7 +11669,7 @@
     },
     {
       "seq": 309,
-      "step": 12,
+      "step": 13,
       "agent": "sams-agent",
       "part": "inbound-gate",
       "kind": "check",
@@ -11717,7 +11717,7 @@
     },
     {
       "seq": 310,
-      "step": 12,
+      "step": 13,
       "agent": "sams-agent",
       "part": "inbound-gate",
       "kind": "check",
@@ -11739,7 +11739,7 @@
     },
     {
       "seq": 311,
-      "step": 12,
+      "step": 13,
       "agent": "sams-agent",
       "part": "inbound-gate",
       "kind": "check",
@@ -11766,7 +11766,7 @@
     },
     {
       "seq": 312,
-      "step": 12,
+      "step": 13,
       "agent": "sams-agent",
       "part": "inbound-gate",
       "kind": "check",
@@ -11788,7 +11788,7 @@
     },
     {
       "seq": 313,
-      "step": 12,
+      "step": 13,
       "agent": "sams-agent",
       "part": "inbound-gate",
       "kind": "decision",
@@ -11798,7 +11798,7 @@
     },
     {
       "seq": 314,
-      "step": 12,
+      "step": 13,
       "agent": "sams-agent",
       "part": "memory",
       "kind": "store",
@@ -11826,7 +11826,7 @@
     },
     {
       "seq": 315,
-      "step": 12,
+      "step": 13,
       "agent": "lender",
       "part": "outbound-gate",
       "kind": "check",
@@ -11849,7 +11849,7 @@
     },
     {
       "seq": 316,
-      "step": 12,
+      "step": 13,
       "agent": "lender",
       "part": "outbound-gate",
       "kind": "check",
@@ -11892,7 +11892,7 @@
     },
     {
       "seq": 317,
-      "step": 12,
+      "step": 13,
       "agent": "lender",
       "part": "outbound-gate",
       "kind": "check",
@@ -11910,7 +11910,7 @@
     },
     {
       "seq": 318,
-      "step": 12,
+      "step": 13,
       "agent": "lender",
       "part": "outbound-gate",
       "kind": "check",
@@ -11928,7 +11928,7 @@
     },
     {
       "seq": 319,
-      "step": 12,
+      "step": 13,
       "agent": "lender",
       "part": "outbound-gate",
       "kind": "check",
@@ -11946,7 +11946,7 @@
     },
     {
       "seq": 320,
-      "step": 12,
+      "step": 13,
       "agent": "lender",
       "part": "outbound-gate",
       "kind": "check",
@@ -11973,7 +11973,7 @@
     },
     {
       "seq": 321,
-      "step": 12,
+      "step": 13,
       "agent": "lender",
       "part": "outbound-gate",
       "kind": "decision",
@@ -11983,7 +11983,7 @@
     },
     {
       "seq": 322,
-      "step": 12,
+      "step": 13,
       "agent": "lender",
       "part": "transport",
       "kind": "message-out",

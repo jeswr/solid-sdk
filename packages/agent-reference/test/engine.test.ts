@@ -68,7 +68,7 @@ it("runs both probing branches through real gates, with no later disclosure or e
   ).toHaveLength(10);
   const conversations = outside.events
     .filter((e) => e.kind === "message-in")
-    .map((e) => (e.packet?.layers.header.raw as { conversation?: string }).conversation);
+    .map((e) => (required(e.packet).layers.header.raw as { conversation?: string }).conversation);
   expect(new Set(conversations).size).toBe(1);
   expect(
     required(required(results.find((p) => p.path === "round-limit")).trace).events.at(-1),
@@ -213,4 +213,55 @@ it("resumes a scripted principal's approval through the executor", async () => {
   const events = required(required(result[0]).trace).events;
   expect(events.some((e) => e.kind === "ask-principal" && e.reason === undefined)).toBe(true);
   expect(events.some((e) => e.kind === "message-out" && e.packet?.kind === "deliver")).toBe(true);
+});
+
+it("returns an already emitted acceptance and resumes the rest of a held agreement plan", async () => {
+  const { profile, scenario } = loaded();
+  const modified = structuredClone(scenario);
+  modified.branches = [];
+  modified.expect = [];
+  const mandate = required(modified.mandates.find((m) => m.agent === "person-agent"));
+  mandate.withApproval.push(
+    required(mandate.autonomous.find((rule) => rule.action === "distribute")),
+  );
+  const answer = required(modified.script.find((step) => step.id === "answer"));
+  if (answer.type !== "receive") throw new Error("answer fixture is not a receive");
+  const plan = answer.agreementPlan as {
+    requiredOutcomes: string[];
+    messages: Array<{ body: { output: Record<string, unknown> } }>;
+  };
+  required(plan.messages[0]).body.output.unfamiliarProse =
+    "Rowan has reviewed this exact explanation.";
+  (plan.messages as unknown[]).push({
+    kind: "receipt",
+    body: {
+      ref: { ["$ref"]: "current.conversation.agreement" },
+      activity: "urn:test:follow-up",
+      outcome: "completed",
+      observed: {},
+      final: false,
+    },
+  });
+  modified.script.splice(5, 0, {
+    id: "approve-exact-text",
+    agent: "person-agent",
+    type: "approve",
+    decision: "approve",
+    note: "Send that explanation.",
+    evidence: [],
+  });
+  modified.script.splice(7, 0, {
+    id: "follow-up-arrives",
+    agent: "service-agent",
+    type: "receive",
+  });
+  const result = await runScenario(profile, modified, { compare: false });
+  const events = required(required(result[0]).trace).events;
+  const sent = events.filter(
+    (event) => event.agent === "person-agent" && event.kind === "message-out",
+  );
+  expect(sent.map((event) => event.packet?.kind)).toEqual(["accept", "deliver", "receipt"]);
+  const ask = required(events.find((event) => event.kind === "ask-principal"));
+  expect(required(sent[0]).seq).toBeLessThan(ask.seq);
+  expect(required(sent[1]).seq).toBeGreaterThan(ask.seq);
 });
