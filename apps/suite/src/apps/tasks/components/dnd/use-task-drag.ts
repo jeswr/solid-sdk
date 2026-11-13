@@ -13,6 +13,7 @@ import {
 } from "react";
 import type { DropContainer } from "../../lib/dnd/types";
 import type { TaskView } from "../../lib/views/types";
+import { useIssueAccess } from "../issues/use-issue-access";
 import {
   type DragData,
   type DropData,
@@ -72,6 +73,8 @@ export function useTaskDrag(
     onLongPress,
   }: { disabled?: boolean; allowChild?: boolean; onLongPress?: (() => void) | undefined } = {},
 ) {
+  const { issue } = useIssueAccess(task);
+  disabled ||= issue;
   const id = `task:${task.url}`;
   const drag = useDraggable({
     id,

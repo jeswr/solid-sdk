@@ -18,11 +18,13 @@ import {
 } from "@jeswr/suite-ui";
 import { CalendarDays, Check, Flag, FolderInput, Tag, Trash2, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
+import { isIssuesProject } from "../lib/issues/model";
 import { unionLabels } from "../lib/model/tracker";
 import type { PriorityLevel } from "../lib/views/types";
 import {
   completeTasks,
   deleteTasks,
+  editableViews,
   labelTasks,
   moveTasksToProject,
   prioritizeTasks,
@@ -48,10 +50,14 @@ export function BulkToolbar() {
   if (!focus?.selection.size) return null;
   const urls = focus.selectedUrls();
   // Unsaved rows have no validator yet; they join once their first write lands.
-  const selected = tasks.views.filter(
-    (view) =>
-      urls.has(view.url) &&
-      tasks.tasks[view.projectUrl]?.items.some((item) => item.url === view.url && item.etag),
+  // Read-only issues are left out, like unsaved rows.
+  const selected = editableViews(
+    tasks.views.filter(
+      (view) =>
+        urls.has(view.url) &&
+        tasks.tasks[view.projectUrl]?.items.some((item) => item.url === view.url && item.etag),
+    ),
+    tasks,
   );
   if (!selected.length) return null;
   const count = selected.length;
@@ -105,6 +111,11 @@ export function BulkToolbar() {
     {
       id: "project",
       label: "Move to project",
+      disabled: selected.some((view) =>
+        tasks.projects.some(
+          (project) => project.url === view.projectUrl && isIssuesProject(project),
+        ),
+      ),
       icon: <FolderInput size={16} />,
       onSelect: () => setPanel("project"),
     },

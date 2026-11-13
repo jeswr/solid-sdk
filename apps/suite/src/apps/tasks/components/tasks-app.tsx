@@ -40,6 +40,7 @@ const VIEW_NAMES: Readonly<Record<string, string>> = {
   "/tasks/today": "Today",
   "/tasks/upcoming": "Upcoming",
   "/tasks/completed": "Completed",
+  "/tasks/issues": "Issues",
 };
 
 function TasksChrome({ children }: { children: ReactNode }) {
@@ -68,7 +69,9 @@ function TasksChrome({ children }: { children: ReactNode }) {
         ? (tasks.projects.find((project) => encodeRef(project.url) === ref)?.tracker.title ??
           preferences.sharedProjects.find((shared) => encodeRef(shared.url) === ref)?.title ??
           "Project")
-        : "Tasks");
+        : pathname.startsWith("/tasks/issues/")
+          ? "Issues"
+          : "Tasks");
   let projectUrl: string | undefined;
   try {
     if (typeof ref === "string") projectUrl = decodeRef(ref);

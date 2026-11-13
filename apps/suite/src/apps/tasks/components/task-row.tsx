@@ -45,7 +45,7 @@ import type { Row } from "../lib/views/project-groups";
 import { planTreeMove, taskLevel, taskProgress } from "../lib/views/tree";
 import { priorityValue } from "../lib/views/types";
 import { completeTask, deleteTask } from "../state/actions";
-import { completeTasks } from "../state/bulk-actions";
+import { completeTasks, editableViews } from "../state/bulk-actions";
 import { useNow } from "../state/clock";
 import { useTaskListFocus } from "../state/list-focus";
 import { useTasksShortcuts } from "../state/shortcuts";
@@ -54,6 +54,7 @@ import { changeTaskDepth } from "../state/tree-actions";
 import { reopenTask, rescheduleTasks } from "../state/view-actions";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { useTaskDrag } from "./dnd/use-task-drag";
+import { useIssueAccess } from "./issues/use-issue-access";
 import { LabelChip } from "./label-chip";
 import { MoveMenuItems, moveDown, moveUp, useTaskMoves } from "./move-menu";
 import { ProjectDot } from "./project-dot";
@@ -121,7 +122,9 @@ export function TaskRow({
     tasks.projects
       .find((project) => project.url === task.projectUrl)
       ?.tracker.labels.filter((label) => task.labelIds.includes(label.id)) ?? [];
-  const pending = !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
+  const { issue, readOnly } = useIssueAccess(task);
+  const pending =
+    readOnly || !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
   const now = useNow();
   const moves = useTaskMoves(task);
   const toggleSelected = () => {
@@ -191,9 +194,9 @@ export function TaskRow({
     if (command.type === "menu") return setMenuOpen(true);
     if (pending) return;
     if (command.type === "complete") {
-      const selected = selectedTasks();
+      const selected = editableViews(selectedTasks(), tasks);
       focus?.clearSelection();
-      void completeTasks(selected, tasks);
+      if (selected.length) void completeTasks(selected, tasks);
     }
     if (command.type === "edit") setEditing(true);
     if (command.type === "delete") void deleteTask(task, tasks);
@@ -213,7 +216,7 @@ export function TaskRow({
     if (command.type === "reorder") void moves.run(command.direction === -1 ? moveUp : moveDown);
   });
   const depthPlan = (outdent: boolean) =>
-    tree && moves.manual && !pending && !completing
+    tree && !issue && moves.manual && !pending && !completing
       ? planTreeMove(tasks.views, task, outdent)
       : undefined;
   const changeDepth = (outdent: boolean) => {
