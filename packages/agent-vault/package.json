@@ -1,0 +1,41 @@
+{
+  "name": "@jeswr/agent-vault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Host-only encrypted credentials, account routing and sessions for the agent browser.",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Codex GPT-6.1-Sol",
+  "securityCritical": true,
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "lint": "pnpm -w exec biome check packages/agent-vault",
+    "build": "pnpm -w exec tsc -p packages/agent-vault/tsconfig.json",
+    "typecheck": "pnpm -w exec tsc -p packages/agent-vault/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/agent-vault/tsconfig.test.json",
+    "test": "pnpm -w exec vitest run --root packages/agent-vault"
+  },
+  "dependencies": {
+    "@jeswr/agent-credentials": "workspace:*",
+    "@jeswr/site-executor": "workspace:*",
+    "@jeswr/site-model": "workspace:*",
+    "n3": "^2.1.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/n3": "^1.26.1"
+  }
+}

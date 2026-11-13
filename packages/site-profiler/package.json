@@ -1,0 +1,40 @@
+{
+  "name": "@jeswr/site-profiler",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Semantic agent browser: learns a website once (crawl, forms, scripts, demonstrations) and writes a site model of schema.org actions mapped to the site's own HTTP calls.",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Claude Opus 5.5",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/site-profiler/tsconfig.json",
+    "typecheck": "pnpm -w exec tsc -p packages/site-profiler/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/site-profiler/tsconfig.test.json",
+    "lint": "pnpm -w exec biome check packages/site-profiler",
+    "test": "pnpm -w exec vitest run --root packages/site-profiler"
+  },
+  "dependencies": {
+    "@jeswr/site-model": "workspace:*",
+    "acorn": "^8.17.0",
+    "domhandler": "^5.0.3",
+    "domutils": "^3.2.2",
+    "htmlparser2": "^10.1.0",
+    "playwright": "1.61.1"
+  },
+  "devDependencies": {
+    "@jeswr/test-shop": "workspace:*"
+  }
+}

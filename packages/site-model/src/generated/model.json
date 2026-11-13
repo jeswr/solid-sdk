@@ -1,0 +1,1110 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "sab": "https://jeswr.org/ns/site-action#",
+    "schema": "https://schema.org/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "ActionOutcome",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#ActionOutcome"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "effect",
+          "predicate": "https://jeswr.org/ns/site-action#effect",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://jeswr.org/ns/site-action#ReversibleWrite",
+            "https://jeswr.org/ns/site-action#IrreversibleWrite",
+            "https://jeswr.org/ns/site-action#Payment"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "status",
+          "predicate": "https://jeswr.org/ns/site-action#status",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://jeswr.org/ns/site-action#Completed",
+            "https://jeswr.org/ns/site-action#Failed"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "target",
+          "predicate": "https://jeswr.org/ns/site-action#target",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "amount",
+          "predicate": "https://schema.org/price",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        },
+        {
+          "name": "currency",
+          "predicate": "https://schema.org/priceCurrency",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "result",
+          "predicate": "https://schema.org/result",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CsrfRule",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#CsrfRule"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "source",
+          "predicate": "https://jeswr.org/ns/site-action#csrfSource",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "target",
+          "predicate": "https://jeswr.org/ns/site-action#csrfTarget",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "CsrfSource",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#CsrfSource"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "attribute",
+          "predicate": "https://jeswr.org/ns/site-action#attribute",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "pointer",
+          "predicate": "https://jeswr.org/ns/site-action#pointer",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "selector",
+          "predicate": "https://jeswr.org/ns/site-action#selector",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "kind",
+          "predicate": "https://jeswr.org/ns/site-action#sourceKind",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "cookie",
+            "html",
+            "json",
+            "meta"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "urlTemplate",
+          "predicate": "https://schema.org/urlTemplate",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "CsrfTarget",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#CsrfTarget"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "kind",
+          "predicate": "https://jeswr.org/ns/site-action#targetKind",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "header",
+            "form",
+            "query"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Extraction",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#Extraction"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "fields",
+          "predicate": "https://jeswr.org/ns/site-action#fieldRule",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "format",
+          "predicate": "https://jeswr.org/ns/site-action#format",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "json",
+            "html"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "idField",
+          "predicate": "https://jeswr.org/ns/site-action#idField",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "itemPath",
+          "predicate": "https://jeswr.org/ns/site-action#itemPath",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "itemType",
+          "predicate": "https://jeswr.org/ns/site-action#itemType",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "FieldRule",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#FieldRule"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "attribute",
+          "predicate": "https://jeswr.org/ns/site-action#attribute",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "property",
+          "predicate": "https://jeswr.org/ns/site-action#fieldProperty",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "path",
+          "predicate": "https://jeswr.org/ns/site-action#selectorPath",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "untrusted",
+          "predicate": "https://jeswr.org/ns/site-action#untrusted",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "valueDatatype",
+          "predicate": "https://jeswr.org/ns/site-action#valueDatatype",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "Flow",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#Flow"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "learnedAt",
+          "predicate": "http://www.w3.org/ns/prov#generatedAtTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "derivedFrom",
+          "predicate": "http://www.w3.org/ns/prov#wasDerivedFrom",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "actionType",
+          "predicate": "https://jeswr.org/ns/site-action#actionType",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "attempts",
+          "predicate": "https://jeswr.org/ns/site-action#attempts",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "confidence",
+          "predicate": "https://jeswr.org/ns/site-action#confidence",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": 0,
+            "maxInclusive": 1
+          }
+        },
+        {
+          "name": "effect",
+          "predicate": "https://jeswr.org/ns/site-action#effect",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://jeswr.org/ns/site-action#Read",
+            "https://jeswr.org/ns/site-action#ReversibleWrite",
+            "https://jeswr.org/ns/site-action#IrreversibleWrite",
+            "https://jeswr.org/ns/site-action#Payment"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "inputs",
+          "predicate": "https://jeswr.org/ns/site-action#input",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "lastVerified",
+          "predicate": "https://jeswr.org/ns/site-action#lastVerified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "method",
+          "predicate": "https://jeswr.org/ns/site-action#learnMethod",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "crawl",
+            "form",
+            "js-analysis",
+            "demonstration",
+            "fallback",
+            "manual"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "steps",
+          "predicate": "https://jeswr.org/ns/site-action#step",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "successes",
+          "predicate": "https://jeswr.org/ns/site-action#successes",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "description",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "label",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "FlowStep",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#FlowStep"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "bindings",
+          "predicate": "https://jeswr.org/ns/site-action#binding",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "operation",
+          "predicate": "https://jeswr.org/ns/site-action#operation",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "LoginRoute",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#LoginRoute"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "method",
+          "predicate": "https://jeswr.org/ns/site-action#loginMethod",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "operation",
+          "predicate": "https://jeswr.org/ns/site-action#operation",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "probeUrl",
+          "predicate": "https://jeswr.org/ns/site-action#probeUrl",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "refresh",
+          "predicate": "https://jeswr.org/ns/site-action#refresh",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "sessionCookies",
+          "predicate": "https://jeswr.org/ns/site-action#sessionCookie",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "guards": {}
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operation",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#Operation"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "learnedAt",
+          "predicate": "http://www.w3.org/ns/prov#generatedAtTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "derivedFrom",
+          "predicate": "http://www.w3.org/ns/prov#wasDerivedFrom",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "actionType",
+          "predicate": "https://jeswr.org/ns/site-action#actionType",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "attempts",
+          "predicate": "https://jeswr.org/ns/site-action#attempts",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "confidence",
+          "predicate": "https://jeswr.org/ns/site-action#confidence",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": 0,
+            "maxInclusive": 1
+          }
+        },
+        {
+          "name": "csrf",
+          "predicate": "https://jeswr.org/ns/site-action#csrfRule",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "effect",
+          "predicate": "https://jeswr.org/ns/site-action#effect",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://jeswr.org/ns/site-action#Read",
+            "https://jeswr.org/ns/site-action#ReversibleWrite",
+            "https://jeswr.org/ns/site-action#IrreversibleWrite",
+            "https://jeswr.org/ns/site-action#Payment"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "extraction",
+          "predicate": "https://jeswr.org/ns/site-action#extraction",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "inputs",
+          "predicate": "https://jeswr.org/ns/site-action#input",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "lastVerified",
+          "predicate": "https://jeswr.org/ns/site-action#lastVerified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "method",
+          "predicate": "https://jeswr.org/ns/site-action#learnMethod",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "crawl",
+            "form",
+            "js-analysis",
+            "demonstration",
+            "fallback",
+            "manual"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "returnsShape",
+          "predicate": "https://jeswr.org/ns/site-action#returnsShape",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "session",
+          "predicate": "https://jeswr.org/ns/site-action#session",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://jeswr.org/ns/site-action#NoSession",
+            "https://jeswr.org/ns/site-action#SignedIn"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "successes",
+          "predicate": "https://jeswr.org/ns/site-action#successes",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "description",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "label",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        },
+        {
+          "name": "request",
+          "predicate": "https://schema.org/target",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Parameter",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#Parameter"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "example",
+          "predicate": "http://www.w3.org/2004/02/skos/core#example",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "location",
+          "predicate": "https://jeswr.org/ns/site-action#location",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "path",
+            "query",
+            "body",
+            "form",
+            "header"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "range",
+          "predicate": "https://jeswr.org/ns/site-action#range",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "default",
+          "predicate": "https://schema.org/defaultValue",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "description",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/valueName",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "required",
+          "predicate": "https://schema.org/valueRequired",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "RefreshRule",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#RefreshRule"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "expiresInPointer",
+          "predicate": "https://jeswr.org/ns/site-action#expiresInPointer",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "tokenPointer",
+          "predicate": "https://jeswr.org/ns/site-action#tokenPointer",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "urlTemplate",
+          "predicate": "https://schema.org/urlTemplate",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "SiteModel",
+      "typeIris": [
+        "https://jeswr.org/ns/site-action#SiteModel"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "generatedAt",
+          "predicate": "http://www.w3.org/ns/prov#generatedAtTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "loginRoutes",
+          "predicate": "https://jeswr.org/ns/site-action#loginRoute",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "actions",
+          "predicate": "https://schema.org/potentialAction",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "site",
+          "predicate": "https://schema.org/url",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "version",
+          "predicate": "https://schema.org/version",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "EntryPoint",
+      "typeIris": [
+        "https://schema.org/EntryPoint"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "bodyTemplate",
+          "predicate": "https://jeswr.org/ns/site-action#bodyTemplate",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "headers",
+          "predicate": "https://jeswr.org/ns/site-action#header",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "contentType",
+          "predicate": "https://schema.org/contentType",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "in": [
+            "application/json",
+            "application/x-www-form-urlencoded",
+            "multipart/form-data"
+          ],
+          "guards": {}
+        },
+        {
+          "name": "method",
+          "predicate": "https://schema.org/httpMethod",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "urlTemplate",
+          "predicate": "https://schema.org/urlTemplate",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "PropertyValue",
+      "typeIris": [
+        "https://schema.org/PropertyValue"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "propertyValue",
+          "predicate": "https://schema.org/value",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "shapesBase": "https://jeswr.org/ns/site-action/codegen-shapes#",
+  "prefixes": {
+    "sab": "https://jeswr.org/ns/site-action#",
+    "schema": "https://schema.org/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#ActionOutcome",
+      "name": "ActionOutcome",
+      "subject": { "convention": "self" }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#SiteModel",
+      "name": "SiteModel",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#Operation",
+      "name": "Operation",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#Flow",
+      "name": "Flow",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#FlowStep",
+      "name": "FlowStep",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://schema.org/PropertyValue",
+      "name": "PropertyValue",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#Parameter",
+      "name": "Parameter",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://schema.org/EntryPoint",
+      "name": "EntryPoint",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#CsrfRule",
+      "name": "CsrfRule",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#CsrfSource",
+      "name": "CsrfSource",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#CsrfTarget",
+      "name": "CsrfTarget",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#Extraction",
+      "name": "Extraction",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#FieldRule",
+      "name": "FieldRule",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#LoginRoute",
+      "name": "LoginRoute",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/site-action#RefreshRule",
+      "name": "RefreshRule",
+      "subject": {
+        "convention": "self"
+      }
+    }
+  ]
+}

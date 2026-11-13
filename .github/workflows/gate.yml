@@ -35,6 +35,12 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # @jeswr/site-profiler's tests drive a headless Chromium against the local test shop.
+      - name: Install Chromium headless shell for browser-driven package tests
+        working-directory: packages/site-profiler
+        run: |
+          timeout 600 pnpm exec playwright install --with-deps --only-shell chromium \
+            || { echo "::warning::playwright --with-deps failed; installing the shell without system deps"; pnpm exec playwright install --only-shell chromium; }
       - run: pnpm run gate
 
   # AUTHORED-BY Codex GPT-6

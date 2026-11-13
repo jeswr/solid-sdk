@@ -1,0 +1,49 @@
+{
+  "name": "@jeswr/site-model",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Semantic agent browser: the RDF site model (actions a website offers, mapped to its own HTTP calls) and its typed projection.",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Claude Opus 5.5",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./site-action.ttl": "./site-action.ttl",
+    "./site-action.shacl.ttl": "./site-action.shacl.ttl"
+  },
+  "files": [
+    "dist",
+    "site-action.ttl",
+    "site-action.shacl.ttl",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/site-model/tsconfig.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology site-action.ttl --shapes codegen/site-action.codegen.shacl.ttl --config codegen.config.json --out src/generated",
+    "typecheck": "pnpm -w exec tsc -p packages/site-model/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/site-model/tsconfig.test.json",
+    "lint": "pnpm -w exec biome check packages/site-model",
+    "test": "pnpm -w exec vitest run --root packages/site-model"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/model-runtime": "workspace:*",
+    "@rdfjs/types": "^2.0.1",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^25.9.2",
+    "@zazuko/env-node": "^3.1.0",
+    "rdf-validate-shacl": "^0.6.5"
+  }
+}
