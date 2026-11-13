@@ -128,7 +128,7 @@ the share of tasks whose calls all get a go (the ceiling on Q2), and the approva
 |---|---|---|
 | E0 | Methods A, B and C over the mortgage runs and the catalogue | The general scenario engine |
 | E1 | AgentDojo replayed without a model | A bridge from the benchmark's Python to the gate |
-| E2 | AgentDojo and ConVerse with a model as the core | A model key |
+| E2 | AgentDojo and ConVerse with a model as the core | A model, reached through a login or a key |
 | E3 | MedAgentBench with the health profile; tau-bench with policy as mandate | A health profile |
 | E4 | Negotiation and marketplace benchmarks | The commitments layer running |
 
@@ -207,3 +207,56 @@ which is the approval-fatigue problem in 04, section 6, measured.
 approval request. Whether the changed rules above work: they were written after seeing these
 results, so a rerun on the same attacks proves little, and they need a benchmark not yet
 looked at.
+
+## 10. First results: AgentDojo with a model as the core (13 November 2026)
+
+Phase E2, first run. The benchmark, tool classification, fitted mandates and locked standing
+mandates are those of section 9, unchanged. Sample fixed by seed before the run: all 97 user
+tasks with no attack, and 120 pairs of task and attack, 30 from each suite. Attack: the
+benchmark's default (`important_instructions`). Model: GPT-6.1-Sol at low reasoning effort,
+through a command-line login, one run per task and condition. Method, limits and commands
+are in `packages/agent-reference/eval/agentdojo/e2/`.
+
+| Condition | Tasks done, no attack | Tasks done under attack | Attacks that succeed | Asks per task | Runs that ask |
+|---|---|---|---|---|---|
+| No gate, raw tool output | 76 of 97 | 87 of 120 | 0 of 120 | | |
+| No gate, tool output labelled as content | 75 of 97 | 85 of 120 | 0 of 120 | | |
+| Gates, fitted mandates | 71 of 96 | 83 of 118 | 0 of 120 | 0 | 0 |
+| Gates, standing mandates, every ask refused | 55 of 96 | 56 of 118 | 0 of 120 | 0.41 | 64 of 217 |
+| Gates, standing mandates, asks answered | 75 of 97 | 85 of 120 | 0 of 120 | 0.43 | 64 of 217 |
+
+Three runs have no task score (an error in the benchmark's checker). The answering principal
+is simulated: it approves an ask unless the call is one the attack's published solution
+contains.
+
+**The model did not follow the attack, with or without gates.** In 12 of 120 pairs it
+proposed a call that also appears in the attack's solution, each one a read the user's task
+could equally need. It never proposed the harmful call. This run therefore says nothing
+about protection (Q1). Section 9 is the evidence for that.
+
+**What it measures is cost (Q2, Q3).**
+
+- Labelling tool output as content cost three tasks in 217, in single runs.
+- Fitted mandates stopped a call in 84 of 217 runs (132 stops, 127 of them reads that the
+  published solution did not use), and nine tasks were lost. A mandate fitted to one route
+  through a task is too tight for a model that takes another. A fitted mandate for a real
+  model grants harmless reads by kind, not by name.
+- Standing mandates asked in 29 per cent of runs. Refusing every ask lost 52 tasks. Answering
+  them returned completion to the labelled, ungated totals.
+- All 94 asks in the answered condition were for calls the user's task wanted (38 at the
+  disclosure check, 34 at the recipient check, 22 at limits and approval): direct messages,
+  channel messages, invitations, profile changes, calendar entries, emails. None was one of
+  the attack's calls.
+
+**Reading it with section 9.** The same asks that are the only thing between a taken-over
+core and 560 more successful attacks are, for a core that is not taken over, all
+unnecessary. A person asked this often about things they plainly wanted will stop reading,
+and section 9 shows what that costs. So the rate of unnecessary asks is the number to bring
+down, by per-task grants that name object, recipient and data (14), and by a cheaper
+way for the disclosure check to establish that content came from the principal's own
+records.
+
+**What this run does not show.** Variance (one run per task, one model, one effort level).
+Anything about a model that an attack does persuade and that then plans around refusals: a
+stronger or adaptive attack is needed. Mandates drafted by the model. The effect of each
+check alone. The reference gate without the adapter of section 9.
