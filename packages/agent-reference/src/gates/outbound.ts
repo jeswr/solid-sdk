@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The outbound gate. Every action and disclosure the core proposes is checked before anything
@@ -51,7 +52,7 @@ import {
   ruleText,
 } from "./common.js";
 import { type PaymentLimit, paymentBinding } from "./payment.js";
-import { evaluateItemTerms, termsSummary } from "./quality.js";
+import { evaluateItemTerms, fitnessOf, termsSummary } from "./quality.js";
 
 /** Where the core took a proposed action from, when it came from a received message. */
 export interface ProposalOrigin {
@@ -122,6 +123,8 @@ function article(word: string): string {
 }
 
 function mandateReason(decision: AuthorisationDecision): string {
+  if (["source-unknown", "excessive-scope", "expired"].includes(decision.reason))
+    return decision.reason;
   if (decision.reason.startsWith("mandate-invalid")) return "mandate-invalid";
   if (decision.outcome === "indeterminate") return "indeterminate-policy";
   return "not-authorised";
@@ -148,7 +151,7 @@ export class OutboundGate {
   private verdict(
     out: CheckVerdict[],
     subject: string,
-    check: OutboundCheck,
+    check: OutboundCheck | "fitness",
     verdict: Verdict,
     caption: string,
     extra: Partial<TraceEventInput> = {},
@@ -256,12 +259,10 @@ export class OutboundGate {
     const party = this.deps.identity.party;
     const out: string[] = [];
     for (const e of message.evidence ?? []) {
-      if (e.role !== "credential" || e.format !== "jws-compact") continue;
+      if (!isClaimEvidence(e)) continue;
       let payload: JsonObject = {};
       try {
-        payload = JSON.parse(
-          Buffer.from(e.value.split(".")[1] ?? "", "base64url").toString("utf8"),
-        ) as JsonObject;
+        payload = unverifiedEvidenceClaim(e);
       } catch {
         out.push("an unreadable statement");
         continue;
@@ -371,20 +372,88 @@ export class OutboundGate {
       ruleRef,
     );
 
+    const taskItems = this.deps.memory.context(ctx.taskId ?? intent.conversation);
+    const requiredClaims = ctx.actionClaims?.find((r) => r.action === intent.action)?.claims ?? [];
+    for (const claimType of requiredClaims) {
+      const admitted = [...this.deps.memory.facts.values()].some(
+        (f) =>
+          f.claimType === claimType &&
+          taskItems.some((i) => i.id === f.id && i.accepted && i.digest === f.digest) &&
+          !!f.statement &&
+          fitnessOf(
+            f.statement as unknown as import("./quality.js").QualityClaim,
+            ctx.reliance,
+            this.deps.now(),
+          ).verdict === "pass" &&
+          evaluateItemTerms(f.terms, {
+            agent: this.deps.identity.actor,
+            action: "use",
+            target: f.id,
+            purpose: intent.purpose,
+            at: this.deps.now(),
+          }).verdict === "pass",
+      );
+      const reading = taskItems.find((i) => i.kind === "reading" && i.claimType === claimType);
+      if (!admitted) {
+        const refusal = Object.entries(this.deps.memory.refusals).find(([key]) =>
+          key.startsWith(`${ctx.taskId ?? intent.conversation}|${claimType}|`),
+        )?.[1];
+        if (refusal) {
+          this.verdict(
+            verdicts,
+            subject,
+            "fitness",
+            "fail",
+            `Required ${claimType} was refused: ${refusal}.`,
+            { reason: refusal },
+          );
+          this.decide("stop", "A refused source cannot authorize the action.", refusal);
+          return {
+            outcome: "stop",
+            verdicts,
+            decision: { ...decision, outcome: "deny", reason: refusal },
+          };
+        }
+        const original = taskItems.find((i) => i.digest === reading?.statement?.originalDigest);
+        this.verdict(
+          verdicts,
+          subject,
+          "fitness",
+          "ask-more",
+          `Structured form required: ${claimType}; request source ${original?.source ?? "unknown"}; original ${reading?.statement?.originalDigest}.`,
+          { reason: "structured-form-required" },
+        );
+        this.decide(
+          "ask-more",
+          `Ask source ${original?.source ?? "unknown"} for ${claimType}.`,
+          "structured-form-required",
+        );
+        return {
+          outcome: "ask-more",
+          verdicts,
+          decision: { ...decision, outcome: "ask-more", reason: "structured-form-required" },
+        };
+      }
+    }
+
     // Labels, not the core's confidence, determine whether support is admitted (CORE-IN-16).
     const support = [intent.parameters.support, intent.parameters.evidence].flatMap((v) =>
       Array.isArray(v) ? v : [],
     );
     if (support.some((id) => !this.deps.memory.facts.has(String(id)))) {
+      const unacceptedReading = taskItems.find(
+        (i) => i.kind === "reading" && support.includes(i.id),
+      );
+      const reason = unacceptedReading ? "method-not-accepted" : "evidence-invalid";
       this.verdict(
         verdicts,
         subject,
-        "evidence",
+        unacceptedReading ? "fitness" : "evidence",
         "fail",
         "The proposed action relies on a statement that was not admitted.",
-        { reason: "evidence-invalid" },
+        { reason },
       );
-      this.decide("stop", "Unaccepted support cannot authorize an action.", "evidence-invalid");
+      this.decide("stop", "Unaccepted support cannot authorize an action.", reason);
       return {
         outcome: "stop",
         verdicts,
@@ -1225,11 +1294,9 @@ export class OutboundGate {
       return finish("stop", "not-authorised");
     }
     for (const evidence of message.evidence ?? []) {
-      if (evidence.role !== "credential" || evidence.format !== "jws-compact") continue;
+      if (!isClaimEvidence(evidence)) continue;
       try {
-        const claim = JSON.parse(
-          Buffer.from(evidence.value.split(".")[1] ?? "", "base64url").toString(),
-        ) as JsonObject;
+        const claim = unverifiedEvidenceClaim(evidence);
         const fact = this.deps.memory.facts.get(String(claim.id));
         if (!fact && claim.issuer !== this.deps.identity.party) {
           this.stopEvidence(digest);
@@ -1511,9 +1578,7 @@ export class OutboundGate {
         .filter((e) => e.role === "credential")
         .map((e) => {
           try {
-            return String(
-              JSON.parse(Buffer.from(e.value.split(".")[1] ?? "", "base64url").toString()).id,
-            );
+            return String(unverifiedEvidenceClaim(e).id);
           } catch {
             return "unknown";
           }
@@ -1654,6 +1719,18 @@ export class OutboundGate {
       ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
       caption: `${this.name(message.from.actor)} sends ${article(message.kind)} ${message.kind} message to ${this.name(message.to?.actor)}.`,
     });
+  }
+
+  stopDisclosure(subject: string, reason = "excessive-scope"): void {
+    this.verdict(
+      [],
+      subject,
+      "disclosure",
+      "fail",
+      "The actual payload is outside the authorized item scope.",
+      { reason },
+    );
+    this.decide("stop", "The disclosure is stopped before release.", reason);
   }
 
   /** Evidence, then go, for an effect (no message): the activity is recorded first. */

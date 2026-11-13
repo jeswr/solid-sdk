@@ -357,6 +357,14 @@ export interface BodyByKind {
  * protected by the selected integrity mechanism: profile, configuration, identity, kind,
  * audience, conversation, times, reply linkage, body and evidence.
  */
+export interface ContentPart {
+  readonly id: Iri;
+  readonly mediaType: string;
+  readonly digest: string;
+  /** UTF-8 text or raw byte values in this JSON binding. */
+  readonly bytes: string | readonly number[];
+}
+
 export interface Message<K extends MessageKind = MessageKind> {
   readonly profile: string;
   readonly configuration: string;
@@ -371,6 +379,7 @@ export interface Message<K extends MessageKind = MessageKind> {
   readonly authorship?: { readonly method: "model-output"; readonly onBehalfOf: Iri };
   readonly body: BodyByKind[K];
   readonly evidence?: readonly EvidenceItem[];
+  readonly content?: readonly ContentPart[];
 }
 
 export type AnyMessage = { [K in MessageKind]: Message<K> }[MessageKind];

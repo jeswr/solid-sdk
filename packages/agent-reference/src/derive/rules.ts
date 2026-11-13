@@ -4,7 +4,7 @@ import { z } from "zod";
 import { digestOf } from "../core/canonical.js";
 import type { JsonObject } from "../core/types.js";
 import type { ContextItem, GateMemory } from "../gates/common.js";
-import { evaluateItemTerms, fitnessOf } from "../gates/quality.js";
+import { claimTime, evaluateItemTerms, fitnessOf } from "../gates/quality.js";
 
 const name = z.string().min(1);
 const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
@@ -306,7 +306,16 @@ export function evaluateRule(options: {
       policy: { id: `urn:derived-terms:${digestOf(unique.map((i) => i.digest)).slice(8)}` },
       inherited: unique.map((i) => ({ target: i.id, terms: i.terms ?? null })),
     };
-    const oldest = unique.map((i) => i.asOf ?? "").sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+    const oldest = unique
+      .map(
+        (i) =>
+          i.asOf ??
+          (i.statement
+            ? claimTime(i.statement as unknown as import("../gates/quality.js").QualityClaim)
+            : undefined) ??
+          "",
+      )
+      .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
     if (!oldest || !Number.isFinite(Date.parse(oldest)))
       return { ok: false, reason: "completeness-not-established" };
     const statement: JsonObject = {
@@ -336,7 +345,12 @@ export function evaluateRule(options: {
           issuer: i.source,
           claimType: i.claimType,
           method: i.method ?? "unknown",
-          asOf: i.asOf ?? at,
+          asOf:
+            i.asOf ??
+            (i.statement
+              ? claimTime(i.statement as unknown as import("../gates/quality.js").QualityClaim)
+              : undefined) ??
+            at,
           period: i.statement?.period ?? null,
           currency: i.statement?.currency ?? null,
           validUntil: i.statement?.validUntil ?? null,

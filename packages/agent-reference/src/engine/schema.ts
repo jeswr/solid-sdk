@@ -66,6 +66,17 @@ export const domainProfileSchema = z.strictObject({
       }),
     ]),
   ),
+  storeAssessments: z
+    .array(
+      z.strictObject({
+        id: iri,
+        template: z.literal("loan-ratio-and-equity"),
+        annualRule: iri,
+        maxLoanIncomeRatio: z.number().positive(),
+        purpose: iri,
+      }),
+    )
+    .default([]),
   assessments: z
     .array(
       z.strictObject({
@@ -94,6 +105,29 @@ export const domainProfileSchema = z.strictObject({
     .default([]),
   decisionsForPerson: strings,
   modelReadings: strings,
+  referenceAction: z.string().optional(),
+  organizations: z
+    .strictObject({
+      registrar: iri,
+      maxStatusAgeSeconds: z.number().positive(),
+      requiredRoles: z.record(iri, strings),
+      actionKinds: z.record(iri, z.string()).optional(),
+      statusClaims: strings.optional(),
+    })
+    .optional(),
+  notificationRecipients: z
+    .record(z.string(), z.strictObject({ actor: iri, party: iri }))
+    .default({}),
+  readings: z
+    .array(
+      z.strictObject({
+        claimType: z.string(),
+        type: z.enum(["code", "number", "date", "term"]),
+        values: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
+      }),
+    )
+    .default([]),
+  actionClaims: z.array(z.strictObject({ action: z.string(), claims: strings })).default([]),
   vocabulary: z.record(z.string(), contentType),
   identifiers: z.array(iri).default([]),
   operations: z.array(
@@ -121,6 +155,11 @@ const party = z.strictObject({
   id: slug,
   identity: iri,
   actor: iri.optional(),
+  operator: iri.optional(),
+  traceId: z.string().optional(),
+  handlers: strings.default([]),
+  configurations: z.array(z.enum(["baseline", "public-read"])).default(["baseline"]),
+  representationOperations: z.array(iri).optional(),
   name: z.string(),
   role: z.enum(["principal", "agent", "source", "register"]),
   runs: z.enum(["agent", "issuer-only"]),
@@ -164,7 +203,7 @@ const root = z.strictObject({
     }),
   ),
 });
-const base = { id: slug, agent: slug };
+const base = { id: slug, agent: slug, atStep: z.number().int().positive().optional() };
 const step = z.discriminatedUnion("type", [
   z.strictObject({ ...base, type: z.literal("instruct"), text: z.string() }),
   z.strictObject({
@@ -184,12 +223,25 @@ const step = z.discriminatedUnion("type", [
     intent: object,
     purpose: iri.optional(),
     discover: z.boolean().default(false),
+    configuration: z.enum(["baseline", "public-read"]).optional(),
+    basis: object.optional(),
+    evidence: strings.default([]),
+    content: z
+      .array(
+        z.strictObject({
+          id: iri,
+          mediaType: z.string(),
+          bytes: z.union([z.string(), z.array(z.number().int().min(0).max(255)).max(32768)]),
+        }),
+      )
+      .default([]),
   }),
   z.strictObject({
     ...base,
     type: z.literal("receive"),
     from: slug.optional(),
     reply: object.optional(),
+    outboundAtStep: z.number().int().positive().optional(),
     agreementPlan: object.optional(),
   }),
   z.strictObject({
@@ -214,6 +266,9 @@ const step = z.discriminatedUnion("type", [
     intent: object,
     params: object,
     activityType: iri,
+    adapter: z.string().optional(),
+    taskId: iri.optional(),
+    origin: object.optional(),
   }),
   z.strictObject({
     ...base,
@@ -251,6 +306,67 @@ const step = z.discriminatedUnion("type", [
     actual: json,
     expected: json,
   }),
+  z.strictObject({ ...base, type: z.literal("request-structured"), claimType: z.string() }),
+  z.strictObject({
+    ...base,
+    type: z.literal("read-content"),
+    part: iri,
+    subject: iri,
+    output: object,
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("read-reference"),
+    reference: json,
+    item: iri,
+    purpose: iri,
+  }),
+  z.strictObject({ ...base, type: z.literal("notifications") }),
+  z.strictObject({ ...base, type: z.literal("duties") }),
+  z.strictObject({ ...base, type: z.literal("show-mandate") }),
+  z.strictObject({ ...base, type: z.literal("mint") }),
+  z.strictObject({ ...base, type: z.literal("pending") }),
+  z.strictObject({ ...base, type: z.literal("conversation"), conversation: json }),
+  z.strictObject({ ...base, type: z.literal("retry-challenge"), conversation: json }),
+  z.strictObject({
+    ...base,
+    type: z.literal("invoke-agreement"),
+    conversation: json,
+    operation: iri,
+    input: object,
+    purpose: iri,
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("receipt"),
+    conversation: json,
+    activity: json,
+    outcome: z.enum(["completed", "not-executed", "uncertain"]),
+    observed: object,
+    final: z.boolean(),
+  }),
+  z.strictObject({ ...base, type: z.literal("issue"), issuer: slug, value: object }),
+  z.strictObject({
+    ...base,
+    type: z.literal("underwriting-handover"),
+    store: slug,
+    conversation: json,
+    peer: slug,
+    operation: iri,
+    items: z.array(iri),
+    purpose: iri,
+  }),
+  z.strictObject({ ...base, type: z.literal("store-request"), store: slug, request: object }),
+  z.strictObject({
+    ...base,
+    type: z.literal("store-assess"),
+    store: slug,
+    assessor: iri,
+    conversation: json,
+    items: z.array(iri),
+    purpose: iri,
+    assessment: iri,
+  }),
   z.strictObject({ ...base, type: z.literal("record") }),
   z.strictObject({
     ...base,
@@ -268,6 +384,7 @@ export const scenarioSchema = z.strictObject({
   parties: z.array(party),
   trust: z.strictObject({
     introductions: z.array(z.tuple([slug, slug])),
+    pins: z.array(z.tuple([slug, slug])).default([]),
     ownLists: z.record(slug, z.array(ownEntry)),
     sources: z.record(slug, z.array(sourceRule)),
     root: root.optional(),
@@ -277,14 +394,92 @@ export const scenarioSchema = z.strictObject({
     z.strictObject({
       id: slug,
       issuer: slug,
-      subject: iri,
+      subject: iri.optional(),
       kind: z.string(),
+      identifier: iri.optional(),
       value: object,
       method: z.string(),
-      asOf: z.string(),
+      asOf: z.string().optional(),
       terms: object.optional(),
     }),
   ),
+  selectiveCredentials: z
+    .array(z.strictObject({ id: slug, issuer: slug, subject: iri, statements: strings }))
+    .default([]),
+  documents: z
+    .array(
+      z.strictObject({
+        id: iri,
+        issuer: slug,
+        typ: z.enum(["awp-organization-identifier+jws", "awp-status-list+jws"]),
+        value: object,
+      }),
+    )
+    .default([]),
+  organizationCredentials: z
+    .array(
+      z.strictObject({
+        agent: slug,
+        issuer: slug,
+        entity: iri,
+        roles: strings,
+        actions: strings,
+        validFrom: z.iso.datetime(),
+        validUntil: z.iso.datetime(),
+        status: z.strictObject({ ref: iri, id: z.string() }),
+      }),
+    )
+    .default([]),
+  resources: z.array(z.strictObject({ ref: iri, holder: slug, statements: strings })).default([]),
+  grants: z
+    .array(
+      z.strictObject({
+        id: slug,
+        holder: slug,
+        ref: iri,
+        reader: slug,
+        statements: strings,
+        purpose: iri,
+        validUntil: z.iso.datetime(),
+      }),
+    )
+    .default([]),
+  handlerImplementations: z
+    .record(
+      slug,
+      z.strictObject({
+        template: z.enum([
+          "mortgage-consumer",
+          "mortgage-lender",
+          "product-search",
+          "product-index",
+          "balance-request",
+          "balance-statement",
+          "lender-underwriting",
+          "underwriter",
+        ]),
+        params: object,
+      }),
+    )
+    .default({}),
+  stores: z
+    .array(
+      z.strictObject({
+        id: slug,
+        organization: iri,
+        roles: z.array(
+          z.strictObject({
+            agent: iri,
+            label: z.string(),
+            purposes: z.array(iri),
+            actions: strings,
+          }),
+        ),
+      }),
+    )
+    .default([]),
+  traceSteps: z.record(z.string(), z.string()).optional(),
+  standIns: z.array(z.strictObject({ what: z.string(), replacedBy: z.string() })).default([]),
   requester: z.record(slug, iri).default({}),
   mandates: z.array(
     z.strictObject({
@@ -300,7 +495,7 @@ export const scenarioSchema = z.strictObject({
   inject: z.array(
     z.strictObject({
       step: slug,
-      target: z.enum(["wire", "body"]),
+      target: z.enum(["wire", "body", "message"]),
       path: strings,
       value: json,
       resign: z.boolean().default(false),

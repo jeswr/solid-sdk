@@ -49,9 +49,14 @@ for (const file of readdirSync(join(root, "scenarios"))
       join(root, "traces", `${stem}--baseline.json`),
       `${JSON.stringify({ "x-authored-by": "Codex GPT-6", ...path.trace }, null, 2)}\n`,
     );
+    const outlinePath = join(root, "outlines", `${stem}--baseline.json`);
+    let legacyArray = false;
+    try {
+      legacyArray = Array.isArray(JSON.parse(readFileSync(outlinePath, "utf8")));
+    } catch {}
     writeFileSync(
-      join(root, "outlines", `${stem}--baseline.json`),
-      `${JSON.stringify({ "x-authored-by": "Codex GPT-6", schema: "agent-outline/0.1", entries: outline }, null, 2)}\n`,
+      outlinePath,
+      `${JSON.stringify(legacyArray ? outline : { "x-authored-by": "Codex GPT-6", schema: "agent-outline/0.1", entries: outline }, null, 2)}\n`,
     );
     index.push({
       file: `${stem}--baseline.json`,

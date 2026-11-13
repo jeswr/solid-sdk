@@ -6,8 +6,10 @@
  * quality. Built from the real message and its wire form; nothing here is hand-written per
  * scenario.
  */
+
 import { digestBytes, digestOf } from "../core/canonical.js";
 import type { AnyMessage, EvidenceItem, JsonObject } from "../core/types.js";
+import { unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 import {
   CORE_CONTENT_VOCABULARY,
   type ContentVocabulary,
@@ -53,7 +55,15 @@ export function peekWire(wire: unknown): AnyMessage | undefined {
 function evidenceOf(message: AnyMessage, role: EvidenceItem["role"]): JsonObject[] {
   return (message.evidence ?? [])
     .filter((e) => e.role === role)
-    .map((e) => (e.format === "jws-compact" ? (decodeJws(e.value).payload ?? {}) : {}));
+    .map((e) => {
+      try {
+        return e.role === "credential"
+          ? unverifiedEvidenceClaim(e)
+          : (decodeJws(e.value).payload ?? {});
+      } catch {
+        return {};
+      }
+    });
 }
 
 /** Inspect strings through the profile vocabulary; unknown strings are unstructured. */
@@ -195,7 +205,7 @@ export function packetView(
   const content: PacketLayerView = {
     present: true,
     summary: contentSummary(message, name, opts.vocabulary, opts.known),
-    raw: message.body,
+    raw: message.content?.length ? { body: message.body, content: message.content } : message.body,
     digest: digestOf(message.body as unknown as JsonObject),
     ...(freeText.length > 0 ? { untrusted: freeText } : {}),
   };

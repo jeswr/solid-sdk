@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { isClaimEvidence, verifySelectivePresentation } from "../mechanisms/selective.js";
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The inbound gate. Every message is checked before the core sees it: integrity, source,
@@ -12,7 +13,7 @@
  */
 
 import { z } from "zod";
-import { digestBytes, digestOf } from "../core/canonical.js";
+import { digestBytes, digestContent, digestOf } from "../core/canonical.js";
 import type { ConversationState } from "../core/conversation.js";
 import { BoundsError, type PilotLimits, parseBoundedJson } from "../core/limits.js";
 import { validateMessage } from "../core/schema.js";
@@ -28,6 +29,7 @@ import type {
 } from "../core/types.js";
 import { verifyDerivation } from "../derive/rules.js";
 import { type KeyAlg, verifyCompact } from "../mechanisms/jws.js";
+import { OrganizationChecks } from "../mechanisms/organizations.js";
 import {
   MECHANISM_ID,
   representationSchema,
@@ -124,6 +126,19 @@ export class InboundGate {
   private readonly authorityByConversation = new Map<string, { id: string; party: string }>();
 
   constructor(private readonly deps: InboundDeps) {}
+
+  private organizations(): OrganizationChecks | undefined {
+    const organizations = this.deps.gate.organizations;
+    return organizations
+      ? new OrganizationChecks({
+          ...organizations,
+          trust: this.deps.trust,
+          now: this.deps.now,
+          verifier: this.deps.identity.actor,
+          record: this.deps.record,
+        })
+      : undefined;
+  }
 
   private get name() {
     return this.deps.gate.name ?? defaultName;
@@ -288,6 +303,42 @@ export class InboundGate {
       }
     }
 
+    for (const part of msg.content ?? []) {
+      if (!signedBy || digestContent(part.bytes) !== part.digest)
+        return fail("evidence-invalid", "content digest does not match protected bytes");
+    }
+    if (new Set((msg.content ?? []).map((p) => p.id)).size !== (msg.content ?? []).length)
+      return fail("malformed", "duplicate content part");
+
+    if (signedBy && this.deps.gate.organizations && msg.from.onBehalfOf) {
+      const current = await this.organizations()?.key(
+        msg.from.onBehalfOf,
+        signedBy.kid,
+        signedBy.subject,
+        "actor",
+      );
+      if (!current?.ok)
+        return fail(
+          current?.reason ?? "lookup-failed",
+          "signing key is absent from the current identifier document",
+        );
+    }
+
+    for (const item of msg.evidence ?? [])
+      if (item.format === "selective-disclosure+jws") {
+        const verified = await verifySelectivePresentation(
+          item,
+          this.deps.trust,
+          at,
+          identity.actor,
+        );
+        this.deps.record(verified.verification);
+        if (!verified.payload || verified.verification.outcome !== "valid")
+          return fail(
+            "evidence-invalid",
+            "selective disclosure does not match its signed commitment",
+          );
+      }
     // Audience.
     if (msg.to) {
       if (msg.to.actor !== identity.actor)
@@ -415,6 +466,31 @@ export class InboundGate {
     };
     if (!msg.from.actor || !msg.from.onBehalfOf)
       return done({ ...base, outcome: "not-accepted", reason: "representation-missing" });
+    if (this.deps.gate.organizations) {
+      const credential = (msg.evidence ?? []).find(
+        (e) => e.role === "representation" && e.format === "organization-mandate+jws",
+      );
+      if (!credential || !kid)
+        return done({ ...base, outcome: "not-accepted", reason: "representation-missing" });
+      const body = msg.body as unknown as JsonObject;
+      const requestedEntity = (body.input as JsonObject | undefined)?.entity;
+      const authority = await this.organizations()?.authority(credential.value, {
+        actor: msg.from.actor,
+        kid,
+        entity: msg.from.onBehalfOf,
+        operation: handler.description.id,
+        action:
+          this.deps.gate.organizations.policy.actionKinds?.[handler.description.id] ?? msg.kind,
+        requestedEntity,
+      });
+      return done({
+        ...base,
+        outcome: authority?.ok ? "accepted" : "not-accepted",
+        ...(authority?.ok
+          ? { statement: authority.statement }
+          : { reason: authority?.reason ?? "lookup-failed" }),
+      });
+    }
     const items = (msg.evidence ?? []).filter(
       (e) => e.role === "representation" && e.format === "jws-compact",
     );
@@ -466,7 +542,15 @@ export class InboundGate {
         verifier: this.deps.identity.actor,
         at,
       });
-    let check = await verify("issuer");
+    let check =
+      item.format === "selective-disclosure+jws"
+        ? ((await verifySelectivePresentation(
+            item,
+            this.deps.trust,
+            at,
+            this.deps.identity.actor,
+          )) as import("../mechanisms/statements.js").StatementCheck<Claim>)
+        : await verify("issuer");
     // A party pinned at its introduction (an organization's own key) may also make statements.
     if (check.verification.outcome === "unknown-key") check = await verify("party");
     if (check.verification.outcome === "unknown-key") {
@@ -488,8 +572,35 @@ export class InboundGate {
         verdict: "fail",
         reason: check.verification.outcome === "unknown-key" ? "unknown-key" : "evidence-invalid",
       };
+    if (
+      s.method === "model-output" &&
+      (typeof s.originalDigest !== "string" ||
+        typeof s.implementation !== "string" ||
+        typeof s.implementationDigest !== "string")
+    )
+      return { verdict: "fail", reason: "evidence-invalid", claim: s };
     if (check.signer?.subject !== s.issuer)
       return { verdict: "fail", reason: "evidence-invalid", claim: s };
+    if (this.deps.gate.organizations && check.signer) {
+      const current = await this.organizations()?.key(
+        s.issuer,
+        check.signer.kid,
+        s.issuer,
+        check.signer.role,
+      );
+      if (!current?.ok)
+        return { verdict: "fail", reason: current?.reason ?? "lookup-failed", claim: s };
+      if (
+        this.deps.gate.organizations.policy.statusClaims?.includes(s.claimType) &&
+        (!s.status || typeof s.status !== "object")
+      )
+        return { verdict: "fail", reason: "lookup-failed", claim: s };
+      if (s.status && typeof s.status === "object") {
+        const status = await this.organizations()?.status(s.issuer, s.status);
+        if (!status?.ok)
+          return { verdict: "fail", reason: status?.reason ?? "lookup-failed", claim: s };
+      }
+    }
     if (
       s.method === "derived" &&
       this.deps.gate.rules?.length &&
@@ -822,7 +933,17 @@ export class InboundGate {
         ...(terms ? { terms: { id: terms.policy.id, summary: termsSummary(terms) } } : {}),
         provenance: `signed by ${this.name(c.issuer)}${c.issuedAt ? `, issued ${c.issuedAt}` : ""}`,
       },
-      ...(chat ? { chat: { who: "agent" as const, text: chat } } : {}),
+      ...(chat
+        ? {
+            chat: {
+              who: "agent" as const,
+              text:
+                c.method === "model-output"
+                  ? `[model-output; reading of ${String(c.originalDigest)}] ${chat}`
+                  : chat,
+            },
+          }
+        : {}),
       caption: `${this.labelOf(c)} is stored with its source, how it was produced, its date and its terms.`,
     });
   }
@@ -832,7 +953,7 @@ export class InboundGate {
    * integrity, source, authority, terms and fitness per statement, then a labelled fact.
    */
   async admitStatements(
-    items: readonly { readonly jws: string }[],
+    items: readonly { readonly jws: string; readonly format?: string }[],
     opts: {
       readonly subject?: Iri;
       readonly task: string;
@@ -845,7 +966,7 @@ export class InboundGate {
     const candidates: Claim[] = [];
     for (const item of items) {
       const checked = await this.assessClaim(
-        { role: "credential", format: "jws-compact", value: item.jws },
+        { role: "credential", format: item.format ?? "jws-compact", value: item.jws },
         opts.subject,
       );
       if (checked.verdict !== "pass" || !checked.claim) continue;
@@ -865,7 +986,11 @@ export class InboundGate {
     this.corroborationPool = candidates;
     for (const item of items) {
       this.claimFailure = undefined;
-      const ev: EvidenceItem = { role: "credential", format: "jws-compact", value: item.jws };
+      const ev: EvidenceItem = {
+        role: "credential",
+        format: item.format ?? "jws-compact",
+        value: item.jws,
+      };
       const cache = new Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>();
       const r = await this.assessClaim(ev, opts.subject);
       cache.set(item.jws, r);
@@ -947,6 +1072,19 @@ export class Admission {
     return this.outcome !== undefined;
   }
 
+  private organizations(): OrganizationChecks | undefined {
+    const organizations = this.deps.gate.organizations;
+    return organizations
+      ? new OrganizationChecks({
+          ...organizations,
+          trust: this.deps.trust,
+          now: this.deps.now,
+          verifier: this.deps.identity.actor,
+          record: this.deps.record,
+        })
+      : undefined;
+  }
+
   private get name() {
     return this.deps.gate.name ?? defaultName;
   }
@@ -977,9 +1115,7 @@ export class Admission {
   }
 
   private claims(msg: AnyMessage): EvidenceItem[] {
-    return (msg.evidence ?? []).filter(
-      (e) => e.role === "credential" && e.format === "jws-compact",
-    );
+    return (msg.evidence ?? []).filter((e) => isClaimEvidence(e));
   }
 
   private need(conv: ConversationState, msg?: AnyMessage) {

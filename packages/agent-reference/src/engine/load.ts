@@ -80,7 +80,10 @@ export function validateReferences(profile: DomainProfile, scenario: Scenario): 
     }
     if (step.type === "admit")
       for (const id of step.statements)
-        if (!scenario.statements.some((s) => s.id === id))
+        if (
+          !scenario.statements.some((s) => s.id === id) &&
+          !scenario.script.some((s) => s.type === "issue" && s.id === id)
+        )
           throw new Error(`unknown statement ${id}`);
   }
   for (const injection of scenario.inject)

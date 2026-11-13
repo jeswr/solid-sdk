@@ -39,6 +39,7 @@ export function mandateOf(
   autonomousRules: OdrlRule[],
   withApprovalRules: OdrlRule[] = [],
   prohibitionRules: OdrlRule[] = [],
+  standing: readonly import("../mechanisms/mandate.js").StandingRule[] = [],
 ) {
   return (ids: Ids): OwnerMandate => {
     const mint = (rules: OdrlRule[]): OdrlRule[] =>
@@ -61,6 +62,7 @@ export function mandateOf(
       subject: ids.actor,
       validFrom: ids.validFrom,
       validUntil: ids.validUntil,
+      ...(standing.length ? { standing: [...standing] } : {}),
       autonomous: {
         id: scopedUrn("policy", ids.actor, `${label}/autonomous`),
         type: "Set",
@@ -211,7 +213,10 @@ export class Cast {
     handlers: OperationHandler[],
     effects: EffectAdapter[] = [],
     accepted: string[] = [CONFIG_ED25519],
-    extra: Pick<AgentRuntimeOptions, "gates" | "core" | "disclosureChecks" | "sourceKey"> = {},
+    extra: Pick<
+      AgentRuntimeOptions,
+      "gates" | "core" | "disclosureChecks" | "sourceKey" | "organizationMandateJws"
+    > = {},
   ): Promise<{ runtime: AgentRuntime; ledger: MemoryLedger }> {
     const p = this.get(name);
     const ledger = new MemoryLedger();

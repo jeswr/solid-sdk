@@ -383,6 +383,7 @@ export interface LenderConfig {
   readonly acceptedModels: readonly { id: string; version: string }[];
   readonly retentionDays: number;
   readonly store: PurposeBoundStore;
+  readonly derivationRule?: Iri;
 }
 
 function monthIndex(ym: string): number {
@@ -574,6 +575,10 @@ export class LenderPrequalHandler implements OperationHandler {
         checked.push({ ...entry, accepted: false, reason: "evidence-invalid" });
         continue;
       }
+      if (this.cfg.derivationRule && !ctx.admittedStatement(s.id, digestOf(s))) {
+        checked.push({ ...entry, accepted: false, reason: "evidence-invalid" });
+        continue;
+      }
       entry.id = s.id;
       entry.claimType = s.claimType;
       entry.issuer = s.issuer;
@@ -650,7 +655,16 @@ export class LenderPrequalHandler implements OperationHandler {
       });
       stored.push(s.id);
       if (s.claimType === CLAIM.incomeMonthly) {
-        const a = annualise(s);
+        const evaluated = this.cfg.derivationRule
+          ? ctx.evaluateRule?.(this.cfg.derivationRule, s.subject, terms.purpose)
+          : undefined;
+        const a = this.cfg.derivationRule
+          ? evaluated?.ok &&
+            evaluated.statement.claimType === "income.gross.annual.derived" &&
+            typeof evaluated.statement.value === "number"
+            ? { value: evaluated.statement.value, months: 12 }
+            : { problem: evaluated && !evaluated.ok ? evaluated.reason : "rule-not-accepted" }
+          : annualise(s);
         ctx.record({
           type: "content-appraisal",
           subject: s.id,

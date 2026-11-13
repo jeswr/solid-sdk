@@ -132,6 +132,7 @@ export interface HandlerContext {
   /** Runtime-minted identifiers are registered before any outgoing classification. */
   mintIdentifier(): Iri;
   admittedStatement(id: Iri, digest: string): boolean;
+  evaluateRule?(rule: Iri, subject: Iri, purpose: Iri): import("../derive/rules.js").DerivedResult;
   /** A fixed-namespace, digest-derived identifier; the input cannot supply IRI words. */
   identifierFor(value: Json): Iri;
   /** Handler-owned persistent state for this operation (JSON only). */

@@ -1,4 +1,5 @@
 {
+  "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
   "scenario": {
     "id": "mortgage-over-ask",
@@ -34,19 +35,25 @@
       "id": "sams-agent",
       "name": "Sam's agent",
       "actsFor": "sam",
-      "role": "Personal agent"
+      "role": "agent"
     },
     {
       "id": "lender",
-      "name": "North Bank",
-      "actsFor": "lender",
-      "role": "Lender"
+      "name": "North Bank's agent",
+      "actsFor": "north",
+      "role": "agent"
     }
   ],
   "generated": {
-    "commit": "67e14700e60bdedf44cd1971d8f0cfe2ecb45c8b",
+    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
     "core": "scripted"
   },
+  "standIns": [
+    {
+      "what": "Lender, bank, payroll, product index, register and identity-provider services",
+      "replacedBy": "Fictional separately keyed local parties and issuer-only sources, serving the same checked mortgage protocol"
+    }
+  ],
   "events": [
     {
       "seq": 1,
@@ -104,7 +111,7 @@
         }
       ],
       "resolution": {
-        "question": "Is North Bank a party I can send a mortgage application to?",
+        "question": "Is North Bank a party I can send mortgage prequalification to?",
         "path": [
           {
             "at": "Sam's own list",
@@ -119,17 +126,17 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+            "says": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for a mortgage application only."
+        "answer": "Accepted, for mortgage prequalification only."
       },
       "rule": {
         "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-        "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+        "text": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
       },
       "reason": "recipient-established",
-      "caption": "North Bank: Accepted, for a mortgage application only."
+      "caption": "North Bank: Accepted, for mortgage prequalification only."
     },
     {
       "seq": 4,
@@ -229,28 +236,28 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
-        "id": "urn:awp:ref:sam:0002",
+        "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0002",
         "from": "Sam's agent",
         "to": "North Bank's agent",
         "kind": "describe",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:8d9aad1b188…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:7a94b84f45d…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam's agent to North Bank's agent; describe; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0002.",
+            "summary": "From Sam's agent to North Bank's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:sam-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:sam:0002",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0002",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "describe",
               "from": {
                 "actor": "https://agents.hostco.example/sam#agent",
                 "onBehalfOf": "https://sam.example/#me",
-                "operator": "https://hostco.example/#org"
+                "operator": "https://agents.hostco.example/#org"
               },
               "to": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -260,11 +267,11 @@
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "kid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:262ebbe9280b5d71ffdd999564ce0477e6321b952c8e8719933a4efb6624f802"
+            "digest": "sha-256:f88b6a32a1cad25efe22acde141121163cc3022b6e9181e90a49d046e0c7b525"
           },
           "authority": {
             "present": false,
@@ -288,7 +295,7 @@
             "present": false,
             "summary": "Opens or continues the conversation.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001"
             }
           }
         }
@@ -316,28 +323,28 @@
       "part": "transport",
       "kind": "message-in",
       "packet": {
-        "id": "urn:awp:ref:sam:0002",
+        "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0002",
         "from": "Sam's agent",
         "to": "North Bank's agent",
         "kind": "describe",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:8d9aad1b188…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:7a94b84f45d…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam's agent to North Bank's agent; describe; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0002.",
+            "summary": "From Sam's agent to North Bank's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:sam-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:sam:0002",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0002",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "describe",
               "from": {
                 "actor": "https://agents.hostco.example/sam#agent",
                 "onBehalfOf": "https://sam.example/#me",
-                "operator": "https://hostco.example/#org"
+                "operator": "https://agents.hostco.example/#org"
               },
               "to": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -347,11 +354,11 @@
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "kid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:262ebbe9280b5d71ffdd999564ce0477e6321b952c8e8719933a4efb6624f802"
+            "digest": "sha-256:f88b6a32a1cad25efe22acde141121163cc3022b6e9181e90a49d046e0c7b525"
           },
           "authority": {
             "present": false,
@@ -375,7 +382,7 @@
             "present": false,
             "summary": "Opens or continues the conversation.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001"
             }
           }
         }
@@ -659,23 +666,23 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
-        "id": "urn:awp:ref:northbank-intake:0001",
+        "id": "urn:awp:engine-mortgage-over-ask-main:north-agent:0001",
         "from": "North Bank's agent",
         "to": "Sam's agent",
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:cf3d3ae2c27…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:252f1894817…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From North Bank's agent to Sam's agent; description; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:northbank-intake:0001.",
+            "summary": "From North Bank's agent to Sam's agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:north-agent:0001.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:northbank-intake:0001",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:north-agent:0001",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "description",
               "from": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -688,14 +695,14 @@
               },
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
-              "inReplyTo": "urn:awp:ref:sam:0002",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0002",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "kid": "ifAsMvFydwVNnIbzlBPc6pPmgujO5o-h2owLw_CzdqQ",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:351c09cf2156b74af3ec92f65802fc576b53865c42647a00655d63bb61b65f3d"
+            "digest": "sha-256:2b339a5bd97df6c58e84e06dc912e27f9ecef6253bc9a0170941942f5309cf5e"
           },
           "authority": {
             "present": false,
@@ -768,6 +775,10 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+                    "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
+                    "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+                    "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
                     "https://w3id.org/jeswr/awp#config/payment-local/0.1",
                     "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
                     "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
@@ -828,7 +839,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:5eaaaf54d036b8dc546dd82b4c50405284dd901dc31a10186f1216c7377a8766"
+            "digest": "sha-256:07de7acc7568e415f9e1e68f39f1f4d9d911f6c37750f0bf5684853047acb69d"
           },
           "evidence": {
             "present": false,
@@ -840,10 +851,10 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:ref:sam:0002.",
+            "summary": "Answers urn:awp:engine-mortgage-over-ask-main:sam-agent:0002.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001",
-              "inReplyTo": "urn:awp:ref:sam:0002"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0002"
             }
           }
         }
@@ -871,23 +882,23 @@
       "part": "transport",
       "kind": "message-in",
       "packet": {
-        "id": "urn:awp:ref:northbank-intake:0001",
+        "id": "urn:awp:engine-mortgage-over-ask-main:north-agent:0001",
         "from": "North Bank's agent",
         "to": "Sam's agent",
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:cf3d3ae2c27…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:252f1894817…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From North Bank's agent to Sam's agent; description; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:northbank-intake:0001.",
+            "summary": "From North Bank's agent to Sam's agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:north-agent:0001.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:northbank-intake:0001",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:north-agent:0001",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "description",
               "from": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -900,14 +911,14 @@
               },
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
-              "inReplyTo": "urn:awp:ref:sam:0002",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0002",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "kid": "ifAsMvFydwVNnIbzlBPc6pPmgujO5o-h2owLw_CzdqQ",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:351c09cf2156b74af3ec92f65802fc576b53865c42647a00655d63bb61b65f3d"
+            "digest": "sha-256:2b339a5bd97df6c58e84e06dc912e27f9ecef6253bc9a0170941942f5309cf5e"
           },
           "authority": {
             "present": false,
@@ -915,7 +926,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
+            "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
             "raw": {
               "description": {
                 "type": "ImplementationDescription",
@@ -980,6 +991,10 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+                    "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
+                    "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+                    "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
                     "https://w3id.org/jeswr/awp#config/payment-local/0.1",
                     "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
                     "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
@@ -1040,7 +1055,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:5eaaaf54d036b8dc546dd82b4c50405284dd901dc31a10186f1216c7377a8766",
+            "digest": "sha-256:07de7acc7568e415f9e1e68f39f1f4d9d911f6c37750f0bf5684853047acb69d",
             "untrusted": [
               {
                 "path": "description.type",
@@ -1164,22 +1179,38 @@
               },
               {
                 "path": "description.configurations.implemented.0",
-                "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
               },
               {
                 "path": "description.configurations.implemented.1",
-                "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
               },
               {
                 "path": "description.configurations.implemented.2",
-                "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
               },
               {
                 "path": "description.configurations.implemented.3",
-                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
               },
               {
                 "path": "description.configurations.implemented.4",
+                "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.5",
+                "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.6",
+                "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.7",
+                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.8",
                 "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
               },
               {
@@ -1282,10 +1313,10 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:ref:sam:0002.",
+            "summary": "Answers urn:awp:engine-mortgage-over-ask-main:sam-agent:0002.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001",
-              "inReplyTo": "urn:awp:ref:sam:0002"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0002"
             }
           }
         }
@@ -1431,7 +1462,7 @@
       "agent": "sams-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to take the next step in a mortgage application with North Bank."
+      "caption": "The core proposes to use mortgage prequalification with North Bank."
     },
     {
       "seq": 33,
@@ -1481,7 +1512,7 @@
         }
       ],
       "resolution": {
-        "question": "Is North Bank a party I can send a mortgage application to?",
+        "question": "Is North Bank a party I can send mortgage prequalification to?",
         "path": [
           {
             "at": "Sam's own list",
@@ -1496,17 +1527,17 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+            "says": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for a mortgage application only."
+        "answer": "Accepted, for mortgage prequalification only."
       },
       "rule": {
         "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-        "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+        "text": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
       },
       "reason": "recipient-established",
-      "caption": "North Bank: Accepted, for a mortgage application only."
+      "caption": "North Bank: Accepted, for mortgage prequalification only."
     },
     {
       "seq": 35,
@@ -1624,28 +1655,28 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
-        "id": "urn:awp:ref:sam:0003",
+        "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003",
         "from": "Sam's agent",
         "to": "North Bank's agent",
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:bfa0bf7b9b5…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:2b677f96d0d…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam's agent to North Bank's agent; propose; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0003.",
+            "summary": "From Sam's agent to North Bank's agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:sam-agent:0003.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:sam:0003",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "propose",
               "from": {
                 "actor": "https://agents.hostco.example/sam#agent",
                 "onBehalfOf": "https://sam.example/#me",
-                "operator": "https://hostco.example/#org"
+                "operator": "https://agents.hostco.example/#org"
               },
               "to": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -1655,11 +1686,11 @@
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "kid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:eea800fadf89972e263b4a306e5b597a64421f46c406451f96c42997c3fa99e3"
+            "digest": "sha-256:50e98b4eeac1fe1d93d53d45900d7541f10d72433ef0b39662bb86d6a72bf82a"
           },
           "authority": {
             "present": true,
@@ -1670,18 +1701,19 @@
                 "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
                 "party": "https://sam.example/#me",
                 "actor": "https://agents.hostco.example/sam#agent",
-                "actorKid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
-                "operator": "https://hostco.example/#org",
+                "actorKid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
+                "operator": "https://agents.hostco.example/#org",
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
-                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                  "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "https://w3id.org/jeswr/awp#op/balance-statement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:d56ef09a048670ad5deea446661e5127f815c94c13e5077e1913ee70e5d87474"
+            "digest": "sha-256:4b6d028790c211fb0073ed3bbc5f2f804ba45726700578c875cd58a6d95656e9"
           },
           "content": {
             "present": true,
@@ -1725,7 +1757,7 @@
             "present": false,
             "summary": "Opens or continues the conversation.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001"
             }
           }
         }
@@ -1753,28 +1785,28 @@
       "part": "transport",
       "kind": "message-in",
       "packet": {
-        "id": "urn:awp:ref:sam:0003",
+        "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003",
         "from": "Sam's agent",
         "to": "North Bank's agent",
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:bfa0bf7b9b5…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:2b677f96d0d…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam's agent to North Bank's agent; propose; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0003.",
+            "summary": "From Sam's agent to North Bank's agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:sam-agent:0003.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:sam:0003",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "propose",
               "from": {
                 "actor": "https://agents.hostco.example/sam#agent",
                 "onBehalfOf": "https://sam.example/#me",
-                "operator": "https://hostco.example/#org"
+                "operator": "https://agents.hostco.example/#org"
               },
               "to": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -1784,11 +1816,11 @@
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "kid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:eea800fadf89972e263b4a306e5b597a64421f46c406451f96c42997c3fa99e3"
+            "digest": "sha-256:50e98b4eeac1fe1d93d53d45900d7541f10d72433ef0b39662bb86d6a72bf82a"
           },
           "authority": {
             "present": true,
@@ -1799,18 +1831,19 @@
                 "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
                 "party": "https://sam.example/#me",
                 "actor": "https://agents.hostco.example/sam#agent",
-                "actorKid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
-                "operator": "https://hostco.example/#org",
+                "actorKid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
+                "operator": "https://agents.hostco.example/#org",
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
-                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                  "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "https://w3id.org/jeswr/awp#op/balance-statement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:d56ef09a048670ad5deea446661e5127f815c94c13e5077e1913ee70e5d87474"
+            "digest": "sha-256:4b6d028790c211fb0073ed3bbc5f2f804ba45726700578c875cd58a6d95656e9"
           },
           "content": {
             "present": true,
@@ -1872,7 +1905,7 @@
             "present": false,
             "summary": "Opens or continues the conversation.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001"
             }
           }
         }
@@ -2022,7 +2055,7 @@
       "agent": "lender",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to take the next step in a mortgage application with Sam."
+      "caption": "The core proposes to use mortgage prequalification with Sam."
     },
     {
       "seq": 50,
@@ -2072,7 +2105,7 @@
         }
       ],
       "resolution": {
-        "question": "Is Sam a party I can send a mortgage application to?",
+        "question": "Is Sam a party I can send mortgage prequalification to?",
         "path": [
           {
             "at": "North Bank's own list",
@@ -2088,7 +2121,7 @@
         "answer": "No register answers for this party."
       },
       "rule": {
-        "id": "urn:awp:ref:sam:0001",
+        "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
         "text": "Replies go to the verified sender of the request."
       },
       "reason": "recipient-established",
@@ -2210,23 +2243,23 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
-        "id": "urn:awp:ref:northbank-intake:0002",
+        "id": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002",
         "from": "North Bank's agent",
         "to": "Sam's agent",
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:c08b47976a2…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:98a88c10572…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From North Bank's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:northbank-intake:0002.",
+            "summary": "From North Bank's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:north-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:northbank-intake:0002",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "propose",
               "from": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -2239,14 +2272,14 @@
               },
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
-              "inReplyTo": "urn:awp:ref:sam:0003",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "kid": "ifAsMvFydwVNnIbzlBPc6pPmgujO5o-h2owLw_CzdqQ",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:7c5044061618e73e30b2c05c640f3ef8feb37dd0bf57d6422b8a396b736593cb"
+            "digest": "sha-256:da8788c1988861bcbebaa8011a1ec0ff82b9470293f04dca53d629dbcbc79d62"
           },
           "authority": {
             "present": true,
@@ -2257,18 +2290,19 @@
                 "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
                 "party": "https://northbank.example/#org",
                 "actor": "https://northbank.example/agents/intake#agent",
-                "actorKid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "actorKid": "ifAsMvFydwVNnIbzlBPc6pPmgujO5o-h2owLw_CzdqQ",
                 "operator": "https://northbank.example/#org",
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
-                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                  "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "https://w3id.org/jeswr/awp#op/balance-statement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:c74ba742481d37055c991ee8293078656ed126fbbfe3d82ba3223a89d6f7b1f6"
+            "digest": "sha-256:6800ac274859c0c2fa86f0ec91f0d392d4ec1224247f02b17e061e796441b719"
           },
           "content": {
             "present": true,
@@ -2289,7 +2323,7 @@
                   "applicant": "https://sam.example/#me",
                   "synthetic": true
                 },
-                "applicationId": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1",
+                "applicationId": "urn:awp:domain-item:0a1a46452829eeef3e9033b0ec09ae15",
                 "evidenceRequest": [
                   {
                     "claimType": "income.gross.monthly-series",
@@ -2325,11 +2359,11 @@
                 },
                 "synthetic": true
               },
-              "termsDigest": "sha-256:738ab3af2eb197064b504faf0852b1540f2a4d1ad40373421db58ef3473645ba",
+              "termsDigest": "sha-256:6be7e465c449043aecc87fb44b1641f00e9b6eeba55666dcc5a9de5f13ab4c31",
               "round": 2,
-              "counters": "urn:awp:ref:sam:0003"
+              "counters": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003"
             },
-            "digest": "sha-256:9d25c422aaf2900d637c86c3b3c89926e584ea5372acd6662330a98fe2fa8c88"
+            "digest": "sha-256:8fd8fae686c1ba709840c45eb29d16bdcd78268bd28de075d87260168d7075bf"
           },
           "evidence": {
             "present": false,
@@ -2349,7 +2383,7 @@
                 "applicant": "https://sam.example/#me",
                 "synthetic": true
               },
-              "applicationId": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1",
+              "applicationId": "urn:awp:domain-item:0a1a46452829eeef3e9033b0ec09ae15",
               "evidenceRequest": [
                 {
                   "claimType": "income.gross.monthly-series",
@@ -2385,14 +2419,14 @@
               },
               "synthetic": true
             },
-            "digest": "sha-256:738ab3af2eb197064b504faf0852b1540f2a4d1ad40373421db58ef3473645ba"
+            "digest": "sha-256:6be7e465c449043aecc87fb44b1641f00e9b6eeba55666dcc5a9de5f13ab4c31"
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:ref:sam:0003.",
+            "summary": "Answers urn:awp:engine-mortgage-over-ask-main:sam-agent:0003.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001",
-              "inReplyTo": "urn:awp:ref:sam:0003"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003"
             }
           }
         }
@@ -2434,7 +2468,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "Paywell's record of your pay for the last 12 months is intact and signed with Paywell's pinned key."
+      "caption": "Paywell's income.gross.monthly-series statement is intact and signed with Paywell's pinned key."
     },
     {
       "seq": 60,
@@ -2472,7 +2506,7 @@
         ],
         "answer": "Accepted, for income.gross.monthly-series claims only."
       },
-      "caption": "Paywell's record of your pay for the last 12 months: Paywell is an accepted source for this kind of claim."
+      "caption": "Paywell's income.gross.monthly-series statement: Paywell is an accepted source for this kind of claim."
     },
     {
       "seq": 61,
@@ -2490,7 +2524,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "Paywell's record of your pay for the last 12 months asks for nothing, so there is no authority to check."
+      "caption": "Paywell's income.gross.monthly-series statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 62,
@@ -2517,7 +2551,7 @@
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
         "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
       },
-      "caption": "Paywell's record of your pay for the last 12 months: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+      "caption": "Paywell's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
     },
     {
       "seq": 63,
@@ -2536,10 +2570,10 @@
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#income",
-        "text": "Income must be recorded by a payroll provider or tax authority and be at most three months old."
+        "id": "urn:profile:mortgage:income.*",
+        "text": "Accept income.* from  by recorded-by-authority, at most 92 days old."
       },
-      "caption": "Paywell's record of your pay for the last 12 months is fit for a mortgage application: recorded-by-authority, 12 days old."
+      "caption": "Paywell's income.gross.monthly-series statement is fit for urn:scenario:mortgage-over-ask:task: recorded-by-authority, 12 days old."
     },
     {
       "seq": 64,
@@ -2549,7 +2583,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "Paywell's record of your pay for the last 12 months is admitted."
+      "caption": "Paywell's income.gross.monthly-series statement is admitted."
     },
     {
       "seq": 65,
@@ -2559,7 +2593,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:awp:evidence:paywell-income-2026-10",
-        "label": "Paywell's record of your pay for the last 12 months",
+        "label": "Paywell's income.gross.monthly-series statement",
         "claimType": "income.gross.monthly-series",
         "subject": "https://sam.example/#me",
         "value": [
@@ -2624,7 +2658,7 @@
         },
         "provenance": "signed by Paywell, issued 2026-11-02T09:00:00Z"
       },
-      "caption": "Paywell's record of your pay for the last 12 months is stored with its source, how it was produced, its date and its terms."
+      "caption": "Paywell's income.gross.monthly-series statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 66,
@@ -2647,7 +2681,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "Harbour Bank's balance at October 31, 2026 is intact and signed with Harbour Bank's pinned key."
+      "caption": "Harbour Bank's deposit.balance statement is intact and signed with Harbour Bank's pinned key."
     },
     {
       "seq": 67,
@@ -2685,7 +2719,7 @@
         ],
         "answer": "Accepted, for deposit.balance claims only."
       },
-      "caption": "Harbour Bank's balance at October 31, 2026: Harbour Bank is an accepted source for this kind of claim."
+      "caption": "Harbour Bank's deposit.balance statement: Harbour Bank is an accepted source for this kind of claim."
     },
     {
       "seq": 68,
@@ -2703,7 +2737,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "Harbour Bank's balance at October 31, 2026 asks for nothing, so there is no authority to check."
+      "caption": "Harbour Bank's deposit.balance statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 69,
@@ -2730,7 +2764,7 @@
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
         "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
       },
-      "caption": "Harbour Bank's balance at October 31, 2026: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+      "caption": "Harbour Bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
     },
     {
       "seq": 70,
@@ -2749,10 +2783,10 @@
       ],
       "reason": "fit-for-use",
       "rule": {
-        "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#balance",
-        "text": "A balance must be recorded by the bank that holds the account and be at most one month old."
+        "id": "urn:profile:mortgage:deposit.*",
+        "text": "Accept deposit.* from  by recorded-by-authority, at most 31 days old."
       },
-      "caption": "Harbour Bank's balance at October 31, 2026 is fit for a mortgage application: recorded-by-authority, 12 days old."
+      "caption": "Harbour Bank's deposit.balance statement is fit for urn:scenario:mortgage-over-ask:task: recorded-by-authority, 12 days old."
     },
     {
       "seq": 71,
@@ -2762,7 +2796,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "Harbour Bank's balance at October 31, 2026 is admitted."
+      "caption": "Harbour Bank's deposit.balance statement is admitted."
     },
     {
       "seq": 72,
@@ -2772,7 +2806,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
-        "label": "Harbour Bank's balance at October 31, 2026",
+        "label": "Harbour Bank's deposit.balance statement",
         "claimType": "deposit.balance",
         "subject": "https://sam.example/#me",
         "value": 90000,
@@ -2789,7 +2823,7 @@
         },
         "provenance": "signed by Harbour Bank, issued 2026-11-01T09:00:00Z"
       },
-      "caption": "Harbour Bank's balance at October 31, 2026 is stored with its source, how it was produced, its date and its terms."
+      "caption": "Harbour Bank's deposit.balance statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 73,
@@ -2798,23 +2832,23 @@
       "part": "transport",
       "kind": "message-in",
       "packet": {
-        "id": "urn:awp:ref:northbank-intake:0002",
+        "id": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002",
         "from": "North Bank's agent",
         "to": "Sam's agent",
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:c08b47976a2…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:98a88c10572…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From North Bank's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key tn4lfPVuaSnl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:northbank-intake:0002.",
+            "summary": "From North Bank's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:north-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:northbank-intake:0002",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "propose",
               "from": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -2827,14 +2861,14 @@
               },
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
-              "inReplyTo": "urn:awp:ref:sam:0003",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "kid": "ifAsMvFydwVNnIbzlBPc6pPmgujO5o-h2owLw_CzdqQ",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:7c5044061618e73e30b2c05c640f3ef8feb37dd0bf57d6422b8a396b736593cb"
+            "digest": "sha-256:da8788c1988861bcbebaa8011a1ec0ff82b9470293f04dca53d629dbcbc79d62"
           },
           "authority": {
             "present": true,
@@ -2845,22 +2879,23 @@
                 "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
                 "party": "https://northbank.example/#org",
                 "actor": "https://northbank.example/agents/intake#agent",
-                "actorKid": "tn4lfPVuaSnlCI8Fu4ngif_xOCATvsDJfIvTri8fbyM",
+                "actorKid": "ifAsMvFydwVNnIbzlBPc6pPmgujO5o-h2owLw_CzdqQ",
                 "operator": "https://northbank.example/#org",
                 "operations": [
                   "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
-                  "https://w3id.org/jeswr/awp#op/valuation-order"
+                  "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "https://w3id.org/jeswr/awp#op/balance-statement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:c74ba742481d37055c991ee8293078656ed126fbbfe3d82ba3223a89d6f7b1f6"
+            "digest": "sha-256:6800ac274859c0c2fa86f0ec91f0d392d4ec1224247f02b17e061e796441b719"
           },
           "content": {
             "present": true,
-            "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"https://w3id.org/jeswr/awp#model/mortgage-application\"; \"https://sam.example/#me\"; \"urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://northbank.example/#org\"; \"https://underwriter.example/#org\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/dpv#Marketing\"; \"sha-256:738ab3af2eb197064b504faf0852b1540f2a4d1ad40373421db58ef3473645ba\"; \"urn:awp:ref:sam:0003\"",
+            "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"https://w3id.org/jeswr/awp#model/mortgage-application\"; \"https://sam.example/#me\"; \"urn:awp:domain-item:0a1a46452829eeef3e9033b0ec09ae15\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://northbank.example/#org\"; \"https://underwriter.example/#org\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/dpv#Marketing\"; \"sha-256:6be7e465c449043aecc87fb44b1641f00e9b6eeba55666dcc5a9de5f13ab4c31\"; \"urn:awp:engine-mortgage-over-ask-main:sam-agent:0003\"",
             "raw": {
               "operation": {
                 "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -2877,7 +2912,7 @@
                   "applicant": "https://sam.example/#me",
                   "synthetic": true
                 },
-                "applicationId": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1",
+                "applicationId": "urn:awp:domain-item:0a1a46452829eeef3e9033b0ec09ae15",
                 "evidenceRequest": [
                   {
                     "claimType": "income.gross.monthly-series",
@@ -2913,11 +2948,11 @@
                 },
                 "synthetic": true
               },
-              "termsDigest": "sha-256:738ab3af2eb197064b504faf0852b1540f2a4d1ad40373421db58ef3473645ba",
+              "termsDigest": "sha-256:6be7e465c449043aecc87fb44b1641f00e9b6eeba55666dcc5a9de5f13ab4c31",
               "round": 2,
-              "counters": "urn:awp:ref:sam:0003"
+              "counters": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003"
             },
-            "digest": "sha-256:9d25c422aaf2900d637c86c3b3c89926e584ea5372acd6662330a98fe2fa8c88",
+            "digest": "sha-256:8fd8fae686c1ba709840c45eb29d16bdcd78268bd28de075d87260168d7075bf",
             "untrusted": [
               {
                 "path": "operation.id",
@@ -2937,7 +2972,7 @@
               },
               {
                 "path": "terms.applicationId",
-                "text": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1"
+                "text": "urn:awp:domain-item:0a1a46452829eeef3e9033b0ec09ae15"
               },
               {
                 "path": "terms.purpose",
@@ -2961,11 +2996,11 @@
               },
               {
                 "path": "termsDigest",
-                "text": "sha-256:738ab3af2eb197064b504faf0852b1540f2a4d1ad40373421db58ef3473645ba"
+                "text": "sha-256:6be7e465c449043aecc87fb44b1641f00e9b6eeba55666dcc5a9de5f13ab4c31"
               },
               {
                 "path": "counters",
-                "text": "urn:awp:ref:sam:0003"
+                "text": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003"
               }
             ]
           },
@@ -2987,7 +3022,7 @@
                 "applicant": "https://sam.example/#me",
                 "synthetic": true
               },
-              "applicationId": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1",
+              "applicationId": "urn:awp:domain-item:0a1a46452829eeef3e9033b0ec09ae15",
               "evidenceRequest": [
                 {
                   "claimType": "income.gross.monthly-series",
@@ -3023,14 +3058,14 @@
               },
               "synthetic": true
             },
-            "digest": "sha-256:738ab3af2eb197064b504faf0852b1540f2a4d1ad40373421db58ef3473645ba"
+            "digest": "sha-256:6be7e465c449043aecc87fb44b1641f00e9b6eeba55666dcc5a9de5f13ab4c31"
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:ref:sam:0003.",
+            "summary": "Answers urn:awp:engine-mortgage-over-ask-main:sam-agent:0003.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001",
-              "inReplyTo": "urn:awp:ref:sam:0003"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0003"
             }
           }
         }
@@ -3180,7 +3215,7 @@
       "agent": "sams-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share Harbour Bank's balance at October 31, 2026 and Paywell's record of your pay for the last 12 months with North Bank."
+      "caption": "The core proposes to share Harbour Bank's deposit.balance statement and Paywell's income.gross.monthly-series statement with North Bank."
     },
     {
       "seq": 81,
@@ -3204,10 +3239,10 @@
       ],
       "reason": "not-authorised",
       "rule": {
-        "id": "urn:awp:mandate:f7152745cd24bc84478991af673e49ba:mortgage",
-        "text": "No rule in Sam's mandate lets the agent share Harbour Bank's balance at October 31, 2026 and Paywell's record of your pay for the last 12 months with North Bank for mortgage application (no applicable grant in the mandate (deny by default))."
+        "id": "urn:awp:mandate:fa78f4f441c2872e99ac95ee563866e7:mortgage-over-ask",
+        "text": "No rule in Sam's mandate lets the agent share Harbour Bank's deposit.balance statement and Paywell's income.gross.monthly-series statement with North Bank for mortgage application (no applicable grant in the mandate (deny by default))."
       },
-      "caption": "Sam's mandate does not allow this: share Harbour Bank's balance at October 31, 2026 and Paywell's record of your pay for the last 12 months with North Bank."
+      "caption": "Sam's mandate does not allow this: share Harbour Bank's deposit.balance statement and Paywell's income.gross.monthly-series statement with North Bank."
     },
     {
       "seq": 82,
@@ -3264,7 +3299,7 @@
         }
       ],
       "resolution": {
-        "question": "Is North Bank a party I can send a mortgage application to?",
+        "question": "Is North Bank a party I can send mortgage prequalification to?",
         "path": [
           {
             "at": "Sam's own list",
@@ -3279,17 +3314,17 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+            "says": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for a mortgage application only."
+        "answer": "Accepted, for mortgage prequalification only."
       },
       "rule": {
         "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
-        "text": "North Bank is authorized for a mortgage application. Checked 2026-11-13T09:00:00.000Z."
+        "text": "North Bank is authorized for mortgage prequalification. Checked 2026-11-13T09:00:00.000Z."
       },
       "reason": "recipient-established",
-      "caption": "North Bank: Accepted, for a mortgage application only."
+      "caption": "North Bank: Accepted, for mortgage prequalification only."
     },
     {
       "seq": 85,
@@ -3389,28 +3424,28 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
-        "id": "urn:awp:ref:sam:0004",
+        "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0004",
         "from": "Sam's agent",
         "to": "North Bank's agent",
         "kind": "refuse",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:fa72209d8a1…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:021dbdcc022…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam's agent to North Bank's agent; refuse; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0004.",
+            "summary": "From Sam's agent to North Bank's agent; refuse; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:sam-agent:0004.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:sam:0004",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0004",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "refuse",
               "from": {
                 "actor": "https://agents.hostco.example/sam#agent",
                 "onBehalfOf": "https://sam.example/#me",
-                "operator": "https://hostco.example/#org"
+                "operator": "https://agents.hostco.example/#org"
               },
               "to": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -3418,14 +3453,14 @@
               },
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
-              "inReplyTo": "urn:awp:ref:northbank-intake:0002",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "kid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:374fe8d9aaf4acb151f186e87eea6e6433a4489d5b6c4bfed3b76e07d1f63f88"
+            "digest": "sha-256:6ae0f3015ab10af8ef3bc8a0011e045c74a36795801339a6be5dc0f92493869f"
           },
           "authority": {
             "present": false,
@@ -3435,10 +3470,10 @@
             "present": true,
             "summary": "Closes the conversation (refuse): not-authorised.",
             "raw": {
-              "ref": "urn:awp:ref:northbank-intake:0002",
+              "ref": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002",
               "reason": "not-authorised"
             },
-            "digest": "sha-256:eadac940cfafec9f1c332a6bd7b0f43036ae24e7e5cf5a91f9af5645b81113f6"
+            "digest": "sha-256:5cb9c68f3f62b7e11927e6c1f164673959a18585419d96ba0cc44d03d8d330f6"
           },
           "evidence": {
             "present": false,
@@ -3450,10 +3485,10 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:ref:northbank-intake:0002.",
+            "summary": "Answers urn:awp:engine-mortgage-over-ask-main:north-agent:0002.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001",
-              "inReplyTo": "urn:awp:ref:northbank-intake:0002"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002"
             }
           }
         }
@@ -3481,28 +3516,28 @@
       "part": "transport",
       "kind": "message-in",
       "packet": {
-        "id": "urn:awp:ref:sam:0004",
+        "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0004",
         "from": "Sam's agent",
         "to": "North Bank's agent",
         "kind": "refuse",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:fa72209d8a1…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:021dbdcc022…; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Sam's agent to North Bank's agent; refuse; signed (JWS EdDSA, pinned key q7DjovV9FQRH…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:ref:sam:0004.",
+            "summary": "From Sam's agent to North Bank's agent; refuse; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-over-ask-main:sam-agent:0004.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
-              "id": "urn:awp:ref:sam:0004",
-              "conversation": "urn:awp:ref:sam:0001",
+              "id": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0004",
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
               "kind": "refuse",
               "from": {
                 "actor": "https://agents.hostco.example/sam#agent",
                 "onBehalfOf": "https://sam.example/#me",
-                "operator": "https://hostco.example/#org"
+                "operator": "https://agents.hostco.example/#org"
               },
               "to": {
                 "actor": "https://northbank.example/agents/intake#agent",
@@ -3510,14 +3545,14 @@
               },
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
-              "inReplyTo": "urn:awp:ref:northbank-intake:0002",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002",
               "proof": {
                 "alg": "EdDSA",
-                "kid": "q7DjovV9FQRH_Z6pDD3sYVI19-QJoAXzLVEFGDAh4DQ",
+                "kid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:374fe8d9aaf4acb151f186e87eea6e6433a4489d5b6c4bfed3b76e07d1f63f88"
+            "digest": "sha-256:6ae0f3015ab10af8ef3bc8a0011e045c74a36795801339a6be5dc0f92493869f"
           },
           "authority": {
             "present": false,
@@ -3525,16 +3560,16 @@
           },
           "content": {
             "present": true,
-            "summary": "Closes the conversation (refuse): not-authorised. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:ref:northbank-intake:0002\"",
+            "summary": "Closes the conversation (refuse): not-authorised. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-mortgage-over-ask-main:north-agent:0002\"",
             "raw": {
-              "ref": "urn:awp:ref:northbank-intake:0002",
+              "ref": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002",
               "reason": "not-authorised"
             },
-            "digest": "sha-256:eadac940cfafec9f1c332a6bd7b0f43036ae24e7e5cf5a91f9af5645b81113f6",
+            "digest": "sha-256:5cb9c68f3f62b7e11927e6c1f164673959a18585419d96ba0cc44d03d8d330f6",
             "untrusted": [
               {
                 "path": "ref",
-                "text": "urn:awp:ref:northbank-intake:0002"
+                "text": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002"
               }
             ]
           },
@@ -3548,10 +3583,10 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:ref:northbank-intake:0002.",
+            "summary": "Answers urn:awp:engine-mortgage-over-ask-main:north-agent:0002.",
             "raw": {
-              "conversation": "urn:awp:ref:sam:0001",
-              "inReplyTo": "urn:awp:ref:northbank-intake:0002"
+              "conversation": "urn:awp:engine-mortgage-over-ask-main:sam-agent:0001",
+              "inReplyTo": "urn:awp:engine-mortgage-over-ask-main:north-agent:0002"
             }
           }
         }

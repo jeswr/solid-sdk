@@ -1,0 +1,213 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "scenario": {
+    "id": "health-referral--branch-2",
+    "title": "A referral from a family doctor to a specialist",
+    "steps": {
+      "1": "registered-role",
+      "2": "select-relevant-history"
+    }
+  },
+  "configuration": {
+    "id": "health-referral-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-reference-local-holder",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "practice-agent",
+      "name": "practice-agent",
+      "actsFor": "practice",
+      "role": "agent"
+    },
+    {
+      "id": "clinic-agent",
+      "name": "clinic-agent",
+      "actsFor": "clinic",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "by-reference-solid catalogue store and Solid access control",
+      "replacedBy": "By-reference local resource-holder party with its own issuer key, signed reader/item/purpose/expiry grants and recorded authenticated reads; no Solid access-control claim"
+    },
+    {
+      "what": "Professional register",
+      "replacedBy": "Fictional issuer-only register signing current clinician roles"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "register's organization.role statement is intact and signed with register's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-unknown",
+      "resolution": {
+        "question": "Is register an authority for organization.role claims about clinician?",
+        "path": [
+          {
+            "at": "practice's own list",
+            "kind": "own-list",
+            "says": "No entry for register for this kind of claim."
+          },
+          {
+            "at": "Local professional register root",
+            "kind": "root",
+            "says": "No register it delegates to lists register."
+          }
+        ],
+        "answer": "No register answers for this source."
+      },
+      "caption": "register's organization.role statement: register is not accepted as a source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "register's organization.role statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "refuse",
+      "reason": "source-unknown",
+      "caption": "register's organization.role statement is refused and kept out of memory."
+    },
+    {
+      "seq": 5,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:health referral with clinic."
+    },
+    {
+      "seq": 6,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:refer",
+        "text": "practice's mandate lets the agent use urn:op:health referral, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "practice's mandate covers this action."
+    },
+    {
+      "seq": 7,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "source-unknown",
+      "caption": "Required organization.role was refused: source-unknown."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "source-unknown",
+      "caption": "A refused source cannot authorize the action."
+    }
+  ]
+}

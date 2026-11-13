@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 /** A vocabulary types values, not field names guessed to contain prose (UNS-8..13). */
 
 import type { z } from "zod";
@@ -31,6 +32,28 @@ export interface ContentProfile {
       }
     >
   >;
+}
+
+export function readingValueAllowed(
+  value: unknown,
+  declaration: {
+    readonly type: "code" | "number" | "date" | "term";
+    readonly values?: readonly (string | number | boolean)[];
+  },
+): boolean {
+  if (declaration.values && !declaration.values.includes(value as string)) return false;
+  if (declaration.type === "number") return typeof value === "number" && Number.isFinite(value);
+  if (declaration.type === "date")
+    return (
+      typeof value === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      Number.isFinite(Date.parse(value)) &&
+      new Date(value).toISOString().slice(0, 10) === value
+    );
+  return (
+    (typeof value === "string" || typeof value === "boolean") &&
+    declaration.values?.includes(value) === true
+  );
 }
 
 export interface KnownContent {
@@ -208,12 +231,18 @@ export function freeMessageStrings(
   known?: KnownContent,
 ): { path: string; text: string }[] {
   const found = freeStrings(message.body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary }, known);
+  for (const [index, part] of (message.content ?? []).entries())
+    found.push({
+      path: `content.${index}.bytes`,
+      text:
+        typeof part.bytes === "string"
+          ? part.bytes
+          : `Unstructured ${part.mediaType} part ${part.digest}`,
+    });
   for (const [index, evidence] of (message.evidence ?? []).entries()) {
-    if (evidence.role !== "credential" || evidence.format !== "jws-compact") continue;
+    if (!isClaimEvidence(evidence)) continue;
     try {
-      const claim = JSON.parse(
-        Buffer.from(evidence.value.split(".")[1] ?? "", "base64url").toString(),
-      );
+      const claim = unverifiedEvidenceClaim(evidence);
       if (claim.issuer !== message.from.actor || claim.method !== "model-output") continue;
       const readingVocabulary = Object.fromEntries(
         Object.entries(vocabulary)

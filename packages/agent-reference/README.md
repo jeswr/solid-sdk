@@ -2,8 +2,9 @@
 
 # @jeswr/agent-reference
 
-The reference agent runtime of the accountable agent architecture. It is the September
-pilot runtime, lifted out of `@jeswr/personal-agent/pilot` without changes:
+The reference agent runtime of the accountable agent architecture. It began as the September
+pilot runtime lifted from `@jeswr/personal-agent/pilot`, and now executes profile/scenario
+data through the same checked runtime:
 
 - `core/` — the transport-neutral message model, conversation state machine, limits, schema
 - `mechanisms/` — JWS signing, pinned trust store, owner mandates over an ODRL subset,
@@ -38,13 +39,12 @@ callers and tests are unchanged. Each module is reachable by path, for example
 
 `pnpm run build` writes every trace to `traces/<scenario>--<configuration>.json` (plus
 `traces/index.json`). Expected outlines are committed in `outlines/`; a test fails when a
-run departs from them. After an intended change, run `node scripts/update-outlines.mjs`
-and review the diff.
+run departs from them. After an intended change, use `pnpm run scenarios --record-outlines`
+and review the diff. The five maintained mortgage outlines retain their original array format.
 
-Trace format extensions beyond the brief: `outcome` on decision events, `resolution` on
-trust lookups, `fact` on memory events, and gate codes (`not-in-configuration`,
-`no-claims`, `no-action-intent`, `conversation-bound`, `not-yet-agreed`,
-`no-register-for-party`, `no-personal-data`) as the reason of `not-applicable` verdicts.
+Traces carry outcomes, trust-resolution paths, labelled facts and declared stand-ins. New
+cases use the core reason registry; the public pilot extension-code union remains available
+for compatibility. A signature establishes attribution, not truth or permission.
 
 Experimental. Synthetic parties and data only; both sides of every exchange run this code.
 
@@ -69,12 +69,13 @@ Scripts use literal JSON and whole-value references such as
 messages, propose replies or synthetic effects, answer approval requests, introduce
 hostile mutations, record readings and check records. They cannot write gate events.
 Branch `change` objects merge into the scenario; arrays replace. The engine rejects
-unsupported suites, legacy DER declarations and standing rules instead of substituting another check.
-Thirteen paths run from data: `probing-counterparty`, `master-data-change`, `pay-an-invoice`,
-`false-but-signed` and `flat-share`, including every branch of those cases. The other
-18 paths retain explicit blockers, including all five mortgage migrations. A blocked path
-is not counted as a run, regardless of whether it has a saved outline. Existing mortgage
-drivers remain pending migration.
+unsupported suites and legacy DER declarations instead of substituting another check.
+Thirty-one paths run from data, including every branch of the first ten catalogue cases
+and all five mortgage references. Only the separately named hidden-validity proof remains
+blocked: ordinary selective disclosure cannot prove a predicate about a concealed date.
+The mortgage reference entry points load the data engine; their complete maintained
+outlines are unchanged. Public mortgage operation handlers remain available and supply
+the closed checked implementations installed by the scenarios.
 
 Free text is detected recursively through the vocabulary's types and closed values.
 Unknown strings remain text, wherever they occur. Vocabulary paths use `*` for one
@@ -133,10 +134,50 @@ Scenario steps also support `derive`, `assess`, `organisation-approve`, `trust-d
 and data assertions. A branch can supply `profileChange` to vary receiver policy. An
 assertion inspects runtime results; it cannot supply a gate verdict. Profile `standIns`
 lists local replacements and is copied to the trace header. See `ENGINE-REPORT.md` for
-coverage, interpretations and the unfinished mortgage migration.
+coverage, interpretations, exact-outline comparisons and the intentionally blocked proof.
 
 Anonymous public queries additionally exclude open numeric/date slots and core-selected
 conversation IDs. A caller that needs variable personal parameters uses a represented,
 authorized action. Existing snapshots without the generated-conversation marker fail
 closed for new anonymous continuations rather than treating a remembered identifier as
 proof that its original selection was safe.
+
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Brief 12 adds the following bounded capabilities without new dependencies:
+
+- Signed messages may contain text or raw-byte `content` parts with IDs, media types and raw-byte
+  digests. They enter context as unstructured data, never instructions. `readContent()`
+  supplies one immutable part to a host-installed reader without runtime capabilities and
+  keeps only the types/closed values declared by profile `readings`. Readings retain
+  `model-output`, the reader's signed implementation and the original digest. Required
+  action claims supported only by unaccepted readings ask their provenance source for
+  structured form. Inherited terms and principal-facing reading labels remain mandatory.
+- A signed mandate's `standing` rules can allow an emergency read of named items for a
+  current, register-attested clinician with a signed emergency declaration. The declaration
+  is a self-report. The actual authenticated request and output must match the named scope.
+  Each release creates durable principal/contact notification duties; the runtime discharges
+  them through signed, gated messages and records missed deadlines, including after restart.
+- `LocalResourceHolder` implements reader/item/purpose/expiry-bound signed grants and
+  authenticated, recorded reads. The receiver admits holder-signed statements under both
+  grant and original terms. Sending a reference discloses every item its grant names.
+  Health-referral uses `by-reference-local-holder`, explicitly replacing the catalogue's
+  Solid store; it implements no Solid access-control protocol.
+- Organization policies install a document resolver, registrar, required operation roles,
+  action kinds, required-status claim types and maximum status age. Current registrar-signed
+  documents restrict introduced organization/agent keys. Organization-signed mandate
+  credentials and issuer-signed status lists establish current scoped authority. Supplier
+  onboarding uses a local resolver, with no live DID-method claim.
+- `issueSelectiveCredential()` signs salted claim digests using existing JWS/SHA-256.
+  `presentSelective()` reveals selected disclosures; integrity, source, fitness and outbound
+  disclosure checks inspect those actual claims. API salts use cryptographic randomness;
+  reproducible fictional fixtures use fixed salts. No hidden-value proof or unlinkability
+  is claimed.
+
+Mortgage data additionally installs closed handlers and purpose-bound stores and can
+perform challenge retries, source issuance, agreement invocations, store requests,
+profile-bound assessments and consent-bound underwriting handovers. The underwriting
+release checks the real consumer agreement, exact onward fields and current store item
+revisions; transmission rechecks its protected outbox condition. Assessments record an
+output receipt and input digests without retaining an extra assessment copy of the inputs.
+The shared source store continues to enforce its separate agreed retention/grants.

@@ -164,6 +164,19 @@ export interface RuntimeState {
   generatedConversations: Record<Iri, true>;
   /** Single-use approvals remain remembered after their permitted release. */
   usedApprovals: Record<Iri, true>;
+  notificationDuties: Record<
+    string,
+    {
+      id: string;
+      rule: string;
+      use: string;
+      recipient: string;
+      due: string;
+      status: "pending" | "discharged" | "failed";
+      at?: string;
+      message?: string;
+    }
+  >;
   trustPins: { kid: string; party: string; purpose: string; expiresAt: string }[];
   trustHolds: Record<
     string,
@@ -218,6 +231,7 @@ export function emptyState(): RuntimeState {
     knownIdentifiers: {},
     generatedConversations: {},
     usedApprovals: {},
+    notificationDuties: {},
     organisationApprovals: {},
     paymentTotals: {},
     statementRefusals: {},

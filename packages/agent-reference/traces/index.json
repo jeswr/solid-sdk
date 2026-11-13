@@ -1,104 +1,104 @@
 [
   {
-    "file": "mortgage-core--baseline.json",
+    "file": "discharge-letter--baseline.json",
     "scenario": {
-      "id": "mortgage-core",
-      "title": "Sam's mortgage in principle, core flow (no index, no step-up)",
+      "id": "discharge-letter",
+      "title": "A discharge letter in a doctor's own words",
       "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "12": "North Bank's gate checks the evidence",
-        "13": "North Bank returns a signed decision in principle",
-        "14": "Each side checks its own record"
+        "1": "relay-holds-letter",
+        "2": "hospital-holds-diagnosis",
+        "3": "letter-sent",
+        "4": "letter-arrives",
+        "5": "read-letter",
+        "6": "needs-structured",
+        "7": "ask-hospital",
+        "8": "hospital-answers",
+        "9": "structured-arrives",
+        "10": "record-clinical-entry",
+        "11": "record-check"
       }
     },
-    "configuration": "baseline",
-    "events": 198
+    "configuration": "discharge-letter-local",
+    "events": 85
   },
   {
-    "file": "mortgage-over-ask--baseline.json",
+    "file": "discharge-letter--branch-1--baseline.json",
     "scenario": {
-      "id": "mortgage-over-ask",
-      "title": "The lender asks for more than Sam's mandate allows",
+      "id": "discharge-letter--branch-1",
+      "title": "A discharge letter in a doctor's own words",
       "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "14": "Each side checks its own record"
+        "1": "relay-holds-letter",
+        "2": "hospital-holds-diagnosis",
+        "3": "letter-sent",
+        "4": "letter-arrives",
+        "5": "read-letter",
+        "6": "wrong-diagnosis"
       }
     },
-    "configuration": "baseline",
-    "events": 99
+    "configuration": "discharge-letter-local",
+    "events": 42
   },
   {
-    "file": "mortgage-out-of-limit--baseline.json",
+    "file": "emergency-access--baseline.json",
     "scenario": {
-      "id": "mortgage-out-of-limit",
-      "title": "The lender's terms are outside Sam's limits",
+      "id": "emergency-access",
+      "title": "Access to allergies in an emergency",
       "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "14": "Each side checks its own record"
+        "1": "clinician-evidence",
+        "2": "patient-summary",
+        "3": "request",
+        "4": "record-answers",
+        "5": "release-summary",
+        "6": "summary-received",
+        "7": "notify",
+        "8": "patient-told",
+        "9": "contact-told",
+        "10": "duties",
+        "11": "two-duties",
+        "12": "second-duty"
       }
     },
     "configuration": "baseline",
-    "events": 107
+    "events": 113
   },
   {
-    "file": "mortgage-injected-fee--baseline.json",
+    "file": "emergency-access--branch-1--baseline.json",
     "scenario": {
-      "id": "mortgage-injected-fee",
-      "title": "A message carries an instruction to pay a fee",
+      "id": "emergency-access--branch-1",
+      "title": "Access to allergies in an emergency",
       "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "12": "North Bank's gate checks the evidence",
-        "13": "North Bank returns a signed decision in principle",
-        "14": "Each side checks its own record"
+        "1": "clinician-evidence",
+        "2": "patient-summary",
+        "3": "request",
+        "4": "record-answers",
+        "5": "release-summary",
+        "6": "summary-received",
+        "7": "notify",
+        "8": "patient-told",
+        "9": "contact-told",
+        "10": "duties",
+        "11": "two-duties",
+        "12": "second-duty"
       }
     },
     "configuration": "baseline",
-    "events": 201
+    "events": 113
   },
   {
-    "file": "mortgage-main--baseline.json",
+    "file": "emergency-access--branch-2--baseline.json",
     "scenario": {
-      "id": "mortgage-main",
-      "title": "Sam's mortgage in principle, all 14 steps: the product index, the register chain and a stronger approval at his bank",
+      "id": "emergency-access--branch-2",
+      "title": "Access to allergies in an emergency",
       "steps": {
-        "1": "Sam signs a mandate",
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "6": "Sam's agent asks Harbour Bank for a signed balance statement",
-        "7": "Harbour Bank asks for a stronger approval",
-        "8": "Sam does a face check and the request is sent again",
-        "9": "Harbour Bank returns a signed statement with its terms",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "12": "North Bank's gate checks the evidence",
-        "13": "North Bank returns a signed decision in principle",
-        "14": "Each side checks its own record"
+        "1": "clinician-evidence",
+        "2": "patient-summary",
+        "3": "request",
+        "4": "record-answers",
+        "5": "release-summary"
       }
     },
     "configuration": "baseline",
-    "events": 333
+    "events": 38
   },
   {
     "file": "false-but-signed--baseline.json",
@@ -164,6 +164,52 @@
     "events": 15
   },
   {
+    "file": "health-referral--baseline.json",
+    "scenario": {
+      "id": "health-referral",
+      "title": "A referral from a family doctor to a specialist",
+      "steps": {
+        "1": "registered-role",
+        "2": "select-relevant-history",
+        "3": "clinician-selects",
+        "4": "clinic-receives",
+        "5": "read-relevant-history",
+        "6": "history-admitted",
+        "7": "check-clinic-record"
+      }
+    },
+    "configuration": "health-referral-local",
+    "events": 47
+  },
+  {
+    "file": "health-referral--branch-1--baseline.json",
+    "scenario": {
+      "id": "health-referral--branch-1",
+      "title": "A referral from a family doctor to a specialist",
+      "steps": {
+        "1": "clinic-asks-for-full-record",
+        "2": "full-record-request-arrives",
+        "3": "registered-role",
+        "4": "select-relevant-history"
+      }
+    },
+    "configuration": "health-referral-local",
+    "events": 32
+  },
+  {
+    "file": "health-referral--branch-2--baseline.json",
+    "scenario": {
+      "id": "health-referral--branch-2",
+      "title": "A referral from a family doctor to a specialist",
+      "steps": {
+        "1": "registered-role",
+        "2": "select-relevant-history"
+      }
+    },
+    "configuration": "health-referral-local",
+    "events": 8
+  },
+  {
     "file": "master-data-change--baseline.json",
     "scenario": {
       "id": "master-data-change",
@@ -212,6 +258,107 @@
     },
     "configuration": "baseline",
     "events": 29
+  },
+  {
+    "file": "mortgage-core--baseline.json",
+    "scenario": {
+      "id": "mortgage-core",
+      "title": "Sam's mortgage in principle, core flow (no index, no step-up)",
+      "steps": {
+        "2": "Sam asks for a mortgage in principle",
+        "3": "Sam's agent looks North Bank up before contacting it",
+        "4": "The agents describe themselves and Sam's agent applies",
+        "5": "North Bank says what evidence it needs",
+        "10": "Sam's agent checks the statements it holds",
+        "11": "Sam is asked, and the agent shares the evidence",
+        "12": "North Bank's gate checks the evidence",
+        "13": "North Bank returns a signed decision in principle",
+        "14": "Each side checks its own record"
+      }
+    },
+    "configuration": "baseline",
+    "events": 198
+  },
+  {
+    "file": "mortgage-injected-fee--baseline.json",
+    "scenario": {
+      "id": "mortgage-injected-fee",
+      "title": "A message carries an instruction to pay a fee",
+      "steps": {
+        "2": "Sam asks for a mortgage in principle",
+        "3": "Sam's agent looks North Bank up before contacting it",
+        "4": "The agents describe themselves and Sam's agent applies",
+        "5": "North Bank says what evidence it needs",
+        "10": "Sam's agent checks the statements it holds",
+        "11": "Sam is asked, and the agent shares the evidence",
+        "12": "North Bank's gate checks the evidence",
+        "13": "North Bank returns a signed decision in principle",
+        "14": "Each side checks its own record"
+      }
+    },
+    "configuration": "baseline",
+    "events": 201
+  },
+  {
+    "file": "mortgage-main--baseline.json",
+    "scenario": {
+      "id": "mortgage-main",
+      "title": "Sam's mortgage in principle, all 14 steps: the product index, the register chain and a stronger approval at his bank",
+      "steps": {
+        "1": "Sam signs a mandate",
+        "2": "Sam asks for a mortgage in principle",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register",
+        "4": "The agents describe themselves and Sam's agent applies",
+        "5": "North Bank says what evidence it needs",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement",
+        "7": "Harbour Bank asks for a stronger approval",
+        "8": "Sam does a face check and the request is sent again",
+        "9": "Harbour Bank returns a signed statement with its terms",
+        "10": "Sam's agent checks the statements it holds",
+        "11": "Sam is asked, and the agent shares the evidence",
+        "12": "North Bank's gate checks the evidence",
+        "13": "North Bank returns a signed decision in principle",
+        "14": "Each side checks its own record"
+      }
+    },
+    "configuration": "baseline",
+    "events": 333
+  },
+  {
+    "file": "mortgage-out-of-limit--baseline.json",
+    "scenario": {
+      "id": "mortgage-out-of-limit",
+      "title": "The lender's terms are outside Sam's limits",
+      "steps": {
+        "2": "Sam asks for a mortgage in principle",
+        "3": "Sam's agent looks North Bank up before contacting it",
+        "4": "The agents describe themselves and Sam's agent applies",
+        "5": "North Bank says what evidence it needs",
+        "10": "Sam's agent checks the statements it holds",
+        "11": "Sam is asked, and the agent shares the evidence",
+        "14": "Each side checks its own record"
+      }
+    },
+    "configuration": "baseline",
+    "events": 107
+  },
+  {
+    "file": "mortgage-over-ask--baseline.json",
+    "scenario": {
+      "id": "mortgage-over-ask",
+      "title": "The lender asks for more than Sam's mandate allows",
+      "steps": {
+        "2": "Sam asks for a mortgage in principle",
+        "3": "Sam's agent looks North Bank up before contacting it",
+        "4": "The agents describe themselves and Sam's agent applies",
+        "5": "North Bank says what evidence it needs",
+        "10": "Sam's agent checks the statements it holds",
+        "11": "Sam is asked, and the agent shares the evidence",
+        "14": "Each side checks its own record"
+      }
+    },
+    "configuration": "baseline",
+    "events": 99
   },
   {
     "file": "pay-an-invoice--baseline.json",
@@ -336,5 +483,78 @@
     },
     "configuration": "baseline",
     "events": 60
+  },
+  {
+    "file": "right-to-work--baseline.json",
+    "scenario": {
+      "id": "right-to-work",
+      "title": "Hiring: right to work and qualifications",
+      "steps": {
+        "1": "holder-admits-revealed-claims",
+        "2": "show-required-claims",
+        "3": "employer-verifies",
+        "4": "employer-record"
+      }
+    },
+    "configuration": "right-to-work-local",
+    "events": 41
+  },
+  {
+    "file": "right-to-work--branch-1--baseline.json",
+    "scenario": {
+      "id": "right-to-work--branch-1",
+      "title": "Hiring: right to work and qualifications",
+      "steps": {
+        "1": "employer-asks-for-passport",
+        "2": "passport-request-arrives",
+        "3": "holder-admits-revealed-claims",
+        "4": "show-required-claims"
+      }
+    },
+    "configuration": "right-to-work-local",
+    "events": 50
+  },
+  {
+    "file": "supplier-onboarding--baseline.json",
+    "scenario": {
+      "id": "supplier-onboarding",
+      "title": "Taking on a new supplier",
+      "steps": {
+        "1": "supplier-evidence",
+        "2": "supplier-applies",
+        "3": "buyer-checks",
+        "4": "buyer-onboards",
+        "5": "onboarded",
+        "6": "buyer-record"
+      }
+    },
+    "configuration": "supplier-onboarding-local",
+    "events": 62
+  },
+  {
+    "file": "supplier-onboarding--branch-1--baseline.json",
+    "scenario": {
+      "id": "supplier-onboarding--branch-1",
+      "title": "Taking on a new supplier",
+      "steps": {
+        "1": "supplier-evidence",
+        "2": "supplier-applies"
+      }
+    },
+    "configuration": "supplier-onboarding-local",
+    "events": 22
+  },
+  {
+    "file": "supplier-onboarding--branch-2--baseline.json",
+    "scenario": {
+      "id": "supplier-onboarding--branch-2",
+      "title": "Taking on a new supplier",
+      "steps": {
+        "1": "supplier-evidence",
+        "2": "supplier-applies"
+      }
+    },
+    "configuration": "supplier-onboarding-local",
+    "events": 22
   }
 ]

@@ -4,21 +4,114 @@
   "id": "discharge-letter",
   "claims": [
     {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:hospital"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
       "kind": "clinical.diagnosis",
-      "sources": ["urn:fictional:hospital"],
-      "methods": ["recorded-by-authority"],
+      "sources": [
+        "urn:fictional:hospital"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:discharge-letter",
-      "claims": ["clinical.diagnosis"]
+      "claims": [
+        "unstructured-content",
+        "clinical.diagnosis",
+        "message:invoke",
+        "message:deliver"
+      ]
     }
   ],
   "rules": [],
   "decisionsForPerson": [],
-  "modelReadings": ["administrative-summary"],
-  "vocabulary": {},
-  "operations": []
+  "modelReadings": [
+    "administrative-summary"
+  ],
+  "vocabulary": {
+    "input.claimType": {
+      "type": "code",
+      "values": [
+        "clinical.diagnosis"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:letter",
+      "version": "0.1",
+      "label": "urn:op:letter",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:discharge-letter"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:structured-form",
+      "version": "0.1",
+      "label": "urn:op:structured-form",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:discharge-letter"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:clinical-record",
+      "version": "0.1",
+      "label": "urn:op:clinical-record",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:discharge-letter"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "readings": [
+    {
+      "claimType": "clinical.diagnosis",
+      "type": "code",
+      "values": [
+        "confirmed",
+        "uncertain"
+      ]
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "read",
+      "claims": [
+        "clinical.diagnosis"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Hospital record system",
+      "replacedBy": "Fictional hospital issuer and separately keyed agent serving structured claims through its gates"
+    },
+    {
+      "what": "Unstructured-content reading model",
+      "replacedBy": "Scenario-scripted capability-free reader returning only declared typed values"
+    }
+  ]
 }

@@ -5,32 +5,32 @@
     {
       "scenario": "discharge-letter",
       "path": "main",
-      "status": "blocked",
-      "reason": "The plain-language-upgrade suite and digest-bound incoming content parts are absent. UNS-3 readings now exist, but source-signed unstructured content is not admitted as a letter with its own media type/digest. A scripted coded diagnosis would bypass that missing admission."
+      "status": "runs",
+      "trace": "discharge-letter--baseline.json"
     },
     {
       "scenario": "discharge-letter",
       "path": "branch-1",
-      "status": "blocked",
-      "reason": "The plain-language-upgrade suite and digest-bound incoming content parts are absent. UNS-3 readings now exist, but source-signed unstructured content is not admitted as a letter with its own media type/digest. A scripted coded diagnosis would bypass that missing admission."
+      "status": "runs",
+      "trace": "discharge-letter--branch-1--baseline.json"
     },
     {
       "scenario": "emergency-access",
       "path": "main",
-      "status": "blocked",
-      "reason": "The mandate subset cannot express registered-clinician emergency predicates, standing break-glass rules, or mandatory notifications to patient and trusted contact. A scripted emergency permission would bypass the missing checks."
+      "status": "runs",
+      "trace": "emergency-access--baseline.json"
     },
     {
       "scenario": "emergency-access",
       "path": "branch-1",
-      "status": "blocked",
-      "reason": "The mandate subset cannot express registered-clinician emergency predicates, standing break-glass rules, or mandatory notifications to patient and trusted contact. A scripted emergency permission would bypass the missing checks."
+      "status": "runs",
+      "trace": "emergency-access--branch-1--baseline.json"
     },
     {
       "scenario": "emergency-access",
       "path": "branch-2",
-      "status": "blocked",
-      "reason": "The mandate subset cannot express registered-clinician emergency predicates, standing break-glass rules, or mandatory notifications to patient and trusted contact. A scripted emergency permission would bypass the missing checks."
+      "status": "runs",
+      "trace": "emergency-access--branch-2--baseline.json"
     },
     {
       "scenario": "false-but-signed",
@@ -59,20 +59,20 @@
     {
       "scenario": "health-referral",
       "path": "main",
-      "status": "blocked",
-      "reason": "by-reference-solid and Solid access-control suites are absent from agent-reference. There is no protected-reference resolver or clinical selection/judgement gate. A by-value substitute would not exercise the catalogue suite."
+      "status": "runs",
+      "trace": "health-referral--baseline.json"
     },
     {
       "scenario": "health-referral",
       "path": "branch-1",
-      "status": "blocked",
-      "reason": "by-reference-solid and Solid access-control suites are absent from agent-reference. There is no protected-reference resolver or clinical selection/judgement gate. A by-value substitute would not exercise the catalogue suite."
+      "status": "runs",
+      "trace": "health-referral--branch-1--baseline.json"
     },
     {
       "scenario": "health-referral",
       "path": "branch-2",
-      "status": "blocked",
-      "reason": "by-reference-solid and Solid access-control suites are absent from agent-reference. There is no protected-reference resolver or clinical selection/judgement gate. A by-value substitute would not exercise the catalogue suite."
+      "status": "runs",
+      "trace": "health-referral--branch-2--baseline.json"
     },
     {
       "scenario": "master-data-change",
@@ -95,32 +95,32 @@
     {
       "scenario": "mortgage-core",
       "path": "main",
-      "status": "blocked",
-      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
+      "status": "runs",
+      "trace": "mortgage-core--baseline.json"
     },
     {
       "scenario": "mortgage-injected-fee",
       "path": "main",
-      "status": "blocked",
-      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
+      "status": "runs",
+      "trace": "mortgage-injected-fee--baseline.json"
     },
     {
       "scenario": "mortgage-main",
       "path": "main",
-      "status": "blocked",
-      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
+      "status": "runs",
+      "trace": "mortgage-main--baseline.json"
     },
     {
       "scenario": "mortgage-out-of-limit",
       "path": "main",
-      "status": "blocked",
-      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
+      "status": "runs",
+      "trace": "mortgage-out-of-limit--baseline.json"
     },
     {
       "scenario": "mortgage-over-ask",
       "path": "main",
-      "status": "blocked",
-      "reason": "Migration remains incomplete: closed DER templates and agreement-bound assessments now exist, but this data file still contains only its opening exchange. The legacy driver also performs application/evidence admission, consent-bound PurposeBoundStore access, discovery and (for main) the index and step-up exchange. These have not been converted to generic data steps. Its public mortgage handler APIs are still consumed by personal-agent. The driver and domains/mortgage.ts are retained; this path is not reported as run."
+      "status": "runs",
+      "trace": "mortgage-over-ask--baseline.json"
     },
     {
       "scenario": "pay-an-invoice",
@@ -161,32 +161,38 @@
     {
       "scenario": "right-to-work",
       "path": "main",
-      "status": "blocked",
-      "reason": "needs the proof system; selective-disclosure credentials and a real proof verifier are unavailable in this offline lane. A signed boolean is not a proof."
+      "status": "runs",
+      "trace": "right-to-work--baseline.json"
     },
     {
       "scenario": "right-to-work",
       "path": "branch-1",
+      "status": "runs",
+      "trace": "right-to-work--branch-1--baseline.json"
+    },
+    {
+      "scenario": "right-to-work",
+      "path": "hidden-validity-proof",
       "status": "blocked",
-      "reason": "needs the proof system; selective-disclosure credentials and a real proof verifier are unavailable in this offline lane. A signed boolean is not a proof."
+      "reason": "Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates."
     },
     {
       "scenario": "supplier-onboarding",
       "path": "main",
-      "status": "blocked",
-      "reason": "DID resolution and mandate-credential suites are unavailable. Certificate revocation status and role-scoped multi-entity authority are not checked by the current source/fitness gates."
+      "status": "runs",
+      "trace": "supplier-onboarding--baseline.json"
     },
     {
       "scenario": "supplier-onboarding",
       "path": "branch-1",
-      "status": "blocked",
-      "reason": "DID resolution and mandate-credential suites are unavailable. Certificate revocation status and role-scoped multi-entity authority are not checked by the current source/fitness gates."
+      "status": "runs",
+      "trace": "supplier-onboarding--branch-1--baseline.json"
     },
     {
       "scenario": "supplier-onboarding",
       "path": "branch-2",
-      "status": "blocked",
-      "reason": "DID resolution and mandate-credential suites are unavailable. Certificate revocation status and role-scoped multi-entity authority are not checked by the current source/fitness gates."
+      "status": "runs",
+      "trace": "supplier-onboarding--branch-2--baseline.json"
     }
   ]
 }

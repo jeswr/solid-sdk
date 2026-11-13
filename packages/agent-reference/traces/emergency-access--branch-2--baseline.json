@@ -1,0 +1,1175 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "scenario": {
+    "id": "emergency-access--branch-2",
+    "title": "Access to allergies in an emergency",
+    "steps": {
+      "1": "clinician-evidence",
+      "2": "patient-summary",
+      "3": "request",
+      "4": "record-answers",
+      "5": "release-summary"
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "clinician-agent",
+      "name": "clinician-agent",
+      "actsFor": "clinician",
+      "role": "agent"
+    },
+    {
+      "id": "record-agent",
+      "name": "record-agent",
+      "actsFor": "patient",
+      "role": "agent"
+    },
+    {
+      "id": "patient-agent",
+      "name": "patient-agent",
+      "actsFor": "patient",
+      "role": "agent"
+    },
+    {
+      "id": "contact-agent",
+      "name": "contact-agent",
+      "actsFor": "contact",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Professional register",
+      "replacedBy": "Fictional issuer-only register signing current clinician roles"
+    },
+    {
+      "what": "Patient's clinical record",
+      "replacedBy": "Fictional issuer-only practice signs the summary; a patient-owned record agent enforces the patient-signed standing mandate"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "clinician's emergency.declaration statement is intact and signed with clinician's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:clinician",
+        "text": "clinician is accepted for emergency.declaration claims."
+      },
+      "resolution": {
+        "question": "Is clinician an authority for emergency.declaration claims about clinician?",
+        "path": [
+          {
+            "at": "clinician's own list",
+            "kind": "own-list",
+            "says": "clinician is accepted for emergency.declaration."
+          }
+        ],
+        "answer": "Accepted, for emergency.declaration claims only."
+      },
+      "caption": "clinician's emergency.declaration statement: clinician is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "clinician's emergency.declaration statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:emergency",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "clinician's emergency.declaration statement: its terms allow this: ."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:emergency-access:emergency.declaration",
+        "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
+      },
+      "caption": "clinician's emergency.declaration statement is fit for urn:scenario:emergency-access:task: self-reported, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "clinician's emergency.declaration statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "clinician-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:emergency-access:emergency",
+        "label": "clinician's emergency.declaration statement",
+        "claimType": "emergency.declaration",
+        "subject": "urn:fictional:clinician",
+        "value": null,
+        "source": "urn:fictional:clinician",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:emergency",
+          "summary": ""
+        },
+        "provenance": "signed by clinician"
+      },
+      "caption": "clinician's emergency.declaration statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "practice's clinical.summary statement is intact and signed with practice's pinned key."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:practice",
+        "text": "practice is accepted for clinical.summary claims."
+      },
+      "resolution": {
+        "question": "Is practice an authority for clinical.summary claims about patient?",
+        "path": [
+          {
+            "at": "patient's own list",
+            "kind": "own-list",
+            "says": "practice is accepted for clinical.summary."
+          }
+        ],
+        "answer": "Accepted, for clinical.summary claims only."
+      },
+      "caption": "practice's clinical.summary statement: practice is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "practice's clinical.summary statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:summary",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "practice's clinical.summary statement: its terms allow this: ."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:emergency-access:clinical.summary",
+        "text": "Accept clinical.summary from urn:fictional:practice by recorded-by-authority, at most 1 days old."
+      },
+      "caption": "practice's clinical.summary statement is fit for urn:scenario:emergency-access:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "practice's clinical.summary statement is admitted."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "record-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:emergency-access:summary",
+        "label": "practice's clinical.summary statement",
+        "claimType": "clinical.summary",
+        "subject": "urn:fictional:patient",
+        "value": null,
+        "source": "urn:fictional:practice",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:summary",
+          "summary": ""
+        },
+        "provenance": "signed by practice"
+      },
+      "caption": "practice's clinical.summary statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 15,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:emergency read with patient."
+    },
+    {
+      "seq": 16,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "clinician's mandate covers this action."
+    },
+    {
+      "seq": 17,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is patient a party I can send urn:op:emergency read to?",
+        "path": [
+          {
+            "at": "clinician's own list",
+            "kind": "own-list",
+            "says": "patient is accepted for urn:op:emergency read."
+          }
+        ],
+        "answer": "Accepted, for urn:op:emergency read only."
+      },
+      "reason": "recipient-established",
+      "caption": "patient: Accepted, for urn:op:emergency read only."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within clinician's limits."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:emergency",
+        "text": "The issuer's terms: . They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "clinician's emergency.declaration statement: its terms allow this: ."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with clinician-agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 25,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to record-agent."
+    },
+    {
+      "seq": 26,
+      "step": 3,
+      "agent": "clinician-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
+        "from": "clinician-agent",
+        "to": "record-agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:121432f68de…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From clinician-agent to record-agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-2:clinician-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
+              "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:clinician-agent:agent",
+                "onBehalfOf": "urn:fictional:clinician"
+              },
+              "to": {
+                "actor": "urn:fictional:record-agent:agent",
+                "party": "urn:fictional:patient"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:2835911278d8476d5fda9d2122766e521d5d1c926e38c8c74e5cc0f02ea25403"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): clinician says clinician-agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:a56efa2d525e5cd9261e087555671049:1794560400000",
+                "party": "urn:fictional:clinician",
+                "actor": "urn:fictional:clinician-agent:agent",
+                "actorKid": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw",
+                "operations": [
+                  "urn:op:emergency-read",
+                  "urn:op:duty-notification"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:e076d75c2e720b6cb39f4b55cb9e66daaf440d87651ed9906e7631384dac3f98"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:emergency-read",
+                "version": "0.1"
+              },
+              "input": {
+                "items": [
+                  "allergies",
+                  "current-medicines"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:emergency-access"
+            },
+            "digest": "sha-256:00b77ed63ff2e4cd22bf2a49a9bbcbdc59ebeac359b902427e48ddc159d51a51"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: emergency.declaration from clinician.",
+            "raw": [
+              {
+                "declared": "emergency",
+                "id": "urn:scenario:emergency-access:emergency",
+                "issuer": "urn:fictional:clinician",
+                "subject": "urn:fictional:clinician",
+                "claimType": "emergency.declaration",
+                "method": "self-reported",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:emergency",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:emergency-access:emergency"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:emergency-access:emergency"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:09b2c5e2185032c23146ae122121159e71c0dddf0f61ea5b86c657d75557ad8c"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by clinician-agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:emergency-access:emergency",
+                  "issuer": "urn:fictional:clinician",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "clinician-agent sends an invoke message to record-agent."
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "record-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
+        "from": "clinician-agent",
+        "to": "record-agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:121432f68de…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From clinician-agent to record-agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-2:clinician-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
+              "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:clinician-agent:agent",
+                "onBehalfOf": "urn:fictional:clinician"
+              },
+              "to": {
+                "actor": "urn:fictional:record-agent:agent",
+                "party": "urn:fictional:patient"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:2835911278d8476d5fda9d2122766e521d5d1c926e38c8c74e5cc0f02ea25403"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): clinician says clinician-agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:a56efa2d525e5cd9261e087555671049:1794560400000",
+                "party": "urn:fictional:clinician",
+                "actor": "urn:fictional:clinician-agent:agent",
+                "actorKid": "z0gQy7sX7Xu4jYjXlCiUW5W8jFAJmgfhUPYUoA8p2Aw",
+                "operations": [
+                  "urn:op:emergency-read",
+                  "urn:op:duty-notification"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:e076d75c2e720b6cb39f4b55cb9e66daaf440d87651ed9906e7631384dac3f98"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:emergency-read\"; \"urn:purpose:emergency-access\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:emergency-read",
+                "version": "0.1"
+              },
+              "input": {
+                "items": [
+                  "allergies",
+                  "current-medicines"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:emergency-access"
+            },
+            "digest": "sha-256:00b77ed63ff2e4cd22bf2a49a9bbcbdc59ebeac359b902427e48ddc159d51a51",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:emergency-read"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:emergency-access"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: emergency.declaration from clinician.",
+            "raw": [
+              {
+                "declared": "emergency",
+                "id": "urn:scenario:emergency-access:emergency",
+                "issuer": "urn:fictional:clinician",
+                "subject": "urn:fictional:clinician",
+                "claimType": "emergency.declaration",
+                "method": "self-reported",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:emergency",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:emergency-access:emergency"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:emergency-access:emergency"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:09b2c5e2185032c23146ae122121159e71c0dddf0f61ea5b86c657d75557ad8c"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by clinician-agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:emergency-access:emergency",
+                  "issuer": "urn:fictional:clinician",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from clinician-agent reaches the inbound gate."
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with clinician-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:clinician",
+        "text": "clinician is accepted for emergency.declaration claims."
+      },
+      "resolution": {
+        "question": "Is clinician an authority for emergency.declaration claims about clinician?",
+        "path": [
+          {
+            "at": "patient's own list",
+            "kind": "own-list",
+            "says": "clinician is accepted for emergency.declaration."
+          }
+        ],
+        "answer": "Accepted, for emergency.declaration claims only."
+      },
+      "caption": "clinician's emergency.declaration statement: clinician is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:a56efa2d525e5cd9261e087555671049:1794560400000",
+        "text": "A representation statement signed with clinician's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "clinician signed a statement that clinician-agent acts for them in this operation."
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:emergency",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "clinician's emergency.declaration statement: its terms allow this: ."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:emergency-access:emergency.declaration",
+        "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
+      },
+      "caption": "clinician's emergency.declaration statement is fit for a mortgage application: self-reported, 0 days old."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "record-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:emergency-access:emergency",
+        "label": "clinician's emergency.declaration statement",
+        "claimType": "emergency.declaration",
+        "subject": "urn:fictional:clinician",
+        "value": null,
+        "source": "urn:fictional:clinician",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:emergency",
+          "summary": ""
+        },
+        "provenance": "signed by clinician"
+      },
+      "caption": "clinician's emergency.declaration statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 35,
+      "step": 5,
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-unknown",
+      "caption": "No current admitted professional-register role for the authenticated requester."
+    },
+    {
+      "seq": 36,
+      "step": 5,
+      "agent": "record-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to read urn:op:emergency read with clinician."
+    },
+    {
+      "seq": 37,
+      "step": 5,
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "source-unknown",
+      "rule": {
+        "id": "urn:awp:mandate:52b76acca7332ca12262f6e32ee71914:emergency-access",
+        "text": "No rule in patient's mandate lets the agent read urn:op:emergency read with clinician for urn:purpose:emergency access (source-unknown)."
+      },
+      "caption": "patient's mandate does not allow this: read urn:op:emergency read with clinician."
+    },
+    {
+      "seq": 38,
+      "step": 5,
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "source-unknown",
+      "caption": "The action is stopped; nothing leaves."
+    }
+  ]
+}

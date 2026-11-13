@@ -126,6 +126,20 @@ const envelope = z.strictObject({
   body: jsonObject,
   authorship: z.strictObject({ method: z.literal("model-output"), onBehalfOf: id }).optional(),
   evidence: z.array(evidenceItem).max(64).optional(),
+  content: z
+    .array(
+      z.strictObject({
+        id,
+        mediaType: z.string().min(1).max(128),
+        digest: z.string().max(128),
+        bytes: z.union([
+          z.string().max(32768),
+          z.array(z.number().int().min(0).max(255)).max(32768),
+        ]),
+      }),
+    )
+    .max(16)
+    .optional(),
 });
 
 export type SchemaResult =

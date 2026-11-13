@@ -37,6 +37,40 @@
             "type": "string",
             "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
           },
+          "operator": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "handlers": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "configurations": {
+            "default": [
+              "baseline"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "baseline",
+                "public-read"
+              ]
+            }
+          },
+          "representationOperations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+            }
+          },
           "name": {
             "type": "string"
           },
@@ -64,6 +98,8 @@
         "required": [
           "id",
           "identity",
+          "handlers",
+          "configurations",
           "name",
           "role",
           "runs"
@@ -75,6 +111,23 @@
       "type": "object",
       "properties": {
         "introductions": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              }
+            ]
+          }
+        },
+        "pins": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "array",
@@ -308,6 +361,7 @@
       },
       "required": [
         "introductions",
+        "pins",
         "ownLists",
         "sources",
         "controllers"
@@ -333,6 +387,10 @@
           },
           "kind": {
             "type": "string"
+          },
+          "identifier": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
           },
           "value": {
             "type": "object",
@@ -362,11 +420,360 @@
         "required": [
           "id",
           "issuer",
-          "subject",
           "kind",
           "value",
-          "method",
-          "asOf"
+          "method"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "selectiveCredentials": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "issuer": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "subject": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "statements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "issuer",
+          "subject",
+          "statements"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "documents": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "issuer": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "typ": {
+            "type": "string",
+            "enum": [
+              "awp-organization-identifier+jws",
+              "awp-status-list+jws"
+            ]
+          },
+          "value": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "issuer",
+          "typ",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "organizationCredentials": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "issuer": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "entity": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "status": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ref",
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "agent",
+          "issuer",
+          "entity",
+          "roles",
+          "actions",
+          "validFrom",
+          "validUntil",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "resources": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "holder": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "statements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "ref",
+          "holder",
+          "statements"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "grants": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "holder": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "ref": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "reader": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "statements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "purpose": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "holder",
+          "ref",
+          "reader",
+          "statements",
+          "purpose",
+          "validUntil"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "handlerImplementations": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string",
+            "enum": [
+              "mortgage-consumer",
+              "mortgage-lender",
+              "product-search",
+              "product-index",
+              "balance-request",
+              "balance-statement",
+              "lender-underwriting",
+              "underwriter"
+            ]
+          },
+          "params": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          }
+        },
+        "required": [
+          "template",
+          "params"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "stores": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "organization": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "agent": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "purposes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  }
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "agent",
+                "label",
+                "purposes",
+                "actions"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "organization",
+          "roles"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "traceSteps": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "standIns": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "what": {
+            "type": "string"
+          },
+          "replacedBy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "what",
+          "replacedBy"
         ],
         "additionalProperties": false
       }
@@ -478,6 +885,11 @@
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
               },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
               "type": {
                 "type": "string",
                 "const": "instruct"
@@ -504,6 +916,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -543,6 +960,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -588,6 +1010,67 @@
               "discover": {
                 "default": false,
                 "type": "boolean"
+              },
+              "configuration": {
+                "type": "string",
+                "enum": [
+                  "baseline",
+                  "public-read"
+                ]
+              },
+              "basis": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "evidence": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "content": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                    },
+                    "mediaType": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "maxItems": 32768,
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 255
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "mediaType",
+                    "bytes"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
@@ -599,7 +1082,9 @@
               "operation",
               "contents",
               "intent",
-              "discover"
+              "discover",
+              "evidence",
+              "content"
             ],
             "additionalProperties": false
           },
@@ -613,6 +1098,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -630,6 +1120,11 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "outboundAtStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "agreementPlan": {
                 "type": "object",
@@ -658,6 +1153,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -701,6 +1201,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -765,6 +1270,11 @@
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
               },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
               "type": {
                 "type": "string",
                 "const": "effect"
@@ -790,6 +1300,22 @@
               "activityType": {
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "adapter": {
+                "type": "string"
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "origin": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
               }
             },
             "required": [
@@ -812,6 +1338,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -852,6 +1383,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -900,6 +1436,11 @@
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
               },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
               "type": {
                 "type": "string",
                 "const": "assess"
@@ -937,6 +1478,11 @@
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
               },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
               "type": {
                 "type": "string",
                 "const": "organisation-approve"
@@ -964,6 +1510,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -995,6 +1546,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -1036,6 +1592,654 @@
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
               },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "request-structured"
+              },
+              "claimType": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "claimType"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "read-content"
+              },
+              "part": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "subject": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "output": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "part",
+              "subject",
+              "output"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "read-reference"
+              },
+              "reference": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "item": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "reference",
+              "item",
+              "purpose"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "notifications"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "duties"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "show-mandate"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "mint"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "pending"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "conversation"
+              },
+              "conversation": {
+                "$ref": "#/$defs/__schema0"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "conversation"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "retry-challenge"
+              },
+              "conversation": {
+                "$ref": "#/$defs/__schema0"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "conversation"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "invoke-agreement"
+              },
+              "conversation": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "operation": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "input": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "conversation",
+              "operation",
+              "input",
+              "purpose"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "receipt"
+              },
+              "conversation": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "activity": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "not-executed",
+                  "uncertain"
+                ]
+              },
+              "observed": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "final": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "conversation",
+              "activity",
+              "outcome",
+              "observed",
+              "final"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "issue"
+              },
+              "issuer": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "value": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "issuer",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "underwriting-handover"
+              },
+              "store": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "conversation": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "peer": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "operation": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                }
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "store",
+              "conversation",
+              "peer",
+              "operation",
+              "items",
+              "purpose"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "store-request"
+              },
+              "store": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "request": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "store",
+              "request"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "store-assess"
+              },
+              "store": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "assessor": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "conversation": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                }
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "assessment": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "store",
+              "assessor",
+              "conversation",
+              "items",
+              "purpose",
+              "assessment"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
               "type": {
                 "type": "string",
                 "const": "record"
@@ -1058,6 +2262,11 @@
               "agent": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "type": {
                 "type": "string",
@@ -1093,7 +2302,8 @@
             "type": "string",
             "enum": [
               "wire",
-              "body"
+              "body",
+              "message"
             ]
           },
           "path": {
@@ -1666,6 +2876,14 @@
     "parties",
     "trust",
     "statements",
+    "selectiveCredentials",
+    "documents",
+    "organizationCredentials",
+    "resources",
+    "grants",
+    "handlerImplementations",
+    "stores",
+    "standIns",
     "requester",
     "mandates",
     "script",

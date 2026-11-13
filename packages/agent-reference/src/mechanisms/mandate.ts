@@ -113,6 +113,17 @@ const policy = z
   })
   .strict();
 
+export const standingRuleSchema = z.strictObject({
+  id: iri,
+  when: z.strictObject({ requesterRole: z.string(), declared: z.literal("emergency") }),
+  allows: z.strictObject({ action: z.literal("read"), items: z.array(z.string()).min(1) }),
+  duties: z
+    .array(z.strictObject({ notify: z.array(z.string()).min(1), within: z.literal("PT1H") }))
+    .min(1),
+  expires: instant,
+});
+export type StandingRule = z.infer<typeof standingRuleSchema>;
+
 export const mandateSchema = z
   .object({
     type: z.literal("OwnerMandate"),
@@ -123,6 +134,7 @@ export const mandateSchema = z
     operator: iri.optional(),
     validFrom: instant,
     validUntil: instant,
+    standing: z.array(standingRuleSchema).max(16).optional(),
     autonomous: policy,
     withApproval: policy,
     note: z.string().max(1024).optional(),

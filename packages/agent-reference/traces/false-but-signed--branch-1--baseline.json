@@ -47,7 +47,7 @@
     }
   ],
   "generated": {
-    "commit": "67e14700e60bdedf44cd1971d8f0cfe2ecb45c8b",
+    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
     "core": "scripted"
   },
   "standIns": [
@@ -413,7 +413,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:e01cbb4286b…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:d3efdcd5820…; never trusted."
         },
         "layers": {
           "header": {
@@ -441,7 +441,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:6bc9c080b7b6a1218909f13ca0fd228cfac2d89dc68c68fef91d4c490bd294e2"
+            "digest": "sha-256:dc99b4d2c3de77a55ce627639b80812532d76c1403f158d99040287cf8a073a6"
           },
           "authority": {
             "present": true,
@@ -531,7 +531,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:e01cbb4286b…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:d3efdcd5820…; never trusted."
         },
         "layers": {
           "header": {
@@ -559,7 +559,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:6bc9c080b7b6a1218909f13ca0fd228cfac2d89dc68c68fef91d4c490bd294e2"
+            "digest": "sha-256:dc99b4d2c3de77a55ce627639b80812532d76c1403f158d99040287cf8a073a6"
           },
           "authority": {
             "present": true,

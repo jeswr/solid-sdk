@@ -3,15 +3,33 @@
 import type { OdrlRule } from "@jeswr/solid-odrl";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { isDeepStrictEqual } from "util";
-import { digestBytes, digestOf } from "../core/canonical.js";
+import { digestBytes, digestContent, digestOf } from "../core/canonical.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
+import { SyntheticPaymentRail, underwritingTermsFor } from "../domains/mortgage.js";
+import {
+  PURPOSE_STORE_RELEASE_CONDITION,
+  PurposeBoundStore,
+  purposeStoreReleaseCheck,
+} from "../domains/purpose-store.js";
 import type { GateContext } from "../gates/common.js";
+import { LocalDocumentResolver } from "../mechanisms/organizations.js";
+import { LocalResourceHolder, type ResourceReference } from "../mechanisms/references.js";
+import {
+  issueSelectiveCredential,
+  presentSelective,
+  unverifiedEvidenceClaim,
+} from "../mechanisms/selective.js";
 import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import {
   CONFIG_CORROBORATION,
+  CONFIG_ORGANIZATIONS,
   CONFIG_PAYMENT,
   CONFIG_PINNED_LIST,
+  CONFIG_PLAIN_LANGUAGE,
+  CONFIG_PUBLIC,
+  CONFIG_REFERENCE_LOCAL,
+  CONFIG_SELECTIVE_LOCAL,
 } from "../profile/configurations.js";
 import { idSource, testKey } from "../reference/keys.js";
 import type { AgentRuntime, OutboundMessage, StepResult } from "../runtime/agent.js";
@@ -23,10 +41,13 @@ import type {
   OutboundPlan,
 } from "../runtime/operations.js";
 import { Cast, mandateOf, signClaim } from "../scenarios/common.js";
+import { MemoryLedger } from "../store/ledger.js";
 import { BASELINE, baselineRegistry } from "../suites/baseline.js";
+import { PUBLIC_READ, withPublicRead } from "../suites/public-read.js";
 import { TraceRecorder } from "../trace/recorder.js";
 import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
 import { TrustResolver } from "../trust/resolver.js";
+import { installHandler } from "./handlers.js";
 import { validateReferences } from "./load.js";
 import {
   type DomainProfile,
@@ -110,24 +131,34 @@ function unsupported(profile: DomainProfile, scenario: Scenario, path: string): 
     if (
       BASELINE.layers[layer as keyof typeof BASELINE.layers] !== suite &&
       (
-        { commitments: "payment", reliance: "corroboration", trust: "pinned-list" } as Record<
-          string,
-          string
-        >
+        {
+          commitments: "payment",
+          reliance: "corroboration",
+          trust: "pinned-list",
+          meaning: "plain-language-upgrade",
+          "data-access": "by-reference-local-holder",
+          authority: "mandate-credential",
+          identity: "organization-document-local",
+          authenticity: "selective-disclosure",
+        } as Record<string, string>
       )[layer] !== suite
     )
       return `suite ${layer}/${suite} is not implemented by this engine`;
   if (
     Object.keys(scenario.suites).filter(
       (layer) => BASELINE.layers[layer as keyof typeof BASELINE.layers] !== scenario.suites[layer],
-    ).length > 1
+    ).length > 1 &&
+    !(
+      scenario.suites.authority === "mandate-credential" &&
+      scenario.suites.identity === "organization-document-local" &&
+      Object.keys(scenario.suites).length === 2
+    )
   )
     return "combined local capability configurations are not implemented";
   // These are declared for inspection, never silently interpreted as a weaker baseline rule.
   if (profile.rules.some((r) => !("template" in r)))
     return "legacy DER declaration needs an executable template";
-  if (scenario.mandates.some((m) => m.standingRules.length))
-    return "standing-rule execution and notification are not implemented";
+
   return undefined;
 }
 
@@ -217,7 +248,7 @@ async function runPath(
   path: string,
   commit: string,
 ): Promise<TraceFile> {
-  const registry = baselineRegistry();
+  const registry = withPublicRead(baselineRegistry());
   registry.register({
     layer: "commitments",
     id: "payment",
@@ -242,14 +273,64 @@ async function runPath(
     summary:
       "Reviewed verification keys require a purpose-scoped, expiring own-list pin; unknown trust is held for a digest-bound principal decision.",
   });
+  registry.register({
+    layer: "meaning",
+    vocabulary: "profile-declared types",
+    id: "plain-language-upgrade",
+    name: "Structured form from the source",
+    summary:
+      "Content remains unstructured data. Typed quarantined readings retain agent authorship and digest; unaccepted readings require source-signed claims.",
+  });
+  registry.register({
+    layer: "data-access",
+    id: "by-reference-local-holder",
+    name: "Signed grants and local resource holder",
+    mode: "by-reference",
+    summary:
+      "A separately keyed local holder verifies signed reader identity, item, purpose and expiry; this does not implement Solid access control.",
+  });
+  registry.register({
+    layer: "identity",
+    id: "organization-document-local",
+    name: "Registrar-served current organization documents",
+    resolution: "resolved",
+    summary:
+      "A local resolver serves registrar-signed current key and delegated-agent lists; no live DID method is claimed.",
+  });
+  registry.register({
+    layer: "authority",
+    id: "mandate-credential",
+    name: "Organization mandate credentials",
+    mandateFormat: "awp-organization-mandate+jws",
+    approvalFormat: "exact-action",
+    summary:
+      "Organization-signed agent-key, entity, role and action scope, with issuer-signed status and bounded freshness.",
+  });
+  registry.register({
+    layer: "authenticity",
+    id: "selective-disclosure",
+    name: "Salted claim digests inside signed credentials",
+    mechanism: "JWS and salted SHA-256 claim commitments",
+    algs: ["EdDSA"],
+    summary:
+      "Each revealed claim is checked against issuer-signed salted digests; no proof about hidden values or unlinkability is claimed.",
+  });
   const local =
-    scenario.suites.commitments === "payment"
-      ? CONFIG_PAYMENT
-      : scenario.suites.reliance === "corroboration"
-        ? CONFIG_CORROBORATION
-        : scenario.suites.trust === "pinned-list"
-          ? CONFIG_PINNED_LIST
-          : undefined;
+    scenario.suites.authenticity === "selective-disclosure"
+      ? CONFIG_SELECTIVE_LOCAL
+      : scenario.suites.authority === "mandate-credential"
+        ? CONFIG_ORGANIZATIONS
+        : scenario.suites["data-access"] === "by-reference-local-holder"
+          ? CONFIG_REFERENCE_LOCAL
+          : scenario.suites.meaning === "plain-language-upgrade"
+            ? CONFIG_PLAIN_LANGUAGE
+            : scenario.suites.commitments === "payment"
+              ? CONFIG_PAYMENT
+              : scenario.suites.reliance === "corroboration"
+                ? CONFIG_CORROBORATION
+                : scenario.suites.trust === "pinned-list"
+                  ? CONFIG_PINNED_LIST
+                  : undefined;
   const configuration = local
     ? {
         id: `${scenario.id}-local`,
@@ -276,20 +357,31 @@ async function runPath(
     const mandate = scenario.mandates.find((m) => m.agent === party.id);
     if (!mandate) throw new Error(`missing mandate for ${party.id}`);
     await cast.add(
-      { name: party.id, actor: required(party.actor), party: principal.identity },
+      {
+        name: party.id,
+        actor: required(party.actor),
+        party: principal.identity,
+        ...(party.operator ? { operator: party.operator } : {}),
+      },
       mandateOf(
         scenario.id,
         mandate.autonomous as unknown as OdrlRule[],
         mandate.withApproval as unknown as OdrlRule[],
         mandate.prohibitions as unknown as OdrlRule[],
+        mandate.standingRules as unknown as import("../mechanisms/mandate.js").StandingRule[],
       ),
-      profile.operations.map((o) => o.id),
+      party.representationOperations ?? profile.operations.map((o) => o.id),
+      {
+        ownerKey: [...cast.agents.values()].find((a) => a.identity.party === principal.identity)
+          ?.ownerKey,
+      },
     );
   }
   for (const [a, b] of scenario.trust.introductions) {
     if (!cast.agents.has(a) || !cast.agents.has(b)) throw new Error("introductions require agents");
     cast.introduce(a, b);
   }
+  for (const [a, b] of scenario.trust.pins) cast.pin(a, b);
   const sourceKeys = new Map<string, Awaited<ReturnType<typeof testKey>>>();
   for (const party of scenario.parties.filter((p) => p.runs === "issuer-only")) {
     const representative = agents.find((a) => a.actsFor === party.id);
@@ -303,7 +395,13 @@ async function runPath(
   }
   const signed: Record<
     string,
-    { jws: string; wireDigest: string; statement: JsonObject; evidence: EvidenceItem }
+    {
+      jws: string;
+      format?: string;
+      wireDigest: string;
+      statement: JsonObject;
+      evidence: EvidenceItem;
+    }
   > = {};
   for (const statement of scenario.statements) {
     const issuer = required(parties.get(statement.issuer));
@@ -318,14 +416,17 @@ async function runPath(
       ...(typeof statement.value.subjectKeyOf === "string"
         ? { subjectKey: required(sourceKeys.get(statement.value.subjectKeyOf)).kid }
         : {}),
-      id: `urn:scenario:${scenario.id}:${statement.id}`,
+      id: statement.identifier ?? `urn:scenario:${scenario.id}:${statement.id}`,
       issuer: issuerIdentity,
-      subject: statement.subject,
+      ...(statement.subject ? { subject: statement.subject } : {}),
       claimType: statement.kind,
       method: statement.method,
-      asOf: statement.asOf,
+      ...(statement.asOf ? { asOf: statement.asOf } : {}),
       ...(statement.terms ? { terms: statement.terms as JsonObject } : {}),
     };
+    if (typeof statement.value.actorKeyOf === "string")
+      payload.subjectKey = cast.get(statement.value.actorKeyOf).actorKey.kid;
+    delete payload.actorKeyOf;
     delete payload.subjectKeyOf;
     const jws = await signClaim(key, payload);
     signed[statement.id] = {
@@ -342,8 +443,166 @@ async function runPath(
   }
   for (const agent of agents)
     for (const rule of scenario.trust.sources[agent.id] ?? []) cast.rule(agent.id, rule);
+  for (const credential of scenario.selectiveCredentials) {
+    const issuer = required(parties.get(credential.issuer));
+    const first = required(signed[required(credential.statements[0])]).statement;
+    const statements = credential.statements.map((id) => required(signed[id]).statement);
+    const issued = await issueSelectiveCredential(
+      required(sourceKeys.get(issuer.id)),
+      {
+        id: `urn:selective:${scenario.id}:${credential.id}`,
+        issuer: issuer.identity,
+        subject: credential.subject,
+        method: String(first.method),
+        asOf: String(first.asOf),
+      },
+      statements.map((s) => ({
+        id: String(s.id),
+        claimType: String(s.claimType),
+        value: required(s.value),
+        ...(s.terms ? { terms: s.terms } : {}),
+      })),
+      statements.map((s) => digestOf({ fixtureSalt: scenario.id, claim: s.id })),
+    );
+    for (const id of credential.statements) {
+      const evidence = required(
+        presentSelective(issued, [String(required(signed[id]).statement.id)])[0],
+      );
+      signed[id] = {
+        jws: evidence.value,
+        format: evidence.format,
+        wireDigest: digestBytes(evidence.value),
+        statement: unverifiedEvidenceClaim(evidence),
+        evidence,
+      };
+    }
+  }
+  const documents: Record<string, string> = {};
+  const documentPayload = (value: JsonObject): JsonObject => {
+    const keys = Array.isArray(value.keys)
+      ? value.keys.map((entry) => {
+          const key = entry as JsonObject;
+          const agent = typeof key.agent === "string" ? cast.get(key.agent) : undefined;
+          const issuer = typeof key.issuer === "string" ? sourceKeys.get(key.issuer) : undefined;
+          const signer = agent
+            ? key.role === "actor"
+              ? agent.actorKey
+              : agent.ownerKey
+            : required(issuer);
+          return { kid: signer.kid, subject: required(key.subject), role: required(key.role) };
+        })
+      : undefined;
+    return { ...value, ...(keys ? { keys } : {}) };
+  };
+  for (const doc of scenario.documents)
+    documents[doc.id] = await signStatement(
+      required(sourceKeys.get(doc.issuer)),
+      doc.typ,
+      documentPayload(doc.value),
+    );
+  const resolver = new LocalDocumentResolver(documents);
+  const organizationCredentials: Record<string, string> = {};
+  for (const credential of scenario.organizationCredentials) {
+    const agent = cast.get(credential.agent);
+    const payload = {
+      type: "OrganizationMandate",
+      id: `urn:credential:${scenario.id}:${credential.agent}`,
+      issuer: required(parties.get(credential.issuer)).identity,
+      actor: agent.identity.actor,
+      subjectKey: agent.actorKey.kid,
+      entity: credential.entity,
+      roles: credential.roles,
+      actions: credential.actions,
+      validFrom: credential.validFrom,
+      validUntil: credential.validUntil,
+      status: credential.status,
+    };
+    organizationCredentials[credential.agent] = await signStatement(
+      required(sourceKeys.get(credential.issuer)),
+      "awp-organization-mandate+jws",
+      payload,
+    );
+  }
+  const grants: Record<string, ResourceReference> = {};
+  const holders = new Map<string, LocalResourceHolder>();
+  for (const resource of scenario.resources) {
+    const holder = required(parties.get(resource.holder));
+    const key = required(sourceKeys.get(holder.id));
+    const readerKeys = agents.map((a) => ({
+      kid: cast.get(a.id).actorKey.kid,
+      alg: cast.get(a.id).actorKey.alg,
+      publicJwk: cast.get(a.id).actorKey.publicJwk,
+      role: "actor" as const,
+      subject: required(a.actor),
+      party: required(parties.get(required(a.actsFor))).identity,
+    }));
+    const trust = await TrustStore.load({
+      version: 1,
+      owner: holder.identity,
+      keys: [
+        {
+          kid: key.kid,
+          alg: key.alg,
+          publicJwk: key.publicJwk,
+          role: "issuer",
+          subject: holder.identity,
+        },
+        ...readerKeys,
+      ],
+      sourceAuthority: [],
+    });
+    const ledger = new MemoryLedger();
+    const resources = Object.fromEntries(
+      scenario.resources
+        .filter((r) => r.holder === holder.id)
+        .map((r) => [r.ref, r.statements.map((id) => required(signed[id]).statement)]),
+    );
+    holders.set(
+      resource.ref,
+      new LocalResourceHolder({
+        identity: holder.identity,
+        key,
+        trust,
+        resources,
+        ledger,
+        now: () => now().toISOString(),
+      }),
+    );
+  }
+  for (const grant of scenario.grants) {
+    const holder = required(parties.get(grant.holder));
+    const reader = required(parties.get(grant.reader));
+    const payload = {
+      type: "ResourceGrant",
+      id: `urn:grant:${scenario.id}:${grant.id}`,
+      issuer: holder.identity,
+      ref: grant.ref,
+      reader: {
+        actor: required(reader.actor),
+        party: required(parties.get(required(reader.actsFor))).identity,
+      },
+      items: grant.statements.map((id) => ({
+        id: String(required(signed[id]).statement.id),
+        claimType: String(required(signed[id]).statement.claimType),
+      })),
+      purpose: grant.purpose,
+      validUntil: grant.validUntil,
+    };
+    grants[grant.id] = {
+      ref: grant.ref,
+      claimTypes: [...new Set(payload.items.map((i) => i.claimType))],
+      grant: await signStatement(
+        required(sourceKeys.get(holder.id)),
+        "awp-resource-grant+jws",
+        payload,
+      ),
+    };
+  }
+  const stores = new Map(
+    scenario.stores.map((s) => [s.id, new PurposeBoundStore(s.organization, s.roles, now)]),
+  );
   const runtimes = new Map<string, AgentRuntime>();
-  const ledgers = new Map<string, { entries(): readonly never[] }>();
+  const ledgers = new Map<string, MemoryLedger>();
   const outputs: Record<string, unknown> = {};
   const queue: Array<{ from: string; out: OutboundMessage }> = [];
   const openings = new Map<string, unknown>();
@@ -354,6 +613,10 @@ async function runPath(
   const variables = (current?: HandlerContext) => ({
     steps: outputs,
     statements: signed,
+    grants,
+    grantDigests: Object.fromEntries(
+      Object.entries(grants).map(([id, reference]) => [id, digestBytes(reference.grant)]),
+    ),
     current,
     now: now().toISOString(),
   });
@@ -365,8 +628,12 @@ async function runPath(
     const trust = await TrustStore.load(cast.trust.get(agent.id));
     const mandate = required(scenario.mandates.find((m) => m.agent === agent.id));
     const gate: GateContext = {
-      configuration,
-      sink: recorder.sink(agent.id),
+      configuration: agent.configurations[0] === "public-read" ? PUBLIC_READ : configuration,
+      configurations: { [CONFIG_PUBLIC]: PUBLIC_READ },
+      ...(profile.organizations
+        ? { organizations: { policy: profile.organizations, resolver } }
+        : {}),
+      sink: recorder.sink(agent.traceId ?? agent.id),
       taskId: task,
       name,
       vocabulary: profile.vocabulary,
@@ -375,7 +642,11 @@ async function runPath(
       rules: profile.rules.filter((r) => "template" in r),
       assessments: profile.assessments,
       personDecisions: profile.personDecisions,
+      readings: profile.readings,
+      actionClaims: profile.actionClaims,
       requester: scenario.requester[agent.id],
+      referenceAction: profile.referenceAction,
+      notificationRecipients: profile.notificationRecipients,
       trust: profile.trust,
       pins: (scenario.trust.ownLists[agent.id] ?? [])
         .filter((entry) => !entry.block)
@@ -418,44 +689,59 @@ async function runPath(
           }
         : {}),
     };
-    const handlers: OperationHandler[] = profile.operations.map((op) => {
-      const reply = (ctx: HandlerContext): HandlerReply =>
-        resolveTemplate(
-          responses.get(agent.id)?.reply ?? { type: "none" },
-          variables(ctx),
-        ) as HandlerReply;
-      const intent = (ctx: HandlerContext, contents: JsonObject): ActionIntent => {
-        const proposed = openings.get(agent.id);
-        void contents;
-        if (!proposed || typeof proposed !== "object" || Array.isArray(proposed))
-          throw new Error("a scripted opening must carry its proposed intent");
-        return {
-          ...(resolveTemplate(proposed, variables(ctx)) as ActionIntent),
-          conversation: ctx.conversation.id,
-        };
-      };
-      return {
-        description: { ...op, roles: ["initiator", "responder"], effects: [], outcomes: [] },
-        requiresRepresentation: op.requiresRepresentation,
-        agreementDelivery: op.agreementDelivery,
-        requiredApproval: op.requiredApproval,
-        intentForProposal: intent,
-        intentForInvoke: intent,
-        onProposal: reply,
-        onInvoke: reply,
-        onDeliver: reply,
-        onReceipt: reply,
-        onAgreement: (ctx) =>
-          resolveTemplate(
-            responses.get(agent.id)?.agreementPlan ?? { requiredOutcomes: [] },
-            variables(ctx),
-          ) as AgreementPlan,
-      };
-    });
+    const handlers: OperationHandler[] = agent.handlers.length
+      ? agent.handlers.map((id) =>
+          installHandler(required(scenario.handlerImplementations[id]), signed, stores),
+        )
+      : profile.operations.map((op) => {
+          const reply = (ctx: HandlerContext): HandlerReply =>
+            resolveTemplate(
+              responses.get(agent.id)?.reply ?? { type: "none" },
+              variables(ctx),
+            ) as HandlerReply;
+          const intent = (ctx: HandlerContext, contents: JsonObject): ActionIntent => {
+            if (op.id === "urn:op:duty-notification")
+              return {
+                action: "use",
+                operation: op.id,
+                target: op.id,
+                recipient: ctx.peer.party,
+                purpose: "urn:purpose:emergency-notification",
+                parameters: contents,
+                conversation: ctx.conversation.id,
+              };
+            const proposed = openings.get(agent.id);
+            void contents;
+            if (!proposed || typeof proposed !== "object" || Array.isArray(proposed))
+              throw new Error("a scripted opening must carry its proposed intent");
+            return {
+              ...(resolveTemplate(proposed, variables(ctx)) as ActionIntent),
+              conversation: ctx.conversation.id,
+            };
+          };
+          return {
+            description: { ...op, roles: ["initiator", "responder"], effects: [], outcomes: [] },
+            requiresRepresentation: op.requiresRepresentation,
+            agreementDelivery: op.agreementDelivery,
+            requiredApproval: op.requiredApproval,
+            intentForProposal: intent,
+            intentForInvoke: intent,
+            onProposal: reply,
+            onInvoke: reply,
+            onDeliver: reply,
+            onReceipt: reply,
+            onAgreement: (ctx) =>
+              resolveTemplate(
+                responses.get(agent.id)?.agreementPlan ?? { requiredOutcomes: [] },
+                variables(ctx),
+              ) as AgreementPlan,
+          };
+        });
     const created = await cast.runtime(
       agent.id,
       handlers,
       [
+        new SyntheticPaymentRail(),
         {
           id: "urn:scenario:effect",
           execute: async (_key, params) => ({ conclusion: "completed", observed: params }),
@@ -465,9 +751,20 @@ async function runPath(
           }),
         },
       ],
-      [configuration.pilotConfiguration],
+      agent.configurations.map((c) =>
+        c === "public-read" ? CONFIG_PUBLIC : configuration.pilotConfiguration,
+      ),
       {
         gates: gate,
+        disclosureChecks: Object.fromEntries(
+          scenario.stores.map((store) => [
+            `${PURPOSE_STORE_RELEASE_CONDITION}/${store.id}`,
+            purposeStoreReleaseCheck(required(stores.get(store.id))),
+          ]),
+        ),
+        ...(organizationCredentials[agent.id]
+          ? { organizationMandateJws: organizationCredentials[agent.id] }
+          : {}),
         ...(profile.rules.some((r) => "template" in r && r.assurances.includes("by-source"))
           ? { sourceKey: cast.get(agent.id).ownerKey }
           : {}),
@@ -479,13 +776,13 @@ async function runPath(
       },
     );
     runtimes.set(agent.id, created.runtime);
-    ledgers.set(agent.id, created.ledger as never);
+    ledgers.set(agent.id, created.ledger);
   }
   const enqueue = (from: string, result: StepResult) => {
     for (const out of result.outbound) queue.push({ from, out });
   };
   for (const [index, step] of scenario.script.entries()) {
-    recorder.step(index + 1);
+    recorder.step(step.atStep ?? index + 1);
     const runtime = runtimes.get(step.agent);
     if (!runtime) throw new Error(`step ${step.id}: ${step.agent} does not run an agent`);
     const template = <T>(v: unknown) => resolveTemplate(v, variables()) as T;
@@ -511,7 +808,10 @@ async function runPath(
           operation: { id: operation.id, version: operation.version },
           models: operation.models,
           discover: step.discover,
-          configuration: configuration.pilotConfiguration,
+          configuration:
+            step.configuration === "public-read" ? CONFIG_PUBLIC : configuration.pilotConfiguration,
+          evidence: step.evidence.map((id) => required(signed[id]).evidence),
+          content: step.content.map((part) => ({ ...part, digest: digestContent(part.bytes) })),
         };
         const contents = template<JsonObject>(step.contents);
         openings.set(step.agent, step.intent);
@@ -521,7 +821,7 @@ async function runPath(
             : await runtime.startInvocation({
                 ...base,
                 input: contents,
-                basis: { kind: "represented" },
+                basis: step.basis ?? { kind: "represented" },
                 ...(step.purpose ? { purpose: step.purpose } : {}),
               });
         enqueue(step.agent, result as StepResult);
@@ -530,15 +830,23 @@ async function runPath(
       case "receive": {
         const position = queue.findIndex(
           (item) =>
-            item.out.toActor === required(parties.get(step.agent)).actor &&
+            (item.out.toActor === required(parties.get(step.agent)).actor ||
+              (!item.out.toActor && !!step.from && item.from === step.from)) &&
             (!step.from || item.from === step.from),
         );
-        if (position < 0) throw new Error(`${step.id}: no queued message to ${step.agent}`);
+        if (position < 0)
+          throw new Error(
+            `${step.id}: no queued message to ${step.agent}; last decision ${recorder.events().findLast((e) => e.kind === "decision")?.reason ?? "none"}`,
+          );
         const item = required(queue.splice(position, 1)[0]);
+        const disclosure = required(runtimes.get(item.from)).disclosureHold(item.out.id);
+        if (disclosure.protected && !disclosure.holds)
+          throw new Error(`local transmission refused: ${disclosure.reason}`);
         responses.set(step.agent, { reply: step.reply, agreementPlan: step.agreementPlan });
         let wire = structuredClone(item.out.wire);
+        let hostileMessage = structuredClone(item.out.message);
         for (const injection of scenario.inject.filter((i) => i.step === step.id)) {
-          const target = injection.target === "body" ? structuredClone(item.out.message) : wire;
+          const target = injection.target !== "wire" ? structuredClone(hostileMessage) : wire;
           let at: Record<string, unknown> =
             injection.target === "body"
               ? ((target as { body: unknown }).body as Record<string, unknown>)
@@ -556,7 +864,8 @@ async function runPath(
           if (!last || ["__proto__", "constructor", "prototype"].includes(last))
             throw new Error("invalid injection path");
           at[last] = injection.value;
-          if (injection.target === "body") {
+          if (injection.target !== "wire") {
+            hostileMessage = target as typeof hostileMessage;
             if (!injection.resign)
               throw new Error("body injection requires explicit hostile re-signing");
             wire = {
@@ -565,7 +874,15 @@ async function runPath(
             };
           } else wire = target as typeof wire;
         }
+        if (step.outboundAtStep)
+          recorder.label((who, event, current) =>
+            who === (required(parties.get(step.agent)).traceId ?? step.agent) &&
+            (event.part === "core" || event.part === "outbound-gate")
+              ? required(step.outboundAtStep)
+              : current,
+          );
         result = await runtime.receive(wire, { binding: "direct-local/0.1" });
+        recorder.label(undefined);
         enqueue(step.agent, result as StepResult);
         break;
       }
@@ -596,15 +913,52 @@ async function runPath(
         break;
       case "effect":
         result = await runtime.runTask({
-          taskId: `urn:scenario:${scenario.id}:${step.id}`,
+          taskId: step.taskId ?? `urn:scenario:${scenario.id}:${step.id}`,
           kind: "scripted-effect",
+          ...(step.origin
+            ? { origin: template<import("../gates/outbound.js").ProposalOrigin>(step.origin) }
+            : {}),
           plan: {
-            adapter: "urn:scenario:effect",
+            adapter: step.adapter ?? "urn:scenario:effect",
             key: `urn:scenario:${scenario.id}:${step.id}`,
             intent: template<ActionIntent>(step.intent),
             params: template<JsonObject>(step.params),
             activityType: step.activityType,
           },
+        });
+        break;
+      case "request-structured": {
+        const request = runtime.structuredRequest(step.claimType);
+        const source = required(
+          agents.find((a) => parties.get(a.actsFor ?? "")?.identity === request.source),
+        );
+        const operation = required(
+          profile.operations.find((o) => o.id === "urn:op:structured-form"),
+        );
+        openings.set(step.agent, {
+          action: "use",
+          operation: operation.id,
+          target: operation.id,
+          recipient: request.source,
+          purpose: operation.purposes[0],
+          parameters: { claimType: request.claimType },
+        });
+        result = await runtime.startInvocation({
+          peer: { actor: required(source.actor), party: request.source },
+          operation,
+          input: { claimType: request.claimType },
+          basis: { kind: "represented" },
+          purpose: operation.purposes[0],
+          models: [],
+          configuration: configuration.pilotConfiguration,
+        });
+        enqueue(step.agent, result as StepResult);
+        break;
+      }
+      case "read-content":
+        result = await runtime.readContent(step.part, step.subject, (part) => {
+          void part;
+          return structuredClone(step.output);
         });
         break;
       case "reading":
@@ -671,11 +1025,247 @@ async function runPath(
         result = true;
         break;
       }
+      case "show-mandate":
+        runtime.showMandate();
+        break;
+      case "mint":
+        result = await runtime.mintIdentifier();
+        break;
+      case "pending":
+        result = required(runtime.pendingApprovals()[0]);
+        break;
+      case "conversation":
+        result = required(runtime.conversation(template<string>(step.conversation)));
+        break;
+      case "retry-challenge":
+        result = await runtime.retryChallenge(template<string>(step.conversation));
+        enqueue(step.agent, result as StepResult);
+        break;
+      case "invoke-agreement": {
+        const operation = required(profile.operations.find((o) => o.id === step.operation));
+        result = await runtime.invokeUnderAgreement({
+          conversation: template<string>(step.conversation),
+          operation: { id: operation.id, version: operation.version },
+          input: template<JsonObject>(step.input),
+          purpose: step.purpose,
+        });
+        enqueue(step.agent, result as StepResult);
+        break;
+      }
+      case "receipt":
+        result = await runtime.sendReceipt(template<string>(step.conversation), {
+          activity: template<string>(step.activity),
+          outcome: step.outcome,
+          observed: template<JsonObject>(step.observed),
+          final: step.final,
+        });
+        enqueue(step.agent, result as StepResult);
+        break;
+      case "issue": {
+        const issuer = required(parties.get(step.issuer));
+        const value = template<JsonObject>(step.value);
+        const identity = issuer.actsFor
+          ? required(parties.get(issuer.actsFor)).identity
+          : issuer.identity;
+        if (value.issuer !== identity)
+          throw new Error("issuer-only source cannot sign for another organization");
+        const key = cast.agents.has(issuer.id)
+          ? cast.get(issuer.id).ownerKey
+          : required(sourceKeys.get(issuer.id));
+        const jws = await signClaim(key, value);
+        const item = {
+          jws,
+          wireDigest: digestBytes(jws),
+          statement: value,
+          evidence: { role: "credential" as const, format: "jws-compact", value: jws },
+        };
+        signed[step.id] = item;
+        result = item;
+        break;
+      }
+      case "underwriting-handover": {
+        const store = required(stores.get(step.store));
+        const peer = required(parties.get(step.peer));
+        const peerParty = required(parties.get(required(peer.actsFor))).identity;
+        const conversation = required(runtime.conversation(template<string>(step.conversation)));
+        const agreement = required(
+          runtime.agreements().find((a) => a.id === conversation.agreement),
+        );
+        const request = {
+          agent: required(parties.get(step.agent)).actor as string,
+          action: "distribute" as const,
+          items: step.items,
+          purpose: step.purpose,
+          recipient: peerParty,
+        };
+        const read = store.request(request);
+        const annual = read.items?.find((i) => i.claimType === "income.gross.annual.derived");
+        const deposit = read.items?.find((i) => i.claimType === "deposit.balance");
+        const onward = (agreement.terms.onward as JsonObject[] | undefined)?.find(
+          (o) => o.recipient === peerParty && o.purpose === step.purpose,
+        );
+        if (
+          read.decision !== "permit" ||
+          !annual ||
+          !deposit ||
+          read.items?.length !== 2 ||
+          !onward ||
+          !(onward.fields as Json[]).includes("annualGrossIncome") ||
+          !(onward.fields as Json[]).includes("depositBalance") ||
+          read.items.some((i) => i.grant.id !== `${agreement.id}#grant`)
+        ) {
+          result = {
+            permitted: false,
+            reason: read.decision === "permit" ? "excessive-scope" : "not-authorised",
+          };
+          break;
+        }
+        const application = agreement.terms.application as JsonObject;
+        const rule = annual.grant.policy.permissions?.find(
+          (p) =>
+            p.action === "distribute" &&
+            p.constraints?.some(
+              (c) =>
+                c.leftOperand === "recipient" &&
+                (Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand]).includes(
+                  peerParty,
+                ),
+            ),
+        );
+        if (!rule?.id) throw new Error("onward grant has no rule identity");
+        if (!conversation.operation) throw new Error("source conversation has no operation");
+        const sourceOperation = `${conversation.operation.id}@${conversation.operation.version}`;
+        runtime.domainState(`${sourceOperation}:stored:${conversation.id}`);
+        runtime.domainState(`${sourceOperation}:grant:${conversation.id}`);
+        const terms = underwritingTermsFor({
+          applicationRef: String(agreement.terms.applicationId),
+          annualGrossIncome: Number((annual.data as JsonObject).value),
+          derivedFrom: [annual.id],
+          depositBalance: Number((deposit.data as JsonObject).balance),
+          loanAmount: Number(application.loanAmount),
+          propertyPrice: Number(application.propertyPrice),
+          consumerAgreement: agreement.id,
+          onwardRule: rule.id,
+          lender: required(parties.get(required(parties.get(step.agent)?.actsFor))).identity,
+        });
+        const operation = required(profile.operations.find((o) => o.id === step.operation));
+        const sent = await runtime.startNegotiation({
+          peer: { actor: required(peer.actor), party: peerParty },
+          operation: { id: operation.id, version: operation.version },
+          models: operation.models,
+          terms: terms as unknown as JsonObject,
+          conditions: [
+            {
+              kind: `${PURPOSE_STORE_RELEASE_CONDITION}/${step.store}`,
+              ref: {
+                ...request,
+                revisions: Object.fromEntries(read.items.map((i) => [i.id, i.revision ?? ""])),
+              },
+            },
+          ],
+        });
+        result = { ...sent, permitted: true, consumerAgreement: agreement.id, onwardRule: rule.id };
+        enqueue(step.agent, sent);
+        break;
+      }
+      case "store-request":
+        result = required(stores.get(step.store)).request(
+          template<import("../domains/purpose-store.js").AccessRequest>(step.request),
+        );
+        break;
+      case "store-assess": {
+        const store = required(stores.get(step.store));
+        const plan = required(profile.storeAssessments.find((p) => p.id === step.assessment));
+        if (plan.purpose !== step.purpose)
+          throw new Error("assessment purpose differs from profile");
+        const conversation = required(runtime.conversation(template<string>(step.conversation)));
+        const agreement = required(
+          runtime.agreements().find((a) => a.id === conversation.agreement),
+        );
+        const application = agreement.terms.application as JsonObject;
+        if (
+          agreement.terms.purpose !== plan.purpose ||
+          store.organisation !== runtime.identity.party
+        )
+          throw new Error("assessment is outside the actual agreement or store owner");
+        const read = store.request({
+          agent: step.assessor,
+          action: "read",
+          items: step.items,
+          purpose: step.purpose,
+        });
+        if (read.decision !== "permit") throw new Error(`assessment store denied: ${read.reason}`);
+        if (
+          read.items?.length !== 2 ||
+          read.items.some(
+            (i) => i.grant.id !== `${agreement.id}#grant` || i.subject !== application.applicant,
+          )
+        )
+          throw new Error("assessment inputs do not belong to this consumer agreement");
+        const annual = read.items?.find((i) => i.claimType === "income.gross.annual.derived")
+          ?.data as JsonObject | undefined;
+        const deposit = read.items?.find((i) => i.claimType === "deposit.balance")?.data as
+          | JsonObject
+          | undefined;
+        if (
+          !annual ||
+          annual.rule !== plan.annualRule ||
+          !deposit ||
+          typeof annual.value !== "number" ||
+          typeof deposit.balance !== "number" ||
+          typeof application.loanAmount !== "number" ||
+          typeof application.propertyPrice !== "number"
+        )
+          throw new Error("incomplete assessment inputs");
+        const eligible =
+          application.loanAmount / annual.value <= plan.maxLoanIncomeRatio &&
+          deposit.balance >= application.propertyPrice - application.loanAmount;
+        const output = {
+          eligible,
+          status: eligible ? "indicatively-eligible" : "not-eligible",
+          amount: eligible ? application.loanAmount : 0,
+        };
+        const receipt = {
+          assessment: plan.id,
+          ruleDigest: digestOf(plan),
+          agreement: agreement.id,
+          purpose: plan.purpose,
+          inputDigests: read.items.map((i) => ({ id: i.id, digest: digestOf(i.data) })),
+          outputDigest: digestOf(output),
+          kept: ["output"],
+          discardedAssessmentInputs: true,
+          at: now().toISOString(),
+        };
+        required(ledgers.get(step.agent)).append(
+          { type: "assessment-receipt", ...receipt },
+          now().toISOString(),
+        );
+        result = { ...output, receipt };
+        break;
+      }
       case "record":
         result = runtime.checkRecord(required(ledgers.get(step.agent)).entries());
         break;
+      case "read-reference": {
+        const reference = template<ResourceReference>(step.reference);
+        result = await runtime.readReference(
+          reference,
+          holders.get(reference.ref),
+          step.purpose,
+          step.item,
+        );
+        break;
+      }
+      case "notifications":
+        result = await runtime.dischargeNotifications();
+        enqueue(step.agent, result as StepResult);
+        break;
+      case "duties":
+        result = runtime.notificationDuties();
+        break;
       case "advance":
         clock += step.milliseconds;
+        for (const runtime of runtimes.values()) runtime.notificationDuties();
         break;
     }
     outputs[step.id] = result ?? null;
@@ -685,17 +1275,21 @@ async function runPath(
     scenario: {
       id: path === "main" ? scenario.id : `${scenario.id}--${path}`,
       title: scenario.title,
-      steps: Object.fromEntries(scenario.script.map((step, i) => [String(i + 1), step.id])),
+      steps:
+        scenario.traceSteps ??
+        Object.fromEntries(
+          scenario.script.map((step, i) => [String(step.atStep ?? i + 1), step.id]),
+        ),
     },
     configuration: { id: configuration.id, layers: { ...configuration.layers } },
     agents: agents.map((p) => ({
-      id: p.id,
+      id: p.traceId ?? p.id,
       name: p.name,
       actsFor: required(p.actsFor),
       role: p.role,
     })),
     generated: { commit, core: "scripted" },
-    standIns: profile.standIns,
+    standIns: [...profile.standIns, ...scenario.standIns],
     events: recorder.events(),
   };
 }

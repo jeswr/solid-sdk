@@ -106,7 +106,7 @@ export interface AdmittedFact {
 
 /** Every item actually shown to the core, with labels retained across restarts. */
 export interface ContextItem extends AdmittedFact {
-  readonly kind: "statement" | "memory" | "message" | "reading";
+  readonly kind: "statement" | "memory" | "message" | "reading" | "content";
   readonly accepted?: boolean;
   readonly digest: string;
 }
@@ -138,8 +138,9 @@ export class GateMemory {
   enter(task: string, item: ContextItem): void {
     this.contexts[task] ??= [];
     const items = this.contexts[task];
-    if (!items.some((prior) => prior.id === item.id && prior.digest === item.digest))
-      items.push(item);
+    const index = items.findIndex((prior) => prior.id === item.id && prior.digest === item.digest);
+    if (index < 0) items.push(item);
+    else if (item.accepted === true) items[index] = item;
   }
 }
 
@@ -176,6 +177,23 @@ export interface GateContext {
     readonly decider: "principal" | { readonly role: string };
   }[];
   readonly requester?: string;
+  readonly referenceAction?: string;
+  readonly organizations?: {
+    readonly policy: import("../mechanisms/organizations.js").OrganizationPolicy;
+    readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;
+  };
+  readonly notificationRecipients?: Readonly<
+    Record<string, { readonly actor: string; readonly party: string }>
+  >;
+  readonly readings?: readonly {
+    readonly claimType: string;
+    readonly type: "code" | "number" | "date" | "term";
+    readonly values?: readonly (string | number | boolean)[];
+  }[];
+  readonly actionClaims?: readonly {
+    readonly action: string;
+    readonly claims: readonly string[];
+  }[];
   readonly trust?: { readonly levels: readonly ["own-list"]; readonly onUnknown: "ask-principal" };
   readonly pins?: readonly {
     readonly kid: string;

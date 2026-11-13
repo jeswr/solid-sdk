@@ -559,6 +559,43 @@
         ]
       }
     },
+    "storeAssessments": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "template": {
+            "type": "string",
+            "const": "loan-ratio-and-equity"
+          },
+          "annualRule": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "maxLoanIncomeRatio": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "purpose": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          }
+        },
+        "required": [
+          "id",
+          "template",
+          "annualRule",
+          "maxLoanIncomeRatio",
+          "purpose"
+        ],
+        "additionalProperties": false
+      }
+    },
     "assessments": {
       "default": [],
       "type": "array",
@@ -689,6 +726,147 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "referenceAction": {
+      "type": "string"
+    },
+    "organizations": {
+      "type": "object",
+      "properties": {
+        "registrar": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+        },
+        "maxStatusAgeSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "requiredRoles": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "actionKinds": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "statusClaims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "registrar",
+        "maxStatusAgeSeconds",
+        "requiredRoles"
+      ],
+      "additionalProperties": false
+    },
+    "notificationRecipients": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "actor": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "party": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          }
+        },
+        "required": [
+          "actor",
+          "party"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "readings": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claimType": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "code",
+              "number",
+              "date",
+              "term"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "claimType",
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "actionClaims": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "action",
+          "claims"
+        ],
+        "additionalProperties": false
       }
     },
     "vocabulary": {
@@ -855,11 +1033,15 @@
     "claims",
     "purposes",
     "rules",
+    "storeAssessments",
     "assessments",
     "standIns",
     "personDecisions",
     "decisionsForPerson",
     "modelReadings",
+    "notificationRecipients",
+    "readings",
+    "actionClaims",
     "vocabulary",
     "identifiers",
     "operations"
