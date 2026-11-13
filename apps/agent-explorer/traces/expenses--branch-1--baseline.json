@@ -43,21 +43,7 @@
  "scenario": {
   "id": "expenses--branch-1",
   "title": "Claiming expenses: A meal is above the policy limit",
-  "steps": {
-   "1": "The employee's agent checks the signed statements.",
-   "2": "The employee's agent sends the signed request.",
-   "3": "The finance agent checks the message and prepares a response.",
-   "4": "The finance agent checks the signed statements.",
-   "5": "The reimbursement bank's agent checks the signed statements.",
-   "6": "The finance agent sends the signed request.",
-   "7": "The reimbursement bank's agent checks the message and prepares a response.",
-   "8": "The reimbursement bank's agent proposes the local action.",
-   "9": "The reimbursement bank's agent checks the observed result.",
-   "10": "The reimbursement bank's agent completes the message step.",
-   "11": "The finance agent checks the message and prepares a response.",
-   "12": "The finance agent checks the durable record.",
-   "13": "The reimbursement bank's agent checks the durable record."
-  }
+  "steps": {}
  },
  "configuration": {
   "id": "expenses-local",
@@ -71,8 +57,9 @@
    "trust": "register-chain",
    "reliance": "precedence-rules",
    "usage-control": "odrl-rules",
-   "commitments": "payment",
-   "accountability": "local-ledger"
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger",
+   "settlement": "rdf-order"
   }
  },
  "agents": [
@@ -96,7 +83,7 @@
   }
  ],
  "generated": {
-  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+  "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
   "core": "scripted"
  },
  "standIns": [
@@ -106,7 +93,11 @@
   },
   {
    "what": "Expense receipt and reimbursement",
-   "replacedBy": "Merchant-signed structured receipt and a gated bank submission stand-in; no photographed receipt is promoted to merchant evidence and no settlement is claimed"
+   "replacedBy": "Merchant-signed structured receipt and a gated reimbursement agreement; no photographed receipt is promoted to merchant evidence."
+  },
+  {
+   "what": "Payment settlement",
+   "replacedBy": "No money moves. The payment provider is a fictional party with its own keys that keeps a ledger."
   }
  ],
  "events": [
@@ -205,7 +196,7 @@
     },
     {
      "layer": "commitments",
-     "suite": "payment",
+     "suite": "signed-offer-acceptance",
      "clause": "CORE-IN-10"
     }
    ],
@@ -287,7 +278,7 @@
    "agent": "employee-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share File the merchant receipt with The employer."
+   "caption": "The core proposes to share File and agree an expense claim with The employer."
   },
   {
    "seq": 9,
@@ -333,18 +324,18 @@
     }
    ],
    "resolution": {
-    "question": "Is The employer a party I can send File the merchant receipt to?",
+    "question": "Is The employer a party I can send File and agree an expense claim to?",
     "path": [
      {
       "at": "The employee's own list",
       "kind": "own-list",
-      "says": "The employer is accepted for File the merchant receipt."
+      "says": "The employer is accepted for File and agree an expense claim."
      }
     ],
-    "answer": "Accepted, for File the merchant receipt only."
+    "answer": "Accepted, for File and agree an expense claim only."
    },
    "reason": "recipient-established",
-   "caption": "The employer: Accepted, for File the merchant receipt only."
+   "caption": "The employer: Accepted, for File and agree an expense claim only."
   },
   {
    "seq": 11,
@@ -416,7 +407,52 @@
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "The gate checks the actual credential against the declared purpose."
+   "caption": "The gate checks the actual credential against the declared purpose.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
    "seq": 15,
@@ -438,7 +474,52 @@
     "text": "The issuer's terms: use for Expenses; share for Expenses. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses."
+   "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
    "seq": 16,
@@ -456,7 +537,52 @@
     }
    ],
    "reason": "no-personal-data",
-   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
    "seq": 17,
@@ -483,7 +609,52 @@
     "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
    },
    "reason": "evidence-complete",
-   "caption": "Signed (JWS EdDSA) with The employee's agent's pinned key, and written to the record."
+   "caption": "Signed (JWS EdDSA) with The employee's agent's pinned key, and written to the record.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
    "seq": 18,
@@ -493,7 +664,52 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The invoke message goes to The finance agent."
+   "caption": "The propose message goes to The finance agent.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
    "seq": 19,
@@ -505,21 +721,21 @@
     "id": "urn:awp:engine-expenses-branch-1:employee-agent:0002",
     "from": "The employee's agent",
     "to": "The finance agent",
-    "kind": "invoke",
+    "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:3faa0cb1ee8…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The employee's agent to The finance agent; invoke; signed (JWS EdDSA, pinned key TQnTZ4uFh03W…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-expenses-branch-1:employee-agent:0002.",
+      "summary": "From The employee's agent to The finance agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
        "id": "urn:awp:engine-expenses-branch-1:employee-agent:0002",
        "conversation": "urn:awp:engine-expenses-branch-1:employee-agent:0001",
-       "kind": "invoke",
+       "kind": "propose",
        "from": {
         "actor": "urn:fictional:employee-agent:actor",
         "onBehalfOf": "urn:fictional:supplier"
@@ -536,7 +752,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:f0cbcd347a506fea643ca019eb53e557c60f0a4184107139711c5a9da0c214c4"
+      "digest": "sha-256:824e927537f7bcd990cd2eb8b55f08a7c159268af89302bf6a780031ac81ef2b"
      },
      "authority": {
       "present": true,
@@ -550,32 +766,75 @@
         "actorKid": "TQnTZ4uFh03WA73-hQ26GekK3qA22IkuuDsmLs_R4iQ",
         "operations": [
          "urn:op:payment",
-         "urn:op:expenses-file"
+         "urn:op:expenses-file",
+         "urn:op:payment-request",
+         "urn:op:payment-provider"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:fda81087c815150b4cc573f6522b7c6bbcd711f6ec394cb9630b9e1c97448a83"
+      "digest": "sha-256:17ce1e166af58f66bebd648ed44c17750fb7279ff4962fdceab3081a9b0fe348"
      },
      "content": {
       "present": true,
-      "summary": "Invokes an operation.",
+      "summary": "An offer for File and agree an expense claim, with terms (round 1).",
       "raw": {
        "operation": {
         "id": "urn:op:expenses-file",
         "version": "0.1"
        },
-       "input": {
-        "receipt": "urn:scenario:expenses:invoice"
+       "terms": {
+        "service": "Reimburse the merchant receipt",
+        "compensation": {
+         "amount": "75.00",
+         "currency": "GBP",
+         "payee": "urn:fictional:supplier"
+        },
+        "validFrom": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-11-20T09:00:00.000Z",
+        "purpose": "urn:purpose:expenses",
+        "receipt": "urn:scenario:expenses:invoice",
+        "payment": {
+         "@context": "https://w3id.org/jeswr/awp/context/v1",
+         "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+         "type": "OdrlOffer",
+         "duties": {
+          "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+          "type": "CompensationDuty",
+          "amountConstraint": {
+           "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+           "type": "AmountConstraint",
+           "paymentAmount": "75.00",
+           "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+           "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+           "paymentUnit": "GBP"
+          },
+          "compensatedParty": "urn:fictional:supplier",
+          "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+         },
+         "instalment": "1",
+         "name": "Reimburse the merchant receipt",
+         "paymentAgent": "urn:fictional:business",
+         "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+         "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+         "permissions": {
+          "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+          "type": "ServicePermission",
+          "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+          "target": {
+           "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+           "name": "Reimburse the merchant receipt"
+          }
+         },
+         "purpose": "urn:purpose:expenses"
+        }
        },
-       "basis": {
-        "kind": "represented"
-       },
-       "purpose": "urn:purpose:expenses"
+       "termsDigest": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7",
+       "round": 1
       },
-      "digest": "sha-256:046dc54fb30bd813110e411e1530ffe43e47d5e9f96dea9259088c4551b3d03d"
+      "digest": "sha-256:d8123b54add83a63a840d74caf4f51452e7490d15465514fdec9260368d2fe92"
      },
      "evidence": {
       "present": true,
@@ -628,11 +887,54 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms of the offer (operation model fields).",
+      "summary": "Terms: purpose Expenses.",
       "raw": {
-       "kind": "represented"
+       "service": "Reimburse the merchant receipt",
+       "compensation": {
+        "amount": "75.00",
+        "currency": "GBP",
+        "payee": "urn:fictional:supplier"
+       },
+       "validFrom": "2026-11-13T09:00:00.000Z",
+       "validUntil": "2026-11-20T09:00:00.000Z",
+       "purpose": "urn:purpose:expenses",
+       "receipt": "urn:scenario:expenses:invoice",
+       "payment": {
+        "@context": "https://w3id.org/jeswr/awp/context/v1",
+        "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+        "type": "OdrlOffer",
+        "duties": {
+         "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+         "type": "CompensationDuty",
+         "amountConstraint": {
+          "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+          "type": "AmountConstraint",
+          "paymentAmount": "75.00",
+          "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+          "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+          "paymentUnit": "GBP"
+         },
+         "compensatedParty": "urn:fictional:supplier",
+         "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+        },
+        "instalment": "1",
+        "name": "Reimburse the merchant receipt",
+        "paymentAgent": "urn:fictional:business",
+        "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+        "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+        "permissions": {
+         "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+         "type": "ServicePermission",
+         "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+         "target": {
+          "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+          "name": "Reimburse the merchant receipt"
+         }
+        },
+        "purpose": "urn:purpose:expenses"
+       }
       },
-      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+      "digest": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7"
      },
      "provenance": {
       "present": true,
@@ -665,11 +967,227 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "The employee's agent sends an invoke message to The finance agent."
+   "caption": "The employee's agent sends a propose message to The finance agent.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
    "seq": 20,
    "step": 3,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The merchant's invoice statement is intact and signed with The merchant's pinned key."
+  },
+  {
+   "seq": 21,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "urn:source-rule:supplier",
+    "text": "The merchant is accepted for invoice claims."
+   },
+   "resolution": {
+    "question": "Is The merchant an authority for invoice claims about The employee?",
+    "path": [
+     {
+      "at": "The employer's own list",
+      "kind": "own-list",
+      "says": "The merchant is accepted for invoice."
+     }
+    ],
+    "answer": "Accepted, for invoice claims only."
+   },
+   "caption": "The merchant's invoice statement: The merchant is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 22,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The merchant's invoice statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 23,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:terms:expense-receipt",
+    "text": "Its terms allow this: use for Expenses; share for Expenses."
+   },
+   "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses."
+  },
+  {
+   "seq": 24,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:expenses:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:merchant"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:expenses:invoice",
+    "text": "Accept invoice from The merchant by recorded-by-authority, at most 30 days old."
+   },
+   "caption": "The merchant's invoice statement is fit for Claiming expenses: recorded-by-authority, 0 days old."
+  },
+  {
+   "seq": 25,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The merchant's invoice statement is admitted."
+  },
+  {
+   "seq": 26,
+   "step": 3,
+   "agent": "business-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:scenario:expenses:invoice",
+    "label": "The merchant's invoice statement",
+    "claimType": "invoice",
+    "subject": "urn:fictional:supplier",
+    "value": null,
+    "source": "urn:fictional:merchant",
+    "method": "recorded-by-authority",
+    "asOf": "2026-11-13T09:00:00.000Z",
+    "terms": {
+     "id": "urn:terms:expense-receipt",
+     "summary": "use for Expenses; share for Expenses"
+    },
+    "provenance": "signed by The merchant"
+   },
+   "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 27,
+   "step": 4,
    "agent": "business-agent",
    "part": "transport",
    "kind": "message-in",
@@ -677,21 +1195,21 @@
     "id": "urn:awp:engine-expenses-branch-1:employee-agent:0002",
     "from": "The employee's agent",
     "to": "The finance agent",
-    "kind": "invoke",
+    "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:3faa0cb1ee8…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The employee's agent to The finance agent; invoke; signed (JWS EdDSA, pinned key TQnTZ4uFh03W…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-expenses-branch-1:employee-agent:0002.",
+      "summary": "From The employee's agent to The finance agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
        "id": "urn:awp:engine-expenses-branch-1:employee-agent:0002",
        "conversation": "urn:awp:engine-expenses-branch-1:employee-agent:0001",
-       "kind": "invoke",
+       "kind": "propose",
        "from": {
         "actor": "urn:fictional:employee-agent:actor",
         "onBehalfOf": "urn:fictional:supplier"
@@ -708,7 +1226,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:f0cbcd347a506fea643ca019eb53e557c60f0a4184107139711c5a9da0c214c4"
+      "digest": "sha-256:824e927537f7bcd990cd2eb8b55f08a7c159268af89302bf6a780031ac81ef2b"
      },
      "authority": {
       "present": true,
@@ -722,44 +1240,191 @@
         "actorKid": "TQnTZ4uFh03WA73-hQ26GekK3qA22IkuuDsmLs_R4iQ",
         "operations": [
          "urn:op:payment",
-         "urn:op:expenses-file"
+         "urn:op:expenses-file",
+         "urn:op:payment-request",
+         "urn:op:payment-provider"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:fda81087c815150b4cc573f6522b7c6bbcd711f6ec394cb9630b9e1c97448a83"
+      "digest": "sha-256:17ce1e166af58f66bebd648ed44c17750fb7279ff4962fdceab3081a9b0fe348"
      },
      "content": {
       "present": true,
-      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:expenses-file\"; \"urn:scenario:expenses:invoice\"; \"urn:purpose:expenses\"",
+      "summary": "An offer for File and agree an expense claim, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "urn:op:expenses-file",
         "version": "0.1"
        },
-       "input": {
-        "receipt": "urn:scenario:expenses:invoice"
+       "terms": {
+        "service": "Reimburse the merchant receipt",
+        "compensation": {
+         "amount": "75.00",
+         "currency": "GBP",
+         "payee": "urn:fictional:supplier"
+        },
+        "validFrom": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-11-20T09:00:00.000Z",
+        "purpose": "urn:purpose:expenses",
+        "receipt": "urn:scenario:expenses:invoice",
+        "payment": {
+         "@context": "https://w3id.org/jeswr/awp/context/v1",
+         "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+         "type": "OdrlOffer",
+         "duties": {
+          "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+          "type": "CompensationDuty",
+          "amountConstraint": {
+           "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+           "type": "AmountConstraint",
+           "paymentAmount": "75.00",
+           "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+           "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+           "paymentUnit": "GBP"
+          },
+          "compensatedParty": "urn:fictional:supplier",
+          "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+         },
+         "instalment": "1",
+         "name": "Reimburse the merchant receipt",
+         "paymentAgent": "urn:fictional:business",
+         "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+         "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+         "permissions": {
+          "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+          "type": "ServicePermission",
+          "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+          "target": {
+           "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+           "name": "Reimburse the merchant receipt"
+          }
+         },
+         "purpose": "urn:purpose:expenses"
+        }
        },
-       "basis": {
-        "kind": "represented"
-       },
-       "purpose": "urn:purpose:expenses"
+       "termsDigest": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7",
+       "round": 1
       },
-      "digest": "sha-256:046dc54fb30bd813110e411e1530ffe43e47d5e9f96dea9259088c4551b3d03d",
+      "digest": "sha-256:d8123b54add83a63a840d74caf4f51452e7490d15465514fdec9260368d2fe92",
       "untrusted": [
        {
         "path": "operation.id",
         "text": "urn:op:expenses-file"
        },
        {
-        "path": "input.receipt",
+        "path": "terms.compensation.payee",
+        "text": "urn:fictional:supplier"
+       },
+       {
+        "path": "terms.purpose",
+        "text": "urn:purpose:expenses"
+       },
+       {
+        "path": "terms.receipt",
         "text": "urn:scenario:expenses:invoice"
        },
        {
-        "path": "purpose",
+        "path": "terms.payment.@context",
+        "text": "https://w3id.org/jeswr/awp/context/v1"
+       },
+       {
+        "path": "terms.payment.id",
+        "text": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8"
+       },
+       {
+        "path": "terms.payment.type",
+        "text": "OdrlOffer"
+       },
+       {
+        "path": "terms.payment.duties.id",
+        "text": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty"
+       },
+       {
+        "path": "terms.payment.duties.type",
+        "text": "CompensationDuty"
+       },
+       {
+        "path": "terms.payment.duties.amountConstraint.id",
+        "text": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount"
+       },
+       {
+        "path": "terms.payment.duties.amountConstraint.type",
+        "text": "AmountConstraint"
+       },
+       {
+        "path": "terms.payment.duties.amountConstraint.paymentAmount",
+        "text": "75.00"
+       },
+       {
+        "path": "terms.payment.duties.amountConstraint.paymentOperand",
+        "text": "http://www.w3.org/ns/odrl/2/payAmount"
+       },
+       {
+        "path": "terms.payment.duties.amountConstraint.paymentOperator",
+        "text": "http://www.w3.org/ns/odrl/2/eq"
+       },
+       {
+        "path": "terms.payment.duties.amountConstraint.paymentUnit",
+        "text": "GBP"
+       },
+       {
+        "path": "terms.payment.duties.compensatedParty",
+        "text": "urn:fictional:supplier"
+       },
+       {
+        "path": "terms.payment.duties.paymentAction",
+        "text": "http://www.w3.org/ns/odrl/2/compensate"
+       },
+       {
+        "path": "terms.payment.instalment",
+        "text": "1"
+       },
+       {
+        "path": "terms.payment.name",
+        "text": "Reimburse the merchant receipt"
+       },
+       {
+        "path": "terms.payment.paymentAgent",
+        "text": "urn:fictional:business"
+       },
+       {
+        "path": "terms.payment.paymentValidFrom",
+        "text": "2026-11-13T09:00:00.000Z"
+       },
+       {
+        "path": "terms.payment.paymentValidUntil",
+        "text": "2026-11-20T09:00:00.000Z"
+       },
+       {
+        "path": "terms.payment.permissions.id",
+        "text": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission"
+       },
+       {
+        "path": "terms.payment.permissions.type",
+        "text": "ServicePermission"
+       },
+       {
+        "path": "terms.payment.permissions.paymentAction",
+        "text": "http://www.w3.org/ns/odrl/2/use"
+       },
+       {
+        "path": "terms.payment.permissions.target.id",
+        "text": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service"
+       },
+       {
+        "path": "terms.payment.permissions.target.name",
+        "text": "Reimburse the merchant receipt"
+       },
+       {
+        "path": "terms.payment.purpose",
         "text": "urn:purpose:expenses"
+       },
+       {
+        "path": "termsDigest",
+        "text": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7"
        }
       ]
      },
@@ -814,11 +1479,54 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms of the offer (operation model fields).",
+      "summary": "Terms: purpose Expenses.",
       "raw": {
-       "kind": "represented"
+       "service": "Reimburse the merchant receipt",
+       "compensation": {
+        "amount": "75.00",
+        "currency": "GBP",
+        "payee": "urn:fictional:supplier"
+       },
+       "validFrom": "2026-11-13T09:00:00.000Z",
+       "validUntil": "2026-11-20T09:00:00.000Z",
+       "purpose": "urn:purpose:expenses",
+       "receipt": "urn:scenario:expenses:invoice",
+       "payment": {
+        "@context": "https://w3id.org/jeswr/awp/context/v1",
+        "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+        "type": "OdrlOffer",
+        "duties": {
+         "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+         "type": "CompensationDuty",
+         "amountConstraint": {
+          "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+          "type": "AmountConstraint",
+          "paymentAmount": "75.00",
+          "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+          "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+          "paymentUnit": "GBP"
+         },
+         "compensatedParty": "urn:fictional:supplier",
+         "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+        },
+        "instalment": "1",
+        "name": "Reimburse the merchant receipt",
+        "paymentAgent": "urn:fictional:business",
+        "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+        "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+        "permissions": {
+         "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+         "type": "ServicePermission",
+         "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+         "target": {
+          "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+          "name": "Reimburse the merchant receipt"
+         }
+        },
+        "purpose": "urn:purpose:expenses"
+       }
       },
-      "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+      "digest": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7"
      },
      "provenance": {
       "present": true,
@@ -851,11 +1559,56 @@
      "suite": "fixed-vocabulary"
     }
    ],
-   "caption": "An invoke message from The employee's agent reaches the inbound gate."
+   "caption": "A propose message from The employee's agent reaches the inbound gate.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
-   "seq": 21,
-   "step": 3,
+   "seq": 28,
+   "step": 4,
    "agent": "business-agent",
    "part": "inbound-gate",
    "kind": "check",
@@ -878,11 +1631,56 @@
     "id": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
     "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
    },
-   "caption": "The message is intact, signed with The employee's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+   "caption": "The message is intact, signed with The employee's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
-   "seq": 22,
-   "step": 3,
+   "seq": 29,
+   "step": 4,
    "agent": "business-agent",
    "part": "inbound-gate",
    "kind": "check",
@@ -916,11 +1714,56 @@
     ],
     "answer": "Accepted, for invoice claims only."
    },
-   "caption": "The merchant's invoice statement: The merchant is an accepted source for this kind of claim."
+   "caption": "The merchant's invoice statement: The merchant is an accepted source for this kind of claim.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
-   "seq": 23,
-   "step": 3,
+   "seq": 30,
+   "step": 4,
    "agent": "business-agent",
    "part": "inbound-gate",
    "kind": "check",
@@ -938,16 +1781,61 @@
     "id": "urn:awp:representation:759c6a4358b10116f2327d87956773d7:1794560400000",
     "text": "A representation statement signed with The employee's pinned key must name this agent, this operation and a current validity period."
    },
-   "caption": "The employee signed a statement that The employee's agent acts for them in this operation."
+   "caption": "The employee signed a statement that The employee's agent acts for them in this operation.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
-   "seq": 24,
-   "step": 3,
+   "seq": 31,
+   "step": 4,
    "agent": "business-agent",
    "part": "inbound-gate",
    "kind": "check",
    "check": "terms",
-   "verdict": "pass",
+   "verdict": "indeterminate",
    "refs": [
     {
      "layer": "usage-control",
@@ -956,20 +1844,65 @@
     },
     {
      "layer": "commitments",
-     "suite": "payment",
+     "suite": "signed-offer-acceptance",
      "clause": "CORE-IN-10"
     }
    ],
-   "reason": "terms-acceptable",
+   "reason": "indeterminate-policy",
    "rule": {
     "id": "urn:terms:expense-receipt",
-    "text": "Its terms allow this: use for Expenses; share for Expenses."
+    "text": "Its terms cannot be decided (use for Expenses; share for Expenses)."
    },
-   "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses."
+   "caption": "The merchant's invoice statement: its terms cannot be decided (use for Expenses; share for Expenses).",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
-   "seq": 25,
-   "step": 3,
+   "seq": 32,
+   "step": 4,
    "agent": "business-agent",
    "part": "inbound-gate",
    "kind": "check",
@@ -992,178 +1925,52 @@
     "id": "urn:profile:expenses:invoice",
     "text": "Accept invoice from The merchant by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The merchant's invoice statement is fit for File the merchant receipt: recorded-by-authority, 0 days old."
-  },
-  {
-   "seq": 26,
-   "step": 3,
-   "agent": "business-agent",
-   "part": "inbound-gate",
-   "kind": "decision",
-   "verdict": "pass",
-   "outcome": "admit",
-   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
-  },
-  {
-   "seq": 27,
-   "step": 3,
-   "agent": "business-agent",
-   "part": "memory",
-   "kind": "store",
-   "fact": {
-    "id": "urn:scenario:expenses:invoice",
-    "label": "The merchant's invoice statement",
-    "claimType": "invoice",
-    "subject": "urn:fictional:supplier",
-    "value": null,
-    "source": "urn:fictional:merchant",
-    "method": "recorded-by-authority",
-    "asOf": "2026-11-13T09:00:00.000Z",
-    "terms": {
-     "id": "urn:terms:expense-receipt",
-     "summary": "use for Expenses; share for Expenses"
-    },
-    "provenance": "signed by The merchant"
-   },
-   "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms."
-  },
-  {
-   "seq": 28,
-   "step": 4,
-   "agent": "business-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "integrity",
-   "verdict": "pass",
-   "refs": [
-    {
-     "layer": "authenticity",
-     "suite": "jws",
-     "clause": "CORE-IN-1"
-    },
-    {
-     "layer": "identity",
-     "suite": "pinned-key",
-     "clause": "CORE-IN-1"
-    }
-   ],
-   "reason": "intact",
-   "caption": "The reimbursement bank's payee-account statement is intact and signed with The reimbursement bank's pinned key."
-  },
-  {
-   "seq": 29,
-   "step": 4,
-   "agent": "business-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "source",
-   "verdict": "pass",
-   "refs": [
-    {
-     "layer": "trust",
-     "suite": "register-chain",
-     "clause": "CORE-IN-4"
-    },
-    {
-     "layer": "authenticity",
-     "suite": "jws",
-     "clause": "CORE-IN-4"
-    }
-   ],
-   "reason": "source-accepted",
-   "rule": {
-    "id": "urn:source-rule:bank",
-    "text": "The reimbursement bank is accepted for payee-account claims."
-   },
-   "resolution": {
-    "question": "Is The reimbursement bank an authority for payee-account claims about The employee?",
-    "path": [
+   "caption": "The merchant's invoice statement is fit for File and agree an expense claim: recorded-by-authority, 0 days old.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
      {
-      "at": "The employer's own list",
-      "kind": "own-list",
-      "says": "The reimbursement bank is accepted for payee-account."
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
      }
     ],
-    "answer": "Accepted, for payee-account claims only."
-   },
-   "caption": "The reimbursement bank's payee-account statement: The reimbursement bank is an accepted source for this kind of claim."
-  },
-  {
-   "seq": 30,
-   "step": 4,
-   "agent": "business-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "authority",
-   "verdict": "not-applicable",
-   "refs": [
-    {
-     "layer": "authority",
-     "suite": "mandate-signed",
-     "clause": "CORE-IN-7"
-    }
-   ],
-   "reason": "no-action",
-   "caption": "The reimbursement bank's payee-account statement asks for nothing, so there is no authority to check."
-  },
-  {
-   "seq": 31,
-   "step": 4,
-   "agent": "business-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "terms",
-   "verdict": "pass",
-   "refs": [
-    {
-     "layer": "usage-control",
-     "suite": "odrl-rules",
-     "clause": "CORE-IN-10"
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
     },
-    {
-     "layer": "commitments",
-     "suite": "payment",
-     "clause": "CORE-IN-10"
-    }
-   ],
-   "reason": "terms-acceptable",
-   "rule": {
-    "id": "urn:terms:payee-account",
-    "text": "Its terms allow this: ."
-   },
-   "caption": "The reimbursement bank's payee-account statement: its terms allow this: ."
-  },
-  {
-   "seq": 32,
-   "step": 4,
-   "agent": "business-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "fitness",
-   "verdict": "pass",
-   "refs": [
-    {
-     "layer": "reliance",
-     "suite": "precedence-rules",
-     "clause": "CORE-IN-13"
-    },
-    {
-     "layer": "meaning",
-     "suite": "fixed-vocabulary",
-     "id": "urn:scenario:expenses:task"
-    },
-    {
-     "layer": "meaning",
-     "suite": "fixed-vocabulary",
-     "id": "urn:fictional:bank"
-    }
-   ],
-   "reason": "fit-for-use",
-   "rule": {
-    "id": "urn:profile:expenses:payee-account",
-    "text": "Accept payee-account from The reimbursement bank by recorded-by-authority, at most 30 days old."
-   },
-   "caption": "The reimbursement bank's payee-account statement is fit for Claiming expenses: recorded-by-authority, 0 days old."
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
    "seq": 33,
@@ -1173,213 +1980,64 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "admit",
-   "caption": "The reimbursement bank's payee-account statement is admitted."
+   "caption": "The message is admitted; statements that did not pass are labelled as not admitted.",
+   "settlement": {
+    "suite": "rdf-order",
+    "objects": [
+     {
+      "name": "Service offer",
+      "form": "application/ld+json",
+      "shown": "Same document as facts."
+     }
+    ],
+    "facts": {
+     "@context": "https://w3id.org/jeswr/awp/context/v1",
+     "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8",
+     "type": "OdrlOffer",
+     "duties": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty",
+      "type": "CompensationDuty",
+      "amountConstraint": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:duty:amount",
+       "type": "AmountConstraint",
+       "paymentAmount": "75.00",
+       "paymentOperand": "http://www.w3.org/ns/odrl/2/payAmount",
+       "paymentOperator": "http://www.w3.org/ns/odrl/2/eq",
+       "paymentUnit": "GBP"
+      },
+      "compensatedParty": "urn:fictional:supplier",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/compensate"
+     },
+     "instalment": "1",
+     "name": "Reimburse the merchant receipt",
+     "paymentAgent": "urn:fictional:business",
+     "paymentValidFrom": "2026-11-13T09:00:00.000Z",
+     "paymentValidUntil": "2026-11-20T09:00:00.000Z",
+     "permissions": {
+      "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:permission",
+      "type": "ServicePermission",
+      "paymentAction": "http://www.w3.org/ns/odrl/2/use",
+      "target": {
+       "id": "urn:awp:offer:sha-256%3A01796981925f75c4328877ae99c4008b25209840d9a4337f7f420d73f2f5d6d8:service",
+       "name": "Reimburse the merchant receipt"
+      }
+     },
+     "purpose": "urn:purpose:expenses"
+    },
+    "sameDocument": "The protocol object and lifted facts are the same RDF document."
+   }
   },
   {
    "seq": 34,
    "step": 4,
    "agent": "business-agent",
-   "part": "memory",
-   "kind": "store",
-   "fact": {
-    "id": "urn:scenario:expenses:account",
-    "label": "The reimbursement bank's payee-account statement",
-    "claimType": "payee-account",
-    "subject": "urn:fictional:supplier",
-    "value": null,
-    "source": "urn:fictional:bank",
-    "method": "recorded-by-authority",
-    "asOf": "2026-11-13T09:00:00.000Z",
-    "terms": {
-     "id": "urn:terms:payee-account",
-     "summary": ""
-    },
-    "provenance": "signed by The reimbursement bank"
-   },
-   "caption": "The reimbursement bank's payee-account statement is stored with its source, how it was produced, its date and its terms."
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to take the next step in File and agree an expense claim with The employee."
   },
   {
    "seq": 35,
-   "step": 5,
-   "agent": "bank-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "integrity",
-   "verdict": "pass",
-   "refs": [
-    {
-     "layer": "authenticity",
-     "suite": "jws",
-     "clause": "CORE-IN-1"
-    },
-    {
-     "layer": "identity",
-     "suite": "pinned-key",
-     "clause": "CORE-IN-1"
-    }
-   ],
-   "reason": "intact",
-   "caption": "The reimbursement bank's payee-account statement is intact and signed with The reimbursement bank's pinned key."
-  },
-  {
-   "seq": 36,
-   "step": 5,
-   "agent": "bank-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "source",
-   "verdict": "pass",
-   "refs": [
-    {
-     "layer": "trust",
-     "suite": "register-chain",
-     "clause": "CORE-IN-4"
-    },
-    {
-     "layer": "authenticity",
-     "suite": "jws",
-     "clause": "CORE-IN-4"
-    }
-   ],
-   "reason": "source-accepted",
-   "rule": {
-    "id": "urn:rule:own-accounts",
-    "text": "The reimbursement bank is accepted for payee-account claims."
-   },
-   "resolution": {
-    "question": "Is The reimbursement bank an authority for payee-account claims about The employee?",
-    "path": [
-     {
-      "at": "The reimbursement bank's own list",
-      "kind": "own-list",
-      "says": "The reimbursement bank is accepted for payee-account."
-     }
-    ],
-    "answer": "Accepted, for payee-account claims only."
-   },
-   "caption": "The reimbursement bank's payee-account statement: The reimbursement bank is an accepted source for this kind of claim."
-  },
-  {
-   "seq": 37,
-   "step": 5,
-   "agent": "bank-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "authority",
-   "verdict": "not-applicable",
-   "refs": [
-    {
-     "layer": "authority",
-     "suite": "mandate-signed",
-     "clause": "CORE-IN-7"
-    }
-   ],
-   "reason": "no-action",
-   "caption": "The reimbursement bank's payee-account statement asks for nothing, so there is no authority to check."
-  },
-  {
-   "seq": 38,
-   "step": 5,
-   "agent": "bank-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "terms",
-   "verdict": "pass",
-   "refs": [
-    {
-     "layer": "usage-control",
-     "suite": "odrl-rules",
-     "clause": "CORE-IN-10"
-    },
-    {
-     "layer": "commitments",
-     "suite": "payment",
-     "clause": "CORE-IN-10"
-    }
-   ],
-   "reason": "terms-acceptable",
-   "rule": {
-    "id": "urn:terms:payee-account",
-    "text": "Its terms allow this: ."
-   },
-   "caption": "The reimbursement bank's payee-account statement: its terms allow this: ."
-  },
-  {
-   "seq": 39,
-   "step": 5,
-   "agent": "bank-agent",
-   "part": "inbound-gate",
-   "kind": "check",
-   "check": "fitness",
-   "verdict": "pass",
-   "refs": [
-    {
-     "layer": "reliance",
-     "suite": "precedence-rules",
-     "clause": "CORE-IN-13"
-    },
-    {
-     "layer": "meaning",
-     "suite": "fixed-vocabulary",
-     "id": "urn:scenario:expenses:task"
-    },
-    {
-     "layer": "meaning",
-     "suite": "fixed-vocabulary",
-     "id": "urn:fictional:bank"
-    }
-   ],
-   "reason": "fit-for-use",
-   "rule": {
-    "id": "urn:profile:expenses:payee-account",
-    "text": "Accept payee-account from The reimbursement bank by recorded-by-authority, at most 30 days old."
-   },
-   "caption": "The reimbursement bank's payee-account statement is fit for Claiming expenses: recorded-by-authority, 0 days old."
-  },
-  {
-   "seq": 40,
-   "step": 5,
-   "agent": "bank-agent",
-   "part": "inbound-gate",
-   "kind": "decision",
-   "verdict": "pass",
-   "outcome": "admit",
-   "caption": "The reimbursement bank's payee-account statement is admitted."
-  },
-  {
-   "seq": 41,
-   "step": 5,
-   "agent": "bank-agent",
-   "part": "memory",
-   "kind": "store",
-   "fact": {
-    "id": "urn:scenario:expenses:account",
-    "label": "The reimbursement bank's payee-account statement",
-    "claimType": "payee-account",
-    "subject": "urn:fictional:supplier",
-    "value": null,
-    "source": "urn:fictional:bank",
-    "method": "recorded-by-authority",
-    "asOf": "2026-11-13T09:00:00.000Z",
-    "terms": {
-     "id": "urn:terms:payee-account",
-     "summary": ""
-    },
-    "provenance": "signed by The reimbursement bank"
-   },
-   "caption": "The reimbursement bank's payee-account statement is stored with its source, how it was produced, its date and its terms."
-  },
-  {
-   "seq": 42,
-   "step": 6,
-   "agent": "business-agent",
-   "part": "core",
-   "kind": "propose",
-   "caption": "The core proposes to take the next step in expenses with The reimbursement bank."
-  },
-  {
-   "seq": 43,
-   "step": 6,
+   "step": 4,
    "agent": "business-agent",
    "part": "outbound-gate",
    "kind": "check",
@@ -1398,15 +2056,15 @@
     }
    ],
    "rule": {
-    "id": "urn:rule:monthly-payments",
-    "text": "The employer's mandate lets the agent pay expenses, on its own."
+    "id": "urn:rule:accept-expense-claim",
+    "text": "The employer's mandate lets the agent use File and agree an expense claim for Expenses with The employee, on its own."
    },
    "reason": "within-mandate",
    "caption": "The employer's mandate covers this action."
   },
   {
-   "seq": 44,
-   "step": 6,
+   "seq": 36,
+   "step": 4,
    "agent": "business-agent",
    "part": "outbound-gate",
    "kind": "check",
@@ -1425,22 +2083,22 @@
     }
    ],
    "resolution": {
-    "question": "Is The reimbursement bank a party I can send expenses to?",
+    "question": "Is The employee a party I can send File and agree an expense claim to?",
     "path": [
      {
       "at": "The employer's own list",
       "kind": "own-list",
-      "says": "The reimbursement bank is accepted for expenses."
+      "says": "The employee is accepted for File and agree an expense claim."
      }
     ],
-    "answer": "Accepted, for expenses only."
+    "answer": "Accepted, for File and agree an expense claim only."
    },
    "reason": "recipient-established",
-   "caption": "The reimbursement bank: Accepted, for expenses only."
+   "caption": "The employee: Accepted, for File and agree an expense claim only."
   },
   {
-   "seq": 45,
-   "step": 6,
+   "seq": 37,
+   "step": 4,
    "agent": "business-agent",
    "part": "outbound-gate",
    "kind": "check",
@@ -1457,8 +2115,8 @@
    "caption": "This action passes on no personal data."
   },
   {
-   "seq": 46,
-   "step": 6,
+   "seq": 38,
+   "step": 4,
    "agent": "business-agent",
    "part": "outbound-gate",
    "kind": "check",
@@ -1475,8 +2133,8 @@
    "caption": "This action passes on no personal data."
   },
   {
-   "seq": 47,
-   "step": 6,
+   "seq": 39,
+   "step": 4,
    "agent": "business-agent",
    "part": "outbound-gate",
    "kind": "check",
@@ -1491,14 +2149,14 @@
    ],
    "reason": "limit-exceeded",
    "rule": {
-    "id": "urn:rule:monthly-payments",
-    "text": "The employer's mandate lets the agent pay expenses, on its own. This payment exceeds the mandate's per-action or calendar-month limit."
+    "id": "urn:scenario:expenses:business-agent:limits",
+    "text": "The employer's mandate lets the agent use File and agree an expense claim for Expenses with The employee, on its own. This commitment exceeds the principal's GBP 50 limit."
    },
    "caption": "This is outside The employer's limits, so the gate asks The employer."
   },
   {
-   "seq": 48,
-   "step": 6,
+   "seq": 40,
+   "step": 4,
    "agent": "business-agent",
    "part": "outbound-gate",
    "kind": "decision",
@@ -1508,14 +2166,14 @@
    "caption": "The gate holds the action and asks The employer."
   },
   {
-   "seq": 49,
-   "step": 6,
+   "seq": 41,
+   "step": 4,
    "agent": "business-agent",
    "part": "principal",
    "kind": "ask-principal",
    "chat": {
     "who": "agent",
-    "text": "The reimbursement bank asks me to take the next step in expenses with The reimbursement bank for Expenses. This payment exceeds the mandate's per-action or calendar-month limit. May I go ahead?"
+    "text": "May I accept Reimburse the merchant receipt from The employee for 75.00 GBP?"
    },
    "caption": "The employer is asked to approve this exact action; the approval will be bound to its digest."
   }

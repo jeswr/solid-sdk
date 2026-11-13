@@ -49,7 +49,8 @@
    "reliance": "precedence-rules",
    "usage-control": "odrl-rules",
    "commitments": "signed-offer-acceptance",
-   "accountability": "local-ledger"
+   "accountability": "local-ledger",
+   "settlement": "rdf-order"
   }
  },
  "agents": [
@@ -67,7 +68,7 @@
   }
  ],
  "generated": {
-  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+  "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
   "core": "scripted"
  },
  "standIns": [
@@ -439,12 +440,12 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:d7e6fcf6a6e…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The person's agent to The company's agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-subject-access-request-main:owner-agent:0002.",
+      "summary": "From The person's agent to The company's agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -558,12 +559,12 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:d7e6fcf6a6e…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The person's agent to The company's agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-subject-access-request-main:owner-agent:0002.",
+      "summary": "From The person's agent to The company's agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -611,7 +612,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:subject-access-request\"; \"urn:purpose:subject-access-request\"",
+      "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "urn:op:subject-access-request",
@@ -1002,12 +1003,12 @@
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:e4100ce3e57…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The company's agent to The person's agent; deliver; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-subject-access-request-main:receiver-agent:0001.",
+      "summary": "From The company's agent to The person's agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1122,7 +1123,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-subject-access-request-main:owner-agent:0002. The statements were issued by their sources and are relayed, not authored, by The company's agent; as of 2026-11-13T09:00:00.000Z.",
+      "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by The company's agent; as of 2026-11-13T09:00:00.000Z.",
       "raw": {
        "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001",
        "inReplyTo": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
@@ -1167,12 +1168,12 @@
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:e4100ce3e57…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The company's agent to The person's agent; deliver; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-subject-access-request-main:receiver-agent:0001.",
+      "summary": "From The company's agent to The person's agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1204,7 +1205,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-subject-access-request-main:owner-agent:0002\"; \"urn:awp:engine-subject-access-request-main:owner-agent:0002\"; \"urn:op:subject-access-request\"; \"urn:scenario:subject-access-request:data-copy\"",
+      "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "ref": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
        "basis": {
@@ -1305,7 +1306,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-subject-access-request-main:owner-agent:0002. The statements were issued by their sources and are relayed, not authored, by The company's agent; as of 2026-11-13T09:00:00.000Z.",
+      "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by The company's agent; as of 2026-11-13T09:00:00.000Z.",
       "raw": {
        "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001",
        "inReplyTo": "urn:awp:engine-subject-access-request-main:owner-agent:0002",

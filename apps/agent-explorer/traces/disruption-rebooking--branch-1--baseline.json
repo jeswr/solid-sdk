@@ -52,7 +52,8 @@
    "reliance": "precedence-rules",
    "usage-control": "odrl-rules",
    "commitments": "signed-offer-acceptance",
-   "accountability": "local-ledger"
+   "accountability": "local-ledger",
+   "settlement": "rdf-order"
   }
  },
  "agents": [
@@ -70,7 +71,7 @@
   }
  ],
  "generated": {
-  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+  "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
   "core": "scripted"
  },
  "standIns": [
@@ -438,12 +439,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:ad41e72edcd…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The airline's agent to The traveller's agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002.",
+      "summary": "From The airline's agent to The traveller's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -492,7 +493,7 @@
      },
      "content": {
       "present": true,
-      "summary": "An offer to start urn:op:disruption-rebooking, with terms (round 1).",
+      "summary": "An offer for Rebooking after a cancelled flight, with terms (round 1).",
       "raw": {
        "operation": {
         "id": "urn:op:disruption-rebooking",
@@ -562,12 +563,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:ad41e72edcd…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The airline's agent to The traveller's agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002.",
+      "summary": "From The airline's agent to The traveller's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -616,7 +617,7 @@
      },
      "content": {
       "present": true,
-      "summary": "An offer to start urn:op:disruption-rebooking, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:disruption-rebooking\"; \"sha-256:5c0bf85c231b15e279b17ebba4bc43fa0caa9654e6f841300456874336ecd894\"",
+      "summary": "An offer for Rebooking after a cancelled flight, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "urn:op:disruption-rebooking",

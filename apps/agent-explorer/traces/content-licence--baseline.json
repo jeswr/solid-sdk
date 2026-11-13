@@ -75,7 +75,8 @@
    "reliance": "precedence-rules",
    "usage-control": "odrl-rules",
    "commitments": "agreement-credential",
-   "accountability": "local-ledger"
+   "accountability": "local-ledger",
+   "settlement": "rdf-order"
   }
  },
  "agents": [
@@ -117,7 +118,7 @@
   }
  ],
  "generated": {
-  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+  "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
   "core": "scripted"
  },
  "standIns": [

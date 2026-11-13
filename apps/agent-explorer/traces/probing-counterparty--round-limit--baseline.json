@@ -50,7 +50,8 @@
    "reliance": "precedence-rules",
    "usage-control": "odrl-rules",
    "commitments": "signed-offer-acceptance",
-   "accountability": "local-ledger"
+   "accountability": "local-ledger",
+   "settlement": "rdf-order"
   }
  },
  "agents": [
@@ -68,7 +69,7 @@
   }
  ],
  "generated": {
-  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+  "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
   "core": "scripted"
  },
  "standIns": [],
@@ -260,12 +261,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:c9c04e36132…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-round-limit:service-agent:0002.",
+      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -312,7 +313,7 @@
      },
      "content": {
       "present": true,
-      "summary": "An offer to start urn:operation:service-query, with terms (round 1).",
+      "summary": "An offer for A bounded request for contact details, with terms (round 1).",
       "raw": {
        "operation": {
         "id": "urn:operation:service-query",
@@ -338,7 +339,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms: purpose urn:purpose:service-query.",
+      "summary": "Terms: purpose Service query.",
       "raw": {
        "purpose": "urn:purpose:service-query",
        "evidenceRequest": [
@@ -388,12 +389,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:c9c04e36132…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-round-limit:service-agent:0002.",
+      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -440,7 +441,7 @@
      },
      "content": {
       "present": true,
-      "summary": "An offer to start urn:operation:service-query, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:purpose:service-query\"; \"sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6\"",
+      "summary": "An offer for A bounded request for contact details, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "urn:operation:service-query",
@@ -480,7 +481,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms: purpose urn:purpose:service-query.",
+      "summary": "Terms: purpose Service query.",
       "raw": {
        "purpose": "urn:purpose:service-query",
        "evidenceRequest": [
@@ -827,12 +828,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:445178b2841…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Rowan's agent to The service's agent; propose; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-round-limit:person-agent:0001.",
+      "summary": "From Rowan's agent to The service's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -908,7 +909,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms: purpose urn:purpose:service-query.",
+      "summary": "Terms: purpose Service query.",
       "raw": {
        "purpose": "urn:purpose:service-query",
        "evidenceRequest": [
@@ -923,7 +924,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-probing-counterparty-round-limit:service-agent:0002.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0001",
        "inReplyTo": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0002"
@@ -960,12 +961,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:445178b2841…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Rowan's agent to The service's agent; propose; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-round-limit:person-agent:0001.",
+      "summary": "From Rowan's agent to The service's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1013,7 +1014,7 @@
      },
      "content": {
       "present": true,
-      "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:purpose:service-query\"; \"sha-256:b91b54c0dd84c9e9952cab4515f34b10cf7fdab5576139f36853c5e7fdf648df\"; \"urn:awp:engine-probing-counterparty-round-limit:service-agent:0002\"",
+      "summary": "A counter-offer (round 2) with new terms. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "urn:operation:service-query",
@@ -1059,7 +1060,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms: purpose urn:purpose:service-query.",
+      "summary": "Terms: purpose Service query.",
       "raw": {
        "purpose": "urn:purpose:service-query",
        "evidenceRequest": [
@@ -1074,7 +1075,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-probing-counterparty-round-limit:service-agent:0002.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0001",
        "inReplyTo": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0002"
@@ -1408,12 +1409,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:ea766b90899…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-round-limit:service-agent:0003.",
+      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1489,7 +1490,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms: purpose urn:purpose:service-query.",
+      "summary": "Terms: purpose Service query.",
       "raw": {
        "purpose": "urn:purpose:service-query",
        "evidenceRequest": [
@@ -1504,7 +1505,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-probing-counterparty-round-limit:person-agent:0001.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0001",
        "inReplyTo": "urn:awp:engine-probing-counterparty-round-limit:person-agent:0001"
@@ -1541,12 +1542,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:ea766b90899…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-round-limit:service-agent:0003.",
+      "summary": "From The service's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1594,7 +1595,7 @@
      },
      "content": {
       "present": true,
-      "summary": "A counter-offer (round 3) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:purpose:service-query\"; \"sha-256:2d8bd2ed782505a97e9d0bb93e13188500991ae7016eaf59935262fdfb828cb1\"; \"urn:awp:engine-probing-counterparty-round-limit:person-agent:0001\"",
+      "summary": "A counter-offer (round 3) with new terms. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "urn:operation:service-query",
@@ -1640,7 +1641,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms: purpose urn:purpose:service-query.",
+      "summary": "Terms: purpose Service query.",
       "raw": {
        "purpose": "urn:purpose:service-query",
        "evidenceRequest": [
@@ -1655,7 +1656,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-probing-counterparty-round-limit:person-agent:0001.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0001",
        "inReplyTo": "urn:awp:engine-probing-counterparty-round-limit:person-agent:0001"

@@ -58,7 +58,8 @@
    "reliance": "precedence-rules",
    "usage-control": "odrl-rules",
    "commitments": "signed-offer-acceptance",
-   "accountability": "local-ledger"
+   "accountability": "local-ledger",
+   "settlement": "rdf-order"
   }
  },
  "agents": [
@@ -76,7 +77,7 @@
   }
  ],
  "generated": {
-  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+  "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
   "core": "scripted"
  },
  "standIns": [
@@ -484,12 +485,12 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:d9f81763bb5…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The delivery partner's agent to The receiving agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-agent-handoff-branch-2:owner-agent:0002.",
+      "summary": "From The delivery partner's agent to The receiving agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
@@ -686,12 +687,12 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:d9f81763bb5…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The delivery partner's agent to The receiving agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-agent-handoff-branch-2:owner-agent:0002.",
+      "summary": "From The delivery partner's agent to The receiving agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
@@ -756,7 +757,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:agent-handoff\"; \"urn:fictional:agent-handoff:subject\"; \"urn:purpose:delivery\"",
+      "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "urn:op:agent-handoff",
@@ -1148,12 +1149,12 @@
     "kind": "refuse",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:0b0a8693202…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The receiving agent to The delivery partner's agent; refuse; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-agent-handoff-branch-2:receiver-agent:0001.",
+      "summary": "From The receiving agent to The delivery partner's agent; refuse; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
@@ -1202,7 +1203,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-agent-handoff-branch-2:owner-agent:0002.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
        "inReplyTo": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002"

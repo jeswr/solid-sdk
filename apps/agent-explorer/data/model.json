@@ -636,13 +636,6 @@
           "summary": "One countersigned record of what was agreed.",
           "maturity": "standard",
           "basis": "W3C Verifiable Credential 2.0 with two proofs"
-        },
-        {
-          "id": "payment",
-          "name": "Offer, acceptance and payment",
-          "summary": "As the baseline, and a payment that settles the agreement, with its own approval and its own proof that it completed.",
-          "maturity": "industry specification",
-          "basis": "Agent Payments Protocol mandates; payment scheme rules"
         }
       ],
       "label": "6"

@@ -587,6 +587,27 @@
      "mortgage": "mortgage-main"
     },
     {
+     "path": "fee-amount-differs",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--fee-amount-differs",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-payee-differs",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--fee-payee-differs",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-no-offer",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--fee-no-offer",
+     "mortgage": "mortgage-main"
+    },
+    {
      "path": "main",
      "label": "All fourteen steps",
      "status": "runs",
@@ -754,9 +775,7 @@
     "recipient",
     "limits-approval"
    ],
-   "suites": {
-    "commitments": "payment"
-   },
+   "suites": {},
    "assurance": null,
    "branches": [
     {
@@ -1823,7 +1842,7 @@
      "path": "hidden-validity-proof",
      "label": "Show valid until at least a date while hiding the actual date",
      "status": "blocked",
-     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+     "reason": "Blocked: needs a hidden date comparison, due in sparq's next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
     }
    ],
    "runState": "some"
@@ -2104,7 +2123,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+     "reason": "Blocked: needs a hidden integer comparison, due in sparq's next result-proof build. Projecting income would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
     },
     {
      "path": "branch-1",
@@ -2545,7 +2564,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+     "reason": "Blocked: needs issuer-scoped GRAPH and the unchanged BSc-or-MSc membership rule; this result-proof build rejects GRAPH and FILTER IN. Selecting only BSc would narrow the rule; releasing the degree would change disclosure."
     },
     {
      "path": "branch-1",
@@ -2625,9 +2644,7 @@
     "mandate",
     "recipient"
    ],
-   "suites": {
-    "commitments": "payment"
-   },
+   "suites": {},
    "assurance": null,
    "branches": [
     {
@@ -2668,6 +2685,12 @@
      "label": "A merchant's message tells the agent to pay to a different account",
      "status": "runs",
      "scenario": "shopping-agent--branch-2"
+    },
+    {
+     "path": "asked-to-look-not-to-buy",
+     "label": "The person asked only for the cheapest price; the core proposes buying.",
+     "status": "runs",
+     "scenario": "shopping-agent--asked-to-look-not-to-buy"
     }
    ],
    "runState": "all"
@@ -2862,7 +2885,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+     "reason": "Blocked: needs a hidden date comparison, due in sparq's next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
     },
     {
      "path": "branch-1",
@@ -3088,7 +3111,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+     "reason": "Blocked: needs a hidden integer comparison, due in sparq's next result-proof build. Projecting the balance would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
     },
     {
      "path": "branch-1",
@@ -4152,9 +4175,7 @@
     "fitness",
     "limits-approval"
    ],
-   "suites": {
-    "commitments": "payment"
-   },
+   "suites": {},
    "assurance": "by-source",
    "branches": [
     {
@@ -4227,7 +4248,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+     "reason": "Blocked: needs an issuer-scoped GRAPH query; this result-proof build rejects GRAPH with \"operator outside positive BGP/JOIN/FILTER\"."
     },
     {
      "path": "branch-1",

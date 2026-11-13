@@ -207,7 +207,7 @@ Use cases that convey a derived answer instead of records: 23 (by-source 9, prov
 
 Use cases with a real run: 70 of 70. The rest are specified and not yet run.
 
-Every use case is written as a profile and a scenario file and run through the reference gates with a scripted core. Of 174 paths, 154 run and give the outcome the catalogue expects, 11 run and differ (a different outcome or reason, or a branch whose run is no different from the main path, so that what goes wrong in it was not exercised), and 9 cannot run yet. By use case: 61 run on every path, 9 run on some, 0 on none.
+Every use case is written as a profile and a scenario file and run through the reference gates with a scripted core. Of 178 paths, 158 run and give the outcome the catalogue expects, 11 run and differ (a different outcome or reason, or a branch whose run is no different from the main path, so that what goes wrong in it was not exercised), and 9 cannot run yet. By use case: 61 run on every path, 9 run on some, 0 on none.
 
 ### Runs that differ from the catalogue
 
@@ -231,13 +231,13 @@ Every use case is written as a profile and a scenario file and run through the r
 |---|---|---|
 | An insurance quote with the least disclosure | The main path | Blocked: needs a Noir circuit for absence and totals, not yet delivered. |
 | Proving eligibility for a clinical trial | The main path | Blocked: needs a Noir circuit for absence and totals, not yet delivered. |
-| Hiring: right to work and qualifications | Show valid until at least a date while hiding the actual date | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
-| Applying to rent a home | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
-| Showing a degree to an employer abroad | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
-| Proving age to buy something | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
-| Applying for a visa | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
+| Hiring: right to work and qualifications | Show valid until at least a date while hiding the actual date | Blocked: needs a hidden date comparison, due in sparq's next result-proof build. The current build also rejects issuer-scoped GRAPH queries. |
+| Applying to rent a home | The main path | Blocked: needs a hidden integer comparison, due in sparq's next result-proof build. Projecting income would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries. |
+| Showing a degree to an employer abroad | The main path | Blocked: needs issuer-scoped GRAPH and the unchanged BSc-or-MSc membership rule; this result-proof build rejects GRAPH and FILTER IN. Selecting only BSc would narrow the rule; releasing the degree would change disclosure. |
+| Proving age to buy something | The main path | Blocked: needs a hidden date comparison, due in sparq's next result-proof build. The current build also rejects issuer-scoped GRAPH queries. |
+| Applying for a visa | The main path | Blocked: needs a hidden integer comparison, due in sparq's next result-proof build. Projecting the balance would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries. |
 | Proving recycled content along a supply chain | The main path | Blocked: needs a Noir circuit for absence and totals, not yet delivered. |
-| Being introduced to a stranger safely | The main path | Needs a proof system: needs the sparq-zk-result/5 package, which is not installed |
+| Being introduced to a stranger safely | The main path | Blocked: needs an issuer-scoped GRAPH query; this result-proof build rejects GRAPH with "operator outside positive BGP/JOIN/FILTER". |
 
 ## 7. What is missing
 

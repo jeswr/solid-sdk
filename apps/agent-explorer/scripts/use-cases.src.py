@@ -72,7 +72,7 @@ uc('pay-an-invoice', 'Paying a supplier\'s invoice', 'finance', 'B2B',
    ['source', 'recipient', 'limits-approval'],
    [('A message gives new bank details for a known supplier', 'stop', 'source-not-authoritative'), ('An invoice is above the limit', 'ask-principal', 'limit-exceeded')],
    'fits', 'The payee account is a claim like any other: it must come from the supplier\'s bank or a register, never from the invoice.',
-   suites={'commitments': 'payment'}, benchmarks=['agentdojo'])
+   benchmarks=['agentdojo'])
 uc('small-business-loan', 'A loan for a small company', 'finance', 'B2B',
    ['A company', 'A director', 'The company\'s agent', 'A lender', 'An accounting platform', 'The tax authority', 'The company register'],
    'A director\'s agent applies for a loan. Accounts come from the accounting platform, filings from the tax authority, and the director\'s right to act from the company register.',
@@ -326,7 +326,7 @@ uc('shopping-agent', 'Buying something within a budget', 'commerce', 'B2C',
    ['limits-approval', 'mandate', 'recipient'],
    [('Fees at checkout take the price above the budget', 'ask-principal', 'limit-exceeded'), ('A merchant\'s message tells the agent to pay to a different account', 'stop', 'not-authorised')],
    'fits', 'The gate bounds what can be spent and with whom. It does not make the agent a good shopper.',
-   suites={'commitments': 'payment'}, benchmarks=['magentic', 'agentdojo'])
+   benchmarks=['magentic', 'agentdojo'])
 uc('price-negotiation', 'Negotiating a price', 'commerce', 'C2C',
    ['A buyer', 'A seller', 'An agent for each'],
    'Two agents haggle over a second-hand bicycle.',
@@ -541,7 +541,7 @@ uc('sell-a-car', 'Selling a used car to a stranger', 'personal', 'C2C',
    '"No loan outstanding" needs a register that sees every lender.',
    ['source', 'fitness', 'limits-approval'],
    [('The seller is not the registered keeper', 'stop', 'source-not-authoritative')],
-   'fits', assurance='by-source', suites={'commitments': 'payment'})
+   'fits', assurance='by-source')
 uc('introduction', 'Being introduced to a stranger safely', 'personal', 'C2C',
    ['Two people', 'A platform'],
    'Before meeting someone from the internet, each wants to know the other is a real, identified person, without learning who.',

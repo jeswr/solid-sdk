@@ -57,7 +57,8 @@
    "reliance": "precedence-rules",
    "usage-control": "odrl-rules",
    "commitments": "signed-offer-acceptance",
-   "accountability": "local-ledger"
+   "accountability": "local-ledger",
+   "settlement": "rdf-order"
   }
  },
  "agents": [
@@ -75,7 +76,7 @@
   }
  ],
  "generated": {
-  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+  "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
   "core": "scripted"
  },
  "standIns": [
@@ -272,12 +273,12 @@
     "kind": "describe",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:4044d053038…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0002.",
+      "summary": "From Sam's agent to The fictional lender's agent; describe; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -359,12 +360,12 @@
     "kind": "describe",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:4044d053038…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0002.",
+      "summary": "From Sam's agent to The fictional lender's agent; describe; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -702,12 +703,12 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:bcce78191ff…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0001.",
+      "summary": "From The fictional lender's agent to Sam's agent; description; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -732,7 +733,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:858f653c24ff7d54e07812737a3b31631d786dd82c826f015d29c81127d0ee3b"
+      "digest": "sha-256:31ae667c0b18a964fd321336bff04d26c29234e839b8d4e938ec84a29ffef024"
      },
      "authority": {
       "present": false,
@@ -856,6 +857,52 @@
           "limitations": [
            "synthetic lender; indicative only; no credit decision or institutional approval"
           ]
+         },
+         {
+          "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+          "version": "0.1",
+          "label": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+          "pattern": "invoke",
+          "access": "public",
+          "models": [
+           {
+            "id": "https://w3id.org/jeswr/awp#model/mortgage-product-record",
+            "version": "0.1"
+           }
+          ],
+          "purposes": [
+           "https://w3id.org/jeswr/awp#purpose/product-search"
+          ],
+          "requiresRepresentation": false,
+          "roles": [
+           "initiator",
+           "responder"
+          ],
+          "effects": [],
+          "outcomes": []
+         },
+         {
+          "id": "https://w3id.org/jeswr/awp#op/balance-statement",
+          "version": "0.1",
+          "label": "https://w3id.org/jeswr/awp#op/balance-statement",
+          "pattern": "invoke",
+          "access": "represented",
+          "models": [
+           {
+            "id": "https://w3id.org/jeswr/awp#model/balance-statement",
+            "version": "0.1"
+           }
+          ],
+          "purposes": [
+           "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+          ],
+          "requiresRepresentation": true,
+          "roles": [
+           "initiator",
+           "responder"
+          ],
+          "effects": [],
+          "outcomes": []
          }
         ],
         "bindings": [
@@ -876,7 +923,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:101f633600b3b1cae0a4fd4c8cf2557fa9acbc7302017df2eb83db1517429bf6"
+      "digest": "sha-256:a988fdd502f3d75a64d0bb38243ce7fa167a81e53051b8f0c720058a4e1e2ed3"
      },
      "evidence": {
       "present": false,
@@ -888,7 +935,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-core-main:sam-agent:0002.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-core-main:sam-agent:0002"
@@ -925,12 +972,12 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:bcce78191ff…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0001.",
+      "summary": "From The fictional lender's agent to Sam's agent; description; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -955,7 +1002,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:858f653c24ff7d54e07812737a3b31631d786dd82c826f015d29c81127d0ee3b"
+      "digest": "sha-256:31ae667c0b18a964fd321336bff04d26c29234e839b8d4e938ec84a29ffef024"
      },
      "authority": {
       "present": false,
@@ -963,7 +1010,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/transport-email/0.1\"; \"https://w3id.org/jeswr/awp#config/transport-a2a/0.1\"; \"https://w3id.org/jeswr/awp#config/transport-mcp/0.1\"; \"https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1\"; \"https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1\"; \"https://w3id.org/jeswr/awp#config/local-approved-query/0.1\"; \"https://w3id.org/jeswr/awp#config/local-record-forum/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
+      "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "description": {
         "type": "ImplementationDescription",
@@ -1079,6 +1126,52 @@
           "limitations": [
            "synthetic lender; indicative only; no credit decision or institutional approval"
           ]
+         },
+         {
+          "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+          "version": "0.1",
+          "label": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+          "pattern": "invoke",
+          "access": "public",
+          "models": [
+           {
+            "id": "https://w3id.org/jeswr/awp#model/mortgage-product-record",
+            "version": "0.1"
+           }
+          ],
+          "purposes": [
+           "https://w3id.org/jeswr/awp#purpose/product-search"
+          ],
+          "requiresRepresentation": false,
+          "roles": [
+           "initiator",
+           "responder"
+          ],
+          "effects": [],
+          "outcomes": []
+         },
+         {
+          "id": "https://w3id.org/jeswr/awp#op/balance-statement",
+          "version": "0.1",
+          "label": "https://w3id.org/jeswr/awp#op/balance-statement",
+          "pattern": "invoke",
+          "access": "represented",
+          "models": [
+           {
+            "id": "https://w3id.org/jeswr/awp#model/balance-statement",
+            "version": "0.1"
+           }
+          ],
+          "purposes": [
+           "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+          ],
+          "requiresRepresentation": true,
+          "roles": [
+           "initiator",
+           "responder"
+          ],
+          "effects": [],
+          "outcomes": []
          }
         ],
         "bindings": [
@@ -1099,7 +1192,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:101f633600b3b1cae0a4fd4c8cf2557fa9acbc7302017df2eb83db1517429bf6",
+      "digest": "sha-256:a988fdd502f3d75a64d0bb38243ce7fa167a81e53051b8f0c720058a4e1e2ed3",
       "untrusted": [
        {
         "path": "description.type",
@@ -1346,6 +1439,86 @@
         "text": "synthetic lender; indicative only; no credit decision or institutional approval"
        },
        {
+        "path": "description.operations.1.id",
+        "text": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+       },
+       {
+        "path": "description.operations.1.version",
+        "text": "0.1"
+       },
+       {
+        "path": "description.operations.1.label",
+        "text": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+       },
+       {
+        "path": "description.operations.1.pattern",
+        "text": "invoke"
+       },
+       {
+        "path": "description.operations.1.access",
+        "text": "public"
+       },
+       {
+        "path": "description.operations.1.models.0.id",
+        "text": "https://w3id.org/jeswr/awp#model/mortgage-product-record"
+       },
+       {
+        "path": "description.operations.1.models.0.version",
+        "text": "0.1"
+       },
+       {
+        "path": "description.operations.1.purposes.0",
+        "text": "https://w3id.org/jeswr/awp#purpose/product-search"
+       },
+       {
+        "path": "description.operations.1.roles.0",
+        "text": "initiator"
+       },
+       {
+        "path": "description.operations.1.roles.1",
+        "text": "responder"
+       },
+       {
+        "path": "description.operations.2.id",
+        "text": "https://w3id.org/jeswr/awp#op/balance-statement"
+       },
+       {
+        "path": "description.operations.2.version",
+        "text": "0.1"
+       },
+       {
+        "path": "description.operations.2.label",
+        "text": "https://w3id.org/jeswr/awp#op/balance-statement"
+       },
+       {
+        "path": "description.operations.2.pattern",
+        "text": "invoke"
+       },
+       {
+        "path": "description.operations.2.access",
+        "text": "represented"
+       },
+       {
+        "path": "description.operations.2.models.0.id",
+        "text": "https://w3id.org/jeswr/awp#model/balance-statement"
+       },
+       {
+        "path": "description.operations.2.models.0.version",
+        "text": "0.1"
+       },
+       {
+        "path": "description.operations.2.purposes.0",
+        "text": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+       },
+       {
+        "path": "description.operations.2.roles.0",
+        "text": "initiator"
+       },
+       {
+        "path": "description.operations.2.roles.1",
+        "text": "responder"
+       },
+       {
         "path": "description.bindings.0.id",
         "text": "direct-local/0.1"
        },
@@ -1385,7 +1558,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-core-main:sam-agent:0002.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-core-main:sam-agent:0002"
@@ -1733,12 +1906,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:3f0405a69c3…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0003.",
+      "summary": "From Sam's agent to The fictional lender's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1789,7 +1962,7 @@
      },
      "content": {
       "present": true,
-      "summary": "An offer to start mortgage-prequalification, with terms (round 1).",
+      "summary": "An offer for Mortgage decision in principle, with terms (round 1).",
       "raw": {
        "operation": {
         "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -1863,12 +2036,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:3f0405a69c3…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; propose; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0003.",
+      "summary": "From Sam's agent to The fictional lender's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1919,7 +2092,7 @@
      },
      "content": {
       "present": true,
-      "summary": "An offer to start mortgage-prequalification, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"https://w3id.org/jeswr/awp#model/mortgage-application\"; \"https://sam.example/#me\"; \"sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59\"",
+      "summary": "An offer for Mortgage decision in principle, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -2321,12 +2494,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:b31c2f0fd44…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0002.",
+      "summary": "From The fictional lender's agent to Sam's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2443,7 +2616,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms: purpose credit-assessment; kept at most 60 days; never for Marketing; passed on only to 1 named recipient(s).",
+      "summary": "Terms: purpose Credit Assessment; kept at most 60 days; never for the unlabelled resource; passed on only to 1 named recipient(s).",
       "raw": {
        "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
        "modelVersion": "0.1",
@@ -2495,7 +2668,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-core-main:sam-agent:0003.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-core-main:sam-agent:0003"
@@ -2920,12 +3093,12 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:b31c2f0fd44…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; propose; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0002.",
+      "summary": "From The fictional lender's agent to Sam's agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2977,7 +3150,7 @@
      },
      "content": {
       "present": true,
-      "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"https://w3id.org/jeswr/awp#model/mortgage-application\"; \"https://sam.example/#me\"; \"urn:awp:domain-item:bd16da66081cd4e589e48ce9619679f8\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"https://northbank.example/#org\"; \"https://underwriter.example/#org\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"https://w3id.org/dpv#Marketing\"; \"sha-256:93d1f662a0a67c2e1ce110f461f9c7690827443d20242074106979fdc9f3efcb\"; \"urn:awp:engine-mortgage-core-main:sam-agent:0003\"",
+      "summary": "A counter-offer (round 2) with new terms. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -3092,7 +3265,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Terms: purpose credit-assessment; kept at most 60 days; never for Marketing; passed on only to 1 named recipient(s).",
+      "summary": "Terms: purpose Credit Assessment; kept at most 60 days; never for the unlabelled resource; passed on only to 1 named recipient(s).",
       "raw": {
        "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
        "modelVersion": "0.1",
@@ -3144,7 +3317,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-core-main:sam-agent:0003.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-core-main:sam-agent:0003"
@@ -3710,12 +3883,12 @@
     "kind": "accept",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:7adcca9cff8…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; accept; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0004.",
+      "summary": "From Sam's agent to The fictional lender's agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3789,7 +3962,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-core-main:north-agent:0002.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-core-main:north-agent:0002"
@@ -4124,12 +4297,12 @@
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:5b1bff37657…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; deliver; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0005.",
+      "summary": "From Sam's agent to The fictional lender's agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4426,7 +4599,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Sent under agreement urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e; its terms bind the data.",
+      "summary": "Sent under the recorded agreement; its terms bind the data.",
       "raw": {
        "kind": "agreement",
        "agreement": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e"
@@ -4485,12 +4658,12 @@
     "kind": "accept",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:7adcca9cff8…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; accept; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0004.",
+      "summary": "From Sam's agent to The fictional lender's agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4542,7 +4715,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-mortgage-core-main:north-agent:0002\"; \"sha-256:93d1f662a0a67c2e1ce110f461f9c7690827443d20242074106979fdc9f3efcb\"; \"urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e\"",
+      "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "proposal": "urn:awp:engine-mortgage-core-main:north-agent:0002",
        "termsDigest": "sha-256:93d1f662a0a67c2e1ce110f461f9c7690827443d20242074106979fdc9f3efcb",
@@ -4578,7 +4751,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-core-main:north-agent:0002.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-core-main:north-agent:0002"
@@ -4738,12 +4911,12 @@
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:5b1bff37657…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; deliver; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0005.",
+      "summary": "From Sam's agent to The fictional lender's agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4775,7 +4948,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e\"; \"urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"",
+      "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "ref": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e",
        "basis": {
@@ -5054,7 +5227,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Sent under agreement urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e; its terms bind the data.",
+      "summary": "Sent under the recorded agreement; its terms bind the data.",
       "raw": {
        "kind": "agreement",
        "agreement": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e"
@@ -5605,12 +5778,12 @@
     "kind": "receipt",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:388ba6e0d3b…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0003.",
+      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5699,7 +5872,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-core-main:sam-agent:0005.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-core-main:sam-agent:0005"
@@ -5736,12 +5909,12 @@
     "kind": "receipt",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:388ba6e0d3b…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0003.",
+      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:01:00.000Z to 2026-11-13T15:01:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5774,7 +5947,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Reports an activity outcome: completed. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e\"; \"urn:awp:domain-item:915364e4a655827ecaf10a7bfcea6a94\"; \"sha-256:a013b12aa4625122647ba7e7a38229133ca24e300818e9ee89847aadc6823914\"; \"urn:awp:evidence:paywell-income-2026-10\"; \"https://paywell.example/#org\"; \"sha-256:cde7e8664c346049f3ee4d3e0323892c5358564e7aef62d4c511d61eb7e80254\"; \"urn:awp:evidence:harbourbank-deposit-2026-10\"; \"https://harbourbank.example/#org\"; \"https://w3id.org/jeswr/awp#rule/annualise-12-consecutive-months\"; \"urn:awp:evidence:paywell-income-2026-10\"",
+      "summary": "Reports an activity outcome: completed. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "ref": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e",
        "activity": "urn:awp:domain-item:915364e4a655827ecaf10a7bfcea6a94",
@@ -5872,7 +6045,7 @@
      },
      "provenance": {
       "present": true,
-      "summary": "Answers urn:awp:engine-mortgage-core-main:sam-agent:0005.",
+      "summary": "Answers the recorded earlier message.",
       "raw": {
        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
        "inReplyTo": "urn:awp:engine-mortgage-core-main:sam-agent:0005"
@@ -6228,12 +6401,12 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:93c95c176c9…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0006.",
+      "summary": "From Sam's agent to The fictional lender's agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6307,7 +6480,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Sent under agreement urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e; its terms bind the data.",
+      "summary": "Sent under the recorded agreement; its terms bind the data.",
       "raw": {
        "kind": "agreement",
        "agreement": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e"
@@ -6352,12 +6525,12 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:93c95c176c9…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From Sam's agent to The fictional lender's agent; invoke; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-core-main:sam-agent:0006.",
+      "summary": "From Sam's agent to The fictional lender's agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6408,7 +6581,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"",
+      "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "operation": {
         "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -6445,7 +6618,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Sent under agreement urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e; its terms bind the data.",
+      "summary": "Sent under the recorded agreement; its terms bind the data.",
       "raw": {
        "kind": "agreement",
        "agreement": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e"
@@ -6804,12 +6977,12 @@
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:65b42f23f5e…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0005.",
+      "summary": "From The fictional lender's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6885,7 +7058,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Sent under agreement urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e; its terms bind the data.",
+      "summary": "Sent under the recorded agreement; its terms bind the data.",
       "raw": {
        "kind": "agreement",
        "agreement": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e"
@@ -6938,12 +7111,12 @@
     "kind": "deliver",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:65b42f23f5e…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0005.",
+      "summary": "From The fictional lender's agent to Sam's agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6975,7 +7148,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-mortgage-core-main:sam-agent:0006\"; \"urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"urn:awp:engine-mortgage-core-main:north-agent:0004\"",
+      "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "ref": "urn:awp:engine-mortgage-core-main:sam-agent:0006",
        "basis": {
@@ -7037,7 +7210,7 @@
      },
      "terms": {
       "present": true,
-      "summary": "Sent under agreement urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e; its terms bind the data.",
+      "summary": "Sent under the recorded agreement; its terms bind the data.",
       "raw": {
        "kind": "agreement",
        "agreement": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e"
@@ -7432,12 +7605,12 @@
     "kind": "receipt",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:d5eb518a108…; never trusted."
+     "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0007.",
+      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -7537,12 +7710,12 @@
     "kind": "receipt",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:d5eb518a108…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
     },
     "layers": {
      "header": {
       "present": true,
-      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; one-time id urn:awp:engine-mortgage-core-main:north-agent:0007.",
+      "summary": "From The fictional lender's agent to Sam's agent; receipt; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:02:00.000Z to 2026-11-13T15:02:00.000Z; a unique message identifier prevents replay.",
       "raw": {
        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
        "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -7574,7 +7747,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Reports an activity outcome: completed (final). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e\"; \"urn:awp:engine-mortgage-core-main:north-agent:0006\"; \"https://northbank.example/#org\"",
+      "summary": "Reports an activity outcome: completed (final). It also carries untrusted free text; the original is available separately as content.",
       "raw": {
        "ref": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e",
        "activity": "urn:awp:engine-mortgage-core-main:north-agent:0006",
