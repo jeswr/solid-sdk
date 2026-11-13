@@ -20,11 +20,13 @@ import { focusAddTask } from "../../state/add-focus";
 import { TaskListFocus } from "../../state/list-focus";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
+import { AddTaskRow } from "../add-task-row";
 import { BulkToolbar } from "../bulk-toolbar";
 import { LabelFilterBar } from "../label-filter-bar";
 import { ProjectDot } from "../project-dot";
 import { TaskList } from "../task-list";
 import { projectHref, useViewMode } from "../view-toggle";
+import { GroupedTasks } from "./grouped-tasks";
 import { ProjectError } from "./project-error";
 
 export function ProjectView({
@@ -78,7 +80,22 @@ export function ProjectView({
   const empty =
     !groups.unsectioned.length && !groups.sections.some((section) => section.rows.length);
   const list = project ? (
-    <TaskList project={project} groups={groups} hideAddTaskTrigger={empty} />
+    <>
+      {preferences.groupBy[viewId] && preferences.groupBy[viewId] !== "none" && (
+        <AddTaskRow project={project} />
+      )}
+      <GroupedTasks
+        rows={tasks.views.filter(
+          (task) =>
+            task.projectUrl === url &&
+            (preferences.showCompletedInProject || task.state === "open"),
+        )}
+        showProject={false}
+        defaultSort="manual"
+      >
+        <TaskList project={project} groups={groups} hideAddTaskTrigger={empty} />
+      </GroupedTasks>
+    </>
   ) : null;
   // Keep TaskList at the same React position when the empty state disappears;
   // the first Enter must leave the add input open and focused.

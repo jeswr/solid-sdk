@@ -45,10 +45,10 @@ it.each([
   "/tasks/today",
   "/tasks/upcoming",
   "/tasks/l/bills",
-])("hides sorting on %s, whose order is fixed by the view", async (path) => {
+])("shows view options on %s", async (path) => {
   pathname = path;
   const { host } = await mount(h(TasksApp, null, "View content"));
-  expect(host.querySelector(".tsk-sort")).toBeNull();
+  expect(host.querySelector(".tsk-sort")).not.toBeNull();
   expect(host.querySelector("main")?.textContent).toBe("View content");
 });
 
