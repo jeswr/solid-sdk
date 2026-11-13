@@ -1,0 +1,37 @@
+{
+  "name": "@jeswr/app-agent-chat",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Errand (working name): a consumer chat app for an Answerable agent. It shops and applies on your behalf, and every action passes the outbound gate; approvals and spending limits are signed on your device. Synthetic stores and parties. Experimental, AI-agent-generated.",
+  "securityCritical": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:pages": "APP_BASE_PATH=/solid-sdk/agent-chat/ vite build",
+    "build:artifact": "vite build --mode artifact",
+    "preview": "vite preview",
+    "lint": "biome check src test e2e vite.config.ts vitest.config.ts playwright.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@jeswr/agent-consent": "workspace:*",
+    "jose": "^6.0.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.0",
+    "@playwright/test": "1.60.0",
+    "@types/node": "22.19.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.2.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "typescript": "5.7.3",
+    "vite": "7.3.5",
+    "vitest": "4.1.10"
+  }
+}

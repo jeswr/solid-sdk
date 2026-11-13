@@ -1,0 +1,39 @@
+{
+  "name": "@jeswr/agent-consent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Consumer consent for Answerable agents: spending rules (per purchase, weekly or monthly budgets, standing allowances), device-signed approvals, the purchase side of the outbound gate's limits and approval check, and dynamic approval requests. Browser-safe. Experimental.",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Claude Opus 5.5",
+  "sideEffects": false,
+  "securityCritical": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "lint": "biome check src test",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@jeswr/agent-model": "workspace:*",
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/node": "^25.9.2",
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
