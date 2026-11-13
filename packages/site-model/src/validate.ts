@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /** validateSiteModel: structural checks SHACL cannot express over the whole model. */
 import type { Flow, Operation, Parameter, SiteModel } from "./types.js";
 import { EFFECT_ORDER, effectRank } from "./vocab.js";
@@ -87,9 +88,24 @@ function checkOperation(
   problem: (path: string, message: string) => void,
 ): void {
   const declared = checkParameters(op.inputs, path, problem);
+  // The executor reserves unbound whole-segment query-CSRF slots for session tokens.
+  // They are host decoration, never planner inputs (the shared types stay unchanged).
+  const requestDeclared = new Set(declared);
+  const pathTemplate = op.request.urlTemplate.split(/[?#]|\{[?&]/)[0] ?? "";
+  const slots = templateVariables(op.request.urlTemplate).variables;
+  for (const rule of op.csrf ?? []) {
+    const name = rule.target.name;
+    if (
+      rule.target.kind === "query" &&
+      !declared.has(name) &&
+      slots.filter((slot) => slot === name).length === 1 &&
+      pathTemplate.split("/").filter((segment) => segment === `{${name}}`).length === 1
+    )
+      requestDeclared.add(name);
+  }
   const used = checkTemplate(
     op.request.urlTemplate,
-    declared,
+    requestDeclared,
     `${path}.request.urlTemplate`,
     problem,
   );
