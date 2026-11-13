@@ -1,24 +1,9 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright globalSetup for the task #123 401-budget e2e. Runs once after the
-// webServers (CSS@3000 + vite@5173) are up. It:
-//   1. creates a fresh CSS account + pod (the verified solid-test-infrastructure recipe);
-//   2. seeds the WebID profile (foaf:name + pim:storage — a fresh CSS pod has neither,
-//      so without this the app sees no display name / no storage and looks broken);
-//   3. seeds MANY chat-room resources under `pod-chat/rooms/` (`room-0..N-1.ttl`), each a
-//      `pc:ChatRoom` (`<#it> a as:Collection, pc:ChatRoom`) — this is the REGRESSION
-//      SURFACE: pod-chat's useChat lists the rooms container AND THEN point-reads EACH
-//      room descriptor individually for its metadata (one container GET + one read per
-//      room — `Promise.all(entries.map(readRoomViewResilient))` in src/ui/useChat.ts), so
-//      N rooms => N+1 pod reads. The budget spec asserts the 401 count does NOT scale
-//      with N.
-// It writes the seeded credentials to a JSON sidecar the spec reads (the spec drives
-// the real OIDC popup login with this account; the seeded data is its pod contents).
-//
-// SELF-CONTAINED: a cross-file .ts/.mjs import from a Playwright globalSetup trips the
-// config transpiler (CJS/ESM mismatch), so everything is inlined (the harness rule).
-// LOCAL-ONLY: every fetch targets http://localhost:3000 (the local CSS) — never the
-// live deploy.
+// Local CSS fixture for shared sign-in: create an account, seed its public
+// profile and private chat rooms, then write the facts for the popup smoke test.
+// Everything is inlined for Playwright's config transpiler. All requests target
+// localhost; this fixture never contacts the deployed app or an external pod.
 import { createHash, randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -38,15 +23,14 @@ const POD_ROOT = `${BASE}/${POD}/`;
 // container is ALWAYS `<podRoot>pod-chat/rooms/` and we seed the room resources there.
 const ROOMS_CONTAINER = `${POD_ROOT}pod-chat/rooms/`;
 // The data layer's RDF namespaces (src/vocab.ts), restated here (the inlined-setup rule).
-// NAMESPACE-SCHEME GOTCHA (the one that bit pod-photos): seed with the EXACT scheme each
-// accessor expects, or the resource parses-but-doesn't-match → an EMPTY room list and a
-// vacuous 401 budget. parseRoom requires `<#it> a pc:ChatRoom` where pc: is the HTTPS
+// Seed with the exact namespace schemes the accessors expect, so resources
+// parse into visible rooms. parseRoom requires `<#it> a pc:ChatRoom` where pc: is the HTTPS
 // w3id namespace, and reads `as:name`/`dct:creator`/`dct:created` where as: is the HTTPS
 // w3.org form — both restated verbatim from src/vocab.ts here.
 const PC = "https://jeswr.org/ns/pod-chat#";
 const AS = "https://www.w3.org/ns/activitystreams#";
 const DCT = "http://purl.org/dc/terms/";
-// The room COUNT is the regression knob: the 401 count must NOT scale with it.
+// Seed enough rooms to verify the authenticated listing and its descriptor reads.
 const ROOM_COUNT = 12;
 
 // Where the spec reads the seeded account + container facts.
@@ -156,7 +140,7 @@ export default async function globalSetup() {
     "text/turtle",
   );
 
-  // 4. seed MANY chat-room resources under pod-chat/rooms/ — the regression surface. A
+  // 4. Seed chat-room resources under pod-chat/rooms/. A
   //    PUT to `rooms/room-K.ttl` auto-creates the `pod-chat/rooms/` container; each room is
   //    a distinct URL useChat point-reads individually when the room list loads (the
   //    listing + one descriptor read per room — the N+1 walk in src/ui/useChat.ts), so N
@@ -170,8 +154,7 @@ export default async function globalSetup() {
       // The @jeswr/pod-chat data layer pins pc: to the HTTPS w3id namespace and as: to the
       // HTTPS w3.org form (src/vocab.ts); parseRoom only counts a resource as a room when
       // `<#it> a https://jeswr.org/ns/pod-chat#ChatRoom`. Seeding with a different scheme
-      // makes every resource parse-but-not-a-room → an EMPTY room list (a vacuous 401
-      // budget — the pod-photos gotcha). Use the EXACT schemes the accessors expect.
+      // makes every resource parse-but-not-a-room. Use the exact schemes the accessors expect.
       `@prefix pc: <${PC}>.
 @prefix as: <${AS}>.
 @prefix dct: <${DCT}>.
@@ -185,27 +168,19 @@ export default async function globalSetup() {
     );
   }
 
-  // 4b. PROVE the seeded resources are PRIVATE (the 401-budget test's load-bearing
-  //     precondition). The regression guard only proves proactive auth if the rooms are
-  //     auth-REQUIRED: were they PUBLIC, the OLD unauthenticated-first reactive behaviour
-  //     would ALSO see zero resource-server 401s, so the budget test could pass WITHOUT the
-  //     proactive patch (roborev MEDIUM finding). CSS pods are private to the owner by
-  //     default, but we ASSERT it rather than assume it: an UNAUTHENTICATED GET on both the
-  //     container AND a seeded room MUST be denied (401/403). If either is public, fail the
-  //     setup loudly — the budget test would be meaningless.
+  // 4b. Prove the container and a room require credentials before the browser
+  // signs in, so a successful listing demonstrates authenticated access.
   for (const url of [ROOMS_CONTAINER, `${ROOMS_CONTAINER}room-0.ttl`]) {
     const anon = await fetch(url, { headers: { accept: "text/turtle" } });
     if (anon.status !== 401 && anon.status !== 403) {
       throw new Error(
         `Seeded resource ${url} is NOT private (unauthenticated GET -> ${anon.status}, ` +
-          "expected 401/403). The 401-budget e2e requires auth-gated rooms — a public " +
-          "resource would let the OLD unauthenticated-first behaviour also pay zero 401s, " +
-          "so the regression guard would not prove the proactive auth-fetch. Check the pod ACL.",
+          "expected 401/403). The sign-in smoke test requires private rooms. Check the pod ACL.",
       );
     }
   }
 
-  // 5. hand the spec the seeded facts (login credentials + the regression container).
+  // 5. hand the spec the seeded facts (login credentials + the private container).
   writeFileSync(
     CREDS_PATH,
     JSON.stringify(

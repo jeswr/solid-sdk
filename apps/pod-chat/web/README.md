@@ -4,10 +4,8 @@
 
 This directory turns the framework-agnostic `@jeswr/pod-chat/ui` React component
 library (`../src/ui`) into a **deployable, statically-served single-page app**
-with standalone Solid login. It is the canonical "host shell" pattern shared
-across the `pod-*` apps — stamped from `pod-docs/web` with only the four
-per-app changes (component + prop, Vite alias + ambient `.d.ts`, the
-session-derivation note, and the per-subdomain `APP_ORIGIN` / `client_name`).
+with shared Solid login through `@jeswr/app-session`, as in Pod Docs and Pod Drive.
+The app owns its client identity adapter, legacy key list, chrome and chat view.
 
 The host is intentionally tiny. The whole app is: log in → derive the user's pod
 from the session → mount the library component → let it read/write the pod. All
@@ -18,50 +16,59 @@ the library; the host only wires **auth + a pod root**.
 
 ```
 index.html → src/main.tsx
-  └─ <SessionProvider>            (src/auth/SessionProvider.tsx — the ONE auth seam)
+  └─ <SessionProvider>            (@jeswr/app-session/react)
        └─ <App>                   (src/App.tsx)
-            ├─ logged out → <LoginScreen>          (WebID-first login)
+            ├─ logged out → <LoginScreen>          (shared SignInCard)
             └─ logged in  → <ChatRooms             (@jeswr/pod-chat/ui)
-                              podRoot webId />
+                              podRoot webId fetch={auth.fetch} />
 ```
 
 ### Auth (standalone, no server)
 
-`SessionProvider` is the only place auth is wired. On mount it:
+Chat imports `SessionProvider`, `useSession` and `LoginScreen` from
+`@jeswr/app-session/react`. The package owns one page-lifetime `@jeswr/pod-auth`
+core and the shared `@jeswr/suite-ui/sign-in` card. The only local auth module,
+`src/auth/pod-auth.ts`, configures the client ID, callback, development flag and
+Chat's exact legacy keys. Recent accounts appear
+first; users can also enter an address, choose the home provider or another listed
+provider, or enter a custom provider address. Addresses are resolved through a
+pristine public fetch. A WebID with several providers asks the user to choose a
+provider explicitly.
 
-1. snapshots the pristine `globalThis.fetch` (for the pre-popup public profile
-   read, so it can never recurse on a 401);
-2. **dynamically** imports `@solid/reactive-authentication` (so the browser-only
-   custom element + oauth stack never evaluate at module-eval / SSR / prerender
-   time — verified by the build: `customElements.define` is `0` in the main
-   bundle and lives only in the lazily-imported chunk);
-3. builds a `WebIdDPoPTokenProvider` (ported from `create-solid-app`) bound to
-   this origin's **static Client Identifier Document** at
-   `${origin}/clientid.jsonld`, so the consent screen shows "Pod Chat" instead
-   of a throwaway dynamic registration;
-4. calls `manager.registerGlobally()` — **this is what patches the global
-   `fetch`** (the 0.1.3 constructor does NOT). Forgetting it is the #1
-   reactive-auth bug.
+The core restores once on mount, including React StrictMode replay, and owns all
+credentials, persistence and logout. `auth.fetch` is passed explicitly to
+`ChatRooms`; global fetch stays public. The default automatic credential
+boundary uses only the authenticated WebID's advertised storage roots. Public
+profile reads for the display name, avatar and pod root use the pristine public
+transport.
 
-Once patched, every plain `fetch()` — including the ones inside `@jeswr/fetch-rdf`
-and the `@jeswr/pod-chat` data layer — transparently upgrades on a 401 with a
-DPoP token. So `<ChatRooms>` is mounted with **no `fetch` prop**: its `fetch?:`
-seam falls back to the now-authenticated ambient global.
+The popup element is lazily registered from `@jeswr/reactive-authentication/registerElements`.
+A StrictMode-safe holder adapts its disposable result to the full callback URL.
+`allowInsecureLoopback` and pod-auth's dynamic client registration are enabled only
+in a development build (`npm run dev`) whose hostname is localhost, 127.0.0.0/8 or
+::1; every other build uses the HTTPS `clientid.jsonld`, so `vite preview` over HTTP
+cannot sign in. Silent `prompt=none` re-authentication during restore is declined
+(no popup without a click). The popup supports cancellation; errors use plain
+messages without raw protocol details. On first load the app removes the
+old `pod-chat:sessions` IndexedDB database, the `pod-chat:remembered-account`
+localStorage pointer, and the `pod-chat:autologin-attempted` and
+`pod-chat:pss.autologin.flow` sessionStorage records. Theme preferences and other
+applications' data are retained.
 
-The `src/auth/` seam is **copied verbatim** from `pod-docs/web` — it carries the
-cross-user-leak fix, the StrictMode auth-flow-holder, the generation-fenced
-`reset()` and the per-probe login proof, all hardened across two roborev rounds.
-Only the app-name strings in its doc comments differ.
+A `#autologin/<encoded-webid>` deep link adds a one-click account row and is
+removed from the address bar. It never opens a popup or redirects without a click.
+Only `callback.html` is registered as an OAuth redirect URI.
 
 ### How the chat containers are derived from the session
 
-`<ChatRooms podRoot webId />` needs only a **pod root** + the **WebID**. The host
-derives them in `src/auth/session-derivation.ts`:
+`<ChatRooms podRoot webId fetch={auth.fetch} />` needs only a **pod root** + the **WebID**. The host
+receives them from `@jeswr/app-session`'s shared session derivation:
 
 - **pod root** = the **first `pim:storage`** advertised on the WebID profile (the
   canonical Solid "where my storage lives" signal). Fallback when a profile omits
   `pim:storage`: the **WebID origin** (`scheme://host/`). A banner tells the user
-  when the fallback is used.
+  when the fallback is used; pod-auth grants no credentials there, so only public
+  rooms can be shown.
 - The **chat containers themselves are NOT derived here.** `@jeswr/pod-chat`'s
   `ChatStore` owns that: it derives `pod-chat/rooms/` + `pod-chat/messages/` from
   the pod root and registers them in the user's **Type Index**
@@ -83,8 +90,10 @@ files from a single `APP_ORIGIN` env, written into `public/` before every build:
 - `public/callback.html` — the OAuth popup → opener post-back. It targets the
   message at **our origin only** (`postMessage(href, "${origin}")`), never `"*"`.
 
-Both are git-ignored (a per-origin artifact; the script + `APP_ORIGIN` are the
-source of truth) and copied by Vite into `dist/` at the root.
+Both are committed with local-development defaults and regenerated before dev
+and build; the script + `APP_ORIGIN` are the source of truth. Vite copies them
+into `dist/`. Set `CLIENT_BASE_PATH=/solid-sdk/pod-chat/` for GitHub Pages and
+use the same base when building Vite.
 
 > `ignore-scripts=true` (supply-chain hardening) means **npm lifecycle hooks do
 > NOT run** — so the generator is chained INLINE in the `build`/`dev` scripts
@@ -114,7 +123,7 @@ directly** — no pre-built `dist/ui` is required.
 
 Gates: `npm run lint` (Biome), `npm run typecheck` (tsc — the library source is
 NOT re-typechecked here; `src/pod-chat-ui.d.ts` declares the consumed surface),
-`npm test` (the copied auth-seam unit tests), `npm run build`.
+`npm test` (shared-auth integration and UI tests), `npm run build`.
 
 ## Env
 
@@ -122,4 +131,11 @@ NOT re-typechecked here; `src/pod-chat-ui.d.ts` declares the consumed surface),
 |---|---|---|---|
 | `APP_ORIGIN` | `gen-clientid.mjs` (build) | `http://localhost:5173` | The deployment origin. Set per-subdomain for prod. |
 | `VITE_APP_ORIGIN` | UI label only | `http://localhost:5173` | Mirror of `APP_ORIGIN`; non-load-bearing (the runtime `client_id` derives from the actual window origin). |
-| `VITE_HOME_IDP` | `LoginScreen` hint | `https://idp.solid-test.jeswr.org` | Display only — the auth issuer always comes from the WebID profile. |
+| `VITE_HOME_IDP` | `LoginScreen` | `https://idp.solid-test.jeswr.org` | Home provider shown first in the sign-in card. |
+| `VITE_HOME_IDP_NAME` | `LoginScreen` | Provider host | Optional home provider label. |
+| `VITE_KNOWN_PROVIDERS` | `LoginScreen` | Shared directory | Comma-separated HTTPS provider URLs. |
+| `CLIENT_BASE_PATH` | `gen-clientid.mjs` | `/` | App base path, including a trailing slash. |
+
+The Playwright smoke test drives a real popup sign-in against local CSS, lists
+private seeded rooms, and checks ambient fetch still gets 401/403. Run
+`pnpm --filter @jeswr/pod-chat-web test:e2e` where CSS and Chromium are available.

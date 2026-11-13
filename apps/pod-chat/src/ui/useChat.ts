@@ -14,17 +14,9 @@
 // shown chronologically (oldest-first), the natural reading order for a thread.
 //
 // ── AUTH SEAM ────────────────────────────────────────────────────────────────
-// The authenticated `fetch` is INJECTED, not imported. Pass the session's fetch
-// via the `fetch` option; omit it and the data layer falls back to the global
-// `fetch`. In production that global is the one
-// @solid/reactive-authentication's ReactiveFetchManager.registerGlobally()
-// patches (so a plain fetch transparently upgrades on a 401 with a DPoP token),
-// wired ONCE in the create-solid-app shell's <SolidAuthProvider>. That wiring is
-// #18-gated (create-solid-app S2 — interactive auth-code login;
-// https://github.com/solid-contrib/reactive-authentication/issues/18). This
-// hook is DELIBERATELY unaware of any of that: it works today against a stubbed
-// fetch in unit tests and later against the real session with NO code change.
-// Do NOT hard-wire a login flow here.
+// Pass pod-auth's `auth.fetch` via the `fetch` option for authenticated reads and
+// writes. Omitting it uses the public global fetch. The hook owns no login flow;
+// tests inject their transport through the same seam.
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -148,9 +140,8 @@ export interface ChatState {
 /** Options for {@link useChat}. */
 export interface UseChatOptions {
   /**
-   * The authenticated fetch. Omit to use the ambient global fetch (which
-   * @solid/reactive-authentication patches in a real session). This is the
-   * injectable auth seam — see the file header.
+   * Pass pod-auth's `auth.fetch` for authenticated pod reads and writes.
+   * Omit to use the public global fetch; tests may inject a stub.
    */
   fetch?: typeof fetch;
 }

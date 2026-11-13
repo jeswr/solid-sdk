@@ -20,8 +20,8 @@ declare module "@jeswr/pod-chat/ui" {
     /** The WebID of the active user — used by the data layer's type-index reads. */
     webId: string;
     /**
-     * The authenticated fetch for pod reads. Omit to use the ambient global
-     * fetch (patched by @solid/reactive-authentication in a real session).
+     * Pass pod-auth's `auth.fetch` for authenticated pod reads and writes.
+     * Omit to use the public global fetch.
      */
     fetch?: typeof fetch;
     /** Optional heading rendered above the view. */

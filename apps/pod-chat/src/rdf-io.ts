@@ -28,8 +28,7 @@ export const REVALIDATE_HEADERS = { "cache-control": "no-cache" } as const;
  * Same contract as `fetchRdf` (errors propagate as `RdfFetchError`; keep the
  * returned `etag` for conditional writes).
  *
- * @param fetchImpl - test-only override; **omit in production** so the
- *   auth-patched global fetch (`@solid/reactive-authentication`) runs.
+ * @param fetchImpl - pod-auth's `auth.fetch` for authenticated reads; defaults to public global fetch.
  */
 export function readRdf(url: string, fetchImpl?: typeof fetch): Promise<FetchedRdf> {
   return fetchRdf(
@@ -61,7 +60,7 @@ export interface WriteOptions {
   etag?: string | null;
   /** Send `If-None-Match: *` — create only, never overwrite (412 if it exists). */
   createOnly?: boolean;
-  /** Test-only override; **omit in production** so the auth-patched global runs. */
+  /** Pass pod-auth's `auth.fetch` for authenticated writes; defaults to public global fetch. */
   fetchImpl?: typeof fetch;
   /** Optional Turtle prefix map for readable documents. */
   prefixes?: Record<string, string>;
@@ -106,7 +105,7 @@ export async function writeRdf(
  * container PUT with `412` we swallow. Parents are created shallowest-first so a
  * child container's PUT never precedes its parent's (no spurious 409).
  *
- * @param fetchImpl - test-only override; **omit in production**.
+ * @param fetchImpl - pod-auth's `auth.fetch` for authenticated writes; defaults to public global fetch.
  * @throws ResourceWriteError on any non-2xx that is not the conditional `412`.
  */
 export async function ensureContainer(url: string, fetchImpl?: typeof fetch): Promise<void> {
@@ -127,7 +126,7 @@ export async function ensureContainer(url: string, fetchImpl?: typeof fetch): Pr
  * Delete a resource. A `404`/`410` is treated as success (idempotent delete —
  * the resource is already gone, the caller's desired end state).
  *
- * @param fetchImpl - test-only override; **omit in production**.
+ * @param fetchImpl - pod-auth's `auth.fetch` for authenticated writes; defaults to public global fetch.
  * @throws ResourceDeleteError on any other non-2xx answer.
  */
 export async function deleteRdf(url: string, fetchImpl?: typeof fetch): Promise<void> {
