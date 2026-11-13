@@ -2494,6 +2494,9 @@ importers:
       '@jeswr/solid-dav-bridge':
         specifier: workspace:*
         version: link:../../packages/solid-dav-bridge
+      '@jeswr/solid-offline':
+        specifier: workspace:*
+        version: link:../../packages/solid-offline
       '@jeswr/solid-sheets':
         specifier: workspace:*
         version: link:../../packages/solid-sheets
