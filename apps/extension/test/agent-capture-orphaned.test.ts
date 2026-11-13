@@ -35,7 +35,7 @@ it.each([
   await allowed; // Closed ports cannot deliver this report.
   await vi.advanceTimersByTimeAsync(0);
   expect(h.state).toEqual(h.before);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(seconds < 60 ? 2 : 3);
   if (seconds < 60) await vi.advanceTimersByTimeAsync(disconnectedAt + 60000 - Date.now());
   expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
   expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
@@ -157,7 +157,7 @@ it.each([
   b.load();
   expect(b.view.message).toBe('Finishing the previous sharing.');
   await vi.advanceTimersByTimeAsync(120000);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
   h.state.cookies = true;
   h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
   await vi.advanceTimersByTimeAsync(0);
@@ -206,7 +206,7 @@ it('joins orphan revocation still in flight after the settle window before a new
 it.each([
   'disconnect',
   'timeout',
-])('bounds settlement of an old armed click after its lease ended: %s', async (exit) => {
+])('refuses an old armed click without creating another abandonment fence: %s', async (exit) => {
   vi.useFakeTimers();
   const h = captureHarness();
   const a = await reviewing(h);
@@ -215,24 +215,22 @@ it.each([
   const b = await reviewing(h);
   await b.allow();
   await phase(b, 'confirming');
-  const result = deferred<boolean>();
-  h.browser.permissions.request.mockImplementationOnce(() => result.promise);
-  void a.allow();
+  await a.allow();
+  expect(h.browser.permissions.request).toHaveBeenCalledTimes(1);
   h.native.mockClear();
   h.browser.cookies.getAll.mockClear();
   if (exit === 'disconnect') a.client.disconnect();
   else await vi.advanceTimersByTimeAsync(120000);
   await vi.advanceTimersByTimeAsync(30000);
-  h.state.cookies = true;
-  h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
+  if (exit === 'disconnect') {
+    expect(b.view.phase).toBe('confirming');
+    b.cancel();
+  }
   await vi.advanceTimersByTimeAsync(0);
   expect(h.state.cookies).toBe(false);
   expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
-  expect(h.native).not.toHaveBeenCalled();
+  expect(h.native.mock.calls.every(([request]) => request.type === 'list')).toBe(true);
   const c = h.popup();
   c.load();
-  c.start();
-  expect(c.view.message).toBe('Finishing the previous sharing.');
-  await vi.advanceTimersByTimeAsync(30000);
   await phase(c, 'ready');
 });

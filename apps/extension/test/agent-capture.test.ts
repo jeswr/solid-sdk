@@ -84,7 +84,7 @@ describe('global idle cookie cleanup', () => {
         : { origins: ['https://other.test:443/*'] },
     );
     await vi.waitFor(() => expect(h.state.cookies).toBe(false));
-    restored(h);
+    await vi.waitFor(() => restored(h));
   });
   it.each([
     'worker restart',
@@ -106,7 +106,7 @@ describe('global idle cookie cleanup', () => {
     const a = h.popup();
     a.load();
     await phase(a, 'ready');
-    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
     expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
     expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
     expect(types(h)).toEqual(['list']);
@@ -191,6 +191,8 @@ describe('global idle cookie cleanup', () => {
     expect(a.view.warning).toBe(true);
     expect(h.native).not.toHaveBeenCalled();
     absent.resolve(false);
+    await phase(a, 'ready');
+    a.start();
     await phase(a, 'permission');
     expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
     a.cancel();
@@ -229,7 +231,7 @@ describe('global idle cookie cleanup', () => {
       a.cancel();
       await vi.waitFor(() => expect(h.state.cookies).toBe(false));
     }
-    restored(h);
+    await vi.waitFor(() => restored(h));
   });
 });
 
@@ -259,7 +261,7 @@ describe('worker capture lease', () => {
     await phase(a, 'confirming');
     a.cancel();
     await vi.waitFor(() => expect(h.state.cookies).toBe(false));
-    restored(h);
+    await vi.waitFor(() => restored(h));
   });
   it('refuses B acquiring during A confirmation while host validation is pending', async () => {
     const h = captureHarness();
@@ -347,11 +349,11 @@ describe('worker capture lease', () => {
     b.start();
     await vi.advanceTimersByTimeAsync(0);
     expect(b.view.message).toBe('Finishing the previous sharing.');
-    expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
     const oldLease = a.view.lease!;
     prompt.resolve(true);
     await allowed;
-    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2));
     await confirming(h, b);
     a.send({ type: 'permission', lease: oldLease, granted: true });
     await vi.advanceTimersByTimeAsync(0);
@@ -547,7 +549,7 @@ describe('worker capture lease', () => {
     expect(h.browser.action.setBadgeText).toHaveBeenCalledWith({ text: '!' });
     const b = h.popup();
     b.load();
-    await phase(b, 'failed');
+    await phase(b, 'busy');
     expect(b.view.warning).toBe(true);
     b.send({ type: 'removeCookieAccess' });
     await phase(b, 'ready');
@@ -587,11 +589,11 @@ describe('worker capture lease', () => {
     h.browser.tabs.query.mockImplementationOnce(() => tab.promise);
     a.start();
     await phase(a, 'reviewing');
-    await vi.advanceTimersByTimeAsync(120000);
-    expect(a.view.phase).toBe('cancelled');
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(a.view.phase).toBe('failed');
     tab.resolve([{ id: 7, url: site, incognito: false }]);
     await vi.advanceTimersByTimeAsync(0);
-    expect(a.view.phase).toBe('cancelled');
+    expect(a.view.phase).toBe('failed');
     restored(h);
   });
   it.each([
@@ -646,13 +648,14 @@ describe('worker capture lease', () => {
     if (['confirming', 'sending', 'cleaning'].includes(stage))
       await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalled());
     await vi.waitFor(() => expect(h.state.cookies).toBe(false));
-    restored(h);
+    await vi.waitFor(() => restored(h));
     if (stage === 'idle' || stage === 'reviewing' || stage === 'permission')
       expect(h.browser.permissions.remove).not.toHaveBeenCalled();
   });
 });
 
-it('quarantines a stale armed click after its lease ended while another lease is confirming', async () => {
+it('contests a stale armed click while another lease is confirming', async () => {
+  vi.useFakeTimers();
   const h = captureHarness();
   const a = await reviewing(h);
   const oldLease = a.view.lease!;
@@ -662,16 +665,12 @@ it('quarantines a stale armed click after its lease ended while another lease is
   h.native.mockClear();
   // The worker revoked A, but its view's terminal update was still in transit.
   a.send({ type: 'requesting', lease: oldLease });
-  h.state.cookies = true;
-  h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
   a.send({ type: 'permission', lease: oldLease, granted: true });
-  await phase(b, 'cancelled');
-  await vi.waitFor(() => expect(h.state.cookies).toBe(false));
+  expect(a.view.message).toBe('Another sharing started. Try again.');
+  expect(b.view.phase).toBe('failed');
   b.confirm();
-  expect(h.native).not.toHaveBeenCalled();
-  const c = await confirming(h);
-  c.confirm();
-  await phase(c, 'shared');
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(types(h).filter((type) => type !== 'list')).toEqual([]);
   restored(h);
 });
 it('consumes a permission result once and cannot repeat beginLogin', async () => {
@@ -685,7 +684,7 @@ it('consumes a permission result once and cannot repeat beginLogin', async () =>
   expect(types(h).filter((t) => t === 'beginLogin')).toHaveLength(1);
   a.cancel();
   await vi.waitFor(() => expect(h.state.cookies).toBe(false));
-  restored(h);
+  await vi.waitFor(() => restored(h));
 });
 it.each([
   'review cookie read',
@@ -700,7 +699,7 @@ it.each([
     h.browser.cookies.getAll.mockImplementationOnce(() => cookies.promise);
   const allowed = a.allow();
   if (stage === 'review cookie read')
-    await vi.waitFor(() => expect(h.browser.cookies.getAll).toHaveBeenCalled());
+    await vi.waitFor(() => expect(h.browser.cookies.getAll).toHaveBeenCalled(), { timeout: 2500 });
   else {
     await allowed;
     await phase(a, 'confirming');

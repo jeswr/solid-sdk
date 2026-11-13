@@ -396,16 +396,30 @@ on invalid pages and withheld sites. Sharing stays blocked until a retry verifie
 Chrome's extension settings can also remove the permission. The button is a retry for failed
 automatic cleanup. Each capture starts without cookie permission.
 The service worker owns one capture lease across all popups, from Review until cleanup.
-A second popup receives **Another sharing is in progress** and cannot request cookies or
-start another capture. Review checks the current active tab and existing host access before
+A second popup receives **Another sharing is in progress** and cannot start another capture.
+Review checks the current active tab and existing host access before
 enabling **Allow cookies and review**. Click that button to request only optional `cookies`
 inside the popup's click gesture. The worker checks the tab and host access again after the
 prompt before contacting `beginLogin`, then shows the site, cookie count and persona.
+Every popup posts `requesting` with its lease ID before calling Chrome. A `requesting`
+from an expired, invalidated, unknown or second acquisition contests the admitted lease:
+the worker immediately revokes cookies, fails sharing with **Another sharing started. Try again.**,
+and runs cleanup with the sixty-second abandoned-prompt fence. A foreign request received
+while idle also starts this fence. Every foreign request gets sixty seconds from when the
+worker observes it, including requests received near the end of an existing fence. Admission
+waits for every deadline and verified cookie absence, so a later request cannot inherit an
+older prompt's nearly expired fence. It never reads cookies or
+dispatches to the native host while contested. A grant is accepted only after one quiet second
+following the latest cookie `onAdded` event or request settlement, without foreign `requesting`.
+The contest latch is checked again immediately before cookie reads and native dispatch.
 Tab activation, navigation of the lease tab, window focus changes and permission changes
 invalidate the armed button; Review must validate the site again before another request.
 The permission click uses the latest worker-pushed authorization synchronously to preserve
-Chrome's gesture requirement. In a sub-second race Chrome may still show the cookies prompt
-after authorization changes, but nothing is read or sent and the grant is removed.
+Chrome's gesture requirement. A positive armed acknowledgement for the current lease must arrive
+within ten seconds of Review; otherwise the popup disarms locally and refuses late armed pushes.
+Once armed, the worker-issued two-minute lease deadline also applies locally.
+In a sub-second race Chrome may still show the cookies prompt after authorization changes,
+but nothing is read or sent and the grant is removed.
 Click **Share this sign-in with my agent** to confirm. The worker verifies this lease's cookie
 grant and the current tab and host access again, reads a fresh exact-origin snapshot, and
 sends it only if its count still matches the review. From confirmation through native dispatch,
@@ -414,32 +428,57 @@ lease invalid, even if the original tab or access is restored. Every pending ste
 latch when it resumes, and dispatch checks it immediately before sending. Nothing is sent to the page.
 
 Cookie access lasts only for this exclusive review/confirmation lease, which expires after
-two minutes. Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
+two minutes. The popup checks the worker-issued deadline locally, even if a disarm push is
+delayed. An expired click is refused. Only one acquisition is admitted; a delayed foreign click
+may still open Chrome's prompt, but its `requesting` contests sharing instead of lending its grant
+to the admitted popup.
+Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
 cleanup: remove only `cookies`, verify absence, then release the lease. Host grants never
 change. Cancel marks the lease cancelled immediately; permission removal, absence verification
-and marker writes retain the lease and mutex until they finish. Other
+and marker writes retain the lease and mutex through a bounded cleanup attempt. Other
 popups show **Finishing the previous sharing** meanwhile. Cancellation is final even if an
 older async step completes afterward. A cancelled permission prompt waits for its result only
 until disconnect or lease timeout. If the popup disconnects or the lease expires while the
 prompt is unsettled, the worker takes over in an orphaned cleanup state: it immediately removes
 `cookies` and verifies absence, then keeps the lease fence for sixty seconds from that event.
-Every cookie grant arriving during this window is removed immediately, bypassing the mutex;
+Every cookie grant arriving during this window is removed immediately, bypassing the queue;
 these idempotent removals cannot read cookies, send native messages or request host access.
+The same independent revocation path handles grants outside an admitted, uncontested lease,
+startup recovery, contests and explicit removal retries. Storage marker writes never delay
+the removal itself. No capture is admitted and no cookies are read or native messages sent
+while revocation is in flight.
 A second popup shows **Finishing the previous sharing**, with the warning and enabled
-**Remove cookie access** retry button if removal fails. After the window, all pending removals
-must finish and absence must be verified before the lease ends; a failed verification keeps
-the fence until cleanup succeeds. Settlement reports after abandonment are ignored. Grants
+**Remove cookie access** retry button if removal fails. Cleanup is tracked in one collection
+keyed by lease ID. Every removal or verification wait is bounded to ten seconds; joining
+pending revocations and the final removal-and-verification share one ten-second deadline after
+the fence. Every cleanup or fence completion drains all expired fences. A timeout or failure
+enters recovery with the warning and enabled **Remove cookie access** button instead of
+**Finishing the previous sharing**. Late settlements of timed-out operations are ignored.
+A successful button retry or automatic retry clears the warning and releases expired admission
+fences; an unexpired sixty-second fence still runs to its deadline.
+The failed entry blocks admission until cleanup succeeds. New captures require an empty
+cleanup collection and verified absence. Settlement reports after abandonment are ignored. Grants
 arriving after the window are removed by the global startup/onAdded rule.
 Cleanup results belong to each lease: a failed earlier removal never skips a newer lease's
-cleanup. Cancellation can interrupt non-mutating checks; mutating work completes before the
-lease is released, including any concurrent orphaned revocations.
+cleanup. Cancellation can interrupt non-mutating checks; failed or timed-out cleanup keeps
+admission fenced until a successful bounded retry verifies absence.
+Every browser API wait in the queue uses the same ten-second timeout helper, including tab
+and focused-window lookups, permission checks, storage and native host setup/replies. A hung
+operation fails closed and releases the queue with an error or actionable recovery warning.
+Disconnecting a popup cancels its pending queue work. Late results cannot resume a timed-out
+or disconnected operation.
 Only a small display marker (`agentCaptureCleanup: true`) is stored in `chrome.storage.local`
 while removal is in progress or has failed; it is cleared after verified absence. No ownership
 metadata or session-storage fallback is needed. The marker contains no cookie values and never
-controls whether cleanup runs. A delayed armed click can still show Chrome's permission prompt
+controls whether cleanup runs. An already dispatched Chrome prompt can still grant access
 after its lease expires; its grant is removed because there is no current acquiring lease.
 A replacement worker removes any surviving grant at start, even if session storage was cleared
 or no marker exists.
+
+Residual: messages on different popup ports can be delayed by more than the one-second quiet
+period. Such a foreign `requesting` may arrive after grant acceptance. The global stateless
+startup/onAdded removal rule and confirmation authorization latch remain the backstops;
+this design does not eliminate that cross-port delay window.
 
 Profiles/personas come from `@jeswr/agent-vault`, separately from the extension's Solid
 accounts. Configure an account for the exact site in the agent's store first. Install the

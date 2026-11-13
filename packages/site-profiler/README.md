@@ -195,6 +195,9 @@ The optional same-origin response inventory scans HTML from any method/status, n
 credential keys and external scripts (including scripts with nonstandard media types). Script
 credential analysis shares the profiler's parser, AST traversal and constant evaluation; variable
 and global-object assignments supply secrets, never invented executable CSRF sources.
+Numeric credential literals also register their runtime string and source spellings (including
+hexadecimal, exponent and separated forms), so snapshots and learning cannot retain them as
+ordinary constants. Parse/size failure recovery recognizes direct numeric assignments too.
 
 Round-9 `test/review-r9.test.ts` profiles fictional standalone hidden `form_key` and meta
 credentials on demonstration-only pages and verifies learning plus redaction before traces return.

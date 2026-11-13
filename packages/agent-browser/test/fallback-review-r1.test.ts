@@ -26,7 +26,6 @@ import {
   scriptedFallbackPlanner,
   scriptedPlanner,
 } from "../src/index.js";
-import * as sessionApi from "../src/session.js";
 
 const click = (name: string) => (input: FallbackPlannerInput) => {
   const ref = input.snapshot.nodes.find((n) => n.ref && n.name === name)?.ref;
@@ -359,7 +358,7 @@ describe("fallback review r1 browser regressions", () => {
           ? vi.spyOn(modelApi, "validateSiteModel").mockImplementation(() => {
               throw new Error("validation failed");
             })
-          : vi.spyOn(sessionApi, "createTaskExecutor").mockImplementation(() => {
+          : vi.spyOn(executor, "withModel").mockImplementation(() => {
               throw new Error("construction failed");
             });
     const before = requests.length;

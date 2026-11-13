@@ -54,7 +54,7 @@ it.each([
   expect(b.view.phase).toBe('busy');
   expect(b.view.message).toBe('Finishing the previous sharing.');
   expect(h.browser.permissions.request).not.toHaveBeenCalled();
-  expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
 
   marker.resolve();
   await vi.advanceTimersByTimeAsync(0);
@@ -82,7 +82,7 @@ it.each([
   verified(h);
 });
 
-it('settles a delayed armed request arriving during cleanup before releasing its lease', async () => {
+it('contests a delayed armed request arriving during cleanup without waiting for its report', async () => {
   vi.useFakeTimers();
   const h = captureHarness();
   const b = h.popup();
@@ -97,19 +97,19 @@ it('settles a delayed armed request arriving during cleanup before releasing its
   a.cancel();
   await vi.waitFor(() => expect(h.browser.storage.local.remove).toHaveBeenCalledTimes(clears + 1));
   // The armed click was already in transit when Cancel reached the worker.
+  a.send({ type: 'requesting', lease: a.view.lease! });
   const allowed = a.allow();
   h.state.cookies = true;
   h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
   clear.resolve();
   b.load();
-  await vi.advanceTimersByTimeAsync(0);
-  expect(b.view.phase).toBe('busy');
-  expect(b.view.message).toBe('Finishing the previous sharing.');
-  expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(h.browser.permissions.request).not.toHaveBeenCalled();
+  await phase(b, 'ready');
   prompt.resolve(true);
   await allowed;
   await phase(b, 'ready');
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(3);
   verified(h);
   expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
   expect(h.native.mock.calls.map(([r]) => r.type)).not.toContain('beginLogin');
@@ -129,12 +129,14 @@ it.each([
   h.native.mockImplementationOnce(() => reply.promise);
   if (stage === 'beginLogin') await a.allow();
   else a.confirm();
-  await vi.waitFor(() => expect(h.native.mock.calls.at(-1)![0].type).toBe(stage));
+  await vi.waitFor(() => expect(h.native.mock.calls.at(-1)![0].type).toBe(stage), {
+    timeout: 2500,
+  });
   a.cancel();
   b.load();
   await vi.advanceTimersByTimeAsync(0);
   expect(b.view.message).toBe('Finishing the previous sharing.');
-  expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
   reply.resolve(
     stage === 'beginLogin'
       ? { type: 'beginLogin', token: '00000000-0000-4000-8000-000000000001' }
@@ -220,9 +222,7 @@ it.each([
   paused.resolve();
   await phase(b, 'ready');
   verified(h);
-  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(
-    step === 'marker write' ? removals + 1 : removals,
-  );
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(removals);
   expect(a.view.phase).toBe('cancelled');
   await confirming(h, b);
   expect(h.state.cookies).toBe(true);
@@ -255,8 +255,8 @@ it.each([
   await vi.advanceTimersByTimeAsync(0);
   expect(b.view.phase).toBe('busy');
   expect(b.view.message).toBe('Finishing the previous sharing.');
-  expect(h.browser.permissions.remove).not.toHaveBeenCalled();
-  expect(h.browser.storage.local.set).not.toHaveBeenCalled();
+  expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
+  expect(h.browser.storage.local.set).toHaveBeenCalledTimes(2);
   if (outcome === 'rejection') prompt.reject(new Error('fixture-secret'));
   else prompt.resolve(outcome === 'grant');
   await allowed;
