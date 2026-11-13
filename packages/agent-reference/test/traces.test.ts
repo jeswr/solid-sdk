@@ -1,6 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { readFileSync } from "fs";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { runReference, SCENARIOS, type ScenarioId } from "../src/reference/mortgage.js";
 import { BASELINE } from "../src/suites/baseline.js";
