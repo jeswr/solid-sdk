@@ -1,22 +1,24 @@
 // AUTHORED-BY Codex GPT-6
 export const CAPTURE_PERMISSION_PORT = 'AGENT_CAPTURE_PERMISSIONS';
-export const capturePermissions = (site: string) => {
+export const captureOriginPermission = (site: string) => {
   const url = new URL(site);
   const pattern = `${url.protocol}//${url.hostname}:${url.port || (url.protocol === 'https:' ? '443' : '80')}/*`;
-  return { permissions: ['cookies'], origins: [pattern] };
+  return { origins: [pattern] };
 };
+export const capturePermissions = () => ({ permissions: ['cookies'] });
 
-export async function releaseCapturePermissions(
-  api: { remove(permissions: chrome.permissions.Permissions): Promise<boolean> },
-  origins: string[],
-): Promise<void> {
-  // Chrome rejects an entire removal containing a host covered by required <all_urls>.
-  // Independent calls ensure that rejection can never retain the optional cookies API.
-  const [cookies] = await Promise.allSettled([
-    (async () => api.remove({ permissions: ['cookies'] }))(),
-    (async () => api.remove({ origins }))(),
-  ]);
-  // Required host access stays in place. An optional origin, if acquired, is removed above.
-  if (cookies.status === 'rejected' || !cookies.value)
-    throw new Error('Sign-in permission cleanup unavailable.');
+export async function releaseCapturePermissions(api: {
+  remove(permissions: chrome.permissions.Permissions): Promise<boolean>;
+  contains(permissions: chrome.permissions.Permissions): Promise<boolean>;
+}): Promise<void> {
+  // Never change host access: a request could permanently promote a withheld required host.
+  let rejected = false;
+  try {
+    await api.remove(capturePermissions());
+  } catch {
+    rejected = true;
+    // Still check the resulting authority, without exposing Chrome diagnostics.
+  }
+  const present = await api.contains(capturePermissions());
+  if (rejected || present) throw new Error('Sign-in permission cleanup unavailable.');
 }

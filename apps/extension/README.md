@@ -379,10 +379,17 @@ and cross-origin iframe refusal.
 
 Sign in to the site in your normal browser, using its passkey, SSO or 2FA flow. Open the
 extension popup on that site's signed-in page, choose a **Vault profile** and **Persona for
-this site**, and click **Review sign-in sharing**. The extension requests optional cookie
-access together with that exact origin, reads only cookies matching the chosen page,
-and releases cookie access and any optional origin grant immediately after preparing the snapshot. Cleanup
-also covers errors, cancellation, popup closure and grants arriving after closure.
+this site**, and click **Review sign-in sharing**. The popup checks existing Chrome site access
+before contacting the native host and again on review. If Chrome withholds this site's access
+("On click" or "On specific sites"), sharing refuses without requesting permission or sending
+a native message. Allow the extension on this site from Chrome's own extension menu first,
+then try again. Capture never requests or removes a host origin.
+Confirmation checks site access again before sending, including access withdrawn during review.
+With site access already granted, the review click requests only optional `cookies`, reads
+cookies matching the chosen page, and removes cookie access immediately after preparing the
+snapshot. It then checks that cookie access is absent. Cleanup also covers errors, permission
+denial, cancellation, popup closure and grants arriving after closure; the same host grants
+remain throughout.
 The preview shows the site,
 cookie count and persona. Click **Share this sign-in with my agent** to send that snapshot
 to the local agent vault. Cancel, profile changes, navigation to another site and expired
@@ -392,14 +399,15 @@ Profiles/personas come from `@jeswr/agent-vault`, separately from the extension'
 accounts. Configure an account for the exact site in the agent's store first. Install the
 pinned Chrome native host using the [vault setup instructions](../../packages/agent-vault/README.md#real-browser-sign-in-through-chrome-native-messaging).
 The worker accepts this channel only from the actual popup, and retains the native port
-for the vault's existing keep-alive scheduler after the popup closes. The manifest's existing
-Solid host access may mean Chrome grants the exact-origin request without another prompt;
-the review and explicit confirmation are always required. No site cookie is stored in
+for the vault's existing keep-alive scheduler after the popup closes. Review and explicit
+confirmation are always required. No site cookie is stored in
 extension storage, content scripts or the page bridge. Values are never rendered or logged.
 Required Solid host permissions remain unchanged; optional cookie access is extension-wide
 while held, so the exact-origin query and filtering remain necessary.
-Cleanup calls `chrome.permissions.remove` separately for cookies and the requested origin,
-so Chrome refusing removal of required host access cannot prevent cookie removal.
+If cookie removal rejects or its absence cannot be confirmed, the popup shows a warning
+alongside the truthful sharing result. Worker cleanup failure leaves a toolbar `!` badge;
+a surviving cookie grant also warns when the popup reopens. A warning must not be read as
+a clean cleanup, even if the capture itself succeeded.
 
 Hostile same-OS-user processes are outside the vault's threat model: they can read its
 store/key or forge the public extension-ID caller argument. No code-signature checks or
