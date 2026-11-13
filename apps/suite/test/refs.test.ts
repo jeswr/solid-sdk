@@ -39,7 +39,7 @@ describe("route references", () => {
     expect(() => decodeRef(ref)).toThrow(
       expect.objectContaining({
         ref,
-        name: "InvalidRefError",
+        name: "RefError",
         message: "Not a valid resource reference",
       }),
     );
