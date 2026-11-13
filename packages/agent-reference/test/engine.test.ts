@@ -68,10 +68,14 @@ it("loads every declared case and preserves every catalogue branch, without clai
     }
   }
   expect(runs + recorded).toBe(
-    manifest.paths.filter((p: { status: string }) => p.status !== "blocked").length,
+    manifest.paths.filter(
+      (p: { status: string; configuration?: string }) => !p.configuration && p.status !== "blocked",
+    ).length,
   );
   expect(blocked).toBe(
-    manifest.paths.filter((p: { status: string }) => p.status === "blocked").length,
+    manifest.paths.filter(
+      (p: { status: string; configuration?: string }) => !p.configuration && p.status === "blocked",
+    ).length,
   );
 }, 60_000);
 

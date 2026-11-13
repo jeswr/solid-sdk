@@ -73,7 +73,7 @@ const COMMON = {
     "unique message id + createdAt/expiresAt window + persistent seen-set; " +
     "same id with different content = replay-conflict",
   serialization: "awp-json 0.1 (UTF-8 JSON payload; digests use RFC 8785 JCS + SHA-256)",
-  bindings: ["direct-local/0.1", "email-mime/0.1", "mcp-tool/0.1", "a2a-data-part/0.2"],
+  bindings: ["direct-local/0.1", "email-mime/0.1", "mcp-tool/2026-07-28", "a2a-data-part/1.0"],
 } as const;
 
 export const CONFIG_ED25519 = `${AWP}config/signed-ed25519/0.1`;
@@ -111,7 +111,27 @@ const localDefinition = (id: string, label: string): ConfigurationDefinition => 
   unresolved: [],
 });
 
+/** Wire ids for single-layer alternatives; names are labels, ids remain machine references. */
+export function alternativeWireId(id: string): string {
+  return `${AWP}config/${id}/0.1`;
+}
+export const CONFIG_TRANSPORT_EMAIL = alternativeWireId("transport-email");
+export const CONFIG_TRANSPORT_A2A = alternativeWireId("transport-a2a");
+export const CONFIG_TRANSPORT_MCP = alternativeWireId("transport-mcp");
+
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  [CONFIG_TRANSPORT_EMAIL]: {
+    ...localDefinition(CONFIG_TRANSPORT_EMAIL, "Signed messages by email"),
+    bindings: ["email-mime/0.1"],
+  },
+  [CONFIG_TRANSPORT_A2A]: {
+    ...localDefinition(CONFIG_TRANSPORT_A2A, "Signed messages through A2A"),
+    bindings: ["a2a-data-part/1.0"],
+  },
+  [CONFIG_TRANSPORT_MCP]: {
+    ...localDefinition(CONFIG_TRANSPORT_MCP, "Signed messages through MCP"),
+    bindings: ["mcp-tool/2026-07-28"],
+  },
   [CONFIG_MAPPING]: localDefinition(
     CONFIG_MAPPING,
     "Signed versioned code-list mapping lookup with original-source standing",

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Direct local binding: an in-process message bus between runtimes. The wire unit is
  * serialised to JSON and back on every hop, exactly as it would be on a socket or file
@@ -7,6 +8,7 @@
 import type { Iri } from "../core/types.js";
 import type { AgentRuntime, OutboundMessage, StepResult } from "../runtime/agent.js";
 import type { WireMessage } from "../store/state.js";
+import { carriageBytes } from "../wire/carriage.js";
 
 export interface TraceEntry {
   readonly step: number;
@@ -45,8 +47,9 @@ export class DirectBus {
   send(from: AgentRuntime, result: StepResult | readonly OutboundMessage[]): this {
     const outs = Array.isArray(result) ? result : (result as StepResult).outbound;
     for (const out of outs) {
-      // Anonymous requesters have no actor to address; replies route back by conversation.
-      if (out.message.from.actor === undefined) this.origin.set(out.conversation, from);
+      // Replies without a channel address route to the conversation's first sender.
+      // The binding does not inspect the signed message to decide whether a party is anonymous.
+      if (!this.origin.has(out.conversation)) this.origin.set(out.conversation, from);
       this.queue.push({ from, out });
     }
     return this;
@@ -84,7 +87,7 @@ export class DirectBus {
       }
       steps++;
       this.step++;
-      const result = await to.receive(JSON.parse(JSON.stringify(wire)), {
+      const result = await to.receive(carriageBytes(wire), {
         binding: "direct-local/0.1",
       });
       this.results.push(result);

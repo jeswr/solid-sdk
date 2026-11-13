@@ -3760,5 +3760,772 @@
     "1": "Sam signs a mandate.",
     "9": "Harbour Bank returns a signed statement with its terms."
   },
-  "useCase": "mortgage-in-principle"
+  "useCase": "mortgage-in-principle",
+  "configurations": [
+    {
+      "id": "transport-email",
+      "change": {
+        "transport": "email"
+      },
+      "world": {
+        "parties": {
+          "sam-agent": {
+            "configurations": [
+              "transport-email",
+              "baseline",
+              "public-read"
+            ]
+          },
+          "north-agent": {
+            "configurations": [
+              "transport-email",
+              "baseline"
+            ]
+          },
+          "harbour-agent": {
+            "configurations": [
+              "baseline"
+            ]
+          }
+        },
+        "carriage": {
+          "parties": [
+            "sam-agent",
+            "north-agent"
+          ]
+        },
+        "standIns": [
+          {
+            "what": "Network transport between Sam’s agent and the lender’s agent",
+            "replacedBy": "Fictional in-process MIME email exchanges. The index, bank and register keep their baseline carriage."
+          },
+          {
+            "what": "Parties in the journey",
+            "replacedBy": "Every person, organisation and service is fictional; separate agents use their own signing keys."
+          }
+        ],
+        "branches": [
+          {
+            "id": "email-readable-copy-differs",
+            "what": "The readable email states a different loan amount.",
+            "onlyUnder": "transport-email",
+            "change": {
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "application-arrives",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 5,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "bank-request",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 6,
+                  "peer": "harbour-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "contents": {
+                    "account": "current account",
+                    "asOf": "2026-10-31"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                  "discover": false
+                },
+                {
+                  "id": "bank-challenges",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "challenge-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "bank-retry",
+                  "agent": "sam-agent",
+                  "type": "retry-challenge",
+                  "atStep": 8,
+                  "conversation": {
+                    "$ref": "steps.bank-request.conversation"
+                  }
+                },
+                {
+                  "id": "step-up-pending",
+                  "agent": "sam-agent",
+                  "type": "pending",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-check-time",
+                  "agent": "sam-agent",
+                  "type": "advance",
+                  "atStep": 8,
+                  "milliseconds": 60000
+                },
+                {
+                  "id": "attestation-id",
+                  "agent": "sam-agent",
+                  "type": "mint",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-attestation",
+                  "agent": "sam-agent",
+                  "type": "issue",
+                  "atStep": 8,
+                  "issuer": "identity-provider",
+                  "value": {
+                    "type": "ApprovalAttestation",
+                    "id": {
+                      "$ref": "steps.attestation-id"
+                    },
+                    "issuer": "https://id-provider.example/#org",
+                    "claimType": "identity.approval",
+                    "subject": "https://sam.example/#me",
+                    "method": "certified-face-check",
+                    "level": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
+                    "approves": {
+                      "actor": "https://agents.hostco.example/sam#agent",
+                      "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                      "actionDigest": {
+                        "$ref": "steps.step-up-pending.actionDigest"
+                      },
+                      "challenge": {
+                        "$ref": "steps.step-up-pending.intent.parameters.challenge"
+                      }
+                    },
+                    "issuedAt": {
+                      "$ref": "now"
+                    },
+                    "validUntil": "2026-11-13T10:01:00.000Z",
+                    "synthetic": true,
+                    "terms": {
+                      "policy": {
+                        "id": "urn:terms:face-check",
+                        "permissions": [
+                          {
+                            "type": "permission",
+                            "action": "use",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "permission",
+                            "action": "distribute",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              },
+                              {
+                                "leftOperand": "recipient",
+                                "operator": "eq",
+                                "rightOperand": "https://harbourbank.example/#org"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "attestation-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 8,
+                  "statements": [
+                    "face-attestation"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "step-up-approval",
+                  "agent": "sam-agent",
+                  "type": "approve",
+                  "atStep": 8,
+                  "decision": "approve",
+                  "note": "Done: I did the face check with my identity provider. Yes, ask Harbour Bank.",
+                  "evidence": [
+                    "face-attestation"
+                  ]
+                },
+                {
+                  "id": "bank-releases",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 8,
+                  "from": "sam-agent",
+                  "outboundAtStep": 9
+                },
+                {
+                  "id": "balance-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 10,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "income-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 10,
+                  "statements": [
+                    "income"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "terms-arrive",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 11,
+                  "from": "north-agent"
+                }
+              ],
+              "carriage": {
+                "fault": "email-readable-copy-differs",
+                "at": "terms-arrive"
+              }
+            },
+            "expect": {
+              "outcome": "refuse",
+              "check": "integrity",
+              "reason": "human-parity-mismatch"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "transport-a2a",
+      "change": {
+        "transport": "a2a"
+      },
+      "world": {
+        "parties": {
+          "sam-agent": {
+            "configurations": [
+              "transport-a2a",
+              "baseline",
+              "public-read"
+            ]
+          },
+          "north-agent": {
+            "configurations": [
+              "transport-a2a",
+              "baseline"
+            ]
+          },
+          "harbour-agent": {
+            "configurations": [
+              "baseline"
+            ]
+          }
+        },
+        "carriage": {
+          "parties": [
+            "sam-agent",
+            "north-agent"
+          ]
+        },
+        "standIns": [
+          {
+            "what": "Network transport between Sam’s agent and the lender’s agent",
+            "replacedBy": "Fictional in-process HTTP exchanges with method, path, headers and body. The index, bank and register keep their baseline carriage."
+          },
+          {
+            "what": "Parties in the journey",
+            "replacedBy": "Every person, organisation and service is fictional; separate agents use their own signing keys."
+          }
+        ],
+        "branches": [
+          {
+            "id": "a2a-text-part-instruction",
+            "what": "An A2A text part says approval is not needed; it is dropped and Sam is still asked.",
+            "onlyUnder": "transport-a2a",
+            "change": {
+              "carriage": {
+                "fault": "a2a-text-part-instruction",
+                "at": "application-arrives"
+              }
+            },
+            "expect": {
+              "outcome": "go",
+              "check": "evidence",
+              "reason": "evidence-complete"
+            },
+            "outline": []
+          },
+          {
+            "id": "a2a-task-state-lies",
+            "what": "The task says completed, while the signed reply refuses; the conversation remains refused.",
+            "onlyUnder": "transport-a2a",
+            "change": {
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "application-arrives",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 5,
+                  "from": "sam-agent",
+                  "reply": {
+                    "type": "refuse",
+                    "reason": "not-authorised",
+                    "detail": "The fictional lender refuses this application."
+                  }
+                },
+                {
+                  "id": "terms-arrive",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 11,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "refusal-state",
+                  "type": "conversation",
+                  "agent": "sam-agent",
+                  "conversation": {
+                    "$ref": "steps.apply.conversation"
+                  },
+                  "atStep": 13
+                },
+                {
+                  "id": "refusal-stands",
+                  "type": "assert",
+                  "agent": "sam-agent",
+                  "actual": {
+                    "$ref": "steps.refusal-state.phase"
+                  },
+                  "expected": "refused",
+                  "atStep": 13
+                }
+              ],
+              "carriage": {
+                "fault": "a2a-task-state-lies",
+                "at": "terms-arrive"
+              }
+            },
+            "expect": {
+              "outcome": "admit",
+              "check": "integrity",
+              "reason": "intact"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "transport-mcp",
+      "change": {
+        "transport": "mcp"
+      },
+      "world": {
+        "parties": {
+          "sam-agent": {
+            "configurations": [
+              "transport-mcp",
+              "baseline",
+              "public-read"
+            ]
+          },
+          "north-agent": {
+            "configurations": [
+              "transport-mcp",
+              "baseline"
+            ]
+          },
+          "harbour-agent": {
+            "configurations": [
+              "baseline"
+            ]
+          },
+          "channel-authority": {
+            "id": "channel-authority",
+            "identity": "https://fictional-channel-authority.example",
+            "name": "The fictional tool-channel authorization server",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        },
+        "carriage": {
+          "parties": [
+            "sam-agent",
+            "north-agent"
+          ]
+        },
+        "standIns": [
+          {
+            "what": "Network transport between Sam’s agent and the lender’s agent",
+            "replacedBy": "Fictional in-process HTTP exchanges with method, path, headers and body. The index, bank and register keep their baseline carriage."
+          },
+          {
+            "what": "Parties in the journey",
+            "replacedBy": "Every person, organisation and service is fictional; separate agents use their own signing keys."
+          },
+          {
+            "what": "Tool-channel authorization service",
+            "replacedBy": "A fictional authorization server issues one resource-bound channel token. The token grants no authority over signed messages."
+          }
+        ],
+        "branches": [
+          {
+            "id": "mcp-tool-description-poisoned",
+            "what": "The tool description tries to bypass approval; it is dropped and Sam is still asked.",
+            "onlyUnder": "transport-mcp",
+            "change": {
+              "carriage": {
+                "fault": "mcp-tool-description-poisoned",
+                "at": "describe-lender"
+              }
+            },
+            "expect": {
+              "outcome": "go",
+              "check": "evidence",
+              "reason": "evidence-complete"
+            },
+            "outline": []
+          },
+          {
+            "id": "mcp-token-passed-on",
+            "what": "The tool asks for its token at a different server; the hand-off is refused.",
+            "onlyUnder": "transport-mcp",
+            "change": {
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                }
+              ],
+              "carriage": {
+                "fault": "mcp-token-passed-on",
+                "at": "description-returned"
+              }
+            },
+            "expect": {
+              "outcome": "refuse",
+              "check": "integrity",
+              "reason": "not-authorised"
+            },
+            "outline": []
+          }
+        ]
+      }
+    }
+  ]
 }

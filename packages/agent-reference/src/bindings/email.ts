@@ -54,3 +54,6 @@ export class ScriptedMailbox {
     return { from: this.address, text };
   }
 }
+
+/** Structured agent-to-agent mail; the prose-only mailbox above remains a separate mode. */
+export { readEmail, writeEmail } from "./email-mime.js";

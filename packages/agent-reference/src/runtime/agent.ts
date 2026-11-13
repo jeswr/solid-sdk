@@ -118,6 +118,7 @@ import type {
 import { domainValue } from "../store/state.js";
 import { peekWire } from "../trace/packet.js";
 import { decodeAdapterJson, decodeCompactPayload } from "../wire/inspect.js";
+import { receiveCarriage } from "./carriage-gate.js";
 
 import { DutyExecutor, type DutyRule, deadlineMissed, dutyRuleSchema } from "./duties.js";
 import {
@@ -2545,7 +2546,16 @@ export class AgentRuntime {
 
   /** Process one inbound wire message. Never throws on hostile input. */
   receive(wire: unknown, meta: { binding?: string } = {}): Promise<StepResult> {
-    return this.exclusive(() => this.receiveGuarded(wire, meta));
+    return this.exclusive(() =>
+      receiveCarriage(
+        wire,
+        meta,
+        this.inbound,
+        this.options.gates?.name ?? ((id) => id ?? "the represented party"),
+        (id) => Boolean(this.state.outbox[id]),
+        (recovered) => this.receiveGuarded(recovered, meta),
+      ),
+    );
   }
 
   private async receiveGuarded(wire: unknown, meta: { binding?: string }): Promise<StepResult> {

@@ -41,6 +41,7 @@ for (const file of readdirSync(join(root, "scenarios"))
   const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));
   for (const path of await runScenario(profile, scenario, {
     commit,
+    configuration: "all",
     compare: !record,
     registry,
     proofCache: new ProofCache(join(root, "proofs")),
@@ -64,6 +65,7 @@ for (const file of readdirSync(join(root, "scenarios"))
       continue;
     }
     const stem = path.path === "main" ? id : `${id}--${path.path}`;
+    const suffix = path.configuration ?? "baseline";
     const traceBytes = path.trace
       ? `${JSON.stringify({ "x-authored-by": "Codex GPT-6", ...path.trace }, null, 2)}\n`
       : undefined;
@@ -72,8 +74,14 @@ for (const file of readdirSync(join(root, "scenarios"))
       useCase: scenario.useCase ?? scenario.id,
       ...(scenario.cataloguePath ? { cataloguePath: scenario.cataloguePath } : {}),
       path: path.path,
+      ...(path.configuration ? { configuration: path.configuration } : {}),
       ...(path.path !== "main"
-        ? { what: scenario.branches.find((b) => b.id === path.path).what }
+        ? {
+            what:
+              path.what ??
+              scenario.branches.find((b) => b.id === path.path)?.what ??
+              path.trace?.path?.what,
+          }
         : {}),
       ...(path.blocked
         ? { status: "blocked", reason: path.blocked }
@@ -83,7 +91,7 @@ for (const file of readdirSync(join(root, "scenarios"))
             expected: path.expected,
             consequences: path.consequences,
             ...(path.note ? { note: path.note } : {}),
-            trace: `${stem}--baseline.json`,
+            trace: `${stem}--${suffix}.json`,
             ...(jointPaths.has(`${id}/${path.path}`) && traceBytes
               ? { traceSha256: traceHash(traceBytes), recordedWith: SPARQ_AGGREGATE }
               : {}),
@@ -92,12 +100,12 @@ for (const file of readdirSync(join(root, "scenarios"))
     if (!path.trace) continue;
     executed++;
     const outline = outlineOf(path.trace);
-    if (record) {
+    if (record && !path.configuration) {
       if (path.path === "main") scenario.expect = outline;
       else scenario.branches.find((b) => b.id === path.path).outline = outline;
     }
-    writeFileSync(join(root, "traces", `${stem}--baseline.json`), traceBytes);
-    const outlinePath = join(root, "outlines", `${stem}--baseline.json`);
+    writeFileSync(join(root, "traces", `${stem}--${suffix}.json`), traceBytes);
+    const outlinePath = join(root, "outlines", `${stem}--${suffix}.json`);
     let legacyArray = false;
     try {
       legacyArray = Array.isArray(JSON.parse(readFileSync(outlinePath, "utf8")));
@@ -107,7 +115,7 @@ for (const file of readdirSync(join(root, "scenarios"))
       `${JSON.stringify(legacyArray ? outline : { "x-authored-by": "Codex GPT-6", schema: "agent-outline/0.1", entries: outline }, null, 2)}\n`,
     );
     index.push({
-      file: `${stem}--baseline.json`,
+      file: `${stem}--${suffix}.json`,
       scenario: path.trace.scenario,
       configuration: path.trace.configuration.id,
       events: path.trace.events.length,
