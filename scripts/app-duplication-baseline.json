@@ -7822,23 +7822,6 @@
         }
       ]
     },
-    "bce0cdb211fa833c5634d6536d073b278c433202312aa6ab1434dac956c15e22": {
-      "tokens": 124,
-      "locations": [
-        {
-          "file": "apps/pod-docs/web/src/App.tsx",
-          "startLine": 34,
-          "endLine": 62,
-          "tokens": 124
-        },
-        {
-          "file": "apps/pod-drive/web/src/App.tsx",
-          "startLine": 26,
-          "endLine": 50,
-          "tokens": 124
-        }
-      ]
-    },
     "be634a6437af37c041cd5d215dfcaae4644b3b5765acb5f8652750458fd3b070": {
       "tokens": 183,
       "locations": [
