@@ -11,7 +11,7 @@
  * maintainer's token proxy as well as the client id.
  */
 import { DataFactory, Store } from "n3";
-import { RunBudget, type RunLimits } from "../core/budget.js";
+import type { RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { copyDataset } from "../core/incremental.js";
@@ -28,6 +28,7 @@ const SCOPES = ["read:user", "repo"] as const;
 /** Create an adapter with host-selected per-run source limits. */
 export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
   return {
+    limits: limits && { ...limits },
     vocabMap,
     metadata: {
       id: ID,
@@ -56,12 +57,11 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
     fixtures: () => GITHUB_FIXTURES,
 
     async import(ctx: ImportContext): Promise<ImportOutcome> {
-      const budget = new RunBudget(ID, limits);
+      const budget = ctx.budget;
       const skipped = new SkipCounter();
 
       ctx.progress({ label: "Fetching your GitHub profile…", done: 0, total: 2 });
-      budget.request();
-      const user = (await getJson<GitHubUser>(ID, ctx.api, `${API}/user`, undefined, budget)) ?? {};
+      const user = (await getJson<GitHubUser>(ID, ctx.api, `${API}/user`, undefined)) ?? {};
       budget.items(1);
 
       const profileDoc = ctx.resolve("work/profile.ttl");
@@ -90,7 +90,6 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
       const repos: (GitHubRepo | null)[] = [];
       const seen = new Set<number>();
       for (let page = 1; ; page += 1) {
-        budget.request();
         const batch = arr(
           await getJson<GitHubRepo[] | null>(
             ID,
@@ -98,7 +97,6 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
             // Pushes must not move unseen repositories ahead of a page already read.
             `${API}/user/repos?sort=created&direction=asc&per_page=100&page=${page}`,
             undefined,
-            budget,
           ),
         );
         budget.items(batch.length);
@@ -135,7 +133,6 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
         if (!Number.isSafeInteger(id) || seen.has(id)) continue;
         seen.add(id);
         const url = `${API}/repositories/${id}`;
-        budget.request();
         let repo: GitHubRepo | null;
         try {
           repo = await getJson<GitHubRepo | null>(
@@ -154,7 +151,6 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
             },
             url,
             undefined,
-            budget,
           );
         } catch (error) {
           if (error instanceof IntegrationSyncError && error.status === 404) continue;

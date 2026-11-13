@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
@@ -13,9 +14,11 @@
  */
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { abortablePodWriter, unlessAborted } from "./abort.js";
+import { RunBudget, type RunLimits, stricterLimits } from "./budget.js";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
+import { budgetedFetch } from "./source-budget.js";
 import type {
   ConnectorState,
   ConnectorStateOptions,
@@ -30,6 +33,8 @@ import type {
 export type ImportMode = "live" | "demo";
 
 export interface RunImportOptions extends ConnectorStateOptions {
+  /** Total source requests, records and response bytes; shared across pages, retries and fallbacks. */
+  limits?: Partial<RunLimits>;
   adapter: IntegrationAdapter;
   /** Explicit, host-owned storage port for this adapter. */
   podWriter: PodWriter;
@@ -48,7 +53,13 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * stops the write that follows. Pass the same signal to `createFetchPodWriter` to check it
    * before every HTTP request inside a port and to abort requests in flight. A run cancelled
    * before it resolves is reported as cancelled, even when the cancel lands while the final
-   * provenance write is in flight (that write may still complete).
+   * provenance write is in flight (that write may still complete). Once the run has reported
+   * its state through `onState`, it resolves successfully; a cancel then only stops the
+   * adapter's best-effort `ImportOutcome.commit` cleanup.
+   *
+   * The run deadline (`limits.maxDurationMs`) bounds source work only. It permits Pod
+   * checkpoint writes after it expires, and once the adapter has resolved it no longer fails
+   * the run: registration and provenance still complete so the new cursor is reported.
    *
    * A cancelled run records no activity. Documents and items it already wrote keep
    * `prov:wasGeneratedBy` naming its activity IRI, which `_provenance.ttl` never describes:
@@ -95,27 +106,59 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   // no source request, Pod read/write, registration or provenance step starts once aborted.
   // Pod I/O is checked at the writer boundary itself, so session-internal reads and writes
   // (including finalisation's provenance read and write) cannot slip past a cancel.
-  const signal = opts.signal;
+  opts.signal?.throwIfAborted();
+  const limits = stricterLimits(adapter.limits, opts.limits);
+  const budget = new RunBudget(id, limits);
+  let timeout: AbortSignal | undefined;
+  const deadline = new AbortController();
+  const expire = () => {
+    if (budget.remainingMs > 0) armDeadline();
+    else deadline.abort(budget.expire());
+  };
+  const armDeadline = () => {
+    // Native timers have a finite range; long host allowances must not expire early.
+    timeout = AbortSignal.timeout(Math.min(Math.ceil(budget.remainingMs), 2_147_483_647));
+    timeout.addEventListener("abort", expire, { once: true });
+  };
+  armDeadline();
+  const signal = AbortSignal.any([...(opts.signal ? [opts.signal] : []), deadline.signal]);
+  const sourceApi = budgetedFetch(api, id, budget, signal);
+  // Source deadlines stop upstream work; completed data may still be checkpointed to the Pod.
+  // Explicit user cancellation continues to stop every Pod operation at its boundary.
   const checked = <A extends unknown[], R>(step: (...args: A) => Promise<R>) =>
-    unlessAborted(signal, step);
-  const podWriter = abortablePodWriter(opts.podWriter, signal);
-  signal?.throwIfAborted();
-  const source = adapter.fixtures()[0]?.url;
-  const session = createImportSession(
-    podWriter,
-    id,
-    source ? `${new URL(source).origin}/` : `urn:solid:connector:${encodeURIComponent(id)}:source`,
-    opts,
-    adapter.vocabMap,
-  );
+    unlessAborted(opts.signal, step);
+  const podWriter = abortablePodWriter(opts.podWriter, opts.signal);
+  let session: ReturnType<typeof createImportSession>;
   try {
+    signal.throwIfAborted();
+    const source = adapter.fixtures()[0]?.url;
+    session = createImportSession(
+      podWriter,
+      id,
+      source
+        ? `${new URL(source).origin}/`
+        : `urn:solid:connector:${encodeURIComponent(id)}:source`,
+      opts,
+      adapter.vocabMap,
+    );
+  } catch (error) {
+    sourceApi.close();
+    timeout?.removeEventListener("abort", expire);
+    throw error;
+  }
+  // Set once adapter.import resolves: source work is over, so the run deadline no longer applies.
+  let imported = false;
+  try {
+    budget.checkTime();
     const outcome = await adapter.import({
-      api: checked(api) as typeof fetch,
+      api: sourceApi.api,
+      budget,
       cursor: opts.cursor ?? opts.state?.cursor,
       resolve: (slug) => opts.podWriter.resolve(slug),
       read: checked(session.read),
+      // Progress stops only on caller cancellation; the deadline is enforced on source I/O.
       progress: (p) => {
-        signal?.throwIfAborted();
+        opts.signal?.throwIfAborted();
         opts.onProgress?.(p);
       },
       write: checked(session.write),
@@ -123,15 +166,29 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       remove: checked(session.remove),
       signal,
       scopes: opts.scopes,
+      limits,
     });
-    signal?.throwIfAborted();
+    imported = true;
+    // The adapter has committed its data and checkpoints. The source deadline is not a
+    // reason to discard them: only the caller's cancellation stops finalisation now.
+    opts.signal?.throwIfAborted();
     const { indexUrl } = await podWriter.registerType(session.registrations());
-    signal?.throwIfAborted();
-    await session.finish();
-    // A cancel during the final provenance write is still a cancel: never report success.
-    signal?.throwIfAborted();
-    const state = session.state(outcome);
-    opts.onState?.(state);
+    opts.signal?.throwIfAborted();
+    let state: ConnectorState | undefined;
+    await session.finish(async () => {
+      // A cancel during the final provenance write is still a cancel: never report success.
+      opts.signal?.throwIfAborted();
+      state = session.state(outcome);
+      opts.onState?.(state);
+      // The run is committed and its cursor reported. Only now may the adapter discard
+      // private resume state that the cursor supersedes; a failure or cancel leaves it.
+      try {
+        await outcome.commit?.();
+      } catch {
+        /* Best-effort: the reported checkpoint stands. */
+      }
+    });
+    if (!state) throw new IntegrationSyncError(id, "Import did not report its state.");
     return {
       adapterId: id,
       mode,
@@ -147,7 +204,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     // run was not cancelled, preserving the original failure if the provenance write fails.
     // A cancelled run starts no further Pod I/O, so its writes name an unrecorded activity
     // (documented on RunImportOptions.signal).
-    if (signal?.aborted) session.release();
+    if (opts.signal?.aborted) session.release();
     else
       try {
         await session.finish();
@@ -156,7 +213,11 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       }
     opts.onState?.(session.state());
     // A cancel can surface as an adapter or write error; callers match the abort reason.
-    throw signal?.aborted ? signal.reason : error;
+    if (opts.signal?.aborted) throw opts.signal.reason;
+    throw !imported && signal.aborted ? signal.reason : error;
+  } finally {
+    sourceApi.close();
+    timeout?.removeEventListener("abort", expire);
   }
 }
 

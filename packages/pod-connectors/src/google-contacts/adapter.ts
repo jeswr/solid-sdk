@@ -4,7 +4,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
-import { RunBudget, readJson } from "../core/budget.js";
+import { readJson } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -46,7 +46,6 @@ export const googleContactsAdapter: IntegrationAdapter = {
   oauth: createGoogleOAuthConfig("contacts"),
   fixtures: () => GOOGLE_CONTACTS_FIXTURES,
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID);
     ctx.progress({ label: "Fetching your contacts…", done: 0 });
     const existing = await ctx.read(PEOPLE);
     const bookIri = `${ctx.resolve(INDEX)}#this`;
@@ -54,7 +53,7 @@ export const googleContactsAdapter: IntegrationAdapter = {
     let syncToken = existing ? ctx.cursor : undefined;
     let batch: Awaited<ReturnType<typeof connections>>;
     try {
-      batch = await connections(ctx, budget, syncToken);
+      batch = await connections(ctx, syncToken);
     } catch (error) {
       if (
         !syncToken ||
@@ -66,7 +65,7 @@ export const googleContactsAdapter: IntegrationAdapter = {
         throw error;
       // No local mutations have happened: discard partial pages and retry a full snapshot once.
       syncToken = undefined;
-      batch = await connections(ctx, budget);
+      batch = await connections(ctx);
     }
     const current = syncToken ? new Map(previous) : new Map<string, string>();
     const changes = new Map<string, GooglePerson>();
@@ -212,7 +211,6 @@ async function managedPeople(ctx: ImportContext): Promise<Set<string>> {
 
 async function connections(
   ctx: ImportContext,
-  budget: RunBudget,
   syncToken?: string,
 ): Promise<{ people: GooglePerson[]; cursor: string }> {
   const people: GooglePerson[] = [];
@@ -226,7 +224,6 @@ async function connections(
     });
     if (syncToken) params.set("syncToken", syncToken);
     if (pageToken) params.set("pageToken", pageToken);
-    budget.request();
     // getJson preserves the framework's 401/403/429/5xx errors. Inspect only the 400
     // body for Google's documented google.rpc.ErrorInfo reason; never match error text.
     const page = await getJson<GoogleConnectionsList>(
@@ -234,14 +231,12 @@ async function connections(
       async (input, init) => {
         const response = await ctx.api(input, init);
         if (response.status === 400) {
-          const body = (await readJson(response, ID, PEOPLE_API, undefined, budget).catch(
-            (error: unknown) => {
-              // Preserve the HTTP error mapping for invalid JSON; size and stream failures propagate.
-              if (error instanceof IntegrationSyncError && error.cause instanceof SyntaxError)
-                return undefined;
-              throw error;
-            },
-          )) as { error?: { details?: { reason?: string }[] } } | undefined;
+          const body = (await readJson(response, ID, PEOPLE_API).catch((error: unknown) => {
+            // Preserve the HTTP error mapping for invalid JSON; size and stream failures propagate.
+            if (error instanceof IntegrationSyncError && error.cause instanceof SyntaxError)
+              return undefined;
+            throw error;
+          })) as { error?: { details?: { reason?: string }[] } } | undefined;
           const details = body?.error?.details;
           if (
             Array.isArray(details) &&
@@ -252,9 +247,10 @@ async function connections(
               url: PEOPLE_API,
             });
         }
-        return response.ok ? metered(response, budget) : response;
+        return response;
       },
       `${PEOPLE_API}?${params}`,
+      undefined,
     );
     if (
       !page ||
@@ -264,7 +260,7 @@ async function connections(
       (page.nextPageToken !== undefined && typeof page.nextPageToken !== "string")
     )
       throw new IntegrationSyncError(ID, "Google Contacts returned an invalid connections page.");
-    budget.items(page.connections?.length ?? 0);
+    ctx.budget.items(page.connections?.length ?? 0);
     for (const person of page.connections ?? []) people.push(person);
     if (!page.nextPageToken) {
       if (typeof page.nextSyncToken !== "string" || !page.nextSyncToken.trim())
@@ -276,22 +272,4 @@ async function connections(
     seen.add(page.nextPageToken);
     pageToken = page.nextPageToken;
   }
-}
-
-/** Count a response body against the run's data budget as getJson streams it. */
-function metered(response: Response, budget: RunBudget): Response {
-  if (!response.body) return response;
-  const counted = response.body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        budget.bytes(chunk.byteLength);
-        controller.enqueue(chunk);
-      },
-    }),
-  );
-  return new Response(counted, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  });
 }

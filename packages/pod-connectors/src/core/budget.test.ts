@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
-import { describe, expect, it } from "vitest";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { describe, expect, it, vi } from "vitest";
 import { RunBudget, readJson } from "./budget.js";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch, getJson } from "./fixture-fetch.js";
@@ -13,6 +14,25 @@ const stream = (parts: string[]) =>
   });
 
 describe("readJson", () => {
+  it("cancels and releases the reader on total-byte overflow, preserving the typed failure", async () => {
+    const cancel = vi.fn(() => {
+      throw new Error("Untrusted cancellation failure");
+    });
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          controller.enqueue(new Uint8Array([32, 32, 32]));
+        },
+        cancel,
+      },
+      { highWaterMark: 0 },
+    );
+    await expect(
+      readJson(new Response(body), "x", "u", undefined, new RunBudget("x", { maxBytes: 2 })),
+    ).rejects.toMatchObject({ name: "RunBudgetExceededError", resource: "bytes" });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(body.locked).toBe(false);
+  });
   it("parses a body split across chunks", async () => {
     expect(await readJson(new Response(stream(['{"a":', "[1,2]}"])), "x", "u")).toEqual({
       a: [1, 2],
@@ -42,13 +62,56 @@ describe("readJson", () => {
 });
 
 describe("RunBudget", () => {
+  it("snapshots caller limits and admits charges exactly at each allowance", () => {
+    const limits = { maxRequests: 1, maxItems: 1, maxBytes: 1 };
+    const budgets = [
+      new RunBudget("x", limits),
+      new RunBudget("x", limits),
+      new RunBudget("x", limits),
+    ];
+    Object.assign(limits, { maxRequests: 100, maxItems: 100, maxBytes: 100 });
+    const [requests, items, bytes] = budgets;
+    requests?.request();
+    items?.items(1);
+    bytes?.bytes(1);
+    expect(() => requests?.request()).toThrow("request budget");
+    expect(() => items?.items(1)).toThrow("item budget");
+    expect(() => bytes?.bytes(1)).toThrow("data budget");
+  });
+  it.each([-1, NaN, Infinity, 0.5])("refuses invalid item/byte charges (%s)", (charge) => {
+    const budget = new RunBudget("x");
+    expect(() => budget.items(charge)).toThrow(TypeError);
+    expect(() => budget.bytes(charge)).toThrow(TypeError);
+  });
+  it.each([
+    NaN,
+    Infinity,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("refuses invalid limits (%s)", (limit) => {
+    for (const key of ["maxRequests", "maxItems", "maxBytes", "maxDurationMs"])
+      expect(() => new RunBudget("x", { maxRequests: 2, maxItems: 3, [key]: limit })).toThrow(
+        TypeError,
+      );
+  });
+
+  it("reports a typed partial-run error and keeps an exhausted budget exhausted", () => {
+    const budget = new RunBudget("x", { maxRequests: 0, maxItems: 0, maxBytes: 0 });
+    expect(() => budget.request()).toThrow(
+      expect.objectContaining({ name: "RunBudgetExceededError", resource: "requests" }),
+    );
+    expect(() => budget.items(0)).toThrow("checkpoint is unchanged");
+  });
+
   it("throws once requests or items exceed the limits", () => {
     const budget = new RunBudget("x", { maxRequests: 2, maxItems: 3 });
     budget.request();
     budget.request();
     expect(() => budget.request()).toThrow("request budget");
-    budget.items(3);
-    expect(() => budget.items(1)).toThrow("item budget");
+    const itemBudget = new RunBudget("x", { maxRequests: 2, maxItems: 3 });
+    itemBudget.items(3);
+    expect(() => itemBudget.items(1)).toThrow("item budget");
   });
 
   it("has generous defaults", () => {

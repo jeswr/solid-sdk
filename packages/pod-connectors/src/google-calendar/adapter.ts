@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, type Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
@@ -180,9 +181,10 @@ async function fetchEvents(
     url.searchParams.set("maxResults", "250");
     if (syncToken) url.searchParams.set("syncToken", syncToken);
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const list = await getJson<GCalEventsList>(ID, ctx.api, url.href);
+    const list = await getJson<GCalEventsList>(ID, ctx.api, url.href, undefined);
     if (!list || (list.items !== undefined && !Array.isArray(list.items))) invalidPage();
     timeZone ??= list.timeZone;
+    ctx.budget.items(list.items?.length ?? 0);
     items.push(...(list.items ?? []));
     pageToken = list.nextPageToken;
     if (

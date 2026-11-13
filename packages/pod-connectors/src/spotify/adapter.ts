@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
-import { RunBudget, type RunLimits } from "../core/budget.js";
+import type { RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { arr, optionalDate, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
 import type {
@@ -43,6 +43,7 @@ interface TrackItem {
 /** Each import has an independent shared source budget; hosts may supply custom limits. */
 export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
   return {
+    limits: limits && { ...limits },
     vocabMap,
     metadata: {
       id: "spotify",
@@ -73,7 +74,7 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
       });
     },
     async import(ctx: ImportContext): Promise<ImportOutcome> {
-      const budget = new RunBudget("spotify", limits);
+      const budget = ctx.budget;
       const documents: NormalisedDoc[] = [];
       const skipped = new SkipCounter();
       const checkpoint = parseCursor(ctx.cursor);
@@ -133,13 +134,13 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
       };
       const tracks = async (slug: string, path: string, wrapped = false) => {
         const ds = new Store();
-        for await (const page of pages<SpotifyTrack & TrackItem>(ctx, `${API}${path}`, budget))
+        for await (const page of pages<SpotifyTrack & TrackItem>(ctx, `${API}${path}`))
           for (const item of arr(page.items)) track(wrapped ? item?.track : item, slug, ds);
         stage(slug, ds, CLASSES.MusicRecording);
       };
       const artists = async (slug: string, path: string, followed = false) => {
         const ds = new Store();
-        for await (const page of pages<Artist>(ctx, `${API}${path}`, budget, (json) =>
+        for await (const page of pages<Artist>(ctx, `${API}${path}`, (json) =>
           followed ? json.artists : json,
         )) {
           for (const value of arr(page.items)) {
@@ -183,6 +184,7 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
 
       ctx.progress({ label: "Fetching playlists and items…", done: 2, total: 4 });
       const user = await spotifyJson<{ id?: string }>(ctx.api, `${API}/me`, budget, ctx.signal);
+      budget.items(1);
       const userId = optionalText(user?.id);
       const slug = "music/playlists.ttl";
       const ds = new Store();
@@ -197,11 +199,7 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
         );
       const partialPlaylists =
         ctx.scopes !== undefined && PLAYLIST_SCOPES.some((scope) => !ctx.scopes?.includes(scope));
-      for await (const page of pages<SpotifyPlaylist>(
-        ctx,
-        `${API}/me/playlists?limit=50`,
-        budget,
-      )) {
+      for await (const page of pages<SpotifyPlaylist>(ctx, `${API}/me/playlists?limit=50`)) {
         for (const value of arr(page.items)) {
           const id = optionalText(value?.id);
           if (!value || !id) {
@@ -236,7 +234,6 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
             for await (const items of pages<TrackItem>(
               ctx,
               `${API}/playlists/${encodeURIComponent(id)}/items?limit=50&additional_types=track,episode`,
-              budget,
             )) {
               for (const item of arr(items.items)) {
                 position++;
@@ -286,7 +283,6 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
       for await (const page of pages<TrackItem>(
         ctx,
         `${API}/me/player/recently-played?limit=50${query}`,
-        budget,
       )) {
         for (const item of arr(page.items)) {
           const date = optionalDate(item?.played_at);

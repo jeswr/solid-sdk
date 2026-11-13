@@ -11,7 +11,7 @@
  * (Basic auth with an empty secret on the token exchange).
  */
 import { DataFactory, Store } from "n3";
-import { RunBudget, type RunLimits } from "../core/budget.js";
+import type { RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { Pagination } from "../core/pagination.js";
@@ -34,6 +34,7 @@ const SCOPES = ["identity", "history", "mysubreddits"] as const;
 /** Create an adapter with host-selected per-run source limits. */
 export function createRedditAdapter(limits?: RunLimits): IntegrationAdapter {
   return {
+    limits: limits && { ...limits },
     vocabMap,
     metadata: {
       id: ID,
@@ -61,11 +62,10 @@ export function createRedditAdapter(limits?: RunLimits): IntegrationAdapter {
     fixtures: () => REDDIT_FIXTURES,
 
     async import(ctx: ImportContext): Promise<ImportOutcome> {
-      const budget = new RunBudget(ID, limits);
+      const budget = ctx.budget;
       const skipped = new SkipCounter();
       ctx.progress({ label: "Checking who you are on Reddit…", done: 0, total: 3 });
-      budget.request();
-      const me = await getJson<RedditMe>(ID, ctx.api, `${API}/api/v1/me`, undefined, budget);
+      const me = await getJson<RedditMe>(ID, ctx.api, `${API}/api/v1/me`, undefined);
       budget.items(1);
 
       ctx.progress({ label: "Fetching your saved posts…", done: 1, total: 3 });
@@ -78,13 +78,11 @@ export function createRedditAdapter(limits?: RunLimits): IntegrationAdapter {
       let after: string | undefined;
       let reachedCheckpoint = false;
       do {
-        budget.request();
         const page = await getJson<RedditListing<RedditSavedPost>>(
           ID,
           ctx.api,
           `${savedUrl}${after ? `&after=${encodeURIComponent(after)}` : ""}`,
           undefined,
-          budget,
         );
         const children = arr(page?.data?.children);
         budget.items(children.length);
@@ -132,13 +130,11 @@ export function createRedditAdapter(limits?: RunLimits): IntegrationAdapter {
       const subsPagination = new Pagination(ID);
       after = undefined;
       do {
-        budget.request();
         const page = await getJson<RedditListing<RedditSubreddit>>(
           ID,
           ctx.api,
           `${API}/subreddits/mine/subscriber?limit=100${after ? `&after=${encodeURIComponent(after)}` : ""}`,
           undefined,
-          budget,
         );
         const children = arr(page?.data?.children);
         budget.items(children.length);

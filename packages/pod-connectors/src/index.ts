@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Adapter contracts and host ports. */
 
+/** Shared source-run limits and typed partial-run budget failures. */
+export { DEFAULT_RUN_LIMITS, RunBudgetExceededError, type RunLimits } from "./core/budget.js";
 /** Typed connector failures. */
 export * from "./core/errors.js";
 /** File import contract and runner. */

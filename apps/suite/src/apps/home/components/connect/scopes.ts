@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import type { IntegrationAdapter } from "@jeswr/pod-connectors";
 
@@ -133,8 +134,9 @@ export function withSelectedScopes(
         (scope) => !selected.includes(scope) && !ungated.includes(scope),
       );
       if (!partial) return outcome;
-      // A partial selection cannot advance a checkpoint shared with omitted data.
-      const { cursor: _cursor, ...rest } = outcome;
+      // A partial selection cannot advance a checkpoint shared with omitted data, nor discard
+      // resume state (a Gmail full-sync journal) that only the withheld cursor supersedes.
+      const { cursor: _cursor, commit: _commit, ...rest } = outcome;
       return { ...rest, ...(ctx.cursor === undefined ? {} : { cursor: ctx.cursor }) };
     },
   };

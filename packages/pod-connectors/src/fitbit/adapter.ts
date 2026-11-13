@@ -10,6 +10,7 @@
  * so live mode goes through the maintainer's token proxy. Demoable now against
  * recorded fixtures.
  */
+
 import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -49,15 +50,18 @@ export const fitbitAdapter: IntegrationAdapter = {
   fixtures: () => FITBIT_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your activity log…", done: 0, total: 1 });
     const answer = await getJson<FitbitActivitiesAnswer>(
       ID,
       ctx.api,
       `${API}/1/user/-/activities/list.json?sort=desc&offset=0&limit=100`,
+      undefined,
     );
 
     const doc = ctx.resolve("health/activities.ttl");
     const activities = new Store();
+    budget.items(answer.activities.length);
     for (const a of answer.activities) {
       const ex = new ExerciseAction(`${doc}#activity-${a.logId}`, activities, DataFactory).mark();
       ex.name = a.activityName;
