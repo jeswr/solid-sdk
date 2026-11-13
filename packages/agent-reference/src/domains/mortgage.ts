@@ -96,6 +96,10 @@ export const evidenceSchema = z
     balance: z.number().min(0).max(1e9).optional(),
     asOf: iso.optional(),
     issuedAt: iso,
+    /** How the issuer produced the claim (e.g. `recorded-by-authority`). Optional. */
+    method: z.string().max(64).optional(),
+    /** The issuer's terms of use (ODRL, pilot subset, plus a deletion duty). Optional. */
+    terms: z.record(z.string(), z.unknown()).optional(),
     synthetic: z.literal(true),
   })
   .strict();
@@ -199,7 +203,7 @@ export function prequalDescription(
     access: "represented",
     roles,
     models,
-    purposes: [PURPOSE.mortgagePrequalification, PURPOSE.creditChecking],
+    purposes: [PURPOSE.mortgageApplication, PURPOSE.creditAssessment],
     effects: ["evidence disclosed under agreed terms", "indicative eligibility (not approval)"],
     outcomes: ["application-state receipt: received / checked / decided"],
     limitations: [
@@ -239,7 +243,7 @@ export class ConsumerMortgageHandler implements OperationHandler {
       operation: PREQUAL_OP.id,
       action: "use",
       target: PREQUAL_OP.id,
-      purpose: PURPOSE.mortgagePrequalification,
+      purpose: PURPOSE.mortgageApplication,
       ...(ctx.peer.party ? { recipient: ctx.peer.party } : {}),
       parameters: { termsDigest: digestOf(terms), disclosed: ["propertyPrice", "loanAmount"] },
       conversation: ctx.conversation.id,
@@ -476,12 +480,12 @@ export class LenderPrequalHandler implements OperationHandler {
         { claimType: CLAIM.incomeMonthly, periodMonths: 12, currency: "USD" },
         { claimType: CLAIM.depositBalance, periodMonths: 1, currency: "USD" },
       ],
-      purpose: PURPOSE.creditChecking,
+      purpose: PURPOSE.creditAssessment,
       recipients: [this.cfg.lender],
       onward: [
         {
           recipient: this.cfg.underwriter,
-          purpose: PURPOSE.creditChecking,
+          purpose: PURPOSE.creditAssessment,
           fields: ["annualGrossIncome", "depositBalance"],
         },
       ],
@@ -497,7 +501,7 @@ export class LenderPrequalHandler implements OperationHandler {
         operation: PREQUAL_OP.id,
         action: "use",
         target: PREQUAL_OP.id,
-        purpose: PURPOSE.creditChecking,
+        purpose: PURPOSE.creditAssessment,
         ...(ctx.peer.party ? { recipient: ctx.peer.party } : {}),
         parameters: { termsDigest: digestOf(terms) },
         conversation: ctx.conversation.id,
@@ -696,7 +700,7 @@ export class LenderUnderwritingHandler implements OperationHandler {
     access: "represented",
     roles: ["initiator"],
     models: [UW_MODEL],
-    purposes: [PURPOSE.creditChecking],
+    purposes: [PURPOSE.creditAssessment],
     effects: ["attenuated fields disclosed to the underwriter"],
     outcomes: ["pass | refer"],
   };
@@ -759,7 +763,7 @@ export class UnderwriterHandler implements OperationHandler {
     access: "represented",
     roles: ["responder"],
     models: [UW_MODEL],
-    purposes: [PURPOSE.creditChecking],
+    purposes: [PURPOSE.creditAssessment],
     effects: ["deterministic check; result delivered to the lender"],
     outcomes: ["pass | refer (not a lending decision)"],
   };
@@ -770,7 +774,7 @@ export class UnderwriterHandler implements OperationHandler {
 
   onProposal(ctx: HandlerContext, body: ProposeBody): HandlerReply {
     const t = underwritingTerms.parse(body.terms);
-    if (t.purpose !== PURPOSE.creditChecking)
+    if (t.purpose !== PURPOSE.creditAssessment)
       return { type: "refuse", reason: "purpose-not-permitted" };
     if (t.retentionDays > this.maxRetentionDays)
       return { type: "refuse", reason: "excessive-scope", detail: "retention above policy" };
@@ -913,7 +917,7 @@ export function valuationDescription(roles: ("initiator" | "responder")[]): Oper
     access: "represented",
     roles,
     models: [VALUATION_MODEL],
-    purposes: [PURPOSE.mortgagePrequalification],
+    purposes: [PURPOSE.mortgageApplication],
     effects: ["payment instruction submitted (synthetic rail; settlement not observed)"],
     outcomes: [
       "quote accepted",
@@ -934,7 +938,7 @@ export class ConsumerValuationHandler implements OperationHandler {
       operation: VALUATION_OP.id,
       action: "compensate",
       target: PAYMENT_OP,
-      purpose: PURPOSE.mortgagePrequalification,
+      purpose: PURPOSE.mortgageApplication,
       ...(ctx.peer.party ? { recipient: ctx.peer.party } : {}),
       parameters: { termsDigest, amount: t.fee.amount, currency: t.fee.currency },
       conversation: ctx.conversation.id,
@@ -977,7 +981,7 @@ export class LenderValuationHandler implements OperationHandler {
       operation: VALUATION_OP.id,
       action: "use",
       target: VALUATION_OP.id,
-      purpose: PURPOSE.mortgagePrequalification,
+      purpose: PURPOSE.mortgageApplication,
       ...(ctx.peer.party ? { recipient: ctx.peer.party } : {}),
       parameters: { termsDigest: digestOf(terms) },
       conversation: ctx.conversation.id,
@@ -1054,7 +1058,7 @@ export function underwritingTermsFor(input: {
       loanAmount: input.loanAmount,
       propertyPrice: input.propertyPrice,
     },
-    purpose: PURPOSE.creditChecking,
+    purpose: PURPOSE.creditAssessment,
     basis: {
       consumerAgreement: input.consumerAgreement,
       onwardRule: input.onwardRule,

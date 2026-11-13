@@ -291,7 +291,7 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
       nb.runOperation("internal_access", {
         agent: NB_ASSESS,
         action: "read",
-        purpose: PURPOSE.creditChecking,
+        purpose: PURPOSE.creditAssessment,
         application,
       }),
     );
@@ -429,7 +429,7 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
       nb.runOperation("internal_access", {
         agent: NB_ASSESS,
         action: "read",
-        purpose: PURPOSE.creditChecking,
+        purpose: PURPOSE.creditAssessment,
         application,
       }),
     );

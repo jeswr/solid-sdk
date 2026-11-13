@@ -19,17 +19,19 @@
       "types": "./dist/*.d.ts",
       "default": "./dist/*.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./traces/*": "./traces/*"
   },
   "files": [
     "dist",
+    "traces",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/generate-traces.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test",
+    "lint": "biome check src test scripts",
     "test": "vitest run"
   },
   "dependencies": {

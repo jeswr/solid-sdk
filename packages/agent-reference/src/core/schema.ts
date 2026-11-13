@@ -59,6 +59,13 @@ const bodies = {
     agreement: id,
   }),
   refuse: z.strictObject({ ref: id, reason, detail }),
+  // CORE-M-8: a challenge says what would satisfy it.
+  challenge: z.strictObject({
+    ref: id,
+    reason,
+    detail,
+    needs: z.strictObject({ approval: id, label: z.string().min(1).max(256) }),
+  }),
   invoke: z.strictObject({
     operation: operationRef,
     input: jsonObject,

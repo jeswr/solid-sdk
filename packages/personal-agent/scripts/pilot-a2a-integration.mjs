@@ -721,7 +721,7 @@ try {
   const permitted = await call("northbank", "internal_access", {
     agent: fixtures.NB_ASSESS,
     action: "read",
-    purpose: vocab.PURPOSE.creditChecking,
+    purpose: vocab.PURPOSE.creditAssessment,
     application,
   });
   const marketing = await call("northbank", "internal_access", {
@@ -733,13 +733,13 @@ try {
   const relabelled = await call("northbank", "internal_access", {
     agent: fixtures.NB_MARKETING,
     action: "read",
-    purpose: vocab.PURPOSE.creditChecking,
+    purpose: vocab.PURPOSE.creditAssessment,
     application,
   });
   const broker = await call("northbank", "internal_access", {
     agent: fixtures.NORTH.actor,
     action: "distribute",
-    purpose: vocab.PURPOSE.creditChecking,
+    purpose: vocab.PURPOSE.creditAssessment,
     recipient: fixtures.DATA_BROKER,
     application,
   });

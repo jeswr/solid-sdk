@@ -205,7 +205,7 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
     agent: NB_ASSESS,
     action: "read",
     items: [derivedId, depositId],
-    purpose: PURPOSE.creditChecking,
+    purpose: PURPOSE.creditAssessment,
   });
   const marketing = nbStore.request({
     agent: NB_MARKETING,
@@ -217,20 +217,20 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
     agent: NB_MARKETING,
     action: "read",
     items: [derivedId],
-    purpose: PURPOSE.creditChecking,
+    purpose: PURPOSE.creditAssessment,
   });
   const broker = nbStore.request({
     agent: NORTH.actor,
     action: "distribute",
     items: [derivedId],
-    purpose: PURPOSE.creditChecking,
+    purpose: PURPOSE.creditAssessment,
     recipient: DATA_BROKER,
   });
   const onward = nbStore.request({
     agent: NORTH.actor,
     action: "distribute",
     items: [derivedId, depositId],
-    purpose: PURPOSE.creditChecking,
+    purpose: PURPOSE.creditAssessment,
     recipient: UW.party,
   });
   obs.pep = {
@@ -323,7 +323,7 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
     operation: VALUATION_OP.id,
     action: "compensate",
     target: PAYMENT_OP,
-    purpose: PURPOSE.mortgagePrequalification,
+    purpose: PURPOSE.mortgageApplication,
     recipient: NORTH.party,
     parameters: { amount: 450, currency: "USD" },
     conversation: "urn:awp:probe",
@@ -381,7 +381,7 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
     agent: NB_ASSESS,
     action: "read",
     items: [derivedId],
-    purpose: PURPOSE.creditChecking,
+    purpose: PURPOSE.creditAssessment,
   }).decision;
 
   obs.ledgers = {

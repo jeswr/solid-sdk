@@ -81,18 +81,29 @@ export async function provisionAgent(input: {
    * part is not returned (it already lives in the owner directory).
    */
   existingOwnerKey?: SigningKey;
+  /**
+   * Fixed keys for reproducible synthetic runs (reference traces). Their private JWKs are
+   * not returned. Absent: fresh keys are generated, as before.
+   */
+  fixedKeys?: { readonly owner: SigningKey; readonly actor: SigningKey };
 }): Promise<ProvisionedAgent> {
   const alg = input.alg ?? "EdDSA";
-  const owner = input.existingOwnerKey
-    ? { key: input.existingOwnerKey, privateJwk: undefined }
+  const owner = input.fixedKeys
+    ? { key: input.fixedKeys.owner, privateJwk: undefined }
+    : input.existingOwnerKey
+      ? { key: input.existingOwnerKey, privateJwk: undefined }
+      : await generateSigningKey(alg);
+  const actor = input.fixedKeys
+    ? { key: input.fixedKeys.actor, privateJwk: undefined }
     : await generateSigningKey(alg);
-  const actor = await generateSigningKey(alg);
   return assemble({
     ...input,
     alg,
     ownerKey: owner.key,
     actorKey: actor.key,
-    privateJwks: { owner: owner.privateJwk as JWK, actor: actor.privateJwk },
+    ...(input.fixedKeys
+      ? {}
+      : { privateJwks: { owner: owner.privateJwk as JWK, actor: actor.privateJwk as JWK } }),
   });
 }
 

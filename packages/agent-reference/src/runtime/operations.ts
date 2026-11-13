@@ -159,6 +159,16 @@ export interface OperationHandler {
   /** Peer must present a representation statement covering this operation. */
   readonly requiresRepresentation: boolean;
   /**
+   * Responder: the approval level the principal's approval must reach for this operation,
+   * shown by a statement of `claimType` from an accepted source (CORE-IN-8). Absent: the
+   * signed mandate is enough.
+   */
+  readonly requiredApproval?: {
+    readonly level: Iri;
+    readonly label: string;
+    readonly claimType: string;
+  };
+  /**
    * Which agreed role supplies a direct result, declared by both local handlers.
    * Without this obligation, delivery requires an explicit invocation.
    */
@@ -189,7 +199,7 @@ export interface OperationHandler {
   onReceipt?(ctx: HandlerContext, body: ReceiptBody): Promise<HandlerReply> | HandlerReply;
   onClosed?(
     ctx: HandlerContext,
-    kind: "refuse" | "unsupported" | "indeterminate",
+    kind: "refuse" | "challenge" | "unsupported" | "indeterminate",
     reason: ReasonCode,
   ): void;
   /**

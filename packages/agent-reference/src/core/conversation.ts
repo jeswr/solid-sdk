@@ -278,6 +278,9 @@ export function transition(
       };
       break;
     }
+    // OPEN-DESIGN: a challenge closes the conversation like a refusal; the sender answers it
+    // by sending the request again, in a new conversation, with what the challenge asked for.
+    case "challenge":
     case "refuse": {
       if (phase === "open" || phase === "discovering") {
         return fail("protocol-violation", `nothing to refuse in ${phase}`);
