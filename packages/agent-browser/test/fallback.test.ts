@@ -208,7 +208,7 @@ describe("fallback shop acceptance", () => {
       expect(trace.model?.operations).toEqual(model.operations);
       return;
     }
-    expect(trace.steps[1]?.status).toBe("repeat-blocked");
+    expect(trace.steps[1]?.status, JSON.stringify(trace.steps)).toBe("repeat-blocked");
     expect(shop.state.addresses.get(SHOP_LOGIN.username)).toBe(address);
     const updated = trace.model as SiteModel;
     const learned = updated.operations.find(

@@ -253,3 +253,14 @@ model/executor pair stays available when admission fails.
 reapproval; wire-only fingerprints and the one-POST constructor regression; learning/construction
 and task-processing failures; first-use meta/script tokens; encoded snapshot secrets and URL
 credentials; navigation during approval; and quoted, submitter-specific approval summaries.
+
+`test/fallback-review-r2.test.ts` checks one shared wire-operation builder against conflicting
+forms, leading zeros, empty values, repeated control names and JSON scalar types, including
+repeat refusal. Each candidate keeps one transmitted request; page controls cannot change its
+typing. Repeated wire fields are refused because the scalar-input contract cannot preserve them.
+Credential discovery scans all same-origin HTML, JSON and JavaScript responses before page
+exposure, including external scripts and unsuccessful responses. Unsupported script/JSON sources
+cause unresolved templates to be rejected before replay. Session headers retain raw, trimmed,
+scheme-normalized and credential-only secret spellings. Snapshots and trace text share URL
+scrubbing for queries, fragments, userinfo and registered-secret path segments. Approval and
+snapshot strings render Unicode formatting and control characters as visible escapes.
