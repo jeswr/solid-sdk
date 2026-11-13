@@ -1,0 +1,483 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
+# @jeswr/pkg-health
+
+Experimental, private, security-critical workspace package. A UI-free reader for
+“what my assistant knows about my health”. Accepts parsed PKG nanopublications from
+`NanopubStore.list()` or `parseNanopublications(trig)`. No fetching, logging, analytics,
+clinical advice or dependency on a UI framework. Requires Node 24.
+
+```ts
+import {
+  projectHealthFacts, observationSeries, healthTimeline, classifyBodySystem,
+  forgetHealthFact, correctHealthFact, importHealthExport,
+} from "@jeswr/pkg-health";
+
+const view = projectHealthFacts(await store.list(), { owner: ownerWebId });
+const { series, skipped } = observationSeries(view, { beliefs: ["definitely"] });
+const lanes = healthTimeline(view);
+const system = view.facts[0] && classifyBodySystem(view.facts[0]);
+await forgetHealthFact(store, nanopubId, { clientId, batchId });
+await correctHealthFact(store, nanopubId, correctedFact, { clientId, batchId });
+```
+
+`projectHealthFacts(value, { owner, now? })` returns `facts`, `byKind`, `unrecognised`,
+`sources` and `excludedOtherSubjects`. `sources` holds one record per (batch, source IRI),
+each with the `batch` that describes it, so a batch citing another batch's source IRI adds
+its own record and never replaces that batch's kind or title. Kinds are condition, allergy, medication,
+observation, immunization, encounter, note and document. Each fact carries its nanopub ID, assertion
+ID, typed subject IRI, label, code, lexical period and parsed epoch milliseconds,
+belief/validity/epistemic metadata, hedge, categories, replacement IDs, corroboration
+and provenance. Conditions expose onset/abatement; medication exposes product and dose;
+observations expose number-or-string value, unit and effective time; immunizations
+and encounters expose a date, and encounters retain the recorder IRI. Decimal doses
+retain their lexical string (including scale). Plain decimal numeric strings become
+numbers when faithfully representable. Notes expose `property` (the propertyID),
+humanised label and string `value`; documents expose `name` and optional `dateCreated`.
+
+A nanopub can project multiple typed records; its `id` stays the nanopub IRI. Use
+`(id, subject, kind)` when a UI needs a distinct key for each record. `byKind` contains
+the same fact objects as `facts`. `unrecognised` uses `kind: "unrecognised"` and keeps
+available labels and metadata, including a typed observation with no usable value.
+Linked products and codes are supporting records rather than independent fact kinds.
+A category-only product/code remains in `unrecognised`.
+
+A recognised record qualifies if it has a health category or an explicit owner link
+through canonical/legacy `health:patient`, `fhir:subject` or `schema:subject`.
+Notes require a health category and an owner `schema:additionalProperty` link to a
+`schema:PropertyValue`. Documents require `schema:about` owner or owner
+`schema:subjectOf` document, and their nanopub must have a health category or no
+categories at all. A document categorized only as non-health (such as `pd:Financial`)
+is excluded. Foreign or malformed links in either direction refuse
+these records, including mixed owner/foreign links; unlinked records never qualify
+through the category fallback. Named and blank note/document subjects are supported.
+Any foreign or malformed subject link on a record excludes it, even beside an
+owner link or a health category. Missing subject links are accepted only with a
+health category. The owner identity is explicit and compared exactly; attribution
+identifies the reporter, so it is never substituted for the patient. The exclusion
+count is once per nanopub containing excluded records. Mixed assertions retain the
+owner's records. Category fallback also checks foreign subject links. Unrelated
+assertion/source/entity graphs do not supply labels or values.
+
+`HEALTH_CATEGORIES` is an explicit subset of pkg-memory's `isSpecialCategory` list:
+MedicalHealth, BloodType, Disability, DNACode, DrugTestResult, Health, PhysicalHealth,
+HealthHistory, FamilyHealthHistory, IndividualHealthHistory, HealthRecord,
+Prescription, Genetic and MentalHealth, all under `https://w3id.org/dpv/pd#`.
+Other special categories (including biometrics, politics and religion) do not
+implicitly qualify. No DPV fetching or subclass inference occurs.
+
+Beliefs come directly from `classifyNanopublications`: `definitely`, `might`,
+`mentioned`, `past`. Every level and historical revision remains visible. Contradicted
+facts are retained. Revisions and withdrawals preserve `replacedBy` links. Consumers
+choose their filters; actions on beliefs must additionally require Current validity.
+`now` is an optional clock seam reserved for consumers; projection does not infer
+clinical activity, expire a period or change a stored validity based on wall time.
+
+Temporal bounds retain the XSD lexical value **as present in the parsed input**;
+the builder may already have applied its documented RDFlib normalization. `date`,
+`gYearMonth`, `gYear` and `dateTime` have calendar-checked `startTime`/`endTime` in ms.
+Partial dates use the first instant of their stated calendar period, and zone-less
+values use UTC. Invalid/unrepresentable dates stay lexical without a parsed time.
+Fractional precision beyond milliseconds stays in the lexical value. Effective time
+supports a direct literal or an OWL-Time instant/interval beginning, including
+`time:inXSDDate`, `time:inXSDDateTime` and `time:inXSDDateTimeStamp`, with a bounded read.
+`xsd:dateTimeStamp` requires a timezone. The four locally declared sector subtypes
+VitalSign, HeartRateObservation, StepCountObservation and SleepObservation (including
+legacy w3id aliases) project as observations, once even when base types are also present.
+This is a fixed sector inventory, not reasoning over untrusted ontology statements.
+
+`observationSeries(view, { beliefs? })` returns `{ series, skipped }`. Each series is
+`{ id, label, unit?, points: [{ x: ISO, y: number, factId, belief, affectedBySkipped?, provenanceUnavailable? }] }`. Numeric observations
+group by code IRI (otherwise system/value), or normalized label, plus exact unit.
+Code IRI namespaces identify SNOMED, LOINC, ICD-10, ATC and dm+d; unknowns remain
+`other`. Values that cannot be represented faithfully as a JS number remain strings.
+Time comes from effective time, otherwise the period start. Missing/invalid times and
+nonnumeric values increment `skipped` after belief filtering. Points sort by time;
+series sort by ID. No unit conversion or aggregation occurs.
+
+`healthTimeline(view, { beliefs?, now? })` returns condition, medication, immunization,
+encounter and documents arrays of `{ id, start?, end?, label, belief, affectedBySkipped?, provenanceUnavailable?, tone }`.
+Timeline items and series points carry `provenanceUnavailable: true` from their fact.
+A past belief, or an end that `now` has passed, gives `past`. Ends are inclusive: a date,
+gYearMonth or gYear end covers its whole day, month or year (`validThrough
+"2026-11-12"^^xsd:date` is past from 2026-11-13T00:00 in its zone, UTC when zone-less);
+a dateTime end is past from that instant. A future
+end means ongoing. An end that cannot be parsed (or an invalid `now`) gives `neutral`:
+the timeline never claims such a period is active or has ended. Otherwise Current without
+`affectedBySkipped` gives `active`; remaining facts (including every fact with an
+unreadable later update) are `neutral`. `now` is an ISO dateTime and defaults to the
+current time; pass it for repeatable output. Tones are display only: belief and validity
+never depend on the clock. Dates remain lexical; the original four lanes retain undated
+items. Lanes list undated items first, then items by parsed start instant (so offsets and
+mixed precisions sort chronologically), then items whose start cannot be parsed; ties
+break on the lexical start and then the ID, in code-point order. The documents lane includes
+only documents with `dateCreated`, using that date. Notes never enter a timeline.
+Document `dateCreated` is exposed only when its typed literal passes the same
+calendar/timezone checks as `temporalTime`; arbitrary strings and invalid dates are omitted.
+These are display tones, not clinical conclusions.
+
+Labels and qualitative results
+
+Label order is `schema:name`, `rdfs:label`, linked `health:hasCode` concept
+`core:value` (canonical then legacy), `skos:prefLabel`, `rdfs:label`, then the
+humanised kind (for example “Observation”). Notes use their humanised propertyID.
+Medication product names remain a fallback for statements without their own label.
+Series grouping prefers code IRI, then code system/value, then normalised label.
+
+Observations retain qualitative string results. `interpretation` is optional and
+matches only an entire phrase from this fixed table after trimming and lower-casing.
+Compound text, negation and parenthetical additions remain uninterpreted: “Negative
+for high-risk HPV”, “Low risk”, “High normal”, “within normal limits, slightly low”
+and “normal (numeric value not transcribed)” all have no interpretation.
+
+| Interpretation | Keywords |
+| --- | --- |
+| high | high, elevated, raised |
+| low | low, decreased, reduced |
+| abnormal | abnormal, positive |
+| normal | normal, negative, unremarkable, within normal limits |
+| undefined | borderline |
+
+This table does not interpret clinical meaning, ranges, or units. Unmatched text
+stays a string with no interpretation. Numeric decimal/integer/double literals are
+read by datatype; non-finite or inexact numbers remain lexical strings. Decimal
+numeric strings such as “4.2” become numbers; qualitative results never enter series.
+
+Tolerant local import
+
+```ts
+const { value, skipped } = await importHealthExport(trig, { owner: ownerWebId });
+const view = projectHealthFacts(value, { owner: ownerWebId });
+// skipped: { count, reasons: { UnsupportedLiteralCharacterError: 2 } }
+```
+
+The importer delegates to pkg-memory `parseNanopublicationsTolerant(text, { baseIRI? })`,
+whose result also has `skipped: [{ id, errorClass }]` and `affected: string[]`.
+Existing parser calls stay atomic, including the string baseIRI overload. Tolerance
+covers literal/term validation only; invalid TriG or malformed nanopub metadata still
+fails, exposed here as a fixed `HealthGraphError`. Each head/assertion/provenance/pubinfo
+envelope is kept or dropped together. A bad shared assertion drops every referencing
+nanopub; a bad batch source/entity graph, including declared `pkg:correspondenceBatch`
+context on retraction envelopes, drops its users. Batch graphs survive
+only with a kept user. Unrelated/orphan graphs are omitted. Nothing rewrites hashes,
+terms or literal values. No values or diagnostics enter skip reasons.
+An otherwise retained envelope whose graph names include a skipped nanopub ID is
+also skipped with reason `SharedGraphWithSkipped`, transitively, so retained heads
+remain complete and the result can be serialized and parsed atomically.
+
+The returned `value.affected` contains retained nanopub IDs targeted by IRI objects
+of `prov:wasRevisionOf` or `pkg:contradicts` in skipped head/provenance/pubinfo graphs.
+Contradiction targets always count; revision targets naming kept envelopes affect only
+those envelopes, otherwise their assertion targets, including retraction targets;
+literal and blank-node objects never supply targets. Past facts never change (a
+readable retraction or replacement is final). Affected `definitely` facts become
+`might`, `might` and `mentioned` keep their level, and every non-past affected fact,
+including unrecognised facts, has `affectedBySkipped: true`. A UI can display “a later update to this could not be read”.
+Keep `affected` with the imported value when filtering or projecting. It is derived
+import context, not persisted RDF; serializing only the retained graphs loses it.
+
+The owner must be an explicit safe HTTP(S) IRI. Import retains all valid nanopubs,
+including non-health and foreign claims; apply purpose policy and owner-scoped
+projection before display. Imported attribution, epistemic status and batch are
+self-asserted and unsigned: nothing verifies them, so an imported nanopub can claim any
+agent (including the owner) and project as `definitely`. pkg-memory's existing RDFlib parity policy still excludes
+`xsd:double` and `xsd:dateTimeStamp`: tolerant import counts/skips these as unsupported
+datatypes, while the projector can read them in an existing `Nanopublications` value.
+
+Assistant Turtle import
+
+```ts
+import { importAssistantTurtle, importHealthExport, projectHealthFacts } from "@jeswr/pkg-health";
+import { mergeNanopublications } from "@jeswr/pkg-memory";
+
+const assistant = await importAssistantTurtle(turtle, {
+  owner: ownerWebId,
+  assistant: { iri: "https://example.org/agents/assistant", label: "Fictional assistant" },
+  batchId: "assistant-health-2026-11-01",
+  generatedAt: "2026-11-01T12:00:00Z",
+});
+const view = projectHealthFacts(assistant.value, { owner: ownerWebId });
+
+// Import the existing PKG independently, then merge the parsed values.
+const existing = await importHealthExport(otherTrig, { owner: ownerWebId });
+const merged = mergeNanopublications(existing.value, assistant.value);
+const combined = projectHealthFacts(merged, { owner: ownerWebId });
+```
+
+Merge with pkg-memory's `mergeNanopublications(a, b)`, never by concatenating TriG.
+Concatenated TriG lets one export add records to another export's batch graphs (batch
+graph names derive from the batch ID alone) and merges unrelated blank nodes that
+happen to share a label. The helper unions the two datasets, keeps one copy of any
+graph present in both only when the copies are identical, and refuses (one fixed error,
+no values) when a shared graph differs or when one input supplies a batch source/entity
+or envelope graph that the other input's nanopubs read but do not hold. Blank nodes are
+relabelled per input, and `affected` is the union of both inputs' lists.
+
+Use distinct batch IDs for independent exports and the same explicit owner; the merge
+refuses an export that reuses another's batch ID with different batch records. Stable claim
+IDs derive from the fact IRIs; fixed input/options yield the same nanopub metadata,
+assertion IDs and byte-identical serialized TriG. Generated OA builders give evidence
+targets/selectors stable named IRIs, replacing only new envelope provenance blanks.
+Do not flatten assertion/provenance graphs or rewrite existing hashes. For empty
+batches, combine only nonempty nanopub exports: the nanopub parser requires a head.
+
+The local importer uses pkg-memory's existing `parseReferenceRdf` suite-parser boundary.
+It accepts both schema.org schemes and both `https://w3id.org/jeswr/pkg#` and
+`https://jeswr.org/ns/pkg#` status predicates. Scalar aliases are combined; conflicting
+values refuse the fact. It requires one recognised fact type and exclusively owner
+subject links: canonical/legacy `health:patient`, FHIR `subject`, and schema.org
+`subject` and `patient` in either scheme (the shared `SUBJECT_LINK_PREDICATES`, which the
+projector also reads), plus `schema:about` on facts only. Missing or mixed owner links refuse
+the fact, and a medicine statement whose product names another person is refused
+(OtherSubject) without copying the product name. Candidates have a recognised fact type or
+a patient/subject link. On a CreativeWork, `about` names a topic: it is neither a fact
+candidate nor a subject link, so topical sources are accepted; a source whose patient/subject
+names someone else is invalid. The projector likewise ignores `schema:about` topics on
+facts. Dates with year 0000 or a UTC year outside 0001-9999 are refused, and the
+assistant-export IRI is reserved: an input source at that IRI is invalid.
+Conditions and medicines use memory templates; observations, encounters, immunizations
+and owner-linked PropertyValue notes use generated builders. Observation string units
+become `health:unitCode`. Statement labels and string `doseSchedule` are preserved;
+the latter projects as `doseSchedule`, alongside the existing structured `dose` view.
+Note names are retained as labels and property IDs. Optional descriptions remain in RDF.
+
+SelfReportedExplicit stays explicit, Inferred stays inferred, Uncertain becomes
+SelfReportedHedged; Current stays Current and Past becomes Historical. Every claim
+carries MedicalHealth and explicit attribution to the assistant, which is also the
+batch worker. Only valid CreativeWorks referenced by accepted claims become document
+batch sources. A source with any foreign or invalid subject link is invalid, and its
+referencing facts skip InvalidSource. Unreferenced sources and sources referenced only
+by skipped facts are omitted from the RDF. Generated source metadata retains its title, creation time and
+the assistant label as model. Assistant exports may repeat a source's name or creation
+date: the first non-empty title in Unicode code-point order and the earliest date are kept
+(an explicitly empty title is preserved if all titles are empty). Source dates compare by
+calendar day, dropping an `xsd:date` timezone without changing its day. On the same UTC
+calendar day a dateTime wins over a date; among dateTimes the earliest instant wins. A
+source `xsd:date` stays a date with no invented time of day; sub-millisecond digits of a
+source `xsd:dateTime` are truncated, because source times are provenance metadata, not
+facts. Fact and medicine names are NFC-normalized before comparing case-only variants;
+the first variant in Unicode code-point order is kept with its original literal.
+Genuinely different names refuse the fact. With exactly one derived-from source, each
+usable quote is paired with it. With multiple sources, each gets one evidence entry
+without a quote; the usable quotes attach to one stable batch document source for the
+assistant export (`pkgId("assistant-export", batchId)`). That source has the assistant's
+label plus ` export` as title, `generatedAt` as creation time, and the assistant label as
+model. It is emitted only when an accepted claim uses it. Quotes remain visible in each
+claim's provenance without claiming that every derived source said the quoted text.
+
+`skipped` counts fact nodes once, with fixed aggregate reasons: OtherSubject,
+UnsupportedType, UnknownEpistemicStatus, UnknownValidityStatus, InvalidEvidence,
+InvalidSource, UnsupportedValue, UnsupportedDatePrecision, TooManyStatements,
+ImportLimit or InvalidFact. Raw outgoing terms on facts, products and sources pass memory's unchanged
+literal-parity and term safety checks (`validateAssertionTerms`, linear per quad) before
+anything else reads the node or assertions are built. Untrusted nodes are never
+canonicalized to validate them. A blank-node object on a fact, product or source refuses
+it (InvalidFact; an invalid source makes its facts InvalidSource), and a node with more
+than `MAX_NODE_STATEMENTS` (256) outgoing statements is refused (TooManyStatements),
+so a few kilobytes of Turtle cannot make the importer slow. At most `MAX_FACT_QUOTES`
+(20) usable quotes are kept per fact, the first 20 in term order; extras are dropped.
+A fact citing more than `MAX_FACT_SOURCES` (16) derived-from sources skips as
+InvalidEvidence. Import-wide, at most `MAX_IMPORT_FACTS` (1000) facts and
+`MAX_IMPORT_EVIDENCE` (2000) evidence entries are accepted. Facts are processed in term
+order; the first fact that would exceed either limit, and every later fact, skips as
+ImportLimit without being read, so `skipped.reasons.ImportLimit` tells the caller to split
+the export. These bounds keep a worst-case import to a few seconds and under about
+100 MB of heap; generated builders cost roughly 0.15 ms each, which dominates the
+per-fact time. No values or parser diagnostics enter errors
+or reports. Invalid syntax throws a fixed HealthGraphError; invalid options fail before
+parsing. Invalid sources cause their referencing facts to be skipped.
+
+Import gaps: named fact/product/source IRIs are required; language-tagged scalar text,
+non-string PropertyValue values, non-string units/schedules, resource effective-time
+links, non-date/dateTime bounds, unsupported memory datatypes and numbers the runtime
+cannot represent faithfully are skipped. Text that the generated runtime would sanitize
+is refused. Quotes must be nonempty and at most 300 Unicode code points, as required by
+the memory builder; quotes are never truncated. An over-long quote is dropped, and the
+fact is kept when another usable quote remains (otherwise InvalidEvidence). Generated date facets retain date vs
+dateTime precision, normalize dateTime offsets to UTC, and drop date timezone suffixes
+without changing the calendar day. Zone-less dateTimes are refused on facts and sources;
+UTC conversion must keep the year within 0001–9999. Nonzero sub-millisecond dateTime precision on a fact is
+skipped rather than rounded. These are local import limits, not changes to the clinical sector
+or pkg-memory's hash/normalization policy.
+
+```sh
+node packages/pkg-health/scripts/import-assistant-turtle.mjs in.ttl out.trig \
+  --owner https://example.org/people/avery#me \
+  --assistant-iri https://example.org/agents/assistant \
+  --assistant-label "Fictional assistant" --batch assistant-health-2026-11-01
+```
+
+Build first. The CLI writes TriG through pkg-memory and prints only imported/skipped
+counts. The output file is created with owner-only mode (0600) and must not exist: an
+existing file or symlink at the output path, or an output path equal to the input path,
+fails without writing. `--generated-at <xsd:dateTime>` fixes the clock for repeatable runs; otherwise
+it uses the current time. Failures print one fixed message with no paths or diagnostics.
+
+Fictional demo
+
+```ts
+import { exampleHealthKnowledge } from "@jeswr/pkg-health/testing";
+const demo = await exampleHealthKnowledge({ now: "2026-11-01T12:00:00Z" });
+const view = projectHealthFacts(demo, { owner: "https://example.org/people/avery#me" });
+```
+
+Returns `Promise<Nanopublications>` built exclusively through the public batch/fact
+builders and generated build APIs. The default now is the fixed timestamp above.
+For fixed now, nanopub IDs, values, dates, provenance and projected output are stable;
+RDF blank-node labels allocated by pkg-memory may differ between invocations.
+All identities and resource IRIs are fictional example.org values (plus standard
+vocabulary and builder-generated UUID URNs). The 77 facts span about 18 months:
+eight condition claims (current, historical, hedged, mentioned, contradicted pair,
+superseded/revised pair), three medicines (one stopped, one with a schedule), two
+allergies, one immunization, three encounters, four six-point laboratory series,
+26 weekly resting heart rates, eight notes and two documents. Five sources have
+titles, fictional models and created dates (four Codex threads and one Claude
+session); every claim has a fictional evidence quote. Qualitative demo results are
+omitted for the generator union gap below; numeric rises are a fictional story,
+not treatment guidance.
+
+`forgetHealthFact` delegates to `store.retract`, appending a Retracted revision. It
+never deletes. `correctHealthFact` accepts only the condition, allergy and medication
+`Fact` templates. It reads the original, verifies its single patient is the store's
+explicit `ownerWebId`, builds a SelfReportedExplicit revision with owner-correction
+evidence, then puts it. The builder's batch-local `supersedes` reference uses an
+unpublished anchor for the original; the typed wrapper preserves its exact assertion
+IRI if hashing a previously skolemized graph gives a different ID. Only the revision
+and its required batch graphs are put. The original bytes remain unchanged. Unsupported
+corrections throw `HealthGraphError` with `code: "unsupported-correction"`. All errors
+use fixed messages without fact values or backend diagnostics. Failed writes propagate
+as `write-failed`; use a fresh batch ID when intentionally making another correction.
+
+Provenance model
+
+`FactProvenance` and `SourceInfo` are shared read-only types exported by pkg-memory.
+`readNanopubProvenance` reads each nanopub's own evidence and its batch sources graph;
+it never re-derives these graph names in this package. Publication generation time,
+agent IRI/label, batch and attribution stay separate from evidence timestamps/speakers.
+Source metadata includes kind, title, thread ID, model and creation date. Document and
+email URLs are their source IRIs; provider-specific thread URLs are not invented.
+Message evidence retains the message IRI as `source`, and resolves its containing
+conversation for source metadata. Direct document evidence retains quote/locator.
+Only referenced sources are returned, deduplicated by IRI; unused batch sources are
+excluded. Evidence order follows parsed annotations and is not chronological.
+
+The builder only persists each evidence's timestamp/speaker on a message record when
+`message_id` is supplied. For direct document/thread evidence, these per-evidence fields
+cannot be recovered; the reader leaves them absent. It does not mislabel the assertion's
+earliest aggregate provenance time as each quote's timestamp. Missing source metadata
+stays optional. Ambiguous or wrongly typed source scalar fields fail closed for that
+fact only: the projector keeps the fact (its assertion and belief are unaffected) and
+sets `provenanceUnavailable: true`, with `provenance` holding only the nanopub's own
+envelope (generation time, agent IRI, batch, attribution, and evidence source IRIs,
+quotes and locators). Source records, the agent label and message times/speakers are
+omitted rather than guessed. Keeping the fact is the safer choice: hiding it would let
+one malformed or forged batch record remove the owner's data from view. The rest of the
+view renders normally. The projector uses a per-call provenance reader that copies each
+batch source graph once, reads each nanopub's provenance once, and an assertion graph
+cache. There is no global cache: later projections read fresh data. Whole-dataset and
+graph lookups use `match` over subject or object indexes (pkg-memory's `readNamedGraph`
+indexes both). Regression tests count these operations over 4,500 records and count
+term comparisons for 2,000 linked notes, without a timing threshold.
+
+Body-system heuristic (display only)
+
+`classifyBodySystem` uses the first matching explicit code rule below, then lower-cased
+whole-word label keywords, then `general`. This is a small local display table, never
+clinical inference, SNOMED ancestry reasoning, diagnosis or treatment guidance. Codes
+are only used when their declared system matches; arbitrary numeric strings are not
+assumed to be SNOMED codes. Drug buckets do not identify an owner's diagnosis.
+
+| Bucket | Explicit SNOMED identifiers | ICD-10 chapter/range | ATC first letter | Label keywords |
+| --- | --- | --- | --- | --- |
+| cardiovascular | 49601007, 38341003, 53741008 | I | B, C | heart, cardiac, hypertension, blood pressure, cholesterol |
+| respiratory | 50043002, 195967001, 13645005 | J | R | asthma, lung, respiratory, copd, breathing |
+| digestive | 53619000, 235719002, 235595009 | K00–K93 | A | coeliac, celiac, bowel, stomach, digestive, reflux, crohn |
+| endocrine and metabolic | 362969004, 73211009, 44054006 | E00–E90 | H | diabetes, thyroid, endocrine, metabolic, glucose |
+| musculoskeletal | 928000, 69896004 | M | M | arthritis, joint, muscle, bone, back pain |
+| nervous system | 118940003, 37796009 | G except G47 | N | migraine, epilepsy, neurological, nerve, seizure |
+| mental health | 74732009, 35489007 | F | — | anxiety, depression, mental, bipolar, adhd, ptsd |
+| skin | 95320005, 24079001 | L | D | skin, eczema, psoriasis, rash, dermatitis |
+| immune and allergy | 414285001, 419199007 | A, B, D50–D89 | J, L, P | allergy, allergic, allergies, anaphylaxis, immune, immunization, vaccine |
+| eyes and ears | 371405004, 232347008 | H00–H95 | S | eye, eyes, ear, ears, vision, hearing, glaucoma, tinnitus |
+| kidney and urinary | 90708001, 709044004 | N00–N39 | — | kidney, renal, urinary, bladder |
+| reproductive and sexual health | 289903006 | N40–N99, O | G | reproductive, sexual, pregnancy, menstrual, prostate |
+| sleep | 39898005 | G47 | — | sleep, insomnia, apnoea, apnea |
+| general | everything else | unlisted chapters | V / unlisted | no match |
+
+Keyword priority is sleep, immune/allergy, mental health, cardiovascular, respiratory,
+digestive, endocrine/metabolic, musculoskeletal, nervous system, skin, eyes/ears,
+kidney/urinary, reproductive/sexual. This prioritization only stabilizes display groups.
+
+Generator gaps
+
+The generated core has twenty-four assertion/supporting-record shapes, including all four
+sector observation subtypes, OWL-Time Instant, PropertyValue and DigitalDocument.
+Six local assistant-import facet classes compose text values, literal date/dateTime
+bounds/effective times, statement text, source metadata and owner-property links with
+the clinical builders. Three OA evidence shapes supply deterministic named provenance
+nodes. PropertyValue adds a name field for imported note labels.
+Canonical and legacy aliases, schema:MedicalCondition/Drug and FHIR/schema Observation
+remain supported. `codegen/pkg-health.shapes.ttl` documents the read/build narrowings:
+numeric builds use xsd:decimal; Instant and document creation builds use xsd:dateTime;
+effective-time builds use named Instant links. Mixed imported values remain readable.
+This reader profile accepts incomplete historical records; it is not the sector's
+normative clinical validator.
+
+1. Shared aliases: admission rejects aliased predicates shared by multiple entity
+   owners. patient, hasCode, medication, unitCode and hasUnit therefore use canonical generated fields
+   plus a minimal canonical-first typed compatibility view for legacy reads. Owner
+   filtering examines all subject predicates and refuses conflicting identities.
+2. BlankNodeOrIRI records: schema:doseSchedule and schema:code can be blank nodes or
+   their PKG skolem IRIs. Typed wrapper views read decimal doseValue/doseUnit/frequency
+   and MedicalCode codeValue/codingSystem. No handwritten domain model or quad builder.
+3. Mixed datatypes: SHACL's heterogeneous date/dateTime/gYearMonth/gYear bounds and
+   numeric-or-string observation values have no admitted single-field union. Typed
+   literal views preserve raw lexical forms and datatype-aware numeric reads.
+4. Effective time: the sector's TemporalEntity link and pilot literal dates are not
+   one admitted field type. The read view handles literal values and one OWL-Time
+   interval-beginning/instant traversal. It does not interpret other interval relations.
+
+5. Qualitative demo builds: a second shape for the same Observation class with a
+   string value is rejected (multiple NodeShapes per canonical targetClass); the
+   generator admits no heterogeneous numeric/string field union. The demo therefore
+   omits qualitative results. Imported qualitative observations remain supported and
+   exhaustively tested. Assistant imports compose the generated AssistantTextValue facet
+   with Observation, using a distinct local target class. No new generator/runtime
+   behaviour is introduced.
+6. Blank subjects: generated entity wrappers require NamedNodes. Imported blank
+   PropertyValue and DigitalDocument records use bounded read-only typed views;
+   demo notes use the existing preference template, which skolemizes the blank node.
+
+The original gaps remain documented for maintainer follow-up (HKG-A1/A2); the
+qualitative demo limitation is the same mixed-value union gap. The
+codegen/runtime packages and generated files are never hand-edited. Regenerate with
+`pnpm --filter @jeswr/pkg-health codegen`; the drift test compares every artifact byte
+for byte. Build copies generated JS/declarations into dist. Biome excludes generated
+output; no dist artifacts are committed.
+
+Privacy
+
+Never log, transmit or put fact values, quotes, source titles or identifiers into error
+messages, telemetry or analytics. The projector itself performs no I/O. Callers must
+apply the owner's purpose policy before supplying data to a UI or tool, and perform
+any required special-category audit in the application. This reader does not confer
+access rights. Mutations use NanopubStore's existing owner-only protection. Tests use
+fictional example.org identities and the in-memory PodPort; no real person's data.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+For a local import benchmark, build the packages and run
+`node --expose-gc packages/pkg-health/scripts/bench-import.mjs <file>` from the workspace
+root. Set `PKG_BENCH_OWNER` to the export owner's WebID; the default is the fictional
+`https://example.org/people/avery#me`. Output contains counts, operation time and sampled
+peak `heapUsed` after explicit GC, without fact
+values or parser diagnostics. Timing uses an uninstrumented pass, including automatic
+GC, with no forced GC between import and projection. A separate pass samples
+`heapUsed` after forced GC during store insertion, graph reads and at operation
+boundaries; profiling time is excluded. The peak is sampled, rather than continuous.
+
+Generate a reproducible fictional input with
+`node packages/pkg-health/test/support/synthetic-export.ts /tmp/fictional-health.trig`.
+It builds 4,500 nanopubs across 40 batches using public batch/fact builders and the
+pkg-memory serializer. An optional final argument changes the nanopub count. The CI
+regression uses 600 nanopubs and counts store insertions instead of timing assertions.
