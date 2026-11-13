@@ -118,7 +118,7 @@ export function normaliseOrigin(raw) {
  * Read + parse a `.env`-style file from web/ into a plain object. A missing or
  * unreadable file yields `{}` (not every checkout ships one). Uses Node's
  * built-in `util.parseEnv` (added in Node 20.12 — the package's `engines.node`
- * floor is `>=20.12` to guarantee it), so there is no dotenv dependency.
+ * floor is `>=24.5`, which includes it), so there is no dotenv dependency.
  */
 function readEnvFile(name) {
   let content;
@@ -133,18 +133,9 @@ function readEnvFile(name) {
 /**
  * The Solid-OIDC Client Identifier Document. A PUBLIC browser client (no secret;
  * `token_endpoint_auth_method: "none"`). `client_id` MUST equal the URL this is
- * served from byte-for-byte, and `redirect_uris` MUST list EVERY redirect target
- * the token provider uses:
- *  - `${origin}/callback.html` — the POPUP path (interactive login); the popup page
- *    only posts the code back to the opener and does NOT run the app;
- *  - `${origin}/` (the app root) — the FULL-PAGE REDIRECT (autologin) path; the
- *    broker redirects back here with `?code&state`, and because the app root re-runs
- *    SessionProvider it can detect + complete the redirect login. callback.html
- *    cannot serve the redirect path (it never runs the app). The provider's
- *    `beginRedirectLogin` uses `${origin}/` as both the authorization redirect_uri
- *    AND the token-exchange redirect_uri — they must match this registered value.
- * A compliant OP REJECTS an unregistered redirect_uri, so omitting `${origin}/`
- * here breaks autologin entirely (the redirect can never come back).
+ * served from byte-for-byte. The only redirect target is callback.html, which
+ * posts the full URL to the popup opener. Deep links suggest an account and
+ * require a click; there is no app-root redirect.
  */
 // CLIENT_BASE_PATH defaults to / for existing local and Vercel deployments.
 export function clientIdDocument(origin, basePath = "/") {
@@ -157,7 +148,7 @@ export function clientIdDocument(origin, basePath = "/") {
     client_id: `${appUrl}clientid.jsonld`,
     client_name: "Pod Mail",
     client_uri: appUrl,
-    redirect_uris: [`${appUrl}callback.html`, appUrl],
+    redirect_uris: [`${appUrl}callback.html`],
     scope: "openid webid offline_access",
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
@@ -193,7 +184,7 @@ function callbackHtml(origin) {
     <p>Signing you in…</p>
     <script>
       // Hand the authorization code back to the app window that opened this popup
-      // (@solid/reactive-authentication's getCode() is awaiting it). Target OUR
+      // (@jeswr/reactive-authentication's getCode() is awaiting it). Target OUR
       // origin only — the URL carries the OAuth code; never broadcast to "*".
       if (window.opener) {
         window.opener.postMessage(location.href, ${JSON.stringify(origin)});
