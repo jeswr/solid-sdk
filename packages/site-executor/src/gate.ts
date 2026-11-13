@@ -200,6 +200,8 @@ export function summarise(
     inputs?: Record<string, string>;
     operation?: Operation;
     selection?: boolean;
+    identifiers?: [string, string][];
+    targets?: Array<{ name: string; id: string }>;
   } = {},
 ): string {
   const host = new URL(site).host;
@@ -207,9 +209,11 @@ export function summarise(
   const quote = (value: string) => JSON.stringify(clean(redact(value)));
   const verb = clean(verbFor(redact(target.actionType)));
   const names = context.names ?? [];
+  const targetDisplays =
+    context.targets?.map(({ name, id }) => `${quote(name)} (id ${quote(id)})`) ?? names.map(quote);
   const resolved =
-    names.slice(0, 5).map(quote).join(", ") +
-    (names.length > 5 ? ` and ${names.length - 5} more` : "");
+    targetDisplays.slice(0, 5).join(", ") +
+    (targetDisplays.length > 5 ? ` and ${targetDisplays.length - 5} more` : "");
   const identifying = Object.entries(context.inputs ?? {}).filter(([name]) => {
     const p = context.operation?.inputs.find((p) => p.name === name);
     return (
@@ -217,7 +221,8 @@ export function summarise(
       p?.path.some((iri) => /(?:object|identifier|sku|productID|orderNumber)$/.test(iri))
     );
   });
-  const fallback = identifying.length ? identifying : Object.entries(context.inputs ?? {});
+  const identifiers = context.identifiers ?? identifying;
+  const fallback = identifiers.length ? identifiers : Object.entries(context.inputs ?? {});
   let what = objectName
     ? `${verb} ${quote(objectName)}`
     : resolved
@@ -232,6 +237,11 @@ export function summarise(
         }`;
   if (context.selection && objectName && names.some((name) => name !== objectName))
     what += ` (resolved: ${resolved})`;
+  if ((objectName || resolved) && identifiers.length)
+    what += ` (${identifiers
+      .slice(0, 5)
+      .map(([name, value]) => `${quote(name)}=${quote(value)}`)
+      .join(", ")})`;
   const price =
     money.amount !== undefined
       ? ` for ${money.currency ? `${clean(redact(money.currency))} ` : ""}${clean(formatAmount(redact(money.amount)), 120)}`

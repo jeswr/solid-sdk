@@ -295,6 +295,12 @@ first denied (zero additional traffic after the prompt), then approved. The test
 a similarly named neighbour with a distinct SKU. A broad name search matching both refuses
 before write approval. The delete Flow resolves the intended SKU and names that product in
 its approval, re-resolves on retry, deletes it, then confirms the neighbour still exists.
+The opt-in fixture configures a resolver whose concrete query scope equals the witnessed delete
+form, rather than exempting grid transport defaults. It declares the known create/update
+created-location pattern through executor-local `writeResponses`. The delete redirect has no
+created-location declaration: it emits Uncertain with no identity, and subsequent complete grid
+reads verify deletion and the surviving neighbour. Production profiling keeps its learned model;
+these explicit sandbox declarations belong only to the opt-in test.
 Exactly two create POSTs, one update POST and one delete POST are required; an identical
 repeated create is blocked within the task. Grid reads check both prices and disappearance.
 Browser cleanup covers both products after execution, including failure, using only the test's

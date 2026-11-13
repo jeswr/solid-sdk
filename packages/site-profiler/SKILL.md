@@ -18,7 +18,9 @@ Invariants the tests keep:
   `test/e2e.test.ts` checks the shop's request log for this; keep that assertion.
 - Writes enter the model only from demonstrations; the login operation is the single exception.
 - The trace never holds cookie values, authorization headers, passwords or CSRF tokens.
-  `sanitiseHeaders` and `redactBody` own that.
+  `sanitiseHeaders` and `redactBody` protect recording. Before returning any trace/sample,
+  register every learned hidden/meta credential source from crawl and demonstration pages,
+  including standalone hidden inputs outside forms, and redact against that complete set.
 - Third-party text (descriptions, reviews, authors) is extracted with `untrusted: true`.
 - Retain demonstrated Order/Invoice/totalPaymentDue reads after the last write before payment,
   even when no wire binding consumes their amount. Prefer the JSON total object over nested lines.
@@ -65,8 +67,8 @@ fall back to Thing/additionalType text rather than Invoice/category.
 Composite write templates must be witnessed by successful demonstrations, size bounded and
 redacted. Prefer witnessed cookie CSRF over hidden/meta sources; script variables require a
 contract discussion, never a hard-coded token. Preserve ordinary flat-form defaults/options.
-Created identities may come from checked on-origin 301/302/303 redirects and supply later flow
-bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
+Demonstrated redirects may propose bindings; execution promotes them only with the executor's
+created-location declaration and redirect/success checks. Undeclared redirects stay Uncertain. Keep every write approval and repeat guard; never replay POST while following redirects.
 The harness's opt-in live test creates and cleans up only its own product, blocks background
 preference writes and uses a scripted planner. Never invoke a planner/model CLI for acceptance.
 

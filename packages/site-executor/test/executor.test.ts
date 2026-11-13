@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { Parser, Store } from "n3";
@@ -120,7 +121,7 @@ describe("approval gate", () => {
     expect(shop.requests).toHaveLength(0);
     const approval = first.approval;
     expect(approval?.summary).toBe(
-      `Add to cart "Trail Runner sneakers" on 127.0.0.1:${new URL(shop.url).port}`,
+      `Add to cart "Trail Runner sneakers" ("sku"="TR-20") on 127.0.0.1:${new URL(shop.url).port}`,
     );
     expect(approval?.effect).toBe("reversible-write");
     expect(approval?.amount).toBeUndefined();
@@ -399,19 +400,26 @@ describe("CSRF sources", () => {
 });
 
 describe("flows", () => {
-  const buy = (name = "Trail Runner", delivery = "express") =>
+  const buy = (name = "Trail Runner sneakers", delivery = "express") =>
     actionRequest(
       `[] a schema:BuyAction ; schema:deliveryMethod "${delivery}" ; schema:object [ a schema:Product ; schema:name "${name}" ; schema:offers [ schema:price 20 ; schema:priceCurrency "gbp" ] ] .`,
     );
 
   it("prefers the flow, gates each write by its effect and binds $step0 values into later steps", async () => {
     const gate = createApprovalGate();
-    const executor = createExecutor({ model: shopModel(shop.url), sessions, gate });
+    const executor = createExecutor({
+      model: shopModel(shop.url),
+      sessions,
+      gate,
+      writeResponses: { "urn:op:checkout": { createdLocationPattern: "/orders/{id}" } },
+    });
     const ask = await executor.execute(buy());
     expect(ask.status).toBe("needs-approval");
     expect(ask.target).toMatchObject({ kind: "flow", id: "urn:flow:buy" });
     expect(ask.approval?.effect).toBe("reversible-write");
-    expect(ask.approval?.summary).toMatch(/^Buy "Trail Runner" for GBP 20.00 on 127\.0\.0\.1:\d+$/);
+    expect(ask.approval?.summary).toMatch(
+      /^Buy "Trail Runner sneakers" \("sku"="TR-20"\) for GBP 20.00 on 127\.0\.0\.1:\d+$/,
+    );
     gate.approve(ask.approval?.id as string);
     const checkout = await executor.execute(buy(), { approvalId: ask.approval?.id as string });
     expect(checkout.status, checkout.error).toBe("needs-approval");
@@ -432,8 +440,8 @@ describe("flows", () => {
     // CSRF is inserted before each payment approval check, including its retry.
     expect(r.requests).toBe(9);
     expect(shop.requests.map((q) => `${q.method} ${q.url}`)).toEqual([
-      "GET /api/search?q=Trail%20Runner&page=1",
-      "GET /api/search?q=Trail%20Runner&page=1",
+      "GET /api/search?q=Trail%20Runner%20sneakers&page=1",
+      "GET /api/search?q=Trail%20Runner%20sneakers&page=1",
       "POST /api/cart/items",
       "GET /api/total?delivery=express&amount=20.0&currency=GBP",
       "GET /checkout",
@@ -498,7 +506,12 @@ describe("flows", () => {
     const model = shopModel(shop.url);
     (model.flows[0] as { effect: string }).effect = "read";
     const gate = createApprovalGate();
-    const executor = createExecutor({ model, sessions, gate });
+    const executor = createExecutor({
+      model,
+      sessions,
+      gate,
+      writeResponses: { "urn:op:checkout": { createdLocationPattern: "/orders/{id}" } },
+    });
     const first = await executor.execute(buy());
     expect(first.approval?.effect).toBe("reversible-write");
     gate.approve(first.approval?.id ?? "");

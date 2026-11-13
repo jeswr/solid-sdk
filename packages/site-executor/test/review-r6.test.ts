@@ -230,7 +230,7 @@ describe("Rule W concrete payment coverage", () => {
 
   it.each(["payment", "total"])("W2 refuses repeated query fields in %s", async (side) => {
     const f = fixture();
-    (side === "payment" ? f.pay : f.read).request.urlTemplate += "?mode=x&MODE=x";
+    (side === "payment" ? f.pay : f.read).request.urlTemplate += "?mode=x&mode=x";
     await refuses(f, "duplicate wire field mode");
   });
 
@@ -327,10 +327,10 @@ describe("Rule W concrete payment coverage", () => {
     expect((await f.start()).status).toBe("needs-approval");
   });
 
-  it("W1 compares names case-insensitively and canonical values exactly", async () => {
+  it("W1 compares header names case-insensitively and preserves other names and canonical values", async () => {
     const f = fixture();
     f.read.inputs = [
-      param("COUNT", [], { location: "query", default: "01", range: `${X}integer` }),
+      param("count", [], { location: "query", default: "01", range: `${X}integer` }),
     ];
     f.pay.inputs = [param("count", [], { location: "form", default: "+1", range: `${X}integer` })];
     const approval = await f.start();
@@ -339,6 +339,19 @@ describe("Rule W concrete payment coverage", () => {
     different.read.request.headers = { delivery: "Standard" };
     different.pay.request.headers = { DELIVERY: "standard" };
     await refuses(different, "payment sends delivery");
+  });
+  it.each([
+    "query",
+    "form",
+  ] as const)("r9 W1 refuses differently cased %s names while keeping header aliases", async (location) => {
+    const f = fixture();
+    f.read.inputs = [param("SEARCH", [], { location: "query", default: "EX" })];
+    f.pay.inputs = [param("search", [], { location, default: "EX" })];
+    await refuses(f, "payment sends search");
+    const headers = fixture();
+    headers.read.request.headers = { "X-Delivery": "standard" };
+    headers.pay.request.headers = { "x-delivery": "standard" };
+    expect((await headers.start()).status).toBe("needs-approval");
   });
 
   it.each([
@@ -438,11 +451,11 @@ describe("Rule W concrete payment coverage", () => {
     expect(approval.status, approval.error).toBe("needs-approval");
   });
 
-  it("W2 refuses case-aliased JSON member pointers", async () => {
+  it("W2 preserves distinct JSON member names and refuses uncovered fields", async () => {
     const f = fixture();
     f.pay.request.contentType = "application/json";
     f.pay.request.bodyTemplate = '{"Delivery":"standard","delivery":"standard"}';
-    await refuses(f, "duplicate wire field /delivery");
+    await refuses(f, "payment sends /Delivery");
   });
 
   it("W5 refuses a static scalar JSON body with no declared parameters", async () => {
@@ -656,7 +669,7 @@ describe("review r7 — serialized form inventory", () => {
     });
     const transmitted = [...(await request.formData())];
     const actual = transmitted.map(([name, value]) => ({
-      name: name.toLowerCase(),
+      name,
       value,
       location: "body",
     }));
@@ -741,7 +754,7 @@ describe("review r7 — reserved path token coverage", () => {
       const tokenFields = effectiveWireFields(compiled).filter((field) => field.sessionToken);
       expect(tokenFields).toEqual(
         op.csrf?.map((rule) => ({
-          name: rule.target.name.toLowerCase(),
+          name: rule.target.name,
           value: "session-secret-123",
           location: "path",
           sessionToken: true,
@@ -783,7 +796,9 @@ describe("review r7 — reserved path token coverage", () => {
     else f.pay.request.headers = { SESSIONPATH: "configuration" };
     const result = await f.start(sessionExecutor(f));
     expect(result.status, result.error).toBe("refused");
-    expect(result.error).toMatch(/CSRF target|duplicate wire field/);
+    expect(result.error).toMatch(
+      /CSRF target|duplicate wire field|payment sends|basket total sends/,
+    );
     expect(
       f.transport.mock.calls.some(([url]) => new URL(String(url)).pathname.startsWith("/pay")),
     ).toBe(false);

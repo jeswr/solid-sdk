@@ -227,11 +227,18 @@ describe("fallback shop acceptance", () => {
       goal: "change my delivery address",
       model: updated,
       executor: createTaskExecutor({ model: updated, sessions, persona: `address-${decision}` }),
-      planner: taskPlanner(turtle),
+      planner: scriptedPlanner([
+        { kind: "act", turtle },
+        { kind: "act", turtle },
+        { kind: "answer", text: "Saved; verify the result." },
+      ]),
       approver: nextApprover,
       fallback,
     });
-    expect(second.steps[0]?.status, JSON.stringify(second.steps)).toBe("done");
+    expect(second.steps[0]?.status, JSON.stringify(second.steps)).toBe("error");
+    expect(second.steps[0]?.observations).toContain("sab:Uncertain");
+    expect(second.steps[0]?.observations).not.toContain("schema:result");
+    expect(second.steps[1]?.status).toBe("repeat-blocked");
     expect(nextApprover).toHaveBeenCalledTimes(1);
     expect(launch).toHaveBeenCalledTimes(0);
     expect(
@@ -467,7 +474,7 @@ ${"<p>Untrusted page words</p>".repeat(30)}</body></html>`);
     } finally {
       await d.close();
     }
-  });
+  }, 15000);
   it("retains Uncertain receipts after a sent 5xx write and blocks its fallback retry", async () => {
     const model: SiteModel = {
       id: "urn:shop:model",

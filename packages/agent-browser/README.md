@@ -59,7 +59,9 @@ write commits can be retried. `allowRetryOf: fingerprint[]` explicitly authorize
 
 `loginWithPassword(model, executorFetch, { username, password })` compiles the model's
 password operation, obtains its CSRF token, submits it and checks its session cookie
-and optional signed-in probe. `createExecutorFetch` returns a host-only transport
+and optional signed-in probe. An Uncertain redirected login requires both the learned
+session cookie and a successful signed-in probe; the host never replays that login POST.
+`createExecutorFetch` returns a host-only transport
 configuration (sessions, optional injected fetch, persona and site). Login delegates
 requests to the existing executor, including its origin guard, manual redirect checks
 and cookie storage. Login
@@ -163,10 +165,10 @@ calling a planner CLI; see the harness README for opt-in settings.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 The opt-in `tools/webarena-bench/test/live-writes.test.ts` uses a scripted planner and learned
-operations to create/update/delete a disposable product. It records six approval decisions
-(deny then approve for each action), requires exactly three POSTs, checks an identical-create
-repeat refusal and observes prices/deletion through the grid. Redirect-derived identifier facts
-bind subsequent actions. Paged ItemList counts and partial markers remain in planner RDF history;
+operations to create/update/delete a disposable product. It records seven approval decisions
+(including a second create), requires exactly four POSTs, checks an identical-create
+repeat refusal and observes prices/deletion through the grid. Only explicitly declared, verified redirect identities bind subsequent actions; an undeclared
+redirect stays Uncertain and requires a verifying read. Paged ItemList counts and partial markers remain in planner RDF history;
 formatted list prices do not relax payment evidence requirements. No planner CLI is used.
 
 ## Browser fallback

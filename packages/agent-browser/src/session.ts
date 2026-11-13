@@ -102,7 +102,10 @@ export async function loginWithPassword(
       gate.approve(result.approval.id);
       result = await executor.execute(request, { approvalId: result.approval.id });
     }
-    if (result.status !== "done") throw new Error();
+    // Verify sign-in independently after an uncertain login redirect. Never replay
+    // the POST or manufacture a created identity from the landing page.
+    const uncertain = result.outcome?.status === "uncertain" && result.committed.length === 1;
+    if (result.status !== "done" && !(uncertain && route.probeUrl)) throw new Error();
     const bundle = await executorFetch.sessions.get(executorFetch.site, executorFetch.persona);
     for (const c of bundle?.cookies ?? []) values.add(c.value);
     const cookies = cookiesFor(

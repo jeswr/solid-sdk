@@ -76,7 +76,7 @@ A later failure never removes entries. Hosts must guard all of them against auto
 The first observation is an executor-authored receipt: `a sab:ActionOutcome`,
 `sab:status sab:Completed` (or `sab:Uncertain` / `sab:Failed`), `sab:target` (the label) and `sab:effect`.
 Payments carry the authorized total as `schema:price` / `schema:priceCurrency`, rather
-than the planner's spending cap. When the final extraction or a write's 303 Location
+than the planner's spending cap. When the final extraction or a verified declared write redirect
 identifies a created item, `schema:result` points to its on-origin IRI and the receipt
 includes that item's trusted facts. Secret identities and URLs containing queries are
 excluded. The remaining observations retain their original step order and untrusted wrappers.
@@ -171,9 +171,17 @@ to the same flow input. These existing Parameter/Flow structures survive RDF rou
 parameter names and descriptions do not activate this behavior. The underlying write
 cannot be invoked directly from an ActionRequest.
 
-Before approval, the executor checks the resolver's complete result and the concrete filter
-fields of both requests. Zero matches, partial/truncated results, missing identities and
-multiple matches return `refused` with `errorKind: "ambiguous-target"`. To deliberately
+Before approval, completeness needs positive evidence: a declared `totalPath` whose observed
+count equals the resolved item count, or modeled pagination starting at the first page whose
+next-page probe returns zero items with the same filters and session. The probe is an ordinary
+authorized read and repeats on approval retry. A single row without either proof has unknown
+completeness and refuses with `errorKind: "ambiguous-target"`. Both explicit-all and ordinary
+selections use this rule.
+
+Compare every concrete query, form/JSON and path-filter field in both requests. Only declared
+paging/sorting parameters and CSRF decoration are exempt. Unrecognized names such as `status`
+still participate; names are case-sensitive. Missing or different fields refuse.
+Zero matches, partial/truncated results, missing identities and multiple matches return `refused` with `errorKind: "ambiguous-target"`. To deliberately
 select every matching item, omit `schema:object` and put `sab:all true` on the action
 (`sab:` is `https://jeswr.org/ns/site-action#`; exactly one lexical `true` is required).
 This does not permit partial or empty selections or bypass payment checks.
@@ -189,9 +197,10 @@ HTTP requests, so sites without atomic selection semantics retain a read/write r
 The resolver uses the ordinary origin, session, read gate, extraction and redaction paths;
 the write retains Rule W, repeat protection and Uncertain handling.
 
-Every write summary prefers the request's object name, then a bound item's trusted name
-or identifier, then the operation label and concrete identifying inputs. Filter selection
-summaries also show the resolved targets when a request name was supplied. Display strings
+Every write summary shows the concrete identifying inputs sent (IDs, SKUs and path tokens)
+next to the preferred request or trusted bound name. A planner name conflicting with a trusted
+resolved/bound identity name refuses with `errorKind: "ambiguous-target"`. Filter selection
+summaries include resolved names and identities. Display strings
 are quoted, controls and bidi characters escaped, and capped with `(truncated)`, after
 redacting the complete value.
 
@@ -222,8 +231,12 @@ redacting the complete value.
   body. Both source secrets and their effective transmitted values are registered after request
   decoration, using the compiled wire inventory and final Fetch headers. This includes multipart
   CRLF normalization, USVString conversion, header trimming and percent-encoded path slots.
-  Redaction matches only forms of at least **8 characters**; empty and shorter forms stay unchanged
-  to avoid erasing ordinary text. Raw, trimmed, mixed/nested percent-encoded (including form `+`
+  Explicitly registered secrets are redacted at every nonempty length. Forms shorter than eight
+  characters match only at token boundaries, outside longer alphanumeric runs. Only heuristically
+  discovered, unregistered values retain the eight-character floor. Cookie registration includes
+  the wire value and logical payload (quotes stripped and percent-decoded). With a registered
+  secret shorter than four characters, free-text observation samples are suppressed and
+  `sab:samplesSuppressed true` records the suppression; safe structured fields remain. Raw, trimmed, mixed/nested percent-encoded (including form `+`
   spaces), JSON-escaped and HTML-entity-escaped echoes are redacted before truncation.
   Every complete summary display value, including unmapped object
   names and model labels, is redacted before whitespace normalization, formatting or truncation. Every return path renders all observations against the final
@@ -258,13 +271,19 @@ redacting the complete value.
   does not explicitly bind that identity. Identity-only records and their source reads join the
   approval digest and retry revalidation; changing them invalidates the previous consent.
 
+  Payment and total evidence consumes original plain decimal lexicals and an explicit model
+  currency. Formatted prices such as `$12.00` and `1.234 €` remain display-only, even on complete
+  lists, and cannot authorize payment. Extraction's structured `values`/`terms` preserve original
+  monetary lexicals (including numeric JSON spellings); presentation conversion is retained
+  separately for rendering.
+
   **Rule W — closed-world wire coverage.** Compare payment P with each total read Q that
   contributed the single fresh amount/currency pair, using the concrete compiled requests after
   template expansion and CSRF insertion:
 
   | Rule | Required behavior |
   |---|---|
-  | W1 — inventory | Every query, form/multipart field, JSON member (RFC 6901 pointer), path variable and model header (static, parameter or CSRF). Header provenance is recorded at compilation; only executor/session headers are excluded. Multipart inventory describes serialized fields, including CRLF normalization; an LF quote and CRLF payment differ and refuse. Names compare case-insensitively and canonical values exactly. A JSON `/delivery` differs from query/form `delivery`. |
+  | W1 — inventory | Every query, form/multipart field, JSON member (RFC 6901 pointer), path variable and model header (static, parameter or CSRF). Header provenance is recorded at compilation; only executor/session headers are excluded. Multipart inventory describes serialized fields, including CRLF normalization; an LF quote and CRLF payment differ and refuse. Header names compare case-insensitively; query, form, JSON and path names compare case-sensitively. Canonical values compare exactly. A JSON `/delivery` differs from query/form `delivery`. |
   | W2 — duplicates | Refuse repeated names within P or Q across all locations, including session path tokens. |
   | W3 — payment coverage | Each P field has the same name/value in Q, is a whole checked order/basket identity matching the total, or is P's unique CSRF/session path token. Token names cannot occur elsewhere in P or anywhere in Q, including another token. Otherwise refuse "payment sends <name>, which the basket total did not cover". |
   | W4 — reverse coverage | Each Q field has the same name/value in P, except whole identities checked against the selected order and decorated session path tokens. Duplicate checks still apply. |
@@ -391,12 +410,29 @@ xsd:dateTime (a space separator becomes T; no timezone is invented). Other strin
 Untrusted fields remain untrusted and secret redaction precedes presentation conversion.
 Endpoint-described refund records use Thing plus additionalType text, never Invoice/category.
 
-A 301/302/303 write redirect can provide a result identity, extending the existing 303 behavior.
-When no extraction is declared, a checked numeric/UUID identifier in the server's on-origin
-redirect becomes trusted identifier/url facts and a result receipt. This also supplies flow
-bindings from a JS-rendered form. Secret-bearing URLs, off-origin targets and non-ID routes do
-not supply identities. The POST is sent once; only GET follows the redirect. Approvals,
-commitment/repeat guards, CSRF decoration and payment rules retain their existing boundaries.
+A 301/302/303 write redirect supplies a created identity only with a declared created-location
+pattern matching the first Location, every subsequent hop staying on that exact resource, and
+no destination matching a declared error/validation pattern. Declared final success evidence
+must also pass. Otherwise the result is Uncertain, has no identity facts or later bindings, and
+retains its repeat fingerprint. The POST is sent once; redirects use GET.
+
+The shared SiteModel contract has no created-location or success-evidence fields. Until a
+coordinated contract extension, declare these locally through executor option `writeResponses`,
+keyed by write operation ID, and persist them separately from model RDF:
+
+```ts
+writeResponses: {
+  "urn:create": {
+    createdLocationPattern: "/products/id/{id}",
+    errorLocationPatterns: ["/errors/validation"],
+    success: { format: "json", path: "/saved", value: "true" },
+  },
+}
+```
+
+Patterns are on-origin paths/URLs with whole-segment variables. HTML success checks use
+`{ format: "html", selector, attribute?, value? }`; without `value`, the element must exist.
+No declaration means a redirect cannot supply an identity and the write is Uncertain.
 
 Review r7 regressions are in the `review r7` groups of `test/review-r6.test.ts`: executor-owned
 headers through all three routes, static/direct-buy/header-parameter Accept and Accept aliases,
@@ -407,9 +443,16 @@ also tests the one unbound whole-segment CSRF slot and every other undeclared-va
 Review r8 regressions are in `test/review-r8.test.ts`: source and serialized token echoes across
 header, form/multipart, JSON, query and path targets; trusted and untrusted RDF; approval summaries,
 results and errors; observations retained across approval pauses; vault headers; common echo
-encodings and the eight-character redaction threshold. Transports inspect serialized `Request`
+encodings and registered short-secret redaction. Transports inspect serialized `Request`
 objects to verify the effective token values.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 `secretRedactor(secrets)` is also exported as a read-only utility for browser snapshot consumers.
 This exposes the existing mixed/nested percent-encoding redactor; executor behavior is unchanged.
+
+Round 9 regressions: `test/selection.test.ts` covers unknown completeness, pagination probes,
+scope mismatches and conflicting names; `test/review-r9.test.ts` covers concrete summary IDs,
+complete display-money lists, redirect policies, short credentials, sample suppression, cookie
+payloads and mixed encodings. `test/list-quality.test.ts` also verifies the formerly masked
+complete display-payment case. Rule W cases in `test/review-r6.test.ts` retain coverage with
+case-sensitive query/form/JSON/path names.

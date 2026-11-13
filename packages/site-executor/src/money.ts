@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // Authorization uses semantic mappings on the operation (or its flow binding),
 // never an unrelated planner price. Keep arithmetic exact, including totals.
@@ -224,7 +225,9 @@ export function inputIdentities(
   return result;
 }
 
-const AMOUNTS = ["totalPaymentDue", "price", "amount", "value"].map((p) => SCHEMA + p);
+const AMOUNTS = ["totalPaymentDue", "totalPrice", "price", "amount", "value"].map(
+  (p) => SCHEMA + p,
+);
 const CURRENCIES = ["priceCurrency", "currency"].map((p) => SCHEMA + p);
 const identityMatches = (item: ExtractedItem, id: ItemIdentity): boolean => {
   if (id.type === "iri")

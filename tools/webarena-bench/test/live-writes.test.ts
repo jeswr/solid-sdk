@@ -113,6 +113,25 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
     const removeSelection = requireValue(
       model.flows.find((flow) => flow.steps.length === 2 && flow.steps[1]?.operation === remove.id),
     );
+    // This opt-in fixture declares the resolver's exact wire scope. Grid transport
+    // defaults (isAjax/keywordUpdated) are not selector exemptions in the executor.
+    const resolveStep = requireValue(removeSelection.steps[0]);
+    const originalRead = requireValue(
+      model.operations.find((op) => op.id === resolveStep.operation),
+    );
+    const resolver = structuredClone(originalRead);
+    resolver.id += "-write-scope";
+    const scope = new URL(originalRead.request.urlTemplate.replace(/\{[^}]*\}/g, ""));
+    scope.search = new URLSearchParams(remove.request.bodyTemplate).toString();
+    resolver.request.urlTemplate = scope.href.replace(/%7B([^%]+)%7D/gi, "{$1}");
+    resolver.inputs = originalRead.inputs.filter((p) =>
+      resolver.request.urlTemplate.includes(`{${p.name}}`),
+    );
+    resolveStep.operation = resolver.id;
+    resolveStep.bind = Object.fromEntries(
+      resolver.inputs.map((p) => [p.name, requireValue(resolveStep.bind[p.name])]),
+    );
+    model.operations.push(resolver);
     const search = operation(model, "SearchAction", /namespace=product_listing/);
     for (const op of [create, update, remove]) {
       expect(op.effect).toBe("irreversible-write");
@@ -131,7 +150,21 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
       credentials,
     );
     calls.length = 0;
-    const executor = createTaskExecutor({ model, sessions, fetch: transport });
+    const executor = createTaskExecutor({
+      model,
+      sessions,
+      fetch: transport,
+      writeResponses: Object.fromEntries(
+        [create, update].map((op) => [
+          op.id,
+          {
+            createdLocationPattern:
+              "/admin/catalog/product/edit/id/{id}/set/4/type/simple/store/0/back/edit/",
+            errorLocationPatterns: ["/admin/catalog/product/validate/"],
+          },
+        ]),
+      ),
+    });
     const item = productFixture();
     const similar = { ...productFixture(), name: `${item.name} Similar` };
     let id: string | undefined;
@@ -243,7 +276,9 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
             return { kind: "act", turtle: await action(removeSelection, { search: item.sku }) };
           },
           (input) => {
-            expect(last(input.history)?.status).toBe("done");
+            expect(last(input.history)?.status).toBe("error");
+            expect(last(input.history)?.observations).toContain("sab:Uncertain");
+            expect(last(input.history)?.observations).not.toContain("schema:result");
             expect(posts()).toHaveLength(4);
             return { kind: "act", turtle: readTurtle };
           },

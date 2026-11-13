@@ -25,6 +25,7 @@ interface RawValue {
   lexical: string;
   inferred?: string;
   display?: string;
+  displayDatatype?: string;
 }
 export interface ExtractOptions {
   baseUrl: string;
@@ -38,15 +39,31 @@ export interface ExtractOptions {
 }
 export interface ExtractOutput {
   items: ExtractedItem[];
+  /** Observed root count, never inferred from page size. */
+  total?: number;
   turtle: string;
   truncation: { items: boolean; values: boolean };
   /** Re-render retained structured values with newly discovered secrets. */
-  render: (redact: (text: string) => string) => Promise<string>;
+  render: (redact: (text: string) => string, suppressSamples?: boolean) => Promise<string>;
 }
 export const PREFIXES = { schema: SCHEMA, sab: SAB, rdf: RDF, xsd: XSD } as const;
+/** JSON.parse's source context preserves decimal lexicals and exposes exponent spellings. */
+class JsonNumber {
+  constructor(readonly lexical: string) {}
+}
 function jsonRaw(value: unknown, max: number): RawValue[] {
   const out: RawValue[] = [];
   const add = (v: unknown): void => {
+    if (v instanceof JsonNumber) {
+      if (!Number.isFinite(Number(v.lexical))) return;
+      if (out.length >= max) throw new ExtractionError("per-field value limit exceeded");
+      out.push({
+        lexical: v.lexical,
+        inferred:
+          XSD + (/e/i.test(v.lexical) ? "double" : v.lexical.includes(".") ? "decimal" : "integer"),
+      });
+      return;
+    }
     if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") return;
     if (typeof v === "number" && !Number.isFinite(v)) return;
     if (out.length >= max) throw new ExtractionError("per-field value limit exceeded");
@@ -104,14 +121,19 @@ function rawItems(
   if (extraction.format === "json") {
     let doc: unknown;
     try {
-      doc = JSON.parse(body);
+      doc = JSON.parse(body, (_key, value: unknown, context?: { source?: string }) =>
+        typeof value === "number" && context?.source ? new JsonNumber(context.source) : value,
+      );
     } catch {
       throw new ExtractionError("response is not valid JSON");
     }
     const root = extraction.itemPath ? jsonPointer(doc, extraction.itemPath) : doc;
     if (extraction.totalPath !== undefined)
       onTotal(
-        jsonPointer(doc, extraction.totalPath),
+        (() => {
+          const value = jsonPointer(doc, extraction.totalPath as string);
+          return value instanceof JsonNumber ? Number(value.lexical) : value;
+        })(),
         Array.isArray(root) ? root.length : root === undefined ? 0 : 1,
       );
     truncation.items =
@@ -236,7 +258,7 @@ export async function extract(
             const display = displayDecimal(value.lexical);
             if (display !== undefined) {
               value.display = display;
-              value.inferred = `${XSD}decimal`;
+              value.displayDatatype = `${XSD}decimal`;
             }
           } else if (
             [`${SCHEMA}dateCreated`, `${SCHEMA}dateModified`, `${SCHEMA}datePublished`].includes(
@@ -246,7 +268,7 @@ export async function extract(
             const display = displayDateTime(value.lexical);
             if (display !== undefined) {
               value.display = display;
-              value.inferred = `${XSD}dateTime`;
+              value.displayDatatype = `${XSD}dateTime`;
             }
           }
         }
@@ -270,23 +292,23 @@ export async function extract(
           const iri = resolveIri(v.lexical, options.baseUrl);
           return iri ? [namedNode(iri)] : [];
         }
-        return [
-          rule.datatype || v.inferred
-            ? literal(
-                v.display ?? v.lexical,
-                namedNode(
-                  expandIri(v.display ? (v.inferred ?? "") : (rule.datatype ?? v.inferred ?? "")),
-                ),
-              )
-            : literal(v.lexical),
-        ];
+        const lexical =
+          v.displayDatatype === `${XSD}dateTime` ? (v.display ?? v.lexical) : v.lexical;
+        const datatype =
+          v.displayDatatype === `${XSD}dateTime`
+            ? v.displayDatatype
+            : (rule.datatype ?? v.inferred);
+        return [datatype ? literal(lexical, namedNode(expandIri(datatype))) : literal(lexical)];
       });
       item.terms?.set(prop, [...(item.terms.get(prop) ?? []), ...terms]);
       item.values.set(prop, [...(item.values.get(prop) ?? []), ...terms.map((v) => v.value)]);
     }
     return item;
   });
-  const render = async (redactor: (text: string) => string): Promise<string> => {
+  const render = async (
+    redactor: (text: string) => string,
+    suppressSamples = false,
+  ): Promise<string> => {
     const redact = (value: string): string => {
       const s = redactor(value);
       if (s.length > maxLen) truncation.values = true;
@@ -296,6 +318,7 @@ export async function extract(
     // unbounded Turtle string and only then check its length.
     const chunks: string[] = [];
     let bytes = 0;
+    let renderedQuads = 0;
     const writer = new Writer(
       {
         write(chunk: string, _encoding?: unknown, callback?: () => void) {
@@ -315,6 +338,7 @@ export async function extract(
       predicate: ReturnType<typeof namedNode>,
       object: Quad_Object,
     ): void => {
+      if (++renderedQuads > maxQuads) throw new ExtractionError("quad limit exceeded");
       writer.addQuad(subject, predicate, object);
       if (bytes > maxBytes) throw new ExtractionError("output byte limit exceeded");
     };
@@ -337,7 +361,14 @@ export async function extract(
       addQuad(subject, namedNode(`${RDF}type`), namedNode(expandIri(extraction.itemType)));
       if (extraType)
         addQuad(subject, namedNode(`${SCHEMA}additionalType`), literal(redact(extraType)));
+      if (suppressSamples && [...raw].some(([rule, values]) => rule.untrusted && values.length))
+        addQuad(
+          subject,
+          namedNode(`${SAB}samplesSuppressed`),
+          literal("true", namedNode(`${XSD}boolean`)),
+        );
       for (const [rule, values] of raw) {
+        if (suppressSamples && rule.untrusted) continue;
         for (const v of values) {
           let object: Quad_Object;
           if (rule.untrusted) object = literal(redact(v.lexical));
@@ -353,7 +384,7 @@ export async function extract(
             redactor(v.lexical) === v.lexical &&
             redactor(v.display) === v.display
           )
-            object = literal(redact(v.display), namedNode(v.inferred ?? `${XSD}string`));
+            object = literal(redact(v.display), namedNode(v.displayDatatype ?? `${XSD}string`));
           else if (v.display !== undefined) object = literal(redact(v.lexical));
           else
             object =
@@ -376,5 +407,11 @@ export async function extract(
     if (bytes > maxBytes) throw new ExtractionError("output byte limit exceeded");
     return chunks.join("");
   };
-  return { items, turtle: await render(options.redact), truncation, render };
+  return {
+    items,
+    turtle: await render(options.redact),
+    truncation,
+    render,
+    ...(total === undefined ? {} : { total }),
+  };
 }

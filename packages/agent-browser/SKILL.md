@@ -31,6 +31,8 @@ The shared contract belongs to site-model; keep adaptations local to this packag
   manufacture approvals or replace the gate with unconditional permission.
 - Run `loginWithPassword` only in host code, with `createExecutorFetch` sharing the
   executor's sessions/persona. Neither credentials nor raw login responses enter history.
+- An Uncertain redirected login may establish sign-in only with the learned session cookie
+  and a successful authenticated probe; never replay the login POST or create an identity.
 - CLI planners are opt-in. Use stdin, bounded output, timeout + one retry, no tools and
   an empty working directory. Do not inspect/copy auth files or set API keys. Tests mock
   the process boundary; they never run a real model.
@@ -73,8 +75,8 @@ fall back to Thing/additionalType text rather than Invoice/category.
 Composite write templates must be witnessed by successful demonstrations, size bounded and
 redacted. Prefer witnessed cookie CSRF over hidden/meta sources; script variables require a
 contract discussion, never a hard-coded token. Preserve ordinary flat-form defaults/options.
-Created identities may come from checked on-origin 301/302/303 redirects and supply later flow
-bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
+Redirect identities need an explicit created-location declaration and the executor's first-hop,
+resource, error-page and success-evidence checks. Without them, keep Uncertain and no bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
 The harness's opt-in live test creates and cleans up only its own product, blocks background
 preference writes and uses a scripted planner. Never invoke a planner/model CLI for acceptance.
 

@@ -69,6 +69,35 @@ function transport(longReviews = false) {
 
 describe("host login and real executor composition (in-process transport)", () => {
   it.each([
+    "verified",
+    "no probe",
+    "failed probe",
+  ])("r9 verifies sign-in after an Uncertain login redirect: %s", async (mode) => {
+    const fixture = transport();
+    const model = modelFixture();
+    const route = model.login?.[0];
+    if (!route) throw new Error("Missing fixture login route");
+    if (mode === "no probe") route.probeUrl = undefined;
+    const calls: string[] = [];
+    const sessions = new InMemorySessions();
+    const fetcher: typeof fixture.fetch = vi.fn(async (url, init) => {
+      calls.push(`${init?.method ?? "GET"} ${new URL(String(url)).pathname}`);
+      if (mode === "failed probe" && calls.filter((call) => call === "GET /account").length > 1)
+        return new Response(null, { status: 401 });
+      return fixture.fetch(url, init);
+    });
+    const run = loginWithPassword(model, createExecutorFetch({ model, sessions, fetch: fetcher }), {
+      username: "alex@example.test",
+      password: fixture.password,
+    });
+    if (mode === "verified") await expect(run).resolves.toBeUndefined();
+    else await expect(run).rejects.toThrow("Password login failed");
+    expect(calls.filter((call) => call === "POST /login")).toHaveLength(1);
+    expect(calls.filter((call) => call === "GET /account")).toHaveLength(
+      mode === "no probe" ? 1 : 2,
+    );
+  });
+  it.each([
     "approve",
     "deny",
   ] as const)("%s gates the write and isolates sessions, secrets and untrusted reviews", async (decision) => {
@@ -115,7 +144,9 @@ describe("host login and real executor composition (in-process transport)", () =
     ]);
     expect(fixture.orders()).toBe(decision === "approve" ? 1 : 0);
     expect(approver).toHaveBeenCalledTimes(1);
-    expect(approver.mock.calls[0]?.[0]?.summary).toContain('"Trail Runner sneakers" for GBP 20.00');
+    expect(approver.mock.calls[0]?.[0]?.summary).toContain('"Trail Runner sneakers"');
+    expect(approver.mock.calls[0]?.[0]?.summary).toContain('"id"="104"');
+    expect(approver.mock.calls[0]?.[0]?.summary).toContain("for GBP 20.00");
     const text = JSON.stringify([inputs, trace]);
     for (const value of ["<html", "Set-Cookie", fixture.password, fixture.sid, fixture.csrf])
       expect(text).not.toContain(value);

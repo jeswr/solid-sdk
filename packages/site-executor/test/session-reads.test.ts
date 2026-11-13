@@ -259,6 +259,7 @@ it("extracts an on-origin created identifier from a 302 without replaying the PO
   };
   const executor = createExecutor({
     model: model([op]),
+    writeResponses: { [op.id]: { createdLocationPattern: "/products/edit/id/{id}/" } },
     sessions: sessions(),
     fetch: transport,
     gate: { authorize: async () => ({ kind: "allow" }) },

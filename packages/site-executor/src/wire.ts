@@ -16,25 +16,25 @@ export interface WireField {
 const pointerPart = (name: string): string => name.replaceAll("~", "~0").replaceAll("/", "~1");
 
 export function csrfFieldName(compiled: CompiledRequest, rule: CsrfRule): string {
-  return (
+  const name =
     rule.target.kind === "form" && compiled.body?.kind === "json"
       ? `/${pointerPart(rule.target.name)}`
       : rule.target.kind === "form" && compiled.body?.kind === "multipart"
         ? normaliseFormFieldName(rule.target.name, true)
-        : rule.target.name
-  ).toLowerCase();
+        : rule.target.name;
+  return rule.target.kind === "header" ? name.toLowerCase() : name;
 }
 
 /** Session/vault headers are attached by send(), so never appear in this inventory. */
 export function effectiveWireFields(compiled: CompiledRequest): WireField[] {
   const fields: WireField[] = [];
   const add = (name: string, value: string, location: WireField["location"]): void => {
-    fields.push({ name: name.toLowerCase(), value, location });
+    fields.push({ name: location === "header" ? name.toLowerCase() : name, value, location });
   };
   for (const [name, value] of compiled.url.searchParams) add(name, value, "query");
   for (const [name, value] of compiled.pathFields ?? []) {
     fields.push({
-      name: name.toLowerCase(),
+      name,
       value,
       location: "path",
       ...(compiled.pathTokens?.names.includes(name) ? { sessionToken: true } : {}),

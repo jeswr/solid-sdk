@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { Flow, Operation, Parameter, SiteModel } from "@jeswr/site-model";
 import { describe, expect, it, vi } from "vitest";
@@ -137,7 +138,7 @@ describe("money from trusted reads in the same flow", () => {
     expect(result.approval).toMatchObject({
       amount: "20",
       currency: "GBP",
-      summary: 'Buy "Trail Runner sneakers" for GBP 20.00 on shop.test',
+      summary: 'Buy "Trail Runner sneakers" ("sku"="TRAIL") for GBP 20.00 on shop.test',
     });
   });
 

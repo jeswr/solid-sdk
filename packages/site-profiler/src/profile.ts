@@ -15,13 +15,14 @@ import { emptyListProbe } from "./empty-list-probe.js";
 import { applyExtraction, proposeHtmlExtraction, proposeJsonExtraction } from "./extraction.js";
 import { addFilterInputs } from "./filters.js";
 import { isCsrfFieldName, parseForms } from "./forms.js";
+import { attr, parseHtml, selectAll } from "./html.js";
 import { heuristicLabeller, isLoginCandidate } from "./labeller.js";
 import { type LoginObservation, performLogin, probeCandidates, refreshInfo } from "./login.js";
 import { buildOperation } from "./operations.js";
 import { Recorder } from "./recorder.js";
 import { analyseScripts } from "./scripts.js";
 import { learnFilterSelections } from "./selection.js";
-import { discoverSessionTokens, redactTrace } from "./session-tokens.js";
+import { discoverCredentialSources, discoverSessionTokens, redactTrace } from "./session-tokens.js";
 import {
   candidateFromForm,
   candidateFromScriptCall,
@@ -512,6 +513,21 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     );
     const secrets = [
       ...tokens.keys(),
+      ...discoverCredentialSources(formPages, await context.cookies()).secrets,
+      ...candidates.flatMap((candidate) =>
+        candidate.csrf.flatMap(({ source }) => {
+          if (source.kind !== "html" && source.kind !== "meta") return [];
+          return formPages.flatMap((page) => {
+            const doc = parseHtml(page.html);
+            const selector = source.kind === "html" ? source.selector : "meta[name]";
+            return selectAll(doc, selector).flatMap((el) => {
+              if (source.kind === "meta" && attr(el, "name") !== source.name) return [];
+              const value = attr(el, source.kind === "html" ? source.attribute : "content");
+              return value ? [value] : [];
+            });
+          });
+        }),
+      ),
       ...tokenFields,
       ...(await context.cookies().then((cs) => cs.map((c) => c.value))),
       ...(options.login ? [options.login.password] : []),
