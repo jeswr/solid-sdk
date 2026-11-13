@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
- * The integrations registry — every app in docs/integrations-catalog.md, all
- * 34 visible, each with its honest status:
+ * The integrations registry — every app in docs/integrations-catalog.md,
+ * each with its honest status:
  *
  * - Tier A + client id (+ proxy where the platform demands one) → **live**
  * - Tier A unconfigured → **demo** (full UX against recorded fixtures)
- * - Tier B → **approval-needed** (platform review gates any user connect)
+ * - Tier B → **approval-needed** (platform review gates any user connect), or **cli-only**
  * - Tier C → **export-file** (no user-grade API; imports the user's official export file)
  *
  * Hosts inject public OAuth configuration through createRegistry().
@@ -34,6 +35,7 @@ import { stravaAdapter } from "./strava/adapter.js";
 import { tiktokAdapter } from "./tiktok/adapter.js";
 import { twitchAdapter } from "./twitch/adapter.js";
 import { vesyncAdapter } from "./vesync/adapter.js";
+import { whoopAdapter } from "./whoop/adapter.js";
 import { xTwitterAdapter } from "./x-twitter/adapter.js";
 import { youtubeAdapter } from "./youtube/adapter.js";
 
@@ -48,7 +50,7 @@ export interface CatalogEntry extends IntegrationMetadata {
 /** What the UI may render for an entry right now. */
 export type IntegrationStatus = "live" | "demo" | "approval-needed" | "export-file" | "cli-only";
 
-/** The 8 Tier-A adapters (docs/integrations-catalog.md). */
+/** The 9 Tier-A adapters, including WHOOP's OAuth/file hybrid. */
 export const ADAPTERS: readonly IntegrationAdapter[] = [
   spotifyAdapter,
   githubAdapter,
@@ -58,6 +60,7 @@ export const ADAPTERS: readonly IntegrationAdapter[] = [
   twitchAdapter,
   notionAdapter,
   dropboxAdapter,
+  whoopAdapter,
 ];
 
 /**
@@ -214,7 +217,7 @@ export const TIER_C: readonly CatalogEntry[] = [
   ),
 ];
 
-/** All 34 catalog entries, A → B → C, in display order. */
+/** All catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
   return [
     ...ADAPTERS.map((a) => ({ ...a.metadata })),

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { type createRegistry, fileAdapterById } from "@jeswr/pod-connectors";
 import { NS } from "@jeswr/suite-vocab";
@@ -34,6 +35,7 @@ const classes: Readonly<Record<string, readonly string[]>> = {
   youtube: schema("VideoObject", "MusicPlaylist"),
   fitbit: schema("ExerciseAction"),
   garmin: schema("ExerciseAction", "TravelAction"),
+  whoop: [...schema("ExerciseAction"), `${NS.HEALTH}Observation`, `${NS.HEALTH}VitalSign`],
   instagram: schema("ImageObject", "SocialMediaPosting"),
   facebook: [...schema("SocialMediaPosting"), `${NS.FOAF}Group`],
   tiktok: schema("VideoObject", "SocialMediaPosting"),

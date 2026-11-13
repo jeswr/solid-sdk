@@ -127,3 +127,14 @@ before the handler runs, with a non-JSON 413. Each audio request carries just on
 of at most 3 MB; the final JSON submit is capped at 1 MB. Ten clips never share one request.
 All turn, audio and submit failures, including non-JSON platform errors, show friendly local
 messages and keep the in-memory download available.
+
+## WHOOP connection
+
+Home → Connect services → WHOOP offers its fixture-backed demo/OAuth connection and
+**Import an export file** under one catalogue entry in Body & Health. Configure
+`NEXT_PUBLIC_CONNECTOR_WHOOP_CLIENT_ID` with the host's registered public client id
+and `NEXT_PUBLIC_CONNECTOR_WHOOP_TOKEN_PROXY_URL` with its token-exchange proxy for OAuth.
+The file option accepts WHOOP's Data Export ZIP or an individual CSV and
+uses the shared pod-connectors adapter. See that package's README for input caps,
+metric coverage and unsupported scores. Imports keep the connector container layout;
+the Health app's current fixed storage root and metric catalogue are unchanged.

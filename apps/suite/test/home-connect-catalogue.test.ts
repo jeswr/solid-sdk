@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { createRegistry, IntegrationError } from "@jeswr/pod-connectors";
 import { describe, expect, it } from "vitest";
@@ -70,8 +71,11 @@ describe("connector catalogue", () => {
       "mobility",
     ]);
     expect(entries.find((entry) => entry.id === "bank-statements")?.domains).toEqual(["financial"]);
+    expect(entries.find((entry) => entry.id === "whoop")?.domains).toEqual(["body-health"]);
     expect(destinationsFor("netflix")).toEqual([{ domain: "media", label: "Media › Streaming" }]);
     expect(destinationsFor("future-adapter")).toEqual([{ domain: "other", label: "Other" }]);
+    expect(scopeLabel("read:recovery")).toBe("Recovery and daily vitals");
+    expect(scopeLabel("read:sleep")).toBe("Sleep and stages");
   });
   it("uses source-aware destinations for Discord and Steam, retaining GitHub in Work", () => {
     expect(destinationsFor("discord")).toEqual([

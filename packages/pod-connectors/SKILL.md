@@ -4,6 +4,7 @@ description: Use when maintaining source adapters, injected PodWriter/SourceAuth
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Maintain Pod connectors
 
@@ -350,6 +351,48 @@ placeVisit values (including missing/invalid location or duration) and all other
 shapes count as skips and make location incomplete. Contacts use an independent
 run-level row counter, including duplicate cards, across retained and capped paths;
 manifest release never resets the counter. Excess rows skip before any Pod writes.
+
+## WHOOP hybrid
+
+`./adapters/whoop` exposes the Tier A OAuth adapter/factory and streaming file adapter
+under the single `whoop` catalogue id. Default token exchange uses a proxy; Node hosts
+may inject a secret for direct exchange. Do not assume public secretless exchange. Read `src/whoop/{adapter,file-adapter,model,vocab}.ts`,
+the README's WHOOP section and `../solid-health/SKILL.md` before changing it. Reuse the Takeout ZIP reader; keep
+CSV normalized-header collision checks, explicit-offset timestamps, native-id/CSV-start
+reconciliation and API-over-file precedence. Source rows and normalized records are capped
+independently, including duplicate and malformed rows. Stage all source parsing before writes.
+One RunBudget covers every API page. Item/request exhaustion commits a bounded batch and
+returns a warning plus an opaque collection/page/offset cursor; only a completed traversal
+returns the ISO start cursor, which replays seven days rather than an updated-since feed.
+A resumed page shorter than its saved offset replays from row 0; a 400/404 on the resumed
+token restarts that collection once per run with no token (never on fresh tokens).
+An empty completed traversal returns `COMPLETE_CURSOR`, never no cursor; file cursors and
+`COMPLETE_CURSOR` start a fresh API traversal. Batch cursors keep `base` (the starting
+high-water cursor) for Suite's partial-scope pinning via `pendingWhoopBatch`. No `offline`
+scope until refresh exists. Hosts print warnings: keep them fixed strings.
+File batches use content-bound host-owned cursors and select newest-first with a bounded
+heap; preserve the byte caps while scanning sort keys and the row/record caps while parsing
+selected rows, including duplicates and malformed rows. A finished traversal returns the
+distinct `before: ""` completion cursor; the next run of that export starts afresh (never
+return no cursor, or the session keeps an older partial one). Scan-time malformed records
+are counted only in a traversal's first batch. The CLI keeps file and API cursors in separate
+state slots (`fileCursor`/`cursor`), classifying a legacy shared cursor by shape. Physiological rows remain atomic. Never invent a recovery time when its cycle is missing.
+
+Workouts live in monthly `health/workouts/YYYY-MM.ttl` documents with stable id fragments;
+their container is registered for ExerciseAction and (via `additionalClasses`) Observation.
+Shards must stay within solid-health's exported `MAX_OBSERVATION_QUADS`/`MAX_OBSERVATIONS`,
+including session provenance. Generated wrappers validate their whole store: never `mark()`
+one on a populated shard; build in a small store and merge, like `buildObservation`.
+Health observations are built only through `@jeswr/solid-health`'s `buildObservation`;
+`METRICS` holds the WHOOP mapping policy and `vocab.ts` only the schema:Dataset record
+marker. Never add a health accessor class. A unit outside the profile's QUDT inventory
+carries UCUM only; a missing subtype or datatype is a profile gap to report, not to
+hand-write around. HRV is RMSSD, not SDNN. Sleep stage totals are generic observations so total sleep is counted once.
+Workouts retain ExerciseAction. Recovery score, strain and sleep performance have no sector
+term: omit them and surface them through ImportOutcome/ImportReport.unsupported (now supported
+for API adapters too). Keep journal entries unsupported. See the README for current Health UI,
+container discovery and cross-month timestamp-correction limitations. Tests are synthetic only;
+never call WHOOP or add dependencies. Preserve byte/row/record/quad caps and cancellation.
 
 Garmin's existing `garmin` file adapter also accepts full account ZIPs. Read
 `src/garmin/archive.ts` and `health-vocab.ts` before changing archive behavior. Reuse

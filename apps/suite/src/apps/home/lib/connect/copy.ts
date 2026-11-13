@@ -1,4 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { IntegrationError } from "@jeswr/pod-connectors";
 export function connectorErrorCopy(error: unknown, service: string): string {
   if (
@@ -61,6 +63,10 @@ const scopeLabels: Readonly<Record<string, string>> = {
   "user:read:follows": "Channels you follow",
   "files.metadata.read": "Your file details",
   "account_info.read": "Your account details",
+  "read:recovery": "Recovery and daily vitals",
+  "read:cycles": "Daily activity and energy",
+  "read:sleep": "Sleep and stages",
+  "read:workout": "Workouts",
 };
 export function scopeLabel(scope: string): string {
   return scopeLabels[scope] ?? "Service data";

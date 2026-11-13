@@ -33,8 +33,14 @@ class OwnerAuthorization extends Authorization {
   }
 }
 
+/** The CLI checkpoint keeps file-import progress in its own slot beside the API cursor, so
+ * neither import path overwrites or misreads the other's progress. */
+export interface CliConnectorState extends ConnectorState {
+  readonly fileCursor?: string;
+}
+
 /** Project validated checkpoint fields only; never persist incidental token/error properties. */
-export function connectorState(value: unknown): ConnectorState {
+export function connectorState(value: unknown): CliConnectorState {
   const state = object(value);
   const date = (value: unknown): string => {
     const text = textValue(value);
@@ -53,6 +59,7 @@ export function connectorState(value: unknown): ConnectorState {
     connectedAt: date(state.connectedAt),
     ...(state.lastSync === undefined ? {} : { lastSync: date(state.lastSync) }),
     ...(state.cursor === undefined ? {} : { cursor: textValue(state.cursor) }),
+    ...(state.fileCursor === undefined ? {} : { fileCursor: textValue(state.fileCursor) }),
     lastOutcome: state.lastOutcome,
     counts: {
       documents: count(counts.documents),
@@ -80,7 +87,7 @@ export function createStateStore(options: {
   let exists = false;
   return {
     url,
-    async read(): Promise<ConnectorState | undefined> {
+    async read(): Promise<CliConnectorState | undefined> {
       loaded = false;
       try {
         const head = await fetchSafe(url, { method: "HEAD" });
@@ -138,7 +145,7 @@ export function createStateStore(options: {
         );
       }
     },
-    async write(state: ConnectorState): Promise<void> {
+    async write(state: CliConnectorState): Promise<void> {
       try {
         if (!loaded) throw new PermanentCauseError(); // Read state before writing.
         const headers = new Headers({ "content-type": "application/json" });

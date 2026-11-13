@@ -333,6 +333,14 @@
     "./vesync/*": {
       "types": "./dist/vesync/*.d.ts",
       "default": "./dist/vesync/*.js"
+    },
+    "./adapters/whoop": {
+      "types": "./dist/adapters-whoop.d.ts",
+      "default": "./dist/adapters-whoop.js"
+    },
+    "./whoop/*": {
+      "types": "./dist/whoop/*.d.ts",
+      "default": "./dist/whoop/*.js"
     }
   },
   "files": [
@@ -351,7 +359,6 @@
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
-    "@jeswr/solid-dpop": "workspace:*",
     "@jeswr/solid-health": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",

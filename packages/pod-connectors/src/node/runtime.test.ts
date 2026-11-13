@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
 import * as fsPromises from "node:fs/promises";
 import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
@@ -7,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import * as podAuth from "@jeswr/pod-auth/node";
+import { HEALTH } from "@jeswr/solid-health";
 import { AclResource, Agent } from "@solid/object";
 import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
@@ -26,6 +28,9 @@ import { writeResource } from "../pod/resource.js";
 import { ProfileTypeIndexAnchor, TypeIndexDataset } from "../pod/type-index.js";
 import * as registryModule from "../registry.js";
 import { spotifyAdapter } from "../spotify/adapter.js";
+import { createWhoopAdapter, whoopAdapter } from "../whoop/adapter.js";
+import { createWhoopFileAdapter, whoopFileAdapter } from "../whoop/file-adapter.js";
+import { CYCLE } from "../whoop/fixtures.js";
 import { EXIT_CODES, importFile, parseImportArgs, runCli } from "./cli.js";
 import type { NodeConfig } from "./config.js";
 import * as loopback from "./loopback.js";
@@ -1257,6 +1262,176 @@ describe("CLI import", () => {
     ).toBe(1);
     expect(JSON.parse(pod.get(url)!)).toEqual({ ...last, lastOutcome: "error" });
     expect(JSON.stringify(options.stderr.mock.calls)).not.toContain("synthetic-private-error");
+  });
+  it("resumes partial WHOOP file batches and prints their warning on ordinary reruns", async () => {
+    const bounded = createWhoopFileAdapter(2);
+    vi.spyOn(whoopFileAdapter, "importFile").mockImplementation(bounded.importFile);
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", "sleeps.csv");
+    await writeFile(
+      file,
+      "Sleep onset,Wake onset,Asleep duration (min)\n" +
+        [1, 2, 3]
+          .map((day) => `2026-06-0${day}T22:00:00Z,2026-06-0${day + 1}T06:00:00Z,450`)
+          .join("\n"),
+    );
+    const stderr = vi.fn();
+    const opts = { configPath: path, podTransport: transport, stdout: vi.fn(), stderr };
+    expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+    expect(stderr).toHaveBeenCalledWith("WHOOP import partial, re-run to continue.\n");
+    stderr.mockClear();
+    expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+    expect(stderr).not.toHaveBeenCalled();
+    const data = pod.dataset(`${TEST_POD_ROOT}integrations/whoop/health/observations/2026-06.ttl`);
+    expect(
+      data.getQuads(null, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", HEALTH.Sleep, null),
+    ).toHaveLength(3);
+  });
+  it("resumes partial WHOOP API batches without requiring --since", async () => {
+    const adapter = createWhoopAdapter({ maxItems: 1, maxRequests: 50 });
+    vi.spyOn(whoopAdapter, "import").mockImplementation(adapter.import);
+    const { pod, transport } = fixturePod();
+    const stderr = vi.fn();
+    const fixtures = fixtureFetch("whoop", whoopAdapter.fixtures());
+    const opts = {
+      configPath: await configPath(),
+      podTransport: transport,
+      stdout: vi.fn(),
+      stderr,
+      sourceAuth: {
+        fetch: (async (input, init) =>
+          String(input).endsWith("/cycle/101")
+            ? Response.json(CYCLE)
+            : fixtures(input, init)) as typeof fetch,
+      },
+    };
+    for (let i = 0; i < 4; i++) expect(await runCli(["import", "whoop"], opts)).toBe(0);
+    const saved = JSON.parse(pod.get(`${TEST_POD_ROOT}integrations/whoop/state.json`) ?? "null");
+    expect(saved.cursor).toBe("2026-06-08T08:00:00.000Z");
+    expect(stderr.mock.calls).toHaveLength(3);
+    expect(pod.get(`${TEST_POD_ROOT}integrations/whoop/health/workouts/2026-06.ttl`)).toContain(
+      "Running",
+    );
+  });
+  // AUTHORED-BY Claude Opus 5.5
+  describe("WHOOP file and API cursor slots", () => {
+    const stateUrl = `${TEST_POD_ROOT}integrations/whoop/state.json`;
+    const sleeps = (days: number[]) =>
+      "Sleep onset,Wake onset,Asleep duration (min)\n" +
+      days.map((day) => `2026-06-0${day}T22:00:00Z,2026-06-0${day + 1}T06:00:00Z,450`).join("\n");
+    async function setup() {
+      const { pod, transport } = fixturePod();
+      const path = await configPath();
+      const file = join(path, "..", "sleeps.csv");
+      await writeFile(file, sleeps([1, 2, 3]));
+      const requests: URL[] = [];
+      const fixtures = fixtureFetch("whoop", whoopAdapter.fixtures());
+      const opts = {
+        configPath: path,
+        podTransport: transport,
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+        sourceAuth: {
+          fetch: (async (input, init) => {
+            requests.push(new URL(String(input)));
+            return String(input).endsWith("/cycle/101")
+              ? Response.json(CYCLE)
+              : fixtures(input, init);
+          }) as typeof fetch,
+        },
+      };
+      const saved = () => JSON.parse(pod.get(stateUrl) ?? "null");
+      return { pod, file, opts, requests, saved };
+    }
+
+    it("resumes --since from the API high-water mark after a file import", async () => {
+      const { file, opts, requests, saved } = await setup();
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(saved().fileCursor).toMatch(/^\{"file":/);
+      const fileCursor = saved().fileCursor;
+      requests.length = 0;
+      expect(await runCli(["import", "whoop", "--since"], opts)).toBe(0);
+      expect(opts.stderr).not.toHaveBeenCalledWith("Import failed.\n");
+      expect(requests.length).toBeGreaterThan(0);
+      expect(
+        requests
+          .filter((url) => !/\/cycle\/\d+$/.test(url.pathname))
+          .every((url) => url.searchParams.get("start") === "2026-06-01T08:00:00.000Z"),
+      ).toBe(true);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(saved().fileCursor).toBe(fileCursor);
+    });
+
+    it("keeps each path's pending batch cursor when runs interleave", async () => {
+      const { pod, file, opts, saved } = await setup();
+      const api = createWhoopAdapter({ maxItems: 1, maxRequests: 50 });
+      const files = createWhoopFileAdapter(2);
+      const apiSeen: (string | undefined)[] = [];
+      const fileSeen: (string | undefined)[] = [];
+      vi.spyOn(whoopAdapter, "import").mockImplementation((ctx) => {
+        apiSeen.push(ctx.cursor);
+        return api.import(ctx);
+      });
+      vi.spyOn(whoopFileAdapter, "importFile").mockImplementation((input, ctx) => {
+        fileSeen.push(ctx.cursor);
+        return files.importFile(input, ctx);
+      });
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      const pendingApi = saved().cursor;
+      expect(pendingApi).toMatch(/^\{"v":1,/);
+      expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+      const pendingFile = saved().fileCursor;
+      expect(pendingFile).toMatch(/^\{"file":/);
+      expect(JSON.parse(pendingFile).before).not.toBe("");
+      expect(saved().cursor).toBe(pendingApi);
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      expect(saved().fileCursor).toBe(pendingFile);
+      expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+      expect(JSON.parse(saved().fileCursor).before).toBe("");
+      expect(apiSeen).toEqual([undefined, pendingApi]);
+      expect(fileSeen).toEqual([undefined, pendingFile]);
+      const data = pod.dataset(
+        `${TEST_POD_ROOT}integrations/whoop/health/observations/2026-06.ttl`,
+      );
+      expect(
+        data.getQuads(null, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", HEALTH.Sleep, null),
+      ).toHaveLength(3);
+    });
+
+    it("strips control characters from adapter warnings before printing them", async () => {
+      const { opts } = await setup();
+      const real = whoopAdapter.import.bind(whoopAdapter);
+      vi.spyOn(whoopAdapter, "import").mockImplementation(async (ctx) => ({
+        ...(await real(ctx)),
+        warnings: ["\u001b[2Jpartial\r\n\u0007batch"],
+      }));
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      // Without ESC, the remaining "[2J" is inert text.
+      expect(opts.stderr).toHaveBeenCalledWith("[2Jpartialbatch\n");
+    });
+    it("classifies a legacy single file cursor into the file slot", async () => {
+      const { pod, opts, requests, saved } = await setup();
+      const legacy = JSON.stringify({ file: "0".repeat(64), before: "" });
+      await pod.fetch(stateUrl, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          connectedAt: "2026-06-01T00:00:00.000Z",
+          cursor: legacy,
+          lastOutcome: "success",
+          counts: { documents: 1, items: 1, skipped: 0 },
+        }),
+      });
+      expect(await runCli(["import", "whoop", "--since"], opts)).toBe(0);
+      // No API cursor yet: a full traversal, not a failure on the file cursor.
+      expect(requests.every((url) => !url.searchParams.has("start"))).toBe(true);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(saved().fileCursor).toBe(legacy);
+    });
   });
   it("imports an export file through the same writer without source login", async () => {
     const { pod, transport } = fixturePod();

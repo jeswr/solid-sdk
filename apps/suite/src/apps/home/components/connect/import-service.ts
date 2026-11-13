@@ -75,7 +75,7 @@ export async function runSavedImport<Auth = undefined>(
       if (hooks.usable && !hooks.usable(auth)) throw new SignInExpiredError();
       const connection = update({ type: "start", at: new Date().toISOString(), mode });
       try {
-        const result = await run(mode === "live" ? connection.cursor : undefined, connection, auth);
+        const result = await run(mode !== "demo" ? connection.cursor : undefined, connection, auth);
         signal.throwIfAborted();
         update({
           type: "success",
