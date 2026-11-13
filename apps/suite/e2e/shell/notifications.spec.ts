@@ -35,10 +35,10 @@ async function demo(page: Page) {
 async function open(page: Page) {
   const mobile = (page.viewportSize()?.width ?? 1280) < 768;
   const bell = page
-    .getByRole(mobile ? "link" : "button", { name: "Notifications, 4 unread", exact: true })
+    .getByRole(mobile ? "link" : "button", { name: "Notifications, 5 unread", exact: true })
     .filter({ visible: true });
   await expect(bell).toBeVisible();
-  await expect(bell.getByRole("status", { name: "4 unread", exact: true })).toBeVisible();
+  await expect(bell.getByRole("status", { name: "5 unread", exact: true })).toBeVisible();
   await bell.focus();
   await bell.press("Enter");
   if (mobile) await expect(page).toHaveURL(/\/notifications$/);
@@ -69,7 +69,7 @@ test("demo tray groups notifications, approves Editor, marks read and dismisses 
     .filter({ visible: true });
   await expect(bell).toBeVisible();
   await expect(bell.getByRole("status")).toHaveCount(0);
-  for (let i = 0; i < 6; i++)
+  for (let i = 0; i < 11; i++)
     await page
       .getByRole("button", { name: /^Dismiss / })
       .first()

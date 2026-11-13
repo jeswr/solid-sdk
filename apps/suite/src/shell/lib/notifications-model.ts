@@ -12,6 +12,12 @@ export const UNDATED = -8640000000000000;
 export interface SuiteNotification {
   id: string;
   kind: NotificationKind;
+  /** Semantic source metadata used by the shared digest engine. */
+  app?: string;
+  category?: string;
+  target?: { id: string; title: string };
+  urgent?: boolean;
+  blocking?: boolean;
   title: string;
   body?: string;
   href?: string;
@@ -30,6 +36,8 @@ export interface SuiteNotification {
 }
 export interface NotificationSource {
   id: string;
+  /** Unavailable optional integrations contribute no items and do not block core readiness. */
+  optional?: boolean;
   list(signal: AbortSignal): Promise<SuiteNotification[]>;
   subscribe?(onChange: () => void): () => void;
   markRead?(ids: string[]): Promise<void>;

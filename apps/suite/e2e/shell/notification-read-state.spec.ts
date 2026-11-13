@@ -1,10 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, type Page, test } from "@playwright/test";
+import { seedDigestNotifications } from "../../src/shell/notifications/demo-digest";
+import { demoNotifications } from "../../src/shell/notifications/demo-source";
+
+const demoItems = [...demoNotifications(), ...seedDigestNotifications(new Date())];
+const demoUnread = demoItems.filter((item) => !item.read).length;
 
 async function notifications(page: Page) {
   await page.goto("/notifications");
   await page.getByRole("heading", { level: 1, name: "Notifications", exact: true }).click();
-  await expect(page.locator("li[data-unread]")).toHaveCount(6);
+  await expect(page.locator("li[data-unread]")).toHaveCount(demoItems.length);
 }
 
 function bell(page: Page, unread: number) {
@@ -21,7 +26,7 @@ test.beforeEach(async ({ page }) => {
   await page.getByRole("button", { name: "Try it with a demo pod", exact: true }).click();
   await expect(page).toHaveURL(/\/home$/);
   await notifications(page);
-  await expect(bell(page, 4)).toBeVisible();
+  await expect(bell(page, demoUnread)).toBeVisible();
 });
 
 test("mark all read survives a full demo pod reload", async ({ page }) => {
@@ -29,7 +34,7 @@ test("mark all read survives a full demo pod reload", async ({ page }) => {
   await markAll.click();
   await expect(bell(page, 0)).toBeVisible();
   await page.reload();
-  await expect(page.locator('li[data-unread="false"]')).toHaveCount(6);
+  await expect(page.locator('li[data-unread="false"]')).toHaveCount(demoItems.length);
   await expect(page.locator('li[data-unread="true"]')).toHaveCount(0);
   await expect(markAll).toBeDisabled();
   await expect(bell(page, 0)).toBeVisible();
@@ -46,6 +51,6 @@ test("opening one notification saves its read flag before leaving the page", asy
   await expect(
     page.getByRole("listitem").filter({ hasText: "Avery Moss shared a folder with you" }),
   ).toHaveAttribute("data-unread", "false");
-  await expect(page.locator('li[data-unread="true"]')).toHaveCount(3);
-  await expect(bell(page, 3)).toBeVisible();
+  await expect(page.locator('li[data-unread="true"]')).toHaveCount(demoUnread - 1);
+  await expect(bell(page, demoUnread - 1)).toBeVisible();
 });

@@ -55,6 +55,8 @@ it.each([
       id: `${inboxUrl}one`,
       kind,
       title: summary,
+      ...(type === "Create" ? { category: "direct-mention" } : {}),
+      ...(target ? { target: { id: target, title: summary } } : {}),
       body: "Notification content",
       createdAt: new Date("2026-11-01T12:30:00Z"),
       read: false,

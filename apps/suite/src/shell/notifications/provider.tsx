@@ -12,22 +12,32 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { shouldNotifyDesktop } from "../lib/notifications-delivery";
 import type { AccessDecider, NotificationSource } from "../lib/notifications-model";
 import { startNotificationUpdates } from "../lib/notifications-scheduler";
+import type { Preferences } from "../lib/settings-preferences";
 import { type AccountsContextValue, useAccounts } from "../session/accounts-provider";
 import type { SuiteAccount } from "../session/types";
+import { useOptionalPreferences } from "../settings/preferences";
 import { createNotificationsController, type NotificationsController } from "./controller";
+import { demoNotificationDate } from "./demo-digest";
 import { createDemoNotificationSource } from "./demo-source";
 import { accountPreferences, showDesktopNotification } from "./desktop";
+import { immediateDesktopNotification, notifyImmediately } from "./digest";
+import type { StoredDigest } from "./digest-store";
 import { localNotificationSource } from "./local-store";
 import { createPodNotificationSource } from "./pod-source";
 import { createNotificationReadState } from "./read-state";
+import { useDigest } from "./use-digest";
 
 const NotificationsContext = createContext<NotificationsController | null>(null);
+const DigestContext = createContext<StoredDigest | null>(null);
 const emptySources: readonly NotificationSource[] = [];
 
-type AccountPodSource = { key: string; source: NotificationSource | null };
+type AccountPodSource = {
+  key: string;
+  source: NotificationSource | null;
+  agent?: NotificationSource | undefined;
+};
 
 /** Only this producer remounts on session changes; editors below the provider keep their state. */
 function PodNotificationSource({
@@ -61,7 +71,22 @@ function PodNotificationSource({
       ready && account?.webId && account.kind !== "demo"
         ? createPodNotificationSource({ webId: account.webId, fetch })
         : undefined;
-    onSource({ key: sessionKey, source: pod ?? null });
+    onSource({
+      key: sessionKey,
+      source: pod ?? null,
+      agent:
+        pod && account
+          ? {
+              id: `agent:${account.id}`,
+              optional: true,
+              async list(signal) {
+                const { createAgentNotificationSource } = await import("./agent-source");
+                signal.throwIfAborted();
+                return createAgentNotificationSource(account, fetch).list(signal);
+              },
+            }
+          : undefined,
+    });
     return () => {
       disposed = true;
       pod?.dispose();
@@ -76,22 +101,32 @@ export function NotificationSessionProvider({
   sources,
   decider,
   liveUpdates = false,
+  preferences,
+  digestReady = true,
   children,
 }: {
   accountId: string;
   sources: readonly NotificationSource[];
   decider?: AccessDecider | undefined;
   liveUpdates?: boolean;
+  preferences?: Preferences | undefined;
+  digestReady?: boolean;
   children: ReactNode;
 }) {
+  const saved = useMemo(
+    () => preferences ?? accountPreferences(accountId),
+    [preferences, accountId],
+  );
+  const latestPreferences = useRef(saved);
+  latestPreferences.current = saved;
   const controller = useMemo(
     () =>
       createNotificationsController(
         sources,
         decider,
         (item) => {
-          if (shouldNotifyDesktop(item.kind, accountPreferences(accountId), new Date()))
-            void showDesktopNotification(item).catch(() => {
+          if (notifyImmediately(item, latestPreferences.current, new Date()))
+            void showDesktopNotification(immediateDesktopNotification(item)).catch(() => {
               /* Delivery failure never interrupts the tray. */
             });
         },
@@ -108,8 +143,12 @@ export function NotificationSessionProvider({
       controller.stop();
     };
   }, [controller, liveUpdates, sources]);
+  // Register polling first so a visibility wake cannot supersede the digest's fresh listing.
+  const digest = useDigest(accountId, controller, saved, digestReady);
   return (
-    <NotificationsContext.Provider value={controller}>{children}</NotificationsContext.Provider>
+    <NotificationsContext.Provider value={controller}>
+      <DigestContext.Provider value={digest}>{children}</DigestContext.Provider>
+    </NotificationsContext.Provider>
   );
 }
 function AccountNotifications({
@@ -127,6 +166,7 @@ function AccountNotifications({
   capabilities: Capabilities;
   children: ReactNode;
 }) {
+  const preferences = useOptionalPreferences();
   const accounts = useAccounts();
   const latest = useRef(accounts);
   latest.current = accounts;
@@ -138,8 +178,11 @@ function AccountNotifications({
   ]);
   const [pod, setPod] = useState<AccountPodSource>();
   // Hide the retired source synchronously, before the new producer's effect runs.
+  const agentSource = pod?.key === sessionKey ? pod.agent : undefined;
   const podSource = pod?.key === sessionKey ? pod.source : null;
-  const [synthetic] = useState(() => (demo ? createDemoNotificationSource() : undefined));
+  const [synthetic] = useState(() =>
+    demo ? createDemoNotificationSource(demoNotificationDate(accountId), true) : undefined,
+  );
   const configuration = useMemo(() => {
     return {
       sources: [
@@ -147,10 +190,11 @@ function AccountNotifications({
         ...(accountId ? [localNotificationSource(accountId)] : []),
         ...(synthetic ? [synthetic] : []),
         ...(podSource ? [podSource] : []),
+        ...(agentSource ? [agentSource] : []),
       ],
       decider: decider ?? synthetic,
     };
-  }, [sources, decider, synthetic, accountId, podSource]);
+  }, [sources, decider, synthetic, accountId, podSource, agentSource]);
   return (
     <>
       <PodNotificationSource
@@ -166,6 +210,8 @@ function AccountNotifications({
         sources={configuration.sources}
         decider={configuration.decider}
         liveUpdates={capabilities.liveUpdates === true}
+        preferences={preferences?.preferences}
+        digestReady={accounts.status === "ready" && (demo || podSource !== null)}
       >
         {children}
       </NotificationSessionProvider>
@@ -209,7 +255,12 @@ export function useNotifications() {
     refresh: controller.refresh,
     markAllRead: controller.markAllRead,
     markRead: controller.markRead,
+    markManyRead: controller.markManyRead,
     dismiss: controller.dismiss,
     decide: controller.decide,
   };
+}
+
+export function useNotificationDigest() {
+  return useContext(DigestContext);
 }

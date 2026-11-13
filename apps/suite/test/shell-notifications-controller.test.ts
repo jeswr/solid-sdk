@@ -23,6 +23,7 @@ it("merges partial results, preserves local reads and dismissal across stale sou
   await controller.refresh();
   expect(controller.getSnapshot().items).toHaveLength(6);
   expect(controller.getSnapshot().error).toContain("Couldn't load");
+  expect(controller.getSnapshot().coreReady).toBe(false);
   await controller.markRead(items[0]!.id);
   expect(controller.getSnapshot().unread).toBe(3);
   expect(controller.getSnapshot().error).toContain("Couldn't save");
@@ -32,6 +33,7 @@ it("merges partial results, preserves local reads and dismissal across stale sou
   expect(controller.getSnapshot().items).toHaveLength(5);
   expect(controller.getSnapshot().items.find((item) => item.id === items[0]!.id)?.read).toBe(true);
   expect(controller.getSnapshot().error).toBeNull();
+  expect(controller.getSnapshot().coreReady).toBe(true);
   await controller.markAllRead();
   expect(controller.getSnapshot().unread).toBe(0);
   expect(markRead).toHaveBeenCalledTimes(3);
@@ -49,18 +51,63 @@ it("fences overlapping refreshes and account teardown even when sources ignore A
   const first = old.refresh(),
     second = old.refresh();
   waiting[1]!(demoNotifications());
-  await second;
+  expect(await second).toBe(true);
   waiting[0]!([]);
-  await first;
+  expect(await first).toBe(false);
   expect(old.getSnapshot().items).toHaveLength(6);
   const third = old.refresh();
   old.stop();
   waiting[2]!([]);
-  await third;
+  expect(await third).toBe(false);
   const next = createNotificationsController([]);
   await next.refresh();
   expect(next.getSnapshot().items).toEqual([]);
   expect(old.getSnapshot().items).toHaveLength(6);
+});
+it("clears failed optional agent results and keeps core readiness independent of read-save errors", async () => {
+  const items = demoNotifications();
+  const item = items[0];
+  if (!item) throw new Error("Expected a core notification");
+  const listAgent = vi
+    .fn()
+    .mockResolvedValueOnce([items[1]])
+    .mockRejectedValue(new Error("unavailable"));
+  const controller = createNotificationsController([
+    {
+      id: "inbox",
+      list: async () => [item],
+      markRead: async () => {
+        throw new Error("offline");
+      },
+    },
+    { id: "agent", optional: true, list: listAgent },
+  ]);
+  expect(controller.getSnapshot().coreReady).toBe(false);
+  expect(await controller.refresh()).toBe(true);
+  expect(controller.getSnapshot().items).toHaveLength(2);
+  await controller.markRead(item.id);
+  expect(controller.getSnapshot()).toMatchObject({
+    coreReady: true,
+    error: expect.stringContaining("Couldn't save"),
+  });
+  expect(await controller.refresh()).toBe(true);
+  expect(controller.getSnapshot().items).toHaveLength(1);
+  expect(controller.getSnapshot()).toMatchObject({
+    coreReady: true,
+    error: expect.stringContaining("Couldn't save"),
+  });
+});
+it("reports a listing superseded by a completion listener as false", async () => {
+  const controller = createNotificationsController([{ id: "s", list: async () => [] }]);
+  let replacement: Promise<boolean> | undefined;
+  const stop = controller.subscribe(() => {
+    if (!controller.getSnapshot().loading) {
+      stop();
+      replacement = controller.refresh();
+    }
+  });
+  expect(await controller.refresh()).toBe(false);
+  expect(await replacement).toBe(true);
 });
 it("decides with the offered role, leaves failures retryable and marks success read", async () => {
   const items = demoNotifications();

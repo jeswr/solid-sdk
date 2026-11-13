@@ -2,6 +2,7 @@
 "use client";
 import { Button, Input } from "@jeswr/suite-ui";
 import { useEffect, useId, useState } from "react";
+import { NotificationSummarySettings } from "./notification-summary";
 import { usePreferences } from "./preferences";
 
 /** The kinds that may pop up on the desktop (02-§7); the tray always lists every kind. */
@@ -103,6 +104,7 @@ export function NotificationSettings() {
         {permission === "unavailable" && <p>This browser doesn't support desktop notifications.</p>}
         {error && <p role="alert">{error}</p>}
       </section>
+      <NotificationSummarySettings />
       <fieldset>
         <legend>Quiet hours (no desktop pop-ups)</legend>
         <label className="settings-toggle">

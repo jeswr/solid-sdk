@@ -44,6 +44,20 @@ export const preferencesSchema = z.object({
         .catch("08:00"),
     })
     .catch({ enabled: false, start: "22:00", end: "08:00" }),
+  summary: z
+    .object({
+      mode: z.enum(["off", "hourly", "daily", "twice-daily"]).catch("off"),
+      time: z
+        .string()
+        .regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)
+        .catch("09:00"),
+      secondTime: z
+        .string()
+        .regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u)
+        .catch("17:00"),
+      urgentImmediately: z.boolean().catch(true),
+    })
+    .catch({ mode: "off", time: "09:00", secondTime: "17:00", urgentImmediately: true }),
   offline: z.boolean().catch(true),
   /** Set once the first-use offline hint toast has been shown for this account. */
   offlineHintSeen: z.boolean().catch(false),
@@ -68,7 +82,7 @@ export function mergePreferences(current: Preferences, patch: unknown): Preferen
   const values = z.record(z.string(), z.unknown()).safeParse(patch);
   if (!values.success) return preferencesSchema.parse(current);
   const object = values.data;
-  const nested = (key: "notifications" | "quietHours") => {
+  const nested = (key: "notifications" | "quietHours" | "summary") => {
     const value = z.record(z.string(), z.unknown()).safeParse(object[key]);
     return value.success ? { ...current[key], ...value.data } : current[key];
   };
@@ -77,5 +91,6 @@ export function mergePreferences(current: Preferences, patch: unknown): Preferen
     ...object,
     notifications: nested("notifications"),
     quietHours: nested("quietHours"),
+    summary: nested("summary"),
   });
 }
