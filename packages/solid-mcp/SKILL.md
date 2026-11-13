@@ -51,6 +51,39 @@ discovery may bypass only the profile restriction; it must still exclude memory.
 Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for RDF/profile
 reads; generic byte reads must retain the backend default representation.
 
+Generic PodOutput.write/delete must refuse decoded, case-insensitive `.acl`, `.acr`
+and `.meta` suffixes and all ACL, ACP access-control, describedby and linkset URLs advertised
+by HEAD of the target or parent. Use the current guarded PodPort, never raw fetch.
+PodHeadResult.auxiliaryResources is the complete absolute link set (empty is known;
+absent is unknown), and exists distinguishes an existing target from a 404. Missing
+HEAD support, failed/redirected HEAD, or malformed metadata or anchors with a different context fail closed
+with `Access-control and description discovery unavailable; mutation refused`.
+404 retains links for safe create discovery. Reuse storage-capabilities' auxiliary target
+guards and `parseLinkHeaders` with `onOverflow: "throw"` and `onMalformed: "throw"`.
+Reject a link whose resolved context differs from the response URL. On servers without
+suffix ACL naming, an ACL at an arbitrary path is caught only when the resource or its
+parent advertises it; an unadvertised association cannot be inferred from the path. Personal memory/audit provisioning
+uses its dedicated path and keeps its existing protections.
+writeResource and pod_write/solid_write default to `If-None-Match: *`. Replacements
+require an optional ifMatch argument containing one strong ETag, never `*`, weak
+tags or lists; reject missing replacement validators with read-first guidance.
+PodOutput generic writes require explicit conditions and storage-pod-port refuses
+empty write conditions instead of translating them to storage-client's unconditional
+`*`. pod_read/solid_read return content first and an optional `ETag: <value>` second
+text block; fetch retains metadata.etag. Projected containers omit source ETags.
+Reject ambiguous generic targets before normalization: semicolons, query/fragment
+delimiters (raw or encoded), trailing dots/spaces and encoded unreserved characters.
+Compare advertised links with queries intact. Both adapters refuse arbitrary RDF
+description bodies when creating containers. Truncated fetch output omits its ETag.
+chat_save and capture use a dedicated ChatWriter ACL capability: discover through
+the current PodPort, confine target and ACL to private/chats/, validate the exact
+owner-only body, recheck discovery, and use conditional writes. Existing ACLs must
+be dedicated to that target; identical owner-only ACLs need no replacement on replay.
+Reuse solid-chat-interop's `ownerOnlyChatAcl` dataset builder to validate the exact body.
+For existing chat data requested with `If-None-Match: *`, report WRITE_CONFLICT with status
+412 locally without another PUT; keep that replay handling confined to `private/chats/`.
+Never expose that capability to generic pod_write/solid_write or guess ACL URLs.
+
 Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
 Chat saves explicitly use channel `mcp` and scope source IDs with
 `chatConversationId(id, account)` before saving. Validate optional account inputs

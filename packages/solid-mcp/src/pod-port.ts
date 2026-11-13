@@ -16,7 +16,7 @@ import { fetchBoundedRdf } from "./bounded-rdf.js";
 import type { PodChild } from "./pod.js";
 import { hasPodFetchLimits, podOperationFetch } from "./pod-operation.js";
 import { handlesProfileRedirects } from "./profile-redirects.js";
-import { wacAclLink } from "./wac-link.js";
+import { auxiliaryResourceLinks, wacAclLink } from "./wac-link.js";
 
 /** Conditional mutation headers supported by a pod. */
 export interface PodConditions {
@@ -39,8 +39,12 @@ export interface PodReadOptions {
 
 /** Server metadata for an exact resource, including a not-yet-created resource. */
 export interface PodHeadResult {
-  /** Absolute WAC ACL URL from a unique, unanchored server Link relation. */
+  /** Absolute WAC ACL URL from a unique server Link relation with the response resource as context. */
   acl?: string;
+  /** Complete absolute ACL, ACP access-control, describedby and linkset links; absent means unknown. */
+  auxiliaryResources?: readonly string[];
+  /** Whether the exact target exists (false on HTTP 404). */
+  exists?: boolean;
 }
 
 /** Raw resource bytes, media type and optional ETag. */
@@ -69,7 +73,7 @@ export interface PodPort {
   readonly webId: string;
   /** Read raw bytes. The configured WebID may be read for discovery, even when off-pod. */
   read(url: string, options?: PodReadOptions): Promise<PodReadResult>;
-  /** Inspect without following redirects; retain WAC discovery links on HTTP 404. */
+  /** Inspect without redirects; retain auxiliary discovery links on HTTP 404. */
   head?(url: string): Promise<PodHeadResult>;
   /** List a container's immediate children. */
   list(container: string): Promise<PodEntry[]>;
@@ -155,13 +159,20 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       });
       void response.body?.cancel().catch(() => {});
       if ((!response.ok && response.status !== 404) || (response.url && response.url !== target))
-        throw new Error("WAC ACL discovery failed");
+        throw Object.assign(new Error("WAC ACL discovery failed"), { status: response.status });
+      const metadata: PodHeadResult = { exists: response.status !== 404 };
+      const header = response.headers.get("link") ?? "";
       try {
-        return { acl: new URL(wacAclLink(response.headers.get("link") ?? ""), target).href };
+        metadata.auxiliaryResources = auxiliaryResourceLinks(header, target);
       } catch {
-        // ACP, absent, malformed or ambiguous WAC links cannot protect audit data.
-        return {};
+        // Missing completeness fails closed at the generic mutation boundary.
       }
+      try {
+        metadata.acl = wacAclLink(header, target);
+      } catch {
+        // Audit/memory still require a unique, same-context WAC link and reject ACP.
+      }
+      return metadata;
     },
     async read(url, options: PodReadOptions = {}) {
       // Only the operator-configured identity retains the legacy off-pod exception.

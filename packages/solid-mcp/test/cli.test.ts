@@ -113,7 +113,11 @@ describe("stdio executable", () => {
         expect(text(search)).toContain(`${POD}note`);
         await callTool({
           name: writeName,
-          arguments: { url: `${POD}written`, content: "hello fixture", contentType: "text/plain" },
+          arguments: {
+            url: `${POD}written-${writeName}`,
+            content: "hello fixture",
+            contentType: "text/plain",
+          },
         });
       }
       const fetched = await callTool({ name: "fetch", arguments: { id: `${POD}note` } });
@@ -222,6 +226,48 @@ describe("stdio executable", () => {
         expect(write.isError).toBe(true);
         expect(text(write)).toMatch(/read-only/);
       }
+    } finally {
+      await client.close();
+    }
+  });
+  it("refuses chat_save without writing when the pod withholds ACL discovery", async () => {
+    const client = new Client({ name: "fixture-client", version: "1" });
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: ["--import", preload, cli],
+      env: env({ ...credentials, SOLID_MCP_READONLY: "false", SOLID_MCP_TEST_NO_CHAT_ACL: "true" }),
+      stderr: "pipe",
+    });
+    try {
+      await client.connect(transport);
+      const saved = await client.callTool({
+        name: "chat_save",
+        arguments: {
+          provider: "codex",
+          conversationId: "stdio-refused",
+          title: "Refused fixture",
+          messages: [
+            {
+              id: "m1",
+              role: "user",
+              text: "must not persist",
+              createdAt: "2026-10-25T12:00:00.000Z",
+            },
+          ],
+        },
+      });
+      // chat-acl.ts refuses with the fixed "Chat protection unavailable" diagnostic,
+      // which podOutputError passes through like the audit and memory refusals.
+      expect(saved.isError).toBe(true);
+      expect(text(saved)).toBe("Chat protection unavailable");
+      const chats = await client.callTool({ name: "chat_list", arguments: {} });
+      expect(chats.isError, text(chats)).toBeFalsy();
+      expect(JSON.parse(text(chats))).toEqual({ conversations: [] });
+      const stats = await client.callTool({
+        name: "solid_read",
+        arguments: { url: `${POD}stats` },
+      });
+      expect(text(stats)).toContain('"writes":0');
     } finally {
       await client.close();
     }
