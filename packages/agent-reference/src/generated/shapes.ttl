@@ -9,6 +9,18 @@ awp:GrantRecordShape a sh:NodeShape;
     sh:name "GrantRecord";
     sh:property shapes:12a2e85bac5e61115e3213aa8dde806ddb206d144185263c5b0f1ddaf6619e5d-GrantRecord-grantee, shapes:16d5b6a544899e1eda37f76b7fe0e060b6c4c40fc1ff1fd57eb7990ecbd11b9d-GrantRecord-validUntil, shapes:49ba705f849e6fd7a782a4b7fc50169468e6e5dc191f4242d5ac883ca6d8abd5-GrantRecord-wasDerivedFrom, shapes:6122e770278ddc72c2c8a482750df46aec38edb89d01a4a7787fe1c4c5ecf445-GrantRecord-grantor, shapes:958cc0c82273a38e36fdf70ac7371c0cbf29fd11dbda44aba62d33394b137c77-GrantRecord-digest, shapes:a55520ceab8da5e86a19984dabeaf478d9ea17600b81fa0f4ec3038d69f8d9ab-GrantRecord-at, shapes:ac2210a4f20b327d753f21756fde157ea18a3296de23541a9063ea127b76d340-GrantRecord-kind;
     sh:targetClass awp:GrantRecord.
+awp:InvokeBodyChallengeShape a sh:NodeShape;
+    <http://www.w3.org/2000/01/rdf-schema#comment> "The challenge component of InvokeBody.";
+    sh:name "InvokeBodyChallenge";
+    sh:property shapes:6f71a376fb821a204bb20e11ff2f88e4c59dad5b68567599b22afce56161b5d5-InvokeBodyChallenge-nonce;
+    sh:targetClass awp:InvokeBodyChallenge.
+awp:MessageAuthorshipShape a sh:NodeShape;
+    <http://www.w3.org/2000/01/rdf-schema#comment> "The authorship component of Message.";
+    sh:name "MessageAuthorship";
+    sh:property shapes:d1f994c4f5a32b35e4d996e56a69057b6ecda3cb74cd2a97dc6f9c567c6c7aca-MessageAuthorship-actedOnBehalfOf, shapes:d441007c8ef9c38f4bf74cfe9c1fcbca34ed9f1bf34e635a7dfbf954eeab1d13-MessageAuthorship-method;
+    sh:targetClass awp:MessageAuthorship.
+shapes:07c0fc29b8ae8de403fbff9ddce0a52e8a4e8a2c16fe8fee8659c745a50c8d7d-n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "model-output";
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
 shapes:12a2e85bac5e61115e3213aa8dde806ddb206d144185263c5b0f1ddaf6619e5d-GrantRecord-grantee sh:maxCount 1;
     sh:minCount 1;
     sh:name "grantee";
@@ -20,43 +32,62 @@ shapes:16d5b6a544899e1eda37f76b7fe0e060b6c4c40fc1ff1fd57eb7990ecbd11b9d-GrantRec
     sh:name "validUntil";
     sh:path <https://www.w3.org/2018/credentials#validUntil>;
     sh:severity sh:Violation.
-shapes:1f0c35a1527ff7ef32a1124691544fa5ce9b6199a02f22477b6f631fbb88f6d3-n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/owner-mandate>;
-    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:d92aaed79a580fe91589bb30cada72ac7c6b22497296f46f7a134788e46ccdfe-n2.
+shapes:2b5a97efc6088564259da4d88ee96c3b376218be0fc36bec431400e25f9718a1-n4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/owner-mandate>;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:2ea6a4b3a18072de46d3e0f7f1de273bba80da07281420e7c89f251f1daebbe8-n0.
+shapes:2ea6a4b3a18072de46d3e0f7f1de273bba80da07281420e7c89f251f1daebbe8-n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/data-use>;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:f7900094687d00c06ebfdb5b954cdf730531f49927f5ee845e82362f6698edd5-n2.
 shapes:49ba705f849e6fd7a782a4b7fc50169468e6e5dc191f4242d5ac883ca6d8abd5-GrantRecord-wasDerivedFrom sh:maxCount 1;
     sh:name "derivedFrom";
     sh:nodeKind sh:IRI;
     sh:path prov:wasDerivedFrom;
     sh:severity sh:Violation.
-shapes:5eb4316a888a48fc27065379a8ad3627de6fcc50c09bd541bd1383442ea30a3e-n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/delegation>;
-    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
 shapes:6122e770278ddc72c2c8a482750df46aec38edb89d01a4a7787fe1c4c5ecf445-GrantRecord-grantor sh:maxCount 1;
     sh:minCount 1;
     sh:name "grantor";
     sh:nodeKind sh:IRI;
     sh:path awp:grantor;
     sh:severity sh:Violation.
-shapes:68b55648c1ce5004a34e210c81c363875849e1fb57d70e6ea92cd3d201d00a11-n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/onward-use>;
-    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:5eb4316a888a48fc27065379a8ad3627de6fcc50c09bd541bd1383442ea30a3e-n3.
+shapes:6f71a376fb821a204bb20e11ff2f88e4c59dad5b68567599b22afce56161b5d5-InvokeBodyChallenge-nonce sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "nonce";
+    sh:nodeKind sh:IRI;
+    sh:path awp:nonce;
+    sh:severity sh:Violation.
 shapes:958cc0c82273a38e36fdf70ac7371c0cbf29fd11dbda44aba62d33394b137c77-GrantRecord-digest sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "digest";
     sh:path awp:digest;
     sh:severity sh:Violation.
+shapes:a1317f29c6500a2501673f94d83b3d5978212e567c5ca7e493ea3ef5e0a0ec4e-n5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/onward-use>;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:a46fa890ab3e6aeeb57d5f7279d874cac4e5b691f75c3ae943cadcf7931a8250-n3.
+shapes:a46fa890ab3e6aeeb57d5f7279d874cac4e5b691f75c3ae943cadcf7931a8250-n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/delegation>;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
 shapes:a55520ceab8da5e86a19984dabeaf478d9ea17600b81fa0f4ec3038d69f8d9ab-GrantRecord-at sh:datatype xsd:dateTime;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "at";
     sh:path awp:at;
     sh:severity sh:Violation.
-shapes:ab7ee82aae7a81116c1883e74f9b01f9ea1e8cdcb6fc0bf67f0d4aedada0b57c-n4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/access>;
-    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:68b55648c1ce5004a34e210c81c363875849e1fb57d70e6ea92cd3d201d00a11-n1.
-shapes:ac2210a4f20b327d753f21756fde157ea18a3296de23541a9063ea127b76d340-GrantRecord-kind sh:in shapes:1f0c35a1527ff7ef32a1124691544fa5ce9b6199a02f22477b6f631fbb88f6d3-n0;
+shapes:ac2210a4f20b327d753f21756fde157ea18a3296de23541a9063ea127b76d340-GrantRecord-kind sh:in shapes:2b5a97efc6088564259da4d88ee96c3b376218be0fc36bec431400e25f9718a1-n4;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "kind";
     sh:nodeKind sh:IRI;
     sh:path awp:kind;
     sh:severity sh:Violation.
-shapes:d92aaed79a580fe91589bb30cada72ac7c6b22497296f46f7a134788e46ccdfe-n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/data-use>;
-    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:ab7ee82aae7a81116c1883e74f9b01f9ea1e8cdcb6fc0bf67f0d4aedada0b57c-n4.
+shapes:d1f994c4f5a32b35e4d996e56a69057b6ecda3cb74cd2a97dc6f9c567c6c7aca-MessageAuthorship-actedOnBehalfOf sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "onBehalfOf";
+    sh:nodeKind sh:IRI;
+    sh:path prov:actedOnBehalfOf;
+    sh:severity sh:Violation.
+shapes:d441007c8ef9c38f4bf74cfe9c1fcbca34ed9f1bf34e635a7dfbf954eeab1d13-MessageAuthorship-method sh:datatype xsd:string;
+    sh:in shapes:07c0fc29b8ae8de403fbff9ddce0a52e8a4e8a2c16fe8fee8659c745a50c8d7d-n1;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "method";
+    sh:path awp:method;
+    sh:severity sh:Violation.
+shapes:f7900094687d00c06ebfdb5b954cdf730531f49927f5ee845e82362f6698edd5-n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/access>;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:a1317f29c6500a2501673f94d83b3d5978212e567c5ca7e493ea3ef5e0a0ec4e-n5.

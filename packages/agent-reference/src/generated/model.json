@@ -94,6 +94,62 @@
           "guards": {}
         }
       ]
+    },
+    {
+      "name": "InvokeBodyChallenge",
+      "typeIris": [
+        "https://w3id.org/jeswr/awp#InvokeBodyChallenge"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "nonce",
+          "predicate": "https://w3id.org/jeswr/awp#nonce",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "MessageAuthorship",
+      "typeIris": [
+        "https://w3id.org/jeswr/awp#MessageAuthorship"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "onBehalfOf",
+          "predicate": "http://www.w3.org/ns/prov#actedOnBehalfOf",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "method",
+          "predicate": "https://w3id.org/jeswr/awp#method",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "model-output"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
     }
   ]
 }

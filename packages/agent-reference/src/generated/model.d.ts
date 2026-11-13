@@ -45,6 +45,64 @@ export interface GrantRecordEntity {
   ): Promise<GrantRecordData | undefined>;
 }
 
+export interface InvokeBodyChallengeData {
+  "nonce": string;
+}
+
+export interface InvokeBodyChallengeWrapper extends EntityWrapper {
+  "nonce"?: string;
+}
+
+export interface InvokeBodyChallengeEntity {
+  readonly name: "InvokeBodyChallenge";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => InvokeBodyChallengeWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: InvokeBodyChallengeData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): InvokeBodyChallengeData | undefined;
+  serialize(resourceUrl: string, data: InvokeBodyChallengeData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<InvokeBodyChallengeData | undefined>;
+}
+
+export interface MessageAuthorshipData {
+  "onBehalfOf": string;
+  "method": "model-output";
+}
+
+export interface MessageAuthorshipWrapper extends EntityWrapper {
+  "onBehalfOf"?: string;
+  "method"?: "model-output";
+}
+
+export interface MessageAuthorshipEntity {
+  readonly name: "MessageAuthorship";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => MessageAuthorshipWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: MessageAuthorshipData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): MessageAuthorshipData | undefined;
+  serialize(resourceUrl: string, data: MessageAuthorshipData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<MessageAuthorshipData | undefined>;
+}
+
 export declare const nodes: Readonly<Record<string, never>>;
 
 export interface GeneratedModel {
@@ -52,6 +110,8 @@ export interface GeneratedModel {
   readonly prefixes: Record<string, string>;
   readonly entities: {
   readonly GrantRecord: GrantRecordEntity;
+  readonly InvokeBodyChallenge: InvokeBodyChallengeEntity;
+  readonly MessageAuthorship: MessageAuthorshipEntity;
   };
 }
 

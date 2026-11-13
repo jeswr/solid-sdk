@@ -21,7 +21,15 @@
       "ChallengeBody": "https://w3id.org/jeswr/awp#ChallengeBody",
       "RefuseBody": "https://w3id.org/jeswr/awp#RefuseBody",
       "InvokeBody": "https://w3id.org/jeswr/awp#InvokeBody",
-      "InvokeBodyChallenge": "https://w3id.org/jeswr/awp#InvokeBodyChallenge",
+      "InvokeBodyChallenge": {
+        "@id": "https://w3id.org/jeswr/awp#InvokeBodyChallenge",
+        "@context": {
+          "nonce": {
+            "@id": "https://w3id.org/jeswr/awp#nonce",
+            "@type": "@id"
+          }
+        }
+      },
       "DeliverBody": "https://w3id.org/jeswr/awp#DeliverBody",
       "ReceiptBody": "https://w3id.org/jeswr/awp#ReceiptBody",
       "UnsupportedBody": "https://w3id.org/jeswr/awp#UnsupportedBody",
@@ -219,7 +227,10 @@
               "operation": "https://w3id.org/jeswr/awp#operation",
               "terms": "https://w3id.org/jeswr/awp#terms",
               "termsDigest": "https://w3id.org/jeswr/awp#termsDigest",
-              "round": "https://w3id.org/jeswr/awp#round",
+              "round": {
+                "@id": "https://w3id.org/jeswr/awp#round",
+                "@type": "http://www.w3.org/2001/XMLSchema#integer"
+              },
               "counters": {
                 "@id": "https://w3id.org/jeswr/awp#counters",
                 "@type": "@id"
@@ -641,7 +652,10 @@
                   }
                 }
               },
-              "purpose": "https://w3id.org/dpv#hasPurpose"
+              "purpose": {
+                "@id": "https://w3id.org/dpv#hasPurpose",
+                "@type": "@id"
+              }
             }
           },
           "evidence": {
@@ -1109,7 +1123,18 @@
         "@type": "@id"
       },
       "version": "https://w3id.org/jeswr/awp#version",
-      "role": "https://w3id.org/jeswr/awp#role",
+      "role": {
+        "@id": "https://w3id.org/jeswr/awp#role",
+        "@type": "@vocab",
+        "@context": {
+          "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+          "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+          "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+          "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+          "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+          "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+        }
+      },
       "format": "https://w3id.org/jeswr/awp#format",
       "value": "https://w3id.org/jeswr/awp#value",
       "want": "https://w3id.org/jeswr/awp#want",
@@ -1238,7 +1263,10 @@
           }
         }
       },
-      "purpose": "https://w3id.org/dpv#hasPurpose",
+      "purpose": {
+        "@id": "https://w3id.org/dpv#hasPurpose",
+        "@type": "@id"
+      },
       "output": "https://w3id.org/jeswr/awp#output",
       "activity": {
         "@id": "https://w3id.org/jeswr/awp#activity",
@@ -1498,7 +1526,78 @@
       "issuedAt": {
         "@id": "http://www.w3.org/ns/prov#generatedAtTime",
         "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
-      }
+      },
+      "NamedValueCollection": "https://w3id.org/jeswr/awp#NamedValueCollection",
+      "NullValue": "https://w3id.org/jeswr/awp#NullValue",
+      "ChallengeNeeds": {
+        "@id": "https://w3id.org/jeswr/awp#ChallengeNeeds",
+        "@context": {
+          "nonce": {
+            "@id": "https://w3id.org/jeswr/awp#nonce",
+            "@type": "@id"
+          }
+        }
+      },
+      "CompactJwsProof": {
+        "@id": "https://w3id.org/jeswr/awp#CompactJwsProof",
+        "@context": {
+          "jws": "https://w3id.org/jeswr/awp#jws"
+        }
+      },
+      "LegacyCredentialSubject": "https://w3id.org/jeswr/awp#LegacyCredentialSubject",
+      "ItemList": "https://schema.org/ItemList",
+      "ListItem": "https://schema.org/ListItem",
+      "PropertyValue": "https://schema.org/PropertyValue",
+      "CreativeWork": "https://schema.org/CreativeWork",
+      "presentFields": {
+        "@id": "https://w3id.org/jeswr/awp#presentFields",
+        "@type": "@id"
+      },
+      "credentialDigest": "https://w3id.org/jeswr/awp#credentialDigest",
+      "statementPayload": "https://w3id.org/jeswr/awp#statementPayload",
+      "propertyID": {
+        "@id": "https://schema.org/propertyID",
+        "@type": "@id"
+      },
+      "itemListElement": {
+        "@id": "https://schema.org/itemListElement",
+        "@container": "@set"
+      },
+      "position": {
+        "@id": "https://schema.org/position",
+        "@type": "http://www.w3.org/2001/XMLSchema#integer"
+      },
+      "domainValue": "https://schema.org/value",
+      "descriptionData": "https://w3id.org/jeswr/awp#description",
+      "claim": "https://w3id.org/jeswr/awp#claimType",
+      "embeddedCredential": {
+        "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+      },
+      "envelopeBytes": "https://w3id.org/jeswr/awp#envelopeBytes",
+      "proofGraph": {
+        "@id": "https://w3id.org/security#proof",
+        "@type": "@id"
+      },
+      "basisKind": {
+        "@id": "https://w3id.org/jeswr/awp#basisKind",
+        "@type": "@vocab",
+        "@context": {
+          "agreement": "https://w3id.org/jeswr/awp#basis/agreement",
+          "public": "https://w3id.org/jeswr/awp#basis/public",
+          "represented": "https://w3id.org/jeswr/awp#basis/represented",
+          "grant": "https://w3id.org/jeswr/awp#basis/grant",
+          "invocation": "https://w3id.org/jeswr/awp#basis/invocation"
+        }
+      },
+      "invocationChallenge": "https://w3id.org/jeswr/awp#challenge",
+      "IntentEvidenceRef": "https://w3id.org/jeswr/awp#IntentEvidenceRef",
+      "itemId": {
+        "@id": "http://purl.org/dc/terms/references",
+        "@type": "@id"
+      },
+      "intentEvidence": "https://w3id.org/jeswr/awp#evidence",
+      "BasisKind": "https://w3id.org/jeswr/awp#BasisKind"
     }
-  ]
+  ],
+  "x-authored-by": "Codex GPT-6"
 }

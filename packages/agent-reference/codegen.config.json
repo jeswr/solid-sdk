@@ -9,7 +9,23 @@
     {
       "targetClass": "https://w3id.org/jeswr/awp#GrantRecord",
       "name": "GrantRecord",
-      "subject": { "convention": "self" }
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://w3id.org/jeswr/awp#MessageAuthorship",
+      "name": "MessageAuthorship",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://w3id.org/jeswr/awp#InvokeBodyChallenge",
+      "name": "InvokeBodyChallenge",
+      "subject": {
+        "convention": "self"
+      }
     }
   ]
 }

@@ -134,3 +134,14 @@ are attributed correctly. Records preserve the `isPartOf` constraint and collect
 ## License
 
 [MIT](./LICENSE) © Jesse Wright
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Explicit target (including duty targets), assignee, assigner and profile identifiers
+accept clean absolute HTTP(S) IRIs and syntactically valid RFC 8141 URNs. URN NIDs
+contain 2–32 ASCII letters, digits or hyphens, with alphanumeric endpoints; the NSS
+is nonempty and uses RFC 8141 syntax (including valid percent escapes). Optional
+r/q components and fragments follow that RFC. Identifiers are preserved exactly.
+Relative references, blank-node identifiers, other schemes, empty strings, whitespace
+and characters requiring `escapeIri` escaping are refused. An invalid explicit value
+throws rather than disappearing and widening the policy to a wildcard.

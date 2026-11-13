@@ -8,7 +8,8 @@ import {
   digestQuads,
 } from "@jeswr/solid-vc";
 import { importJWK } from "jose";
-import { canonicalJson, digestBytes } from "../core/canonical.js";
+import { DataFactory } from "n3";
+import { canonicalJson, digestBytes, isIri } from "../core/canonical.js";
 import { DEFAULT_LIMITS, type PilotLimits } from "../core/limits.js";
 import { isIsoInstant } from "../core/schema.js";
 import {
@@ -18,6 +19,7 @@ import {
   verifyCompact,
 } from "../mechanisms/jws.js";
 import { checkDocumentTerms, DocumentError } from "./contexts.js";
+import { outerProof, withoutOuterProof } from "./data-integrity-proof.js";
 import {
   assertBlankNodeLimit,
   type DocumentNode,
@@ -51,8 +53,13 @@ function assertSuite(suite: Authenticity): void {
     throw new DocumentError("configuration-mismatch");
 }
 
-async function documentOf(input: JsonLdDocument | DocumentNode): Promise<JsonLdDocument> {
-  return "dataset" in input ? writeDocument(input as DocumentNode) : (input as JsonLdDocument);
+async function documentOf(
+  input: JsonLdDocument | DocumentNode,
+  limits?: PilotLimits,
+): Promise<JsonLdDocument> {
+  return "dataset" in input
+    ? writeDocument(input as DocumentNode, { limits })
+    : (input as JsonLdDocument);
 }
 
 function withoutProof(document: JsonLdDocument): JsonLdDocument {
@@ -66,10 +73,23 @@ export async function canonicalise(
   suite: Authenticity,
 ): Promise<string> {
   assertSuite(suite);
-  const document = readJson(JSON.stringify(withoutProof(await documentOf(input))));
+  const original = await documentOf(input);
+  const document = readJson(JSON.stringify(suite === "jws" ? withoutProof(original) : original));
   checkDocumentTerms(document);
   if (suite === "jws") return canonicalJson(document);
-  const dataset = await documentDataset(document);
+  let dataset = await documentDataset(document);
+  assertBlankNodeLimit(dataset);
+  const root = document.id ?? document["@id"];
+  if (
+    typeof root === "string" &&
+    dataset.countQuads(
+      DataFactory.namedNode(root),
+      DataFactory.namedNode("https://w3id.org/security#proof"),
+      null,
+      DataFactory.defaultGraph(),
+    )
+  )
+    dataset = withoutOuterProof(dataset, root);
   assertBlankNodeLimit(dataset);
   await digestQuads([...dataset]);
   return canonicalNQuads([...dataset]);
@@ -89,9 +109,16 @@ export async function sign(
 ): Promise<JsonLdDocument> {
   assertSuite(options.suite);
   if (options.key.alg !== "EdDSA") throw new DocumentError("configuration-mismatch");
-  if (!isSafeAbsoluteIri(options.verificationMethod) || !isIsoInstant(options.created))
+  if (
+    !isSafeAbsoluteIri(options.verificationMethod) ||
+    !isIri(options.verificationMethod) ||
+    !isIsoInstant(options.created)
+  )
     throw new DocumentError("malformed-proof-options");
-  const document = readJson(JSON.stringify(withoutProof(await documentOf(input))), options.limits);
+  const document = readJson(
+    JSON.stringify(withoutProof(await documentOf(input, options.limits))),
+    options.limits,
+  );
   const admitted = await readDocument(JSON.stringify(document), "application/ld+json", options);
   if (!admitted.ok)
     throw new DocumentError(
@@ -142,9 +169,9 @@ export async function verify(
       throw new DocumentError("unsupported-media-type");
     const limits = options.limits ?? DEFAULT_LIMITS;
     const document = readJson(bytes, limits);
-    const proof = proofOf(document);
     const unsigned = withoutProof(document);
     if (options.suite === "jws") {
+      const proof = proofOf(document);
       if (proof.type !== "JwsProof" || typeof proof.jws !== "string")
         throw new DocumentError("malformed-proof");
       if (Object.keys(proof).some((key) => key !== "type" && key !== "jws"))
@@ -179,37 +206,20 @@ export async function verify(
         suite: "jws",
       });
     }
-    if (
-      proof.type !== "DataIntegrityProof" ||
-      proof.cryptosuite !== "eddsa-rdfc-2022" ||
-      proof.proofPurpose !== "assertionMethod" ||
-      typeof proof.verificationMethod !== "string" ||
-      typeof proof.proofValue !== "string" ||
-      typeof proof.created !== "string"
-    )
-      throw new DocumentError("malformed-proof");
-    if (!isSafeAbsoluteIri(proof.verificationMethod) || !isIsoInstant(proof.created))
-      throw new DocumentError("malformed-proof-options");
-    if (
-      Object.keys(proof).some(
-        (key) =>
-          ![
-            "type",
-            "cryptosuite",
-            "proofPurpose",
-            "verificationMethod",
-            "proofValue",
-            "created",
-          ].includes(key),
-      )
-    )
-      throw new DocumentError("malformed-proof");
     const admitted = await readDocument(JSON.stringify(document), "application/ld+json", {
       limits,
       suite: "data-integrity",
     });
     if (!admitted.ok) return admitted;
-    const dataset = await documentDataset(unsigned, limits);
+    const extracted = outerProof(admitted.dataset, admitted.root);
+    const proof = extracted.proof;
+    if (
+      !isSafeAbsoluteIri(proof.verificationMethod) ||
+      typeof proof.created !== "string" ||
+      !isIsoInstant(proof.created)
+    )
+      throw new DocumentError("malformed-proof-options");
+    const dataset = extracted.unsigned;
     assertBlankNodeLimit(dataset);
     await digestQuads([...dataset]);
     const pinned = options.resolve(proof.verificationMethod);
