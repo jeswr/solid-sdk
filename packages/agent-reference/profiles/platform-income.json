@@ -27,9 +27,7 @@
         "urn:fictional:platform-income:computer",
         "urn:fictional:platform-income:requester"
       ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
@@ -40,9 +38,7 @@
         "urn:fictional:platform-income:contributor-3",
         "urn:fictional:platform-income:contributor-4"
       ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
@@ -53,29 +49,33 @@
         "urn:fictional:platform-income:contributor-3",
         "urn:fictional:platform-income:contributor-4"
       ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
       "kind": "platform-income.total",
       "sources": [],
-      "methods": [
-        "derived"
+      "methods": ["derived"],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "joint.keys",
+      "sources": [
+        "urn:fictional:platform-income:contributor-1",
+        "urn:fictional:platform-income:contributor-2",
+        "urn:fictional:platform-income:contributor-3",
+        "urn:fictional:platform-income:contributor-4",
+        "urn:fictional:platform-income:computer",
+        "urn:fictional:platform-income:requester"
       ],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:platform-income",
-      "claims": [
-        "joint.message",
-        "joint.count",
-        "joint.sum",
-        "platform-income.total"
-      ]
+      "claims": ["joint.message", "joint.count", "joint.sum", "platform-income.total", "joint.keys"]
     }
   ],
   "rules": [
@@ -97,9 +97,7 @@
         "urn:fictional:platform-income:contributor-3",
         "urn:fictional:platform-income:contributor-4"
       ],
-      "assurances": [
-        "joint"
-      ]
+      "assurances": ["joint"]
     }
   ],
   "acceptedJoint": [
@@ -107,9 +105,7 @@
       "rule": "urn:rule:platform-income:aggregate",
       "method": "sparq-aggregate/1",
       "minimumContributors": 3,
-      "purposes": [
-        "urn:purpose:platform-income"
-      ]
+      "purposes": ["urn:purpose:platform-income"]
     }
   ],
   "decisionsForPerson": [],
@@ -127,9 +123,7 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": [
-        "urn:purpose:platform-income"
-      ],
+      "purposes": ["urn:purpose:platform-income"],
       "requiresRepresentation": true
     },
     {
@@ -139,9 +133,7 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": [
-        "urn:purpose:platform-income"
-      ],
+      "purposes": ["urn:purpose:platform-income"],
       "requiresRepresentation": true
     },
     {
@@ -151,9 +143,7 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": [
-        "urn:purpose:platform-income"
-      ],
+      "purposes": ["urn:purpose:platform-income"],
       "requiresRepresentation": true
     },
     {
@@ -163,13 +153,17 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": [
-        "urn:purpose:platform-income"
-      ],
+      "purposes": ["urn:purpose:platform-income"],
       "requiresRepresentation": true
     }
   ],
   "labels": {
     "urn:purpose:platform-income": "Platform income"
-  }
+  },
+  "standIns": [
+    {
+      "what": "Contributing organisations",
+      "replacedBy": "Fictional local parties, each with its own pinned identity key and aggregate keys. Joint computation uses the research-grade, unaudited sparq-aggregate/1 method."
+    }
+  ]
 }

@@ -615,7 +615,7 @@
       "id": "prove-answer",
       "agent": "owner-agent",
       "type": "prove",
-      "method": "sparq-authrdf/1",
+      "method": "sparq-noir-closed-world/0",
       "request": {
         "$ref": "steps.fresh-request.request"
       },
@@ -1412,13 +1412,13 @@
   ],
   "traceSteps": {},
   "requiredMethods": [
-    "sparq-authrdf/1"
+    "sparq-noir-closed-world/0"
   ],
   "catalogueAssurance": "proved",
   "recordedAssurance": "attested",
   "proofCredentials": [
     {
-      "method": "sparq-authrdf/1",
+      "method": "sparq-noir-closed-world/0",
       "issuer": "practice",
       "subject": "urn:fictional:trial-eligibility:owner",
       "statements": [

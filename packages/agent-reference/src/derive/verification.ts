@@ -6,6 +6,64 @@ import type { GateContext } from "../gates/common.js";
 import { type DerivationRule, ruleInputs } from "./rules.js";
 import type { JointOutcome, ProofBinds } from "./verifiers.js";
 
+// Claims are held across every asynchronous verifier and source check.
+const inFlight = new WeakSet<object>();
+
+/** Bare outcome messages (including refusals) also verify before handler/core admission. */
+export async function verifyJointMessageOutcome(
+  gate: GateContext,
+  value: JsonObject,
+  purpose?: string,
+): Promise<{ ok: boolean; reason?: string; detail?: string }> {
+  const fixed = gate.fixedJointSessions?.[String(value.sessionId)];
+  const protocol = fixed && gate.jointProtocols?.get(fixed.method);
+  if (!fixed || !protocol) return { ok: false, reason: "source-not-accepted" };
+  const accepted = gate.acceptedJoint?.find(
+    (entry) =>
+      entry.method === fixed.method &&
+      entry.rule === fixed.rule &&
+      entry.purposes.includes(fixed.purpose),
+  );
+  if (!accepted || (purpose !== undefined && purpose !== fixed.purpose))
+    return { ok: false, reason: "method-not-accepted" };
+  if (fixed.outcomeConsumed || inFlight.has(fixed)) return { ok: false, reason: "replay-conflict" };
+  inFlight.add(fixed);
+  try {
+    const checked = await protocol.verifyOutcome({
+      session: fixed.session,
+      outcome: value.outcome as unknown as JointOutcome,
+      contributions: value.contributions as JsonObject[],
+    });
+    if (!checked.ok)
+      return {
+        ok: false,
+        reason: "derivation-not-verified",
+        detail: `${checked.reason}; check: ${checked.check ?? "unknown"}; roster index: ${checked.index ?? "unknown"}; party at fault: ${checked.partyAtFault ?? "unknown"}`,
+      };
+    const outcome = value.outcome as JsonObject;
+    if (
+      !["below-minimum-group", "too-few-contributors"].includes(String(outcome.type)) &&
+      new Set(checked.contributors).size < accepted.minimumContributors
+    )
+      return {
+        ok: false,
+        reason: "derivation-not-verified",
+        detail: "The verified contributor set is below the receiver's minimum.",
+      };
+    fixed.outcomeConsumed = true;
+    gate.saveDerivationState?.();
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      reason: "derivation-not-verified",
+      detail: "Outcome verifier refused the message.",
+    };
+  } finally {
+    inFlight.delete(fixed);
+  }
+}
+
 export interface DerivationStep {
   clause: string;
   ok: boolean;
@@ -124,57 +182,65 @@ export async function verifyOpaqueDerivation(input: {
     return fail("derivation-not-verified");
   }
   if (d.assurance === "joint" && joint && fixed && protocol && jointEntry) {
-    const same =
-      fixed.method === method &&
-      fixed.rule === rule.id &&
-      fixed.purpose === purpose &&
-      digestOf(fixed.session) === digestOf(joint.session) &&
-      fixed.ruleDigest === (joint.session as JsonObject).ruleDigest &&
-      joint.assumption === protocol.assumption &&
-      digestOf(joint.parties) ===
-        digestOf(((fixed.session.roster ?? []) as JsonObject[]).map((p) => p.party));
-    const contributions = Array.isArray(joint.contributions)
-      ? (joint.contributions as JsonObject[])
-      : [];
-    let checked: Awaited<ReturnType<typeof protocol.verifyOutcome>>;
+    if (fixed.consumed || inFlight.has(fixed)) return fail("replay-conflict");
+    inFlight.add(fixed);
     try {
-      checked = await protocol.verifyOutcome({
-        session: fixed.session,
-        outcome: joint.outcome as unknown as JointOutcome,
-        contributions,
-      });
-    } catch {
-      checked = { ok: false, reason: "verifier failed" };
-    }
-    const outcome = joint.outcome as unknown as JointOutcome;
-    const released =
-      outcome?.type === "threshold-verdict"
-        ? outcome.verdict
-        : outcome?.type === "release"
-          ? fixed.session.statistic === "count"
-            ? outcome.count
-            : fixed.session.statistic === "sum"
-              ? outcome.sum
-              : { count: outcome.count, sum: outcome.sum }
-          : undefined;
-    const ok =
-      same &&
-      checked.ok &&
-      new Set(checked.contributors).size >= jointEntry.minimumContributors &&
-      released !== undefined &&
-      digestOf(released) === digestOf(s.value);
-    if (
-      !step(
-        "DER-14",
-        ok,
-        "derivation-not-verified",
-        checked.ok
-          ? `Every roster contribution verifies; assumption: ${protocol.assumption}`
-          : `Joint evidence failed: ${checked.reason}; party at fault: ${checked.partyAtFault ?? "unknown"}.`,
+      const same =
+        fixed.method === method &&
+        fixed.rule === rule.id &&
+        fixed.purpose === purpose &&
+        digestOf(fixed.session) === digestOf(joint.session) &&
+        fixed.ruleDigest === (joint.session as JsonObject).ruleDigest &&
+        joint.assumption === protocol.assumption &&
+        digestOf(joint.parties) ===
+          digestOf(((fixed.session.roster ?? []) as JsonObject[]).map((p) => p.party));
+      const contributions = Array.isArray(joint.contributions)
+        ? (joint.contributions as JsonObject[])
+        : [];
+      let checked: Awaited<ReturnType<typeof protocol.verifyOutcome>>;
+      try {
+        checked = await protocol.verifyOutcome({
+          session: fixed.session,
+          outcome: joint.outcome as unknown as JointOutcome,
+          contributions,
+        });
+      } catch {
+        checked = { ok: false, reason: "verifier failed" };
+      }
+      const outcome = joint.outcome as unknown as JointOutcome;
+      const released =
+        outcome?.type === "threshold-verdict"
+          ? outcome.verdict
+          : outcome?.type === "release"
+            ? fixed.session.statistic === "count"
+              ? outcome.count
+              : fixed.session.statistic === "sum"
+                ? outcome.sum
+                : { count: outcome.count, sum: outcome.sum }
+            : undefined;
+      const ok =
+        same &&
+        checked.ok &&
+        new Set(checked.contributors).size >= jointEntry.minimumContributors &&
+        released !== undefined &&
+        digestOf(released) === digestOf(s.value);
+      if (
+        !step(
+          "DER-14",
+          ok,
+          "derivation-not-verified",
+          checked.ok
+            ? `Every roster contribution verifies; assumption: ${protocol.assumption}`
+            : `Joint evidence failed: ${checked.reason}; check: ${checked.check ?? "unknown"}; roster index: ${checked.index ?? "unknown"}; party at fault: ${checked.partyAtFault ?? "unknown"}.`,
+        )
       )
-    )
-      return fail("derivation-not-verified");
-    return { ok: true, statement: s };
+        return fail("derivation-not-verified");
+      fixed.consumed = true;
+      gate.saveDerivationState?.();
+      return { ok: true, statement: s };
+    } finally {
+      inFlight.delete(fixed);
+    }
   }
   if (!verifier || !proof) return fail("derivation-not-verified");
   if (
@@ -182,6 +248,7 @@ export async function verifyOpaqueDerivation(input: {
       "DER-16",
       !!request &&
         !request.consumed &&
+        !inFlight.has(request) &&
         request.rule === rule.id &&
         request.ruleDigest === digestOf(rule) &&
         request.subject === s.subject &&
@@ -192,83 +259,88 @@ export async function verifyOpaqueDerivation(input: {
   )
     return fail("replay-conflict");
   if (!request) return fail("replay-conflict");
-  let checked: Awaited<ReturnType<typeof verifier.verify>>;
+  inFlight.add(request);
   try {
-    checked = await verifier.verify({
-      expectedQuery: request.query,
-      presentation: proof.presentation as JsonObject,
-      policy: request.policy,
-      nonce: request.nonce,
-    });
-  } catch {
-    checked = { ok: false, reason: "verifier failed" };
-  }
-  if (
-    !step(
-      "DER-17",
-      checked.ok && digestOf(checked.released) === digestOf(s.value),
-      "derivation-not-verified",
-      checked.ok
-        ? "The verifier checked the receiver's own query, issuer/status policy and nonce, and the released value equals the claim."
-        : `The verifier refused: ${checked.reason}.`,
+    let checked: Awaited<ReturnType<typeof verifier.verify>>;
+    try {
+      checked = await verifier.verify({
+        expectedQuery: request.query,
+        presentation: proof.presentation as JsonObject,
+        policy: request.policy,
+        nonce: request.nonce,
+      });
+    } catch {
+      checked = { ok: false, reason: "verifier failed" };
+    }
+    if (
+      !step(
+        "DER-17",
+        checked.ok && digestOf(checked.released) === digestOf(s.value),
+        "derivation-not-verified",
+        checked.ok
+          ? "The verifier checked the receiver's own query, issuer/status policy and nonce, and the released value equals the claim."
+          : `The verifier refused: ${checked.reason}.`,
+      )
     )
-  )
-    return fail("derivation-not-verified");
-  if (!checked.ok) return fail("derivation-not-verified");
-  const claimed = Array.isArray(d.proofBinds) ? (d.proofBinds as ProofBinds[]) : [];
-  const bindsOk =
-    Array.isArray(d.proofBinds) &&
-    claimed.every((b) => checked.binds.includes(b)) &&
-    checked.binds.every((b) => verifier.binds.includes(b)) &&
-    (d.assurance !== "proved" ||
-      ["rule", "issuers", "subject"].every(
-        (b) => claimed.includes(b as ProofBinds) && checked.binds.includes(b as ProofBinds),
-      ));
-  if (
-    !step(
-      "DER-13",
-      bindsOk,
-      "derivation-not-verified",
-      "The record does not overstate the method's confirmed bindings; proved also requires subject binding.",
+      return fail("derivation-not-verified");
+    if (!checked.ok) return fail("derivation-not-verified");
+    const claimed = Array.isArray(d.proofBinds) ? (d.proofBinds as ProofBinds[]) : [];
+    const bindsOk =
+      Array.isArray(d.proofBinds) &&
+      claimed.every((b) => checked.binds.includes(b)) &&
+      checked.binds.every((b) => verifier.binds.includes(b)) &&
+      (d.assurance !== "proved" ||
+        ["rule", "issuers", "subject"].every(
+          (b) => claimed.includes(b as ProofBinds) && checked.binds.includes(b as ProofBinds),
+        ));
+    if (
+      !step(
+        "DER-13",
+        bindsOk,
+        "derivation-not-verified",
+        "The record does not overstate the method's confirmed bindings; proved also requires subject binding.",
+      )
     )
-  )
-    return fail("derivation-not-verified");
-  let reportedBySubject = false;
-  if (d.assurance === "attested") {
-    const accepted = !!proofEntry && proofEntry.binds.every((b) => checked.binds.includes(b));
-    if (!accepted && !holder) reportedBySubject = true;
-    step(
-      "DER-13a",
-      true,
-      "derivation-not-verified",
-      `The proof establishes ${checked.binds.join(", ") || "no bindings"}. ${accepted ? "The profile accepts these limited bindings as attested." : holder ? "The accepted holder's signature attests the remaining claims." : "The remaining claims rest on the holder's signature and are treated as reported by subject; fitness decides."} No subject binding is inferred.`,
-    );
-  }
-  const keys = checked.issuerKeys;
-  const sourcesOk =
-    keys.length > 0 &&
-    keys.every((key) => {
-      const pinned = gate.proofIssuerKeys?.find((k) => digestOf(k.key) === digestOf(key));
-      return (
-        pinned &&
-        ruleInputs(rule).every(
-          (kind) =>
-            pinned.claimTypes.includes(kind) &&
-            input.acceptsSource(pinned.issuer, kind) &&
-            rule.inputsFrom.map((s) => gate.sourceAliases?.[s] ?? s).includes(pinned.issuer),
-        )
+      return fail("derivation-not-verified");
+    let reportedBySubject = false;
+    if (d.assurance === "attested") {
+      const accepted = !!proofEntry && proofEntry.binds.every((b) => checked.binds.includes(b));
+      if (!accepted && !holder) reportedBySubject = true;
+      step(
+        "DER-13a",
+        true,
+        "derivation-not-verified",
+        `The proof establishes ${checked.binds.join(", ") || "no bindings"}. ${accepted ? "The profile accepts these limited bindings as attested." : holder ? "The accepted holder's signature attests the remaining claims." : "The remaining claims rest on the holder's signature and are treated as reported by subject; fitness decides."} No subject binding is inferred.`,
       );
-    });
-  if (
-    !step(
-      "DER-18",
-      sourcesOk,
-      "source-not-authoritative",
-      "This method does not bind an issuer to each fact. Every reported issuer key must therefore be independently accepted for every kind of claim the rule reads.",
+    }
+    const keys = checked.issuerKeys;
+    const sourcesOk =
+      keys.length > 0 &&
+      keys.every((key) => {
+        const pinned = gate.proofIssuerKeys?.find((k) => digestOf(k.key) === digestOf(key));
+        return (
+          pinned &&
+          ruleInputs(rule).every(
+            (kind) =>
+              pinned.claimTypes.includes(kind) &&
+              input.acceptsSource(pinned.issuer, kind) &&
+              rule.inputsFrom.map((s) => gate.sourceAliases?.[s] ?? s).includes(pinned.issuer),
+          )
+        );
+      });
+    if (
+      !step(
+        "DER-18",
+        sourcesOk,
+        "source-not-authoritative",
+        "This method does not bind an issuer to each fact. Every reported issuer key must therefore be independently accepted for every kind of claim the rule reads.",
+      )
     )
-  )
-    return fail("source-not-authoritative");
-  request.consumed = true;
-  gate.saveDerivationState?.();
-  return { ok: true, statement: s, reportedBySubject };
+      return fail("source-not-authoritative");
+    request.consumed = true;
+    gate.saveDerivationState?.();
+    return { ok: true, statement: s, reportedBySubject };
+  } finally {
+    inFlight.delete(request);
+  }
 }

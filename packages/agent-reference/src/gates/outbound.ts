@@ -348,7 +348,7 @@ export class OutboundGate {
       ok ? "pass" : "fail",
       ok
         ? "The evidence record retains the derivation and every contribution."
-        : `A contribution does not verify; party at fault: ${input.partyAtFault ?? "unknown"}.`,
+        : `A contribution does not verify; backend reason: ${input.record?.reason ?? "unknown"}; check: ${input.record?.check ?? "unknown"}; roster index: ${input.record?.index ?? "unknown"}; party at fault: ${input.partyAtFault ?? "unknown"}.`,
       {
         reason: ok ? "evidence-complete" : "derivation-not-verified",
         rule: {

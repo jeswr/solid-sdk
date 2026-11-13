@@ -33,9 +33,7 @@
         "urn:fictional:salary-benchmark:computer",
         "urn:fictional:salary-benchmark:requester"
       ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
@@ -48,9 +46,7 @@
         "urn:fictional:salary-benchmark:contributor-5",
         "urn:fictional:salary-benchmark:contributor-6"
       ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
@@ -63,17 +59,28 @@
         "urn:fictional:salary-benchmark:contributor-5",
         "urn:fictional:salary-benchmark:contributor-6"
       ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
       "kind": "salary-benchmark.total",
       "sources": [],
-      "methods": [
-        "derived"
+      "methods": ["derived"],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "joint.keys",
+      "sources": [
+        "urn:fictional:salary-benchmark:contributor-1",
+        "urn:fictional:salary-benchmark:contributor-2",
+        "urn:fictional:salary-benchmark:contributor-3",
+        "urn:fictional:salary-benchmark:contributor-4",
+        "urn:fictional:salary-benchmark:contributor-5",
+        "urn:fictional:salary-benchmark:contributor-6",
+        "urn:fictional:salary-benchmark:computer",
+        "urn:fictional:salary-benchmark:requester"
       ],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     }
   ],
@@ -84,7 +91,8 @@
         "joint.message",
         "joint.count",
         "joint.sum",
-        "salary-benchmark.total"
+        "salary-benchmark.total",
+        "joint.keys"
       ]
     }
   ],
@@ -109,9 +117,7 @@
         "urn:fictional:salary-benchmark:contributor-5",
         "urn:fictional:salary-benchmark:contributor-6"
       ],
-      "assurances": [
-        "joint"
-      ]
+      "assurances": ["joint"]
     }
   ],
   "acceptedJoint": [
@@ -119,9 +125,7 @@
       "rule": "urn:rule:salary-benchmark:aggregate",
       "method": "sparq-aggregate/1",
       "minimumContributors": 3,
-      "purposes": [
-        "urn:purpose:salary-benchmark"
-      ]
+      "purposes": ["urn:purpose:salary-benchmark"]
     }
   ],
   "decisionsForPerson": [],
@@ -139,9 +143,7 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": [
-        "urn:purpose:salary-benchmark"
-      ],
+      "purposes": ["urn:purpose:salary-benchmark"],
       "requiresRepresentation": true
     },
     {
@@ -151,9 +153,7 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": [
-        "urn:purpose:salary-benchmark"
-      ],
+      "purposes": ["urn:purpose:salary-benchmark"],
       "requiresRepresentation": true
     },
     {
@@ -163,9 +163,7 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": [
-        "urn:purpose:salary-benchmark"
-      ],
+      "purposes": ["urn:purpose:salary-benchmark"],
       "requiresRepresentation": true
     },
     {
@@ -175,13 +173,17 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": [
-        "urn:purpose:salary-benchmark"
-      ],
+      "purposes": ["urn:purpose:salary-benchmark"],
       "requiresRepresentation": true
     }
   ],
   "labels": {
     "urn:purpose:salary-benchmark": "Salary benchmark"
-  }
+  },
+  "standIns": [
+    {
+      "what": "Contributing organisations",
+      "replacedBy": "Fictional local parties, each with its own pinned identity key and aggregate keys. Joint computation uses the research-grade, unaudited sparq-aggregate/1 method."
+    }
+  ]
 }

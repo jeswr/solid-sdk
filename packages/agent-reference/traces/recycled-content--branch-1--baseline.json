@@ -74,13 +74,13 @@
     }
   ],
   "generated": {
-    "commit": "unknown",
+    "commit": "139af7150bdad7803c9411c85b19cd1400485a44",
     "core": "scripted"
   },
   "standIns": [
     {
-      "what": "Planned proof method sparq-authrdf/1",
-      "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+      "what": "Planned proof method sparq-noir-closed-world/0",
+      "replacedBy": "Purpose-built Noir circuits for absence and totals are not yet delivered. Native dataset commitment preparation remains an open gap from Brief 21."
     },
     {
       "what": "Outside organizations and data sources",

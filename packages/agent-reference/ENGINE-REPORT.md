@@ -831,6 +831,77 @@ The joint adapter also supplies one explicit `assumption` sentence describing th
 
 Reproduction logs are `/tmp/brief21-part{1,2,3,4}-tests.log`, the corresponding scenario logs, and `/tmp/brief21-final-{tests,build,typecheck,lint,scenarios,layers}.log`; proof discovery is in `/tmp/brief21-proofs-command.log`. The per-path double-run observations are in `/tmp/brief21-path-results.json`. No commit, dependency installation, network call, personal-agent suite, coverage or full-workspace gate was performed. All changes remain uncommitted. Real adapters and native commitment preparation remain explicitly unavailable as described above; there is no claim that these fifteen paths have run with real cryptographic evidence.
 
+## Brief 23
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Implemented offline, without commits or dependency/lockfile changes. The optional **research-grade, unaudited `sparq-aggregate/1`** adapter calls the real `sparq-verifiable-aggregate` CommonJS/WASM package at commit `61989f5`. `scripts/install-sparq.mjs` authenticates the complete tarball against SHA-256 `9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830` before creating an installation, then extracts the authenticated bytes into ignored `.sparq/sparq-verifiable-aggregate/`. The installer runs without a subprocess or network. An incorrect hash fails before unpacking and preserves an existing installation. Discovery uses `createRequire`, with `ANSWERABLE_SPARQ_AGGREGATE` as the optional directory override; an absent installation registers no aggregate adapter.
+
+**Manifest: 166 paths — 146 `runs`, 11 `disagrees`, 9 `blocked`.** Five new real paths agree or have no specified catalogue main decision; the sixth is a new disagreement. All nine proof-dependent paths remain blocked. No proof double is recorded as a real run.
+
+| Path | Real outcome and gate decision | Catalogue comparison |
+|---|---|---|
+| `cohort-count/main` | Verified release: count **30**; inbound **admit / fit-for-use / fitness**. | Main decision unspecified; `runs`. |
+| `cohort-count/branch-1` | Verified count-hiding `below-minimum-group`; outbound **stop / prohibited / data-terms**; only the verified refusal reaches the requester. | Matches **stop / prohibited**; `runs`. |
+| `cohort-count/branch-2` | Real signature verification rejects the unattested hospital input before a partial leaves; outbound **stop / derivation-not-verified / evidence**. Backend `input-not-attested`, check and roster index are retained. | Matches **stop / derivation-not-verified**; `runs`. |
+| `platform-income/main` | Verified release: supplied-platform sum **11500**; inbound **admit / fit-for-use / fitness**. | Main decision unspecified; `runs`. No all-platform completeness claim. |
+| `salary-benchmark/main` | Verified release: count **75**, sum **3120000**, mean **41600**; inbound **admit / fit-for-use / fitness**. | Main decision unspecified; `runs`. |
+| `salary-benchmark/branch-1` | Verified release: count **22**, sum **904000**; inbound **admit / fit-for-use / fitness**. | **Disagrees** with **stop / prohibited**. The unchanged Brief 21 roster has two employers **and one compute-only finisher**. The package explicitly counts that third slot toward its minimum of three. |
+
+The salary branch retains its original roster, minima, finisher, input values and catalogue expectation. The original double-only script skipped partials because it expected a refusal. It now performs the required private exchange and delivers the actual release through the requester's inbound verifier; its observation assertion records `release`. It does not change the catalogue's `expect`. An initial implementation interpreted the branch as two total roster slots; that interpretation was discarded before final recording because it would change the experiment to obtain the expected refusal. The independently tested genuinely two-slot session does produce a verified `too-few-contributors` refusal.
+
+Each of the six recordings carries the real method, package name, package commit and authenticated tarball hash in `generated`, a research/unaudited notice, `assurance.kind: joint`, and the README's coalition limit: an input stays hidden from a coalition missing at least one other party, beyond its own inputs and the totals; contributors can reconstruct both totals, including on refusal or a threshold verdict. Fictional local organisations have independent identity and aggregate keys. No truth, disjointness, reliable delivery or protection against repeated-query inference is claimed.
+
+**Caller responsibilities and seam changes, by file.**
+
+- `src/derive/adapters/sparq-aggregate.ts` and `adapters/index.ts`: real optional loading; strict, unknown-field-rejecting schemas for every package result and all wire types used; conversion between the seam's numbers and canonical unsigned decimal sums; exact wrapper/native session agreement; ordered contribution/index/party binding; actual `verifyOutcome`, not simulation. Package errors retain their code, check and roster index. Results outside JavaScript's safe integer range and the seam's unsupported `<=` threshold operator fail closed. No `simulateSession` call exists under `src/`.
+- `src/derive/verifiers.ts`: optional contributor-local state and audit opening, and finisher party/keys/local state in the protocol interface. The package needs these explicit private inputs; the previous interface's `finish` had no way to supply them. Separate durable consumption flags distinguish the bare outcome message from its attached derived claim.
+- `src/mechanisms/joint.ts`: local shares and audit openings remain only in that party's private state store; public step outputs omit them. Compute-only roster members attest zero inputs. Each party recomputes the opened session digest before contributing. Duplicate opens/contributions and simultaneous/repeated outcome operations fail with `replay-conflict`; rule mismatches refuse. Only the partial encrypted to the current roster recipient is accepted. The finisher receives its own keys/local partial, never another party's secrets. Backend failures become gate refusals with public failure metadata.
+- `src/core/limits.ts`: finite per-kind bounds for open, contribution, private partial and outcome payloads, sized from the roster. The ordinary envelope/depth/node bounds still apply before these checks.
+- `src/gates/inbound.ts`: the requester and every participant independently verify each identity-signed aggregate-key/compute-role binding against pinned identity keys and source policy. Missing/mismatched bindings fail `source-not-accepted`. Bare outcomes, including refusals, additionally run the real verifier inside source admission before reaching a handler/core. Private partial routing and per-kind payload bounds are checked there too. Existing gate ordering is retained.
+- `src/derive/verification.ts`: proof nonces are claimed before awaiting verification and released in `finally`; successful verification alone consumes them. The same protection covers joint derived claims and bare outcome messages. Corrected evidence remains usable after a failed verification. Tests run competing copies concurrently and require exactly one admission.
+- `src/runtime/agent.ts`: the requester's own runtime draws 32 random bytes for each real session. It authenticates and fixes the complete roster/rules before use; sender-boundary outcome verification remains in place. Ledger records use the same private-message logging projection as traces.
+- `src/mechanisms/joint-privacy.ts`, `src/trace/recorder.ts`, `src/trace/types.ts`: private partial payloads and nested signed wrappers are replaced in logs/traces with digest summaries; routing still names the peer. Secrets, shares and audit openings are excluded. The real-session test observes private values only in test memory and searches every trace from all six paths; only a Boolean leak result is asserted, so failed tests do not print secrets.
+- `src/gates/outbound.ts`: the existing failed-evidence caption now includes the backend reason, check and roster index; gate decisions are unchanged.
+- `src/engine/run.ts`, the three joint profiles/scenarios, their six new traces/outlines and `traces/index.json`: requester-created sessions, independently signed key-binding statements, zero-input compute attestations, recipient-specific partial dispatch, readable step captions, and real package provenance. New outlines/expectation arrays are implementation-derived observations, not independent conformance evidence. Previously maintained outlines are preserved.
+- `scripts/run-scenarios.mjs`, `scripts/recorded-joint.mjs` and `scenario-runs.json`: store each real trace's SHA-256 plus `recordedWith` provenance. Without the package, the six rows retain their recorded status (including the salary disagreement), verify the exact trace bytes and do not rewrite those traces or outlines. Missing provenance or a hash mismatch is an error. Command output distinguishes retained recordings from live execution.
+- The three closed-world proof profiles/scenarios, discovery and the test double now use `sparq-noir-closed-world/0`; native executable/guest probing is removed. Their reason is exactly **“Blocked: needs a Noir circuit for absence and totals, not yet delivered.”** The other six proof paths keep `sparq-zk-result/5`. Brief 21's **native dataset commitment/preparation gap remains open against the new method**: the engine's credential-digest fixture agreement is still not a native dataset commitment, and no delivered circuit/preparation contract closes it. Historical report text is unchanged.
+
+**One wall-clock observation per session size on this machine, Node 24.22.3.** Keys were generated beforehand. Each timing covers session creation, every party's separate contribution and partial call, one finisher and real recipient verification, including adapter validation; it excludes transport/gate/trace I/O. No simulation function was used. These were individual observations, not benchmark statistics.
+
+| Contributors | Elapsed |
+|---|---:|
+| 3 | 559.176 ms |
+| 5 | 1012.740 ms |
+| 10 | 2795.795 ms |
+
+**Package/verification limits and remaining conflicts.** The package behaves as documented for releases, threshold verdicts, minimum refusals, a missing contribution, altered signatures and outcomes checked against a different complete set. One malformed-wire edge differs from the README's broad missing/invalid-attestation wording: deleting a required `signature` field yields `{code: "protocol-error", index: null, check: "json-encoding"}`, rather than `input-not-attested`. The unattested scenario supplies a syntactically shaped invalid signature, which reaches and fails the real signature verifier; no signature or successful evidence is invented. The package's documented counting of compute-only slots explains the salary disagreement, not a package defect.
+
+The required `createRequire` loader conflicts with the repository's current `check:agent-layers` ban on CommonJS loaders. That guard also scans ignored vendored `.sparq/` glue. **The layer guard cannot pass as written while implementing this brief's mandatory loader.** No root guard or allowlist was weakened; the failed check is reported rather than hidden. The inherited Brief 21 restriction also means no personal-agent suite, coverage or `gate:full` is run.
+
+**Final commands and results (all with `/opt/node24/bin` first on `PATH`).**
+
+| Command/check | Result |
+|---|---|
+| `node packages/agent-reference/scripts/install-sparq.mjs /mnt/project-files/agent-architecture/sparq-dist/sparq-verifiable-aggregate-61989f5.tgz` | Passed; exact tarball hash verified and real package installed. |
+| `pnpm --filter @jeswr/agent-reference run build` | Passed: TypeScript, schema drift check, legacy trace generation, **157 live data paths**, manifest **146 runs / 11 disagrees / 9 blocked**. |
+| `pnpm --filter @jeswr/agent-reference test` | **271 passed**, 38 files. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run test/sparq-aggregate.test.ts test/recorded-joint.test.ts` | Final targeted check: **12 passed**, including the private-value trace scan, recipient bounds/routing, source/method policy, real evidence refusals, replay, recorded hashes and installer hash refusal. |
+| `pnpm --filter @jeswr/agent-reference typecheck` | Passed. |
+| `pnpm --filter @jeswr/agent-reference lint` | Passed; **4 warnings, 22 informational diagnostics**, no errors. |
+| `ANSWERABLE_SPARQ_AGGREGATE=/tmp/brief23-absent-sparq pnpm --filter @jeswr/agent-reference run build` | Passed: **151 live paths**, six recorded real joint paths retained; all six original trace hashes and index entries preserved. |
+| Same absent-package environment, `pnpm --filter @jeswr/agent-reference test` | **262 passed, 9 skipped**. A separate final real-test-file invocation confirms the explicit one-line research/unaudited package skip notice and `describe.skipIf` skips. |
+| Same absent-package environment, `node packages/agent-reference/scripts/run-scenarios.mjs` | Passed; six trace hashes and the complete manifest bytes remained unchanged, including the salary disagreement. |
+| Same absent-package command with `--scenario=cohort-count`, after adding one byte to its main trace | Failed as required with **Recorded joint trace SHA-256 mismatch: cohort-count/main**. Original bytes were restored immediately and rechecked. |
+| `node packages/agent-reference/scripts/generate-proofs.mjs` | Passed as discovery/preparation only: precisely nine blocked proof paths, including the exact new Noir blocker for all three closed-world paths; no proof generated. |
+| `node scripts/check-agent-layers.mjs` | **Failed**: mandatory CommonJS loader and ignored vendored glue conflict with the current guard, as explained above. No guard change made. |
+| Adapter discovery | Exactly one real joint method, no proof methods; loaded package notice names the research-grade, unaudited package and commit. |
+| Final artifact/scope audit and `git diff --check` | Passed. Exactly 166 manifest rows; six valid trace hashes/provenance/`joint` assurances; original salary branch roster and all catalogue expectations unchanged; all **151 previously maintained outlines** and all pre-Brief-23 report bytes unchanged. Only agent-reference changed; no dependency, lockfile, eval, tracked dist or vendored-package changes. |
+
+Build/scenario generation refreshed unrelated commit headers; **146 unrelated trace files were restored byte-for-byte**. Only the six newly recorded joint traces, the already-running platform branch's updated captions/stand-ins, four closed-world proof branch stand-ins and their index remain changed. The six new outline files and the six corresponding scenario expectation arrays describe new real observations; no previously maintained outline was changed. All work remains uncommitted.
+
+Logs: `/tmp/brief23-{build,all-tests,typecheck,lint,layers,absent-build,absent-tests,absent-scenarios,tamper,proof-discovery,final-target-tests,final-skip}.log`. Timing observations are `/tmp/brief23-timings.jsonl`.
+
 ## Brief 22
 
 <!-- AUTHORED-BY Codex GPT-6 -->

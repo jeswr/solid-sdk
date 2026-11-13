@@ -428,3 +428,15 @@ it("stores a weaker reliance label separately while retaining the holder's signe
   expect(fact.digest).toBe(digestOf(f.statement));
   expect(f.events.find((e) => e.kind === "store")?.fact?.method).toBe("reported-by-subject");
 });
+
+it("claims a proof nonce across concurrent verification and admits exactly one copy", async () => {
+  const f = await proofFixture();
+  const verify = f.system.verify.bind(f.system);
+  f.system.verify = async (input) => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    return verify(input);
+  };
+  const results = await Promise.all([f.admit(), f.admit()]);
+  expect(results.map((r) => r.admitted).sort()).toEqual([0, 1]);
+  expect(f.events.some((e) => e.reason === "replay-conflict")).toBe(true);
+});

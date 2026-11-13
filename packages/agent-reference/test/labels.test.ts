@@ -46,10 +46,10 @@ it("keeps generated captions and rule explanations free of identifiers in every 
       );
     }
   }
-  expect(traces).toBe(151);
-  expect(manifest.paths.filter((path) => path.status === "runs")).toHaveLength(141);
-  expect(manifest.paths.filter((path) => path.status === "disagrees")).toHaveLength(10);
-  expect(manifest.paths.filter((path) => path.status === "blocked")).toHaveLength(15);
+  expect(traces).toBe(157);
+  expect(manifest.paths.filter((path) => path.status === "runs")).toHaveLength(146);
+  expect(manifest.paths.filter((path) => path.status === "disagrees")).toHaveLength(11);
+  expect(manifest.paths.filter((path) => path.status === "blocked")).toHaveLength(9);
 });
 
 it("preserves exact original content in principal review even when it contains a URI", () => {

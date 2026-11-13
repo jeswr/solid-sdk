@@ -8,6 +8,7 @@ import { ScriptedMailbox } from "../bindings/email.js";
 import { digestBytes, digestContent, digestOf } from "../core/canonical.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
 import { availableAdapters } from "../derive/adapters/index.js";
+import { SPARQ_AGGREGATE } from "../derive/adapters/sparq-aggregate.js";
 import type { ProofCache } from "../derive/cache.js";
 import type { DerivedRequest, FixedJointSession, VerifierRegistry } from "../derive/verifiers.js";
 import { DERIVATION_LIMITS, registryForRun } from "../derive/verifiers.js";
@@ -160,6 +161,8 @@ function unsupported(
   verifiers: VerifierRegistry,
 ): string | undefined {
   for (const method of scenario.requiredMethods) {
+    if (method === "sparq-noir-closed-world/0" && !verifiers.proofSystems.has(method))
+      return "Blocked: needs a Noir circuit for absence and totals, not yet delivered.";
     if (!verifiers.proofSystems.has(method) && !verifiers.jointProtocols.has(method))
       return `${method === "sparq-aggregate/1" ? "needs joint computation" : "needs a proof system"}: needs the ${method} package, which is not installed`;
   }
@@ -1168,6 +1171,7 @@ async function runPath(
     Awaited<ReturnType<import("../derive/verifiers.js").JointProtocol["generateKeys"]>>
   >();
   let jointFixed: FixedJointSession | undefined;
+  let jointParams: import("../derive/verifiers.js").SessionParams | undefined;
   if (scenario.jointSession && scenario.requiredMethods.includes(scenario.jointSession.method)) {
     const spec = scenario.jointSession,
       protocol = required(verifiers.jointProtocols.get(spec.method));
@@ -1176,25 +1180,35 @@ async function runPath(
         id,
         await protocol.generateKeys(new TextEncoder().encode(`engine/${scenario.id}/${id}`)),
       );
-    const made = await protocol.newSession({
+    jointParams = {
       sessionId: `urn:session:${scenario.id}:${path}`,
       statistic: spec.statistic,
       minimumGroup: spec.minimumGroup,
       minimumContributors: spec.minimumContributors,
       ...(spec.threshold ? { threshold: spec.threshold } : {}),
-      roster: [...spec.contributors, ...spec.computeOnly].map((id) => ({
-        party: cast.get(id).identity.party ?? cast.get(id).identity.actor,
-        publicKeys: required(jointKeys.get(id)).publicKeys,
-        ...(spec.computeOnly.includes(id) ? { computeOnly: true } : {}),
-      })),
-    });
-    jointFixed = {
-      method: spec.method,
-      rule: spec.rule,
-      session: made.session,
-      ruleDigest: made.ruleDigest,
-      purpose: spec.purpose,
-      assurances: ["joint"],
+      roster: await Promise.all(
+        [...spec.contributors, ...spec.computeOnly].map(async (id) => ({
+          party: cast.get(id).identity.party ?? cast.get(id).identity.actor,
+          publicKeys: required(jointKeys.get(id)).publicKeys,
+          ...(spec.computeOnly.includes(id) ? { computeOnly: true } : {}),
+          ...(protocol.kind === "real"
+            ? {
+                keyBinding: await signClaim(cast.get(id).ownerKey, {
+                  id: `urn:binding:${scenario.id}:${id}`,
+                  issuer: cast.get(id).identity.party,
+                  subject: cast.get(id).identity.party,
+                  claimType: "joint.keys",
+                  method: "recorded-by-authority",
+                  asOf: now().toISOString(),
+                  value: {
+                    publicKeys: required(jointKeys.get(id)).publicKeys,
+                    computeOnly: spec.computeOnly.includes(id),
+                  },
+                }),
+              }
+            : {}),
+        })),
+      ),
     };
   }
   const ledgers = new Map<string, MemoryLedger>();
@@ -1412,12 +1426,18 @@ async function runPath(
                   .find((c) => c.claimType === "joint.message");
                 if (!envelope || envelope.issuer !== ctx.peer.party)
                   return { type: "refuse", reason: "derivation-not-verified" };
-                await required(jointParties.get(agent.id)).receive(
+                const accepted = await required(jointParties.get(agent.id)).receive(
                   ctx,
                   op.id,
                   envelope.value as JsonObject,
                 );
-                return { type: "none" };
+                return accepted.ok
+                  ? { type: "none" }
+                  : {
+                      type: "refuse",
+                      reason: (accepted.reason ??
+                        "derivation-not-verified") as import("../core/types.js").ReasonCode,
+                    };
               }
               return reply(ctx);
             },
@@ -1596,8 +1616,27 @@ async function runPath(
       },
     );
     runtimes.set(agent.id, created.runtime);
-    if (jointFixed && scenario.jointSession) {
-      created.runtime.fixJointSession(jointFixed);
+    ledgers.set(agent.id, created.ledger);
+  }
+  if (jointParams && scenario.jointSession) {
+    const spec = scenario.jointSession,
+      protocol = required(verifiers.jointProtocols.get(spec.method));
+    const { sessionId, ...params } = jointParams;
+    const made =
+      protocol.kind === "real"
+        ? await required(runtimes.get(spec.requester)).newJointSession(spec.method, params)
+        : await protocol.newSession({ ...params, sessionId });
+    jointFixed = {
+      method: spec.method,
+      rule: spec.rule,
+      session: made.session,
+      ruleDigest: made.ruleDigest,
+      purpose: spec.purpose,
+      assurances: ["joint"],
+    };
+    for (const agent of agents) {
+      if (!(await required(runtimes.get(agent.id)).acceptJointSession(jointFixed)))
+        throw new Error("source-not-accepted: aggregate roster key binding");
       const spec = scenario.jointSession;
       jointParties.set(
         agent.id,
@@ -1617,7 +1656,6 @@ async function runPath(
         }),
       );
     }
-    ledgers.set(agent.id, created.ledger);
   }
   const outsideSystems = new Map<string, Map<string, JsonObject>>();
   const enqueue = (from: string, result: StepResult) => {
@@ -1715,7 +1753,11 @@ async function runPath(
         const party = required(jointParties.get(step.agent));
         if (step.action === "contribute") {
           const made = await party.contribute();
-          if (made.ok && step.attack === "unsigned") delete made.contribution.signature;
+          if (made.ok && step.attack === "unsigned") {
+            if (party.options.protocol.kind === "real")
+              made.contribution.signature = Buffer.alloc(64, 0xa5).toString("base64url");
+            else delete made.contribution.signature;
+          }
           if (made.ok && step.attack === "off-roster") made.contribution.signature = "off-roster";
           result = made;
         } else if (step.action === "partial") result = await party.partial();
@@ -1743,7 +1785,19 @@ async function runPath(
         const peer = required(parties.get(step.peer)),
           operation = `urn:op:joint:${step.operation}`,
           spec = required(scenario.jointSession);
-        const payload = template<JsonObject>(step.payload);
+        let payload = template<JsonObject>(step.payload);
+        if (step.operation === "partial" && jointFixed?.session.wire) {
+          const p = payload.partial as JsonObject;
+          const recipient = (jointFixed.session.roster as JsonObject[]).findIndex(
+            (r) => r.party === cast.get(step.peer).identity.party,
+          );
+          const message = (p.messages as JsonObject[] | undefined)?.find(
+            (m) => m.recipient === recipient,
+          );
+          if (recipient < 0 || !message)
+            throw new Error("source-not-accepted: private partial recipient");
+          payload = { ...payload, partial: { party: String(p.party), message } };
+        }
         const input: JsonObject = {
           sessionId: required(jointFixed).session.sessionId as string,
           ...(step.operation === "open"
@@ -2560,8 +2614,31 @@ async function runPath(
       actsFor: p.actsFor ?? p.id,
       role: p.role,
     })),
-    generated: { commit, core: "scripted" },
+    generated: {
+      commit,
+      core: "scripted",
+      ...(scenario.jointSession?.method === SPARQ_AGGREGATE.method &&
+      verifiers.jointProtocols.get(SPARQ_AGGREGATE.method)?.kind === "real"
+        ? {
+            method: SPARQ_AGGREGATE.method,
+            package: SPARQ_AGGREGATE.package,
+            packageCommit: SPARQ_AGGREGATE.commit,
+            sha256: SPARQ_AGGREGATE.sha256,
+            notice: SPARQ_AGGREGATE.notice,
+          }
+        : {}),
+    },
     standIns: [...profile.standIns, ...scenario.standIns],
+    ...(scenario.jointSession &&
+    verifiers.jointProtocols.get(scenario.jointSession.method)?.kind === "real"
+      ? {
+          assurance: {
+            kind: "joint" as const,
+            assumption: required(verifiers.jointProtocols.get(scenario.jointSession.method))
+              .assumption,
+          },
+        }
+      : {}),
     events: recorder.events(),
   };
 }

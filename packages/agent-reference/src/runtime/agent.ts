@@ -14,6 +14,8 @@
  */
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { AsyncLocalStorage } from "async_hooks";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { randomBytes } from "crypto";
 import type { JWK } from "jose";
 import { emailEnvelopeSchema, emailPinSchema } from "../bindings/email.js";
 import { derivedUrn, digestBytes, digestContent, digestOf, newUrn } from "../core/canonical.js";
@@ -52,6 +54,7 @@ import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
 import { periodKey } from "../gates/payment.js";
 import { evaluateItemTerms, fitnessOf } from "../gates/quality.js";
 import { jointPayloadSchema } from "../mechanisms/joint.js";
+import { jointLogView } from "../mechanisms/joint-privacy.js";
 import { type KeyAlg, type SigningKey, signCompact, verifyCompact } from "../mechanisms/jws.js";
 import {
   actionDigest,
@@ -1468,6 +1471,30 @@ export class AgentRuntime {
     };
     return { statement, jws: await signCompact(this.options.sourceKey, TYP.statement, statement) };
   }
+  async newJointSession(
+    method: string,
+    params: Omit<import("../derive/verifiers.js").SessionParams, "sessionId">,
+  ) {
+    const protocol = this.options.gates?.jointProtocols?.get(method);
+    if (!protocol) throw new Error("method-not-accepted");
+    return protocol.newSession({ ...params, sessionId: randomBytes(32).toString("base64url") });
+  }
+  async acceptJointSession(fixed: FixedJointSession): Promise<boolean> {
+    if (fixed.session.wire) {
+      const protocol = this.options.gates?.jointProtocols?.get(fixed.method);
+      if (!protocol) return false;
+      const { wire, ruleDigest, ...params } = fixed.session;
+      const made = await protocol.newSession(
+        params as unknown as import("../derive/verifiers.js").SessionParams,
+      );
+      if (made.ruleDigest !== ruleDigest || digestOf(made.session) !== digestOf(fixed.session))
+        return false;
+      void wire;
+    }
+    if (!(await this.inbound.checkJointBindings(fixed.session))) return false;
+    this.fixJointSession(fixed);
+    return true;
+  }
   fixJointSession(fixed: FixedJointSession): void {
     const sessions = this.state.domain.fixedJointSessions as unknown as Record<
       string,
@@ -1603,7 +1630,7 @@ export class AgentRuntime {
       let proof = gate?.proofCache?.read(input.method, args);
       const cached = !!proof;
       if (!proof) {
-        if (input.method === "sparq-authrdf/1" && !gate?.generateProofs)
+        if (input.method === "sparq-noir-closed-world/0" && !gate?.generateProofs)
           return { ok: false as const, reason: "evidence-missing" };
         proof = await system.prove(args);
         if (gate?.generateProofs && system.kind === "real")
@@ -5921,6 +5948,7 @@ export class AgentRuntime {
       const parsed = jointPayloadSchema.safeParse(claim.value);
       let ok = parsed.success,
         partyAtFault: string | undefined;
+      let backendFailure: JsonObject = {};
       if (parsed.success && "outcome" in parsed.data) {
         const fixed = (
           this.state.domain.fixedJointSessions as unknown as Record<string, FixedJointSession>
@@ -5948,7 +5976,14 @@ export class AgentRuntime {
             ok =
               checked.ok &&
               (suppressed || new Set(checked.contributors).size >= entry.minimumContributors);
-            if (!checked.ok) partyAtFault = checked.partyAtFault;
+            if (!checked.ok) {
+              partyAtFault = checked.partyAtFault;
+              backendFailure = {
+                reason: checked.reason,
+                check: checked.check ?? "unknown",
+                index: checked.index ?? null,
+              };
+            }
           } catch {
             ok = false;
           }
@@ -5963,7 +5998,7 @@ export class AgentRuntime {
           way: "joint outcome",
           evidenceOk: false,
           ...(partyAtFault ? { partyAtFault } : {}),
-          record: claim,
+          record: { ...claim, ...backendFailure },
         });
         throw new MessageReleaseError(
           this.result("rejected", {
@@ -6544,7 +6579,7 @@ export class AgentRuntime {
   }
 
   private record<T extends LedgerRecord>(record: T): void {
-    this.ledger.append(record, this.now());
+    this.ledger.append(jointLogView(record), this.now());
   }
 
   private persist(): void {

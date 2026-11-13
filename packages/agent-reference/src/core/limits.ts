@@ -58,6 +58,32 @@ export const DEFAULT_LIMITS: PilotLimits = Object.freeze({
   maxWorkflowSteps: 200,
 });
 
+// AUTHORED-BY Codex GPT-6
+/** Public range proofs and encrypted per-party packets have linear roster overhead. */
+export function jointLimits(
+  kind: "open" | "contribute" | "partial" | "outcome",
+  rosterLength: number,
+): PilotLimits {
+  if (!Number.isInteger(rosterLength) || rosterLength < 1 || rosterLength > 1024)
+    throw new BoundsError("array-too-long", "joint roster must contain 1 to 1024 parties");
+  const contribution = 32 * 1024 + rosterLength * 2048;
+  const maxEnvelopeBytes =
+    kind === "partial"
+      ? 4096
+      : kind === "contribute"
+        ? contribution
+        : kind === "open"
+          ? 4096 + rosterLength * 1024
+          : 32 * 1024 + rosterLength * contribution;
+  return resolveLimits({
+    maxEnvelopeBytes,
+    maxStringLength: 24 * 1024,
+    maxJsonDepth: 32,
+    maxJsonNodes: 5000 + rosterLength * rosterLength * 100,
+    maxArrayLength: Math.max(512, rosterLength),
+  });
+}
+
 /** Merge overrides and refuse non-positive / non-finite bounds (fail closed). */
 export function resolveLimits(overrides: Partial<PilotLimits> = {}): PilotLimits {
   const merged = { ...DEFAULT_LIMITS, ...overrides };

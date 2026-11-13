@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import { digestOf } from "../core/canonical.js";
+import { jointLimits, parseBoundedJson } from "../core/limits.js";
 import type { Json, JsonObject } from "../core/types.js";
 import type { FixedJointSession, JointOutcome, JointProtocol } from "../derive/verifiers.js";
 import type { AgentRuntime } from "../runtime/agent.js";
@@ -39,9 +40,18 @@ interface JointState {
   shares: Record<string, JsonObject>;
   partials: Record<string, JsonObject>;
   own?: JsonObject;
+  localPartial?: JsonObject;
   outcome?: JointOutcome;
 }
+const inFlight = new WeakMap<StateStore, Set<string>>();
 export class JointParty {
+  private claim(key: string): (() => void) | undefined {
+    const seen = inFlight.get(this.options.store) ?? new Set<string>();
+    inFlight.set(this.options.store, seen);
+    if (seen.has(key)) return undefined;
+    seen.add(key);
+    return () => seen.delete(key);
+  }
   constructor(
     readonly options: {
       party: string;
@@ -80,64 +90,102 @@ export class JointParty {
       fixed = this.options.fixed;
     if (message.sessionId !== fixed.session.sessionId || !ctx.peer.party)
       throw new Error("joint session or sender missing");
-    if (operation === "urn:op:joint:open") {
-      if (
-        ctx.peer.party !== this.options.requester ||
-        digestOf(message.session) !== digestOf(fixed.session) ||
-        message.ruleDigest !== fixed.ruleDigest
-      )
-        throw new Error("joint session differs from receiver-fixed roster and digest");
-      state.opened = true;
-    } else {
-      if (!state.opened) throw new Error("joint session was not opened");
-      if (operation === "urn:op:joint:contribute") {
-        const c = message.contribution as JsonObject;
-        if (!c || c.party !== ctx.peer.party)
-          throw new Error("joint contributor differs from authenticated sender");
+    const kind = operation.slice(operation.lastIndexOf(":") + 1) as
+      | "open"
+      | "contribute"
+      | "partial"
+      | "outcome";
+    parseBoundedJson(
+      JSON.stringify(message),
+      jointLimits(kind, (fixed.session.roster as JsonObject[]).length),
+    );
+    const release = this.claim(`${message.sessionId}:${operation}:${ctx.peer.party}`);
+    if (!release) return { ok: false, reason: "replay-conflict" };
+    try {
+      if (operation === "urn:op:joint:open") {
+        if (state.opened) return { ok: false, reason: "replay-conflict" };
         if (
-          state.contributions[ctx.peer.party] &&
-          digestOf(state.contributions[ctx.peer.party]) !== digestOf(c)
+          ctx.peer.party !== this.options.requester ||
+          digestOf(message.session) !== digestOf(fixed.session) ||
+          message.ruleDigest !== fixed.ruleDigest
         )
-          throw new Error("conflicting contribution");
-        state.contributions[ctx.peer.party] = c;
-        if (message.share) state.shares[ctx.peer.party] = message.share as JsonObject;
-      } else if (operation === "urn:op:joint:partial") {
-        const p = message.partial as JsonObject;
-        if (!p || p.party !== ctx.peer.party)
-          throw new Error("joint partial differs from authenticated sender");
-        if (
-          state.partials[ctx.peer.party] &&
-          digestOf(state.partials[ctx.peer.party]) !== digestOf(p)
-        )
-          throw new Error("conflicting partial");
-        state.partials[ctx.peer.party] = p;
-      } else if (operation === "urn:op:joint:outcome") {
-        const contributions = message.contributions as JsonObject[];
-        const checked = await this.options.protocol.verifyOutcome({
-          session: fixed.session,
-          outcome: message.outcome as unknown as JointOutcome,
-          contributions,
-        });
-        if (!checked.ok) {
-          this.release("joint outcome", {
-            evidenceOk: false,
-            partyAtFault: checked.partyAtFault,
-            record: message,
-          });
-          return { ok: false, reason: "derivation-not-verified" };
+          return { ok: false, reason: "rule-not-accepted" };
+        if (fixed.session.wire) {
+          const { ruleDigest, wire, ...params } = message.session as JsonObject;
+          const computed = await this.options.protocol.newSession(
+            params as unknown as import("../derive/verifiers.js").SessionParams,
+          );
+          if (
+            computed.ruleDigest !== ruleDigest ||
+            digestOf(computed.session) !== digestOf(fixed.session)
+          )
+            return { ok: false, reason: "rule-not-accepted" };
+          void wire;
         }
-        state.outcome = message.outcome as unknown as JointOutcome;
+        state.opened = true;
+      } else {
+        if (!state.opened) throw new Error("joint session was not opened");
+        if (operation === "urn:op:joint:contribute") {
+          const c = message.contribution as JsonObject;
+          if (!c || c.party !== ctx.peer.party)
+            throw new Error("joint contributor differs from authenticated sender");
+          if (state.contributions[ctx.peer.party]) return { ok: false, reason: "replay-conflict" };
+          state.contributions[ctx.peer.party] = c;
+          if (message.share) state.shares[ctx.peer.party] = message.share as JsonObject;
+        } else if (operation === "urn:op:joint:partial") {
+          const p = message.partial as JsonObject;
+          if (!p || p.party !== ctx.peer.party)
+            throw new Error("joint partial differs from authenticated sender");
+          if (fixed.session.wire) {
+            const roster = fixed.session.roster as JsonObject[],
+              index = roster.findIndex((p) => p.party === this.options.party);
+            if (index < 0 || (p.message as JsonObject)?.recipient !== index)
+              return { ok: false, reason: "source-not-accepted" };
+          }
+          if (
+            state.partials[ctx.peer.party] &&
+            digestOf(state.partials[ctx.peer.party]) !== digestOf(p)
+          )
+            throw new Error("conflicting partial");
+          state.partials[ctx.peer.party] = p;
+        } else if (operation === "urn:op:joint:outcome") {
+          if (state.outcome) return { ok: false, reason: "replay-conflict" };
+          const contributions = message.contributions as JsonObject[];
+          const checked = await this.options.protocol.verifyOutcome({
+            session: fixed.session,
+            outcome: message.outcome as unknown as JointOutcome,
+            contributions,
+          });
+          if (!checked.ok) {
+            this.release("joint outcome", {
+              evidenceOk: false,
+              partyAtFault: checked.partyAtFault,
+              record: {
+                ...message,
+                reason: checked.reason,
+                check: checked.check ?? "unknown",
+                index: checked.index ?? null,
+              },
+            });
+            return { ok: false, reason: "derivation-not-verified" };
+          }
+          state.outcome = message.outcome as unknown as JointOutcome;
+        }
       }
+      this.save(state);
+      ctx.record({
+        type: "joint-message",
+        operation,
+        sender: ctx.peer.party,
+        session: fixed.session.sessionId,
+        ...(operation === "urn:op:joint:partial"
+          ? { recipient: this.options.party, digest: digestOf(message) }
+          : { evidence: message }),
+      });
+      return { ok: true };
+    } finally {
+      release();
     }
-    this.save(state);
-    ctx.record({
-      type: "joint-message",
-      operation,
-      sender: ctx.peer.party,
-      session: fixed.session.sessionId,
-      evidence: message,
-    });
-    return { ok: true };
   }
   private release(
     way: "joint contribution" | "joint partial" | "joint outcome",
@@ -159,40 +207,48 @@ export class JointParty {
     });
   }
   async contribute() {
-    const s = this.load();
-    if (!s.opened) throw new Error("joint session was not opened");
-    if (s.own)
-      return {
-        ok: true as const,
-        ...(s.own as unknown as Awaited<ReturnType<JointProtocol["contribute"]>>),
-      };
-    const facts = this.options
-      .runtime()
-      .admittedStatements()
-      .filter((s) => this.options.inputs.includes(String(s.id)));
-    const count = facts.find((f) => f.claimType === "joint.count")?.value;
-    const sum = facts.find((f) => f.claimType === "joint.sum")?.value;
-    if (
-      typeof count !== "number" ||
-      typeof sum !== "number" ||
-      !Number.isSafeInteger(count) ||
-      !Number.isSafeInteger(sum) ||
-      count < 0 ||
-      sum < 0
-    )
-      throw new Error("joint inputs are unavailable or invalid");
-    if (!this.release("joint contribution")) return { ok: false as const, reason: "prohibited" };
-    const result = await this.options.protocol.contribute({
-      session: this.options.fixed.session,
-      party: this.options.party,
-      secretKeys: this.options.secretKeys,
-      count,
-      sum,
-    });
-    s.contributions[this.options.party] = result.contribution;
-    s.own = result as unknown as JsonObject;
-    this.save(s);
-    return { ok: true as const, ...result };
+    const release = this.claim("own-contribution");
+    if (!release) return { ok: false as const, reason: "replay-conflict" };
+    try {
+      const s = this.load();
+      if (!s.opened) throw new Error("joint session was not opened");
+      if (s.own) return { ok: false as const, reason: "replay-conflict" };
+      const facts = this.options
+        .runtime()
+        .admittedStatements()
+        .filter((s) => this.options.inputs.includes(String(s.id)));
+      const computeOnly = (this.options.fixed.session.roster as JsonObject[]).some(
+        (p) => p.party === this.options.party && p.computeOnly,
+      );
+      const count = computeOnly ? 0 : facts.find((f) => f.claimType === "joint.count")?.value;
+      const sum = computeOnly ? 0 : facts.find((f) => f.claimType === "joint.sum")?.value;
+      if (
+        typeof count !== "number" ||
+        typeof sum !== "number" ||
+        !Number.isSafeInteger(count) ||
+        !Number.isSafeInteger(sum) ||
+        count < 0 ||
+        sum < 0
+      )
+        throw new Error("joint inputs are unavailable or invalid");
+      if (!this.release("joint contribution")) return { ok: false as const, reason: "prohibited" };
+      const result = await this.options.protocol.contribute({
+        session: this.options.fixed.session,
+        party: this.options.party,
+        secretKeys: this.options.secretKeys,
+        count,
+        sum,
+      });
+      s.contributions[this.options.party] = result.contribution;
+      s.own = result as unknown as JsonObject;
+      this.save(s);
+      const { local, auditOpening, ...publicResult } = result;
+      void local;
+      void auditOpening;
+      return { ok: true as const, ...publicResult };
+    } finally {
+      release();
+    }
   }
   async partial() {
     const s = this.load();
@@ -205,55 +261,103 @@ export class JointParty {
       secretKeys: this.options.secretKeys,
       contributions: Object.values(s.contributions),
       shares: Object.values(s.shares),
+      local: s.own?.local as JsonObject | undefined,
     });
     if (
       !this.release("joint partial", {
         evidenceOk: result.ok,
         ...(!result.ok ? { partyAtFault: result.partyAtFault } : {}),
-        record: { contributions: Object.values(s.contributions) },
+        record: {
+          contributions: Object.values(s.contributions),
+          ...(!result.ok
+            ? {
+                reason: result.reason,
+                check: result.check ?? "unknown",
+                index: result.index ?? null,
+              }
+            : {}),
+        },
       })
     )
       return { ok: false as const, reason: "derivation-not-verified" };
     if (result.ok) {
       s.partials[this.options.party] = result.partial;
+      s.localPartial = result.local;
       this.save(s);
     }
-    return result;
+    return result.ok ? { ok: true as const, partial: result.partial } : result;
   }
   async finish() {
-    const s = this.load();
-    if (!s.opened) throw new Error("joint session was not opened");
-    const contributions = Object.values(s.contributions);
-    const outcome = await this.options.protocol.finish({
-      session: this.options.fixed.session,
-      contributions,
-      partials: Object.values(s.partials),
-    });
-    const checked = await this.options.protocol.verifyOutcome({
-      session: this.options.fixed.session,
-      outcome,
-      contributions,
-    });
-    if (!checked.ok) {
-      this.release("joint outcome", {
-        evidenceOk: false,
-        partyAtFault: checked.partyAtFault,
-        record: { contributions },
+    const release = this.claim("own-outcome");
+    if (!release) return { ok: false as const, reason: "replay-conflict" };
+    try {
+      const s = this.load();
+      if (!s.opened) throw new Error("joint session was not opened");
+      if (s.outcome) return { ok: false as const, reason: "replay-conflict" };
+      const contributions = Object.values(s.contributions);
+      let outcome: JointOutcome;
+      try {
+        outcome = await this.options.protocol.finish({
+          session: this.options.fixed.session,
+          contributions,
+          partials: Object.values(s.partials),
+          party: this.options.party,
+          secretKeys: this.options.secretKeys,
+          local: s.localPartial,
+        });
+      } catch (error) {
+        const failure = error as { reason?: unknown; check?: unknown; index?: unknown };
+        const index = typeof failure.index === "number" ? failure.index : null;
+        this.release("joint outcome", {
+          evidenceOk: false,
+          ...(index === null
+            ? {}
+            : {
+                partyAtFault: String(
+                  (this.options.fixed.session.roster as JsonObject[])[index]?.party ?? "unknown",
+                ),
+              }),
+          record: {
+            reason: typeof failure.reason === "string" ? failure.reason : "derivation-not-verified",
+            check: typeof failure.check === "string" ? failure.check : "verifier-failed",
+            index,
+          },
+        });
+        return { ok: false as const, reason: "derivation-not-verified" };
+      }
+      const checked = await this.options.protocol.verifyOutcome({
+        session: this.options.fixed.session,
+        outcome,
+        contributions,
       });
-      return { ok: false as const, reason: "derivation-not-verified" };
+      if (!checked.ok) {
+        this.release("joint outcome", {
+          evidenceOk: false,
+          partyAtFault: checked.partyAtFault,
+          record: {
+            contributions,
+            reason: checked.reason,
+            check: checked.check ?? "unknown",
+            index: checked.index ?? null,
+          },
+        });
+        return { ok: false as const, reason: "derivation-not-verified" };
+      }
+      const suppressed = ["below-minimum-group", "too-few-contributors"].includes(outcome.type);
+      const released = this.release("joint outcome", {
+        suppressed,
+        record: { contributions, outcome: outcome as unknown as JsonObject },
+      });
+      s.outcome = outcome;
+      this.save(s);
+      return {
+        ok: released,
+        outcome,
+        contributions,
+        ...(suppressed ? { reason: "prohibited" } : {}),
+      };
+    } finally {
+      release();
     }
-    const suppressed = ["below-minimum-group", "too-few-contributors"].includes(outcome.type);
-    const released = this.release("joint outcome", {
-      suppressed,
-      record: { contributions, outcome: outcome as unknown as JsonObject },
-    });
-    s.outcome = outcome;
-    this.save(s);
-    return {
-      ok: released,
-      outcome,
-      contributions,
-      ...(suppressed ? { reason: "prohibited" } : {}),
-    };
   }
 }

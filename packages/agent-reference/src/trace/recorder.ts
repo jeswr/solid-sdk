@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 /**
@@ -7,6 +8,7 @@
  * run is, and never writes an agent event.
  */
 
+import { jointLogView } from "../mechanisms/joint-privacy.js";
 import type { LabelIndex } from "../model/labels.js";
 import type { TraceEvent, TraceEventInput } from "./types.js";
 
@@ -47,9 +49,10 @@ export class TraceRecorder {
       agent,
       emit: (event) => {
         if (this.rule) this.current = this.rule(agent, event, this.current);
+        const view = jointLogView(event);
         const displayed = this.presentation
-          ? this.presentation.labels.annotations(event, this.presentation.meaningSuite)
-          : event;
+          ? this.presentation.labels.annotations(view, this.presentation.meaningSuite)
+          : view;
         this.list.push({ seq: this.list.length + 1, step: this.current, agent, ...displayed });
       },
     };

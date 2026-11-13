@@ -33,7 +33,8 @@
     "./model": {
       "types": "./dist/model/index.d.ts",
       "default": "./dist/model/index.js"
-    }
+    },
+    "./eval/e0/e0-compact.json": "./eval/e0/e0-compact.json"
   },
   "files": [
     "dist",
@@ -44,18 +45,20 @@
     "scenarios",
     "schemas",
     "outlines",
-    "vocab"
+    "vocab",
+    "eval/e0/e0-compact.json"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs && node scripts/export-schemas.mjs --check && node scripts/generate-traces.mjs && node scripts/run-scenarios.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts",
-    "test": "vitest run",
+    "lint": "biome check src test scripts eval/e0/run.mjs eval/e0/vitest.config.ts",
+    "test": "vitest run && vitest run --config eval/e0/vitest.config.ts",
     "scenarios": "node scripts/run-scenarios.mjs",
     "schemas": "node scripts/export-schemas.mjs",
     "proofs": "node scripts/generate-proofs.mjs",
     "codegen": "node scripts/federation-codegen.mjs --out src/generated",
-    "check:rdf-pipeline": "node scripts/check-rdf-pipeline.mjs"
+    "check:rdf-pipeline": "node scripts/check-rdf-pipeline.mjs",
+    "eval:e0": "pnpm --filter '@jeswr/agent-reference^...' build && tsc -p tsconfig.build.json && node eval/e0/run.mjs"
   },
   "dependencies": {
     "@jeswr/solid-odrl": "workspace:*",
