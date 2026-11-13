@@ -1174,3 +1174,280 @@ Removing the new configurations member leaves `mortgage-main.json` identical as 
 | `git diff --check` | PASS. |
 
 Final command logs are `/tmp/brief26a-{build,typecheck,lint,tests,scenarios,layers}.log`. All work remains uncommitted.
+
+## Brief 25p
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Standalone protocol objects and provider checks only. Work uses Node 24 from
+`/opt/node24/bin`, offline, without commits. The only protocol source is
+`payment-protocols-2026-11-13.md`; the complete Brief 25 was also read. This branch has no
+Brief 24 report section or settlement directory. No SettlementSuite, gate, mechanism,
+engine, runtime, wire, model, scenario, profile or trace is changed. The report append is
+the sole requested exception to the new-files-only rule.
+
+**Part 1 complete — 62 tests.** `settlement/eip3009.ts` implements EIP-712 domain and
+TransferWithAuthorization hashing, deterministic secp256k1 signing, Ethereum signature
+encoding, low-s enforcement and signer recovery. A locally computed vector is pinned;
+every authorization and domain field has a signature-binding test. `http.ts` supplies
+the in-process exchange, unambiguous case-insensitive header lookup, canonical base64 and
+base64url encodings, bounded UTF-8 JSON parsing and duplicate-member rejection.
+`ledger.ts` owns exact-decimal balances, immutable SHA-256 hash-chained entries and a
+single-use set. Failed transfers leave balances and replay state unchanged. `money.ts`
+provides integer conversion without floating point, including zero-decimal currencies.
+
+**Dependencies.** The working copy already contained `@noble/curves` and `@noble/hashes`
+2.4.0 and the corresponding manifest/lockfile edits. The task reports that
+`check:packages` passed before installation; that is supplied evidence, not a new check
+run here. No dependency was added or installed in this lane; those files are untouched.
+
+**Not from the specification.** The source confirms the EIP-712 authorization fields
+but not ABI byte construction or signature wire layout. This implementation uses 32-byte
+ABI words, Keccak-256, the EIP-712 0x1901 prefix, and r/s/v with v=27/28, low-s only.
+The pinned vector is computed locally, not an external conformance vector. Provider
+accounts, exact-decimal arithmetic, globally scoped ledger once-keys, hash-chained
+`sha-256:<hex>` transaction references and synchronous atomic updates are local stand-ins.
+Precision is explicit caller-supplied profile data (0–36); no currency or asset registry
+is inferred. Parsing defaults to 65,536 decoded bytes and rejects duplicate JSON members,
+non-finite numbers, invalid UTF-8, ambiguous headers and noncanonical base encodings.
+
+**Integration notes and final validation** are appended as the remaining parts finish.
+
+**Part 2 complete — 29 tests.** `settlement/x402/objects.ts` has strict exact/EVM
+requirements and all three v2 header payloads, base64 JSON codecs, facilitator request
+and response schemas, a 402 exchange builder and bidirectional atomic conversion.
+`facilitator.ts` verifies the configured domain, accepted requirements, signer, value,
+recipient, time window, funds and unused nonce before settling on `Ledger`. A changed
+recipient returns `invalid_exact_evm_payload_recipient_mismatch`; transaction is the
+actual entry digest. Repeated verification is read-only; settlement is single use.
+
+**Not from the specification — x402 additions.** This narrow exact/EVM profile requires
+`extra.name/version`, rejects unknown object fields outside explicit extensions, and
+uses all accepted requirement fields in an exact canonical comparison with server
+configuration. Currency and token precision are configured separately from network and
+asset. Authorization time uses strict EIP-3009 endpoints and remaining validity no
+longer than `maxTimeoutSeconds`. Errors for invalid signatures, expiry, unknown accounts
+and nonce reuse use the source's generic `invalid_payload`; no unconfirmed error codes
+are invented. Failed settlements have empty `transaction`, optional payer and the
+configured network (failure-field presence was not specified). EIP-3009 replay keys are
+the canonical tuple of chain, contract, signer and nonce, shared across protocols.
+
+**Second-half wiring — x402.** `paymentRequiredExchange` produces the request for
+payment. Construct `PaymentPayload` with `signAuthorization(requirementsDomain(req),
+auth, key)`, then `encodePaymentSignature` for the order. Call `X402Facilitator.verify`
+then `settle`; `encodePaymentResponse` produces the receipt header. Read payee from
+`accepts[].payTo` / `accepted.payTo` / `payload.authorization.to`, amount from `amount`
+and `authorization.value`; convert with `convertX402Amount` using configured currency
+and precision. `authorization.nonce` carries the engine once-key binding, with
+`authorizationOnceKey` supplying provider replay scope. The integration must derive the
+nonce from the engine once-key, bind the token/network/currency profile and the payee's
+account, and authenticate the facilitator's receipt separately: x402 does not sign it.
+There is no chain, and network/asset identifiers have no live-network effect.
+
+**Part 3 complete — 48 tests.** `settlement/mpp/objects.ts` builds/parses RFC 9110
+Payment challenges, canonical base64url/JCS charge requests, the recommended HMAC-SHA256
+binding, challenge-derived nonces, EIP-3009 credentials with did:pkh sources, and
+Payment-Receipt headers. `server.ts` checks the original challenge echo, HMAC, expiry,
+single use, recipient/value/currency/nonce, signer, source, funds and provider nonce
+scope. Its HTTP handler returns a fresh challenge on credential refusal; replay returns
+402 `https://paymentauth.org/problems/invalid-challenge` without a second debit.
+All research-listed problem types/statuses are exposed. Tests change every HMAC field,
+rebind tampered credentials, exercise the alternate Payment-Authorization header and
+verify zero-decimal currency conversion.
+
+**Not from the specification — MPP additions.** Challenge hashing is SHA-256 of the
+JCS form of the parsed recognized challenge parameters (including id and any description).
+The HMAC uses exactly eight pipe-separated slots, including an empty header slot when
+absent. Bound parameter values containing pipes are refused to prevent delimiter
+ambiguity; server secrets must have at least 32 bytes. The local evm/charge profile
+requires recipient, source and expires, limits authorization expiry to challenge expiry,
+and uses configured token domain/currency/precision. The source permits those challenge
+and request fields to be absent generally. Method details remain opaque JSON and do not
+select the trusted domain. The caller supplies the originally issued challenge and a
+fresh-challenge callback; it must make fresh challenges distinct, e.g. with random opaque
+data. `digest` is HMAC-bound but this module does not interpret its unconfirmed body
+binding semantics. Receipt chainId is a decimal string. Non-JCS requests, duplicate auth
+parameters and unknown credential JSON keys are refused; unknown challenge auth
+parameters are ignored as specified. This is a charge/authorization subset, not another
+EVM payload type, policy-refusal flow or a live facilitator.
+
+**Second-half wiring — MPP.** `createChallenge` + `challengeExchange` produce the
+request for payment; put the agreement terms digest in `request.externalId`.
+`createCredential` signs the order, and `buildCredential` encodes its authorization
+header. `MppServer.verify` is read-only; `settle` returns the settlement/receipt and
+`encodeReceipt` provides Payment-Receipt. `handle` composes those HTTP operations.
+Payee/amount/currency are `chargeRequest(challenge).recipient/amount/currency` and
+`credential.payload.to/value`; `challenge.id` and `challengeNonce(challenge)` identify
+single use. The engine must record its once-key association with the challenge and
+authenticate the merchant/provider through its ordinary envelope. The receipt is not
+itself signed by MPP. Configure the same ledger/domain for EIP-3009 nonce protection
+shared with x402.
+
+**Part 4 complete — 40 tests.** `settlement/ap2/sdjwt.ts` issues ES256 SD-JWT issuer
+commitments, salts disclosures, creates holder key-binding JWTs with `typ: kb+sd-jwt`,
+and verifies issuer signature, holder `cnf.jwk`, aud, nonce, iat, sd_hash, each disclosed
+claim's commitment and required disclosure presence. The existing selective-disclosure
+mechanism was read; it is a different signed-statement encoding, so it cannot substitute
+for this format. Attacks with tampered/missing disclosures are re-signed by the holder
+in tests, proving that commitment/presence checks work independently of sd_hash.
+`objects.ts` signs/verifies the merchant checkout, computes checkout_hash, defines strict
+closed Checkout/Payment Mandates and the open Payment Mandate, and converts amounts.
+`provider.ts` checks both closed mandates against a verified merchant checkout. A real
+signed Payment Mandate for another checkout returns `terms-digest-mismatch`. Open
+mandates verify the person's signature, agent holder key, short expiry, payee and amount
+constraints. No FIDO claim is made.
+
+**Not from the specification — AP2 additions.** The research has examples, not closed
+field schemas. This profile uses decimal strings for checkout/product prices, integer
+minor units for payment_amount and amount ranges, uppercase three-letter currencies,
+safe-integer units, optional string shipping/return policies and strict example field
+sets. Only the two required open constraint kinds are implemented; allowed payees use
+`{type: payment.allowed_payees, payees: [id, ...]}`. Other researched constraint kinds
+are refused rather than guessed. Open expiry is at most 900 seconds; key binding age is
+at most 300 seconds by default. This profile chooses SHA-256 for checkout_hash and
+sd_hash, unpadded base64url, top-level `[salt, name, value]` disclosures with 16 random
+salt bytes, `_sd`/`_sd_alg` commitments and `issuer~disclosure~...~binding` serialization
+(including the separator before the binding in sd_hash). Issuer typ is `sd-jwt`, holder
+typ is the brief's `kb+sd-jwt`, checkout typ is `ap2-checkout+jwt`. Those serialization
+details are not present in the research. Only public P-256 cnf JWKs are accepted;
+verification uses pinned caller-supplied issuer/merchant keys and refuses embedded
+verification-key headers. Checkout validation additionally compares payee id, currency
+and converted amount. No receipt field schema was supplied, so no invented AP2 receipt
+claim set or settlement method is added.
+
+**Second-half wiring — AP2.** `signCheckout` produces the request for payment;
+`verifyCheckout` and `checkoutHash` validate and identify its exact bytes.
+`issueCheckoutMandate` / `issuePaymentMandate` produce issuer objects and `presentSdJwt`
+produces the holder-bound orders. Set audiences to merchant and credential-provider,
+respectively, and pass the expected nonce to each verifier. `checkCheckoutMandate` and
+`checkPaymentMandate` authenticate them before use. Checkout payee/amount/currency are
+`merchant.id`, `total_price`, `currency`; the Payment Mandate uses `payee.id`,
+`payment_amount.amount/currency` and transaction_id = checkout_hash. `convertAp2Amount`
+bridges minor units. Key-binding nonce carries the expected once-key association;
+transaction_id identifies the checkout. The second half must retain consumed transaction
+and nonce state, perform the provider ledger transfer and sign the processor Payment
+Receipt and merchant Checkout Receipt with an explicitly documented local claim set.
+No such settlement/receipt producer exists here because the source gives only their
+JWT form and signing roles. `issueOpenPaymentMandate` and `checkOpenPaymentMandate`
+provide the autonomous constraint form; the second half must pin the closed mandate's
+agent signing key to the open mandate's cnf and lift its constraints into P5.
+
+**Part 5 complete — 43 tests.** `settlement/acp/objects.ts` defines strict checkout
+creation/session, delegate_payment/allowance, delegated token, complete/payment_data
+and order objects. `signing.ts` creates/verifies detached Ed25519 signatures and requires
+Signature/Timestamp under the local profile, with separate Authorization/API-Version/
+POST Idempotency-Key header checks. `idempotency.ts` caches an immutable copy of the
+first response for a canonical body, returns it on identical retries, returns 422
+idempotency_conflict for changed bodies and 409 idempotency_in_flight for an unfinished
+identical request. `provider.ts` issues vt_ tokens, checks their one-time allowance,
+session, merchant, currency, amount, account, expiry and handler, and settles on the
+ledger without consuming tokens on refused transfers. Tests cover replay, every
+allowance binding, signature/body/key attacks, header requirements, concurrent retries,
+and a complete retry that provably debits only once. JPY settlement uses zero decimals.
+
+**Not from the specification — ACP additions.** Session totals use one
+`{type: total, amount: integer}` entry and currency/merchant_id at session level; the
+source supplies no complete session table. Items use the confirmed creation fields.
+Non-ready statuses are limited to the six researched RFC values. Ready totals are
+positive and completed sessions require the matching order. Buyer, fulfillment,
+billing, risk and metadata structures remain JSON rather than invented field tables.
+The payment_method stand-in is `{type: account, account_id}`. `created` is Unix seconds;
+vt_ tokens contain random UUIDs, are stored by the fictional provider and are not chain
+or card credentials. Merchant id is the local ledger payee account id. Instrument id
+must match the delegated payer's account and handler ids must match the configured
+provider. Token redemption is single use per token; the HTTP idempotency store must wrap
+delegation as well as completion. There is no durable or distributed token/idempotency
+store. A failed idempotent callback releases the key for retry; successfully returned
+error responses, like any returned response, are cached. Store scope is per endpoint.
+Currency is lowercase, precision is configured, and all minor amounts are safe integers.
+The optional ACP signing scheme is fixed locally to a detached EdDSA/Ed25519 JWS over
+the JCS JSON body. Timestamp is unsigned Unix seconds, checked within 300 seconds by
+default. Method, path and other headers are outside that signature, as the source only
+confirms body coverage; the engine envelope must protect them. Local allowance,
+signature and header error labels are implementation choices, not ACP problem types.
+
+**Second-half wiring — ACP.** Build checkout creation using `createSessionSchema`;
+`checkoutSessionSchema` is the request-for-payment object. Sign requests and merchant
+responses with `signAcpExchange`, verify with the pinned identity key using
+`verifyAcpExchange`, and call `checkAcpRequestHeaders` (which checks bearer format, not
+account authentication). Build delegate_payment using `delegatePaymentSchema`;
+`AcpPaymentProvider.delegate` returns the token. The order is `completeSchema` with
+`payment_data.instrument.credential.token`. `redeem` checks the allowance and returns
+the ledger settlement entry. The second half creates the matching completed session's
+`order`, and the provider's separately signed payment-receipt statement. Payee is
+session.merchant_id / allowance.merchant_id; amount is totals[0].amount bounded by
+allowance.max_amount; currency is session/allowance.currency. Use `convertAcpAmount`
+before emitting engine decimal money. Pass the engine-derived Idempotency-Key and
+parsed body to an endpoint-scoped `IdempotencyStore.execute` around every POST;
+provider replay scope is `acp:<vt_token>`. The engine must associate that token with
+its once-key, authenticate bearer accounts and protect routing headers in its envelope.
+
+**Adversarial review and final test inventory.** The review added independent
+read-only verifier refusals for insufficient funds, funded recovered-signer substitution,
+HMAC checks independent of echo comparison, replay by a second funded signer, hidden
+registered JWT claims, malformed uint256 schema input and ACP instrument substitution.
+Registered JWT timing claims must be visible so jose verifies them before disclosure
+reconstruction. MPP rejects non-HTTP whitespace rather than accepting folded headers.
+The same real EIP-3009 authorization cannot settle once through x402 and again through
+MPP, or vice versa, when both share the provider ledger. Ledger failure injection also
+checks the source's insufficient-funds errors after verification, without consuming an
+MPP challenge. The duplicate ledger account check was consolidated into one accessor.
+
+The final inventory is **17 new source modules and 10 new test/fixture files**, with
+**254 new tests in 9 test files**:
+
+| Part | Final tests | Coverage |
+|---|---:|---|
+| Shared EIP-3009, HTTP, ledger/money | 67 | Vector, all signed fields, low-s, encodings, bounded/duplicate JSON, exact funds, atomic refusals, replay. |
+| x402 exact v2 | 38 | Header objects, every facilitator binding, signed failures, verify/settle and post-verification ledger refusal. |
+| MPP draft 01 evm/charge | 56 | Auth syntax, all HMAC fields, original echo, expiry, nonce, did:pkh, both replay scopes, problems, fresh challenges and receipts. |
+| AP2 v0.2 | 47 | SD-JWT issuer/holder signatures, disclosure commitments/presence, aud/nonce/sd_hash, checkout binding and open constraints. |
+| ACP 2026-04-17 | 44 | Strict objects, delegated allowance/redemption, signatures/timestamps, mandatory headers and concurrent/idempotent requests. |
+| Shared x402/MPP replay | 2 | Both settlement orders debit once. |
+
+A temporary AST mutation harness disabled **55 selected refusal guards one at a time**;
+all 55 changes made their corresponding tests fail. Source files were restored after
+each run, including on errors. The first mutation pass exposed five checks whose tests
+were masked by later refusals; the final pass detected every selected mutation. The
+harness and results are `/tmp/brief25p-mutate.mjs`, `/tmp/brief25p-mutations.json` and
+`/tmp/brief25p-mutations.log`. This is targeted adversarial evidence, not a claim of
+exhaustive protocol conformance. V8 coverage for the new modules is **625/625 statements**
+and **437/439 branches**.
+
+**Not from the specification — final scope notes.** Bounds on identifiers, arrays,
+encoded objects and selective claims, positive payment amounts, schema strictness and
+the local error classes are profile/implementation choices. All provider stores are
+in memory; callers must retain provider instances across exchanges, and durability or
+multiple processes require shared replay/idempotency state. API functions returning
+protocol-native integer/base-unit money must be converted by their protocol's single
+bidirectional amount helper before the engine reads them as decimal money. No public
+protocol discovery, live HTTP, chain, card network or actual money movement is claimed.
+The runtime must still pin each protocol key through an identity-signed statement,
+authenticate every protocol envelope and supply the agreed terms and accepted payee
+account. Those are second-half responsibilities; these pure modules confer no identity
+or payment permission themselves.
+
+**Final commands and results.** Commands below run with `/opt/node24/bin` first on PATH;
+package commands run from `packages/agent-reference` unless prefixed with a filter.
+
+| Last command | Result |
+|---|---|
+| `pnpm exec vitest run` | PASS: **579 tests, 58 files**, including the existing 325 tests. |
+| `pnpm exec vitest run test/settlement --coverage --coverage.provider=v8 --coverage.include='src/settlement/**/*.ts' --coverage.reporter=json --coverage.reportsDirectory=/tmp/brief25p-coverage --reporter=json --outputFile=/tmp/brief25p-settlement-results.json` | PASS: **254 tests, 9 files**, 100% statements and 99.54% branches in new modules. |
+| `node /tmp/brief25p-mutate.mjs` | PASS: **55/55 selected removed guards detected**; all source restored. |
+| `pnpm exec tsc -p tsconfig.build.json --outDir /tmp/brief25p-dist` | PASS: all package source compiles, declarations emitted outside the working tree. |
+| `pnpm exec tsc -p tsconfig.json --noEmit` | PASS: source and tests. |
+| `pnpm --filter @jeswr/agent-reference run lint` | PASS: zero errors; 6 pre-existing warnings, 97 informational diagnostics. |
+| `pnpm exec biome check packages/agent-reference/src/settlement packages/agent-reference/test/settlement` from root | PASS: new files only, zero diagnostics. |
+| `node scripts/check-agent-layers.mjs` from root | PASS. Bare built-ins, literal ESM imports, no CommonJS loader. |
+| `git diff --check` and final status inspection | PASS. Only the report append and the new settlement trees were authored here; the starting package.json/lockfile edits remain untouched. |
+
+Logs are `/tmp/brief25p-{all-tests,settlement,settlement-coverage,compile,typecheck,lint,
+biome,layers,mutations}.log`; structured coverage and test results are also in `/tmp` as
+shown above. The package `build` script and `gate:full` were not run: they regenerate
+existing schemas, traces and scenario artifacts, which this brief explicitly protects.
+All source was compiled to `/tmp` and the standard package tests were run instead.
+No evaluation run, network access, dependency installation, scenario/manifest change or
+commit was made. The HTTP stand-in for the second half is: requests and responses pass
+in process with their method, path, headers and body; the fictional provider keeps the
+ledger and no real money moves. ACP delegation must be wrapped as a 201 response.

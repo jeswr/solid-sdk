@@ -62,6 +62,8 @@
   },
   "dependencies": {
     "@jeswr/solid-odrl": "workspace:*",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
     "canonicalize": "^1.0.8",
     "jose": "^6.2.3",
     "n3": "^2.1.0",
