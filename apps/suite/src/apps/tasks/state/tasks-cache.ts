@@ -16,6 +16,7 @@ import { type FilterQuery, serializeFilterQuery } from "../lib/views/filter-quer
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
 import { projectColour } from "../lib/views/project-colours";
 import { compareTasks } from "../lib/views/project-groups";
+import { applySkip, planSkip, type SkipPlan, skipMatches } from "../lib/views/skip";
 import { type TaskView, toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
 
@@ -1182,6 +1183,73 @@ export class TasksCache {
     else this.hiddenTasks.delete(url);
     this.emit();
   }
+  /** Recover committed completions first; the skip itself never creates completion history. */
+  async skipTask(item: StoredTask, now = new Date()): Promise<SkipPlan | undefined> {
+    let current = Object.values(this.snapshot.tasks)
+      .flatMap((load) => load.items)
+      .find((task) => task.url === item.url);
+    if (!current) return undefined;
+    const unresolved = this.unresolvedCompletions.get(item.url);
+    const recovery = unresolved ? unresolved() : this.recoverPersistedCompletion(current, now);
+    if (recovery) {
+      if (!(await recovery)) {
+        this.onNotice("Couldn't check this task's history. Try again.");
+        return undefined;
+      }
+      current = Object.values(this.snapshot.tasks)
+        .flatMap((load) => load.items)
+        .find((task) => task.url === item.url);
+      if (!current) return undefined;
+    }
+    const plan = planSkip(current, this.snapshot.views, now);
+    if (!plan) return undefined;
+    return this.updateOccurrence(current, plan.original, plan.previous).then((result) =>
+      result ? plan : undefined,
+    );
+  }
+  undoSkip(item: StoredTask, plan: SkipPlan): Promise<StoredTask | undefined> {
+    return this.updateOccurrence(item, plan.previous, plan.original);
+  }
+  private updateOccurrence(
+    item: StoredTask,
+    target: TaskDetails,
+    expected: TaskDetails,
+  ): Promise<StoredTask | undefined> {
+    const project = this.snapshot.projects.find((project) =>
+      this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
+    );
+    if (!project) return Promise.resolve(undefined);
+    const accepts = (task: TaskItem) => skipMatches(task, expected) || skipMatches(task, target);
+    const current = this.snapshot.tasks[project.url]?.items.find((task) => task.url === item.url);
+    if (!current || !accepts(current.task)) {
+      this.onNotice("The occurrence was changed by a newer action");
+      return Promise.resolve(undefined);
+    }
+    return this.mutate(
+      (state) => {
+        const current = state.tasks[project.url]?.items.find((task) => task.url === item.url);
+        return current && accepts(current.task)
+          ? replaceTask(
+              state,
+              project.url,
+              item.url,
+              changeTask(current, (task) => applySkip(task, target)),
+            )
+          : state;
+      },
+      async () => {
+        const current = this.task(project.url, item.url);
+        if (!accepts(current.task)) throw new Error("The occurrence was changed by a newer action");
+        const task = await this.store.updateTask(current, (task) => applySkip(task, target));
+        this.undoRepairs.get(item.url)?.supersede(task);
+        return { result: task, commit: (state) => replaceTask(state, project.url, item.url, task) };
+      },
+      () => {
+        void this.updateOccurrence(item, target, expected);
+      },
+      [item.url],
+    );
+  }
   completeTask(
     item: StoredTask,
     now = new Date(),
@@ -1189,6 +1257,19 @@ export class TasksCache {
   ): Promise<CompletionPlan | undefined> {
     const unresolved = this.unresolvedCompletions.get(item.url);
     if (unresolved) return unresolved();
+    const recovery = this.recoverPersistedCompletion(item, now);
+    if (recovery) return recovery;
+    const plan = planComplete(item, this.snapshot.views, now, options);
+    if (plan.kind === "advance") return this.advanceTask(item, plan);
+    return this.updateTask(item, (task) => {
+      task.state = "closed";
+      task.endedAt = now;
+    }).then((task) => (task ? plan : undefined));
+  }
+  private recoverPersistedCompletion(
+    item: StoredTask,
+    now: Date,
+  ): Promise<CompletionPlan | undefined> | undefined {
     const project = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -1200,12 +1281,6 @@ export class TasksCache {
         !item.task.completionOperations.has(copy.url),
     );
     if (project && orphans?.length) return this.recoverCompletion(project, item, orphans, now);
-    const plan = planComplete(item, this.snapshot.views, now, options);
-    if (plan.kind === "advance") return this.advanceTask(item, plan);
-    return this.updateTask(item, (task) => {
-      task.state = "closed";
-      task.endedAt = now;
-    }).then((task) => (task ? plan : undefined));
   }
   /** Undo retains occurrence ownership across lost responses and retries each write conditionally. */
   undoCompletion(item: StoredTask, plan: CompletionPlan): Promise<boolean | undefined> {

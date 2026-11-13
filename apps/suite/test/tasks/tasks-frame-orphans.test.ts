@@ -50,7 +50,8 @@ async function copy(result: Fixture, id: string, due = now, endedAt = now) {
 async function reload(result: Fixture) {
   const store = frameStore(result.pod);
   const failures = vi.fn();
-  const cache = new TasksCache(store, failures, webId);
+  const notices = vi.fn();
+  const cache = new TasksCache(store, failures, webId, notices);
   await cache.start();
   const project = cache.getSnapshot().projects.find((item) => item.url === result.inbox.url);
   if (!project) throw new Error("Missing reloaded project");
@@ -60,10 +61,142 @@ async function reload(result: Fixture) {
     .tasks[project.url]?.items.find((item) => item.url === result.original.url);
   if (!original) throw new Error("Missing reloaded original");
   result.pod.requests.length = 0;
-  return { cache, store, failures, original };
+  return { cache, store, failures, notices, original };
 }
 
 describe("recurring completion recovery after reload", () => {
+  it.each([2, 3])("recovers a lost monthly completion before Skip (COUNT=%s)", async (count) => {
+    const result = await recurring(count);
+    result.original = await result.store.updateTask(result.original, (task) => {
+      task.allDay = "2026-11-20";
+      task.recurrence = { frequency: "MONTHLY", byDay: ["Friday"], bySetPos: 3, count };
+      task.reminders = [{ time: new Date("2026-11-19T18:00:00Z") }, { offset: "-PT1H" }];
+    });
+    await result.cache.loadTasks(result.inbox, true);
+    let copyUrl: string | undefined;
+    result.pod.intercept = (request) => {
+      if (request.method === "PUT" && request.headers.get("If-None-Match") === "*") {
+        copyUrl = request.url;
+        result.pod.seed(request.url, request.body);
+        throw new TypeError("Occurrence PUT committed; response lost");
+      }
+      return undefined;
+    };
+    expect(await result.cache.completeTask(result.original, now)).toBeUndefined();
+    expect(result.failures).toHaveBeenCalledOnce();
+    result.pod.intercept = undefined;
+
+    const { cache, store, original, failures, notices } = await reload(result);
+    const plan = await cache.skipTask(original, now);
+    expect(plan).toMatchObject({
+      kind: count === 2 ? "close" : "advance",
+      previous: { allDay: "2026-12-18", state: "open" },
+      original: { allDay: count === 2 ? "2026-12-18" : "2027-01-15" },
+    });
+    const updated = await store.readTask(original.url);
+    expect(updated.task.allDay).toBe(count === 2 ? "2026-12-18" : "2027-01-15");
+    expect(updated.task.state).toBe(count === 2 ? "closed" : "open");
+    expect(updated.task.recurrence?.count).toBe(count);
+    expect([...updated.task.completionOperations]).toEqual([copyUrl]);
+    const history = (await store.listTasks(result.inbox.tracker.stateStore as string)).filter(
+      (item) => item.task.clonedFrom === original.task.id,
+    );
+    expect(history).toHaveLength(1);
+    expect(history[0]?.url).toBe(copyUrl);
+    expect(history[0]?.task.allDay).toBe("2026-11-20");
+    expect(result.pod.mutations().map((request) => [request.method, request.url])).toEqual([
+      ["PUT", original.url],
+      ["PUT", original.url],
+    ]);
+    expect(result.pod.mutations().every((request) => request.headers.has("If-Match"))).toBe(true);
+    expect(failures).not.toHaveBeenCalled();
+    expect(notices).not.toHaveBeenCalled();
+
+    if (!plan) throw new Error("Missing skip plan");
+    await cache.undoSkip(original, plan);
+    const restored = await store.readTask(original.url);
+    expect(restored.task.state).toBe("open");
+    expect(restored.task.allDay).toBe("2026-12-18");
+    expect(restored.task.reminders).toHaveLength(2);
+    expect(restored.task.reminders).toEqual(
+      expect.arrayContaining([
+        { time: new Date("2026-12-17T18:00:00Z"), id: expect.any(String) },
+        { offset: "-PT1H", id: expect.any(String) },
+      ]),
+    );
+    expect([...restored.task.completionOperations]).toEqual([copyUrl]);
+    expect((await store.readTask(copyUrl as string)).task.allDay).toBe("2026-11-20");
+  });
+
+  it("blocks Skip with an actionable notice when persisted completion recovery fails", async () => {
+    const result = await recurring(3);
+    const orphan = await copy(result, "orphan");
+    const { cache, store, original, failures, notices } = await reload(result);
+    result.pod.intercept = (request) =>
+      request.method === "PUT" ? new Response(null, { status: 403 }) : undefined;
+
+    expect(await cache.skipTask(original, now)).toBeUndefined();
+    expect(notices).toHaveBeenCalledWith("Couldn't check this task's history. Try again.");
+    expect(failures).toHaveBeenCalledOnce();
+    expect(result.pod.mutations().map((request) => [request.method, request.url])).toEqual([
+      ["PUT", original.url],
+    ]);
+    expect((await store.readTask(original.url)).etag).toBe(original.etag);
+    expect((await store.readTask(orphan.url)).etag).toBe(orphan.etag);
+    expect(cache.getSnapshot().views.find((item) => item.url === original.url)?.due).toEqual(now);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("retries failed completion recovery on every Skip (refresh: %s)", async (refresh) => {
+    const result = await recurring(3);
+    const orphan = await copy(result, "orphan");
+    const { cache, store, original, failures, notices } = await reload(result);
+    result.pod.intercept = (request) =>
+      request.method === "PUT" ? new Response(null, { status: 403 }) : undefined;
+
+    expect(await cache.skipTask(original, now)).toBeUndefined();
+    expect(notices).toHaveBeenCalledExactlyOnceWith(
+      "Couldn't check this task's history. Try again.",
+    );
+    if (refresh) await cache.loadTasks(result.inbox, true);
+
+    expect(await cache.skipTask(original, now)).toBeUndefined();
+    expect(notices).toHaveBeenCalledTimes(2);
+    expect(notices).toHaveBeenLastCalledWith("Couldn't check this task's history. Try again.");
+    expect(failures).toHaveBeenCalledTimes(2);
+    expect(result.pod.mutations().map((request) => [request.method, request.url])).toEqual([
+      ["PUT", original.url],
+      ["PUT", original.url],
+    ]);
+    expect((await store.readTask(original.url)).etag).toBe(original.etag);
+    expect((await store.readTask(orphan.url)).etag).toBe(orphan.etag);
+
+    result.pod.intercept = undefined;
+    const skipped = new Date("2026-11-03T12:00:00Z");
+    expect(await cache.skipTask(original, now)).toMatchObject({
+      kind: "advance",
+      previous: { dueDate: next },
+      original: { dueDate: skipped },
+    });
+    const updated = await store.readTask(original.url);
+    expect(updated.task.dueDate).toEqual(skipped);
+    expect(updated.task.state).toBe("open");
+    expect([...updated.task.completionOperations]).toEqual([orphan.url]);
+    expect((await store.readTask(orphan.url)).etag).toBe(orphan.etag);
+    expect(cache.getSnapshot().views).toHaveLength(2);
+    expect(result.pod.mutations().map((request) => [request.method, request.url])).toEqual([
+      ["PUT", original.url],
+      ["PUT", original.url],
+      ["PUT", original.url],
+      ["PUT", original.url],
+    ]);
+    expect(result.pod.mutations().every((request) => request.headers.has("If-Match"))).toBe(true);
+    expect(notices).toHaveBeenCalledTimes(2);
+    expect(failures).toHaveBeenCalledTimes(2);
+  });
+
   it("adopts a committed occurrence with a lost response, then completes the second occurrence", async () => {
     const result = await recurring();
     const { pod, inbox } = result;

@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { fromRRule } from "@jeswr/suite-ui/date-time/model";
 import { fromEditorRule, recurrenceAnchor } from "../detail/recurrence-map";
-import { humanise, type RecurrenceRule, weekdays } from "../model/recurrence";
+import { expandRecurrence, humanise, type RecurrenceRule } from "../model/recurrence";
 import type { TaskDetails } from "../model/task";
 import { priorityValue, type TaskView } from "../views/types";
 import {
@@ -19,11 +19,7 @@ export interface CalendarSource {
 }
 
 function matchesAnchor(rule: RecurrenceRule, anchor: Date): boolean {
-  return (
-    (!rule.byDay ||
-      rule.byDay.includes(weekdays[(anchor.getDay() + 6) % 7] as (typeof weekdays)[number])) &&
-    (rule.byMonthDay === undefined || rule.byMonthDay === anchor.getDate())
-  );
+  return expandRecurrence(rule, anchor, 1)[0]?.getTime() === anchor.getTime();
 }
 function appendDescription(description: string | undefined, rule: string): string {
   return description ? `${description}\n\n${rule}` : rule;
@@ -36,11 +32,7 @@ function importRule(todo: VTodoTask): RecurrenceRule | undefined {
     if (parsed.until && parsed.until.length !== 10) return;
     const anchor = new Date(`${todo.start.value}T00:00:00`);
     const rule = fromEditorRule(parsed, anchor) as RecurrenceRule;
-    if (
-      matchesAnchor(rule, anchor) &&
-      (parsed.until === undefined || parsed.until >= todo.start.value)
-    )
-      return rule;
+    if (matchesAnchor(rule, anchor)) return rule;
   } catch {
     // Preserve unsupported rules as description text, with a preview warning.
   }

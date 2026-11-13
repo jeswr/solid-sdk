@@ -13,6 +13,7 @@ export interface RecurrenceRule {
   freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
   byDay?: Weekday[];
+  bySetPos?: number;
   byMonthDay?: number[];
 }
 

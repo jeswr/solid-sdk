@@ -169,6 +169,48 @@ afterEach(() => {
 });
 
 describe("detail edits", () => {
+  it("edits monthly ordinal weekdays and skips from the detail menu without creating history", async () => {
+    const { parent, store } = await setup();
+    await cache.updateTask(parent, (task) => {
+      task.allDay = "2026-11-20";
+    });
+    await mount(h(Detail, { url: parent.url }));
+    const repeat = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "Repeat",
+    );
+    if (!repeat) throw new Error("Missing Repeat");
+    await click(repeat);
+    const select = async (suffix: string, value: string) => {
+      const field = document.querySelector<HTMLSelectElement>(`select[id$="-${suffix}"]`);
+      if (!field) throw new Error(`Missing ${suffix}`);
+      await act(() => {
+        field.value = value;
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    };
+    await select("frequency", "MONTHLY");
+    await select("monthly", "weekday");
+    await select("ordinal", "3");
+    await select("weekday", "Friday");
+    expect((await store.readTask(parent.url)).task.recurrence).toMatchObject({
+      frequency: "MONTHLY",
+      byDay: ["Friday"],
+      bySetPos: 3,
+    });
+    expect(document.body.textContent).toContain("Every month on the 3rd Friday");
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    await key(document.querySelector('[role="dialog"]') as Element, "Escape");
+    await key(document.querySelector('button[aria-label="Task actions"]') as Element, "ArrowDown");
+    const skip = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === "Skip this occurrence",
+    );
+    if (!skip) throw new Error("Missing skip action");
+    await click(skip);
+    await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+    expect((await store.readTask(parent.url)).task.allDay).toBe("2026-12-18");
+    expect(cache.getSnapshot().views).toHaveLength(1);
+  });
   it("preserves an invalid due-date draft during refresh without saving it on blur", async () => {
     const { pod, parent, store, inbox } = await setup();
     await mount(h(Detail, { url: parent.url }));
