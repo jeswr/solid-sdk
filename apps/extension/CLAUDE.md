@@ -57,8 +57,11 @@ Armed views are invalidated on tab activation, lease-tab URL updates, window foc
 and permission additions/removals; the click checks the latest worker-pushed armed lease.
 In a sub-second race Chrome may still show the cookies prompt after authorization changes,
 but nothing is read or sent and the grant is removed. After the prompt the worker rechecks
-tab/origin and host access before `beginLogin`; confirmation rechecks lease ownership of the
-cookie grant, tab/origin and host access before reading a fresh snapshot and sending it.
+tab/origin and host access before `beginLogin`; confirmation rechecks the cookie grant,
+tab/origin and host access before reading a fresh snapshot and sending it. Tab activations,
+lease-tab URL changes, window focus changes and all permission changes latch authorization
+invalid throughout confirmation/sending, even if the previous tab/access is restored. Every
+awaited step checks the latch before continuing, including immediately before native dispatch.
 The preview shows site/count/persona; a changed cookie count refuses confirmation.
 Never expose this action through window.solid or the content bridge.
 `background/agent-vault.ts` admits only Chrome-attested popup ports, never a content-script
@@ -79,29 +82,27 @@ Capture never requests or removes a host origin. Withheld site access refuses wi
 permission request or native message; tell the person to allow the extension on this site
 through Chrome's own extension menu first, then try again. Check optional `cookies` on every
 popup load before tab/site validation, retaining its warning even when loading fails.
-A pre-existing or uncheckable cookie grant blocks review, permission requests and native
-messages. Only the person's **Remove cookie access** click removes this stale grant and
-verifies absence before enabling sharing; failed removal keeps the warning and directs
-them to Chrome's extension settings. Recheck absence on review: captures start without it.
-Request only optional `cookies` from the worker-armed popup click. The permission lasts
-only for the exclusive capture lease (review -> confirming -> sending -> cleaning -> idle),
-with a two-minute timeout. A second popup receives "Another sharing is in progress" without
-another request or native message. Success, failure, Cancel, timeout and port disconnect
-all remove only the lease's requested cookie permission and verify absence before releasing
-the lease. Cancellation invalidates in-flight work immediately and terminal views never
-move backwards. An unresolved prompt fences new captures after the lease ends until its
-result/onAdded grant has been cleaned, so no late grant can belong to another lease.
-If Chrome never reports a closed prompt's outcome, sharing stays blocked for that worker
-lifetime. Removal rejection or unconfirmed absence displays a warning alongside the actual
-outcome and blocks further sharing; worker cleanup failure sets a toolbar `!` badge.
-A surviving cookie grant blocks sharing on every popup load, including withheld sites.
-Before arming, persist only `{ leaseId, requestedAt }` to `chrome.storage.session`, with
-`storage.local` as the fallback. Top-level worker startup and `runtime.onStartup` serialize
-recovery through the capture mutex before popup intents: for an unowned marker, remove
-`cookies`, verify absence, then clear it. An already absent grant needs only verification.
-Keep the marker and warning on cleanup failure, and retain markers for unresolved prompts
-even after cancellation cleanup. Unowned stale grants without a marker still require the
-person's explicit removal.
+The extension uses `cookies` only for active capture: whenever no lease is acquiring cookies,
+confirming or sending, remove any present grant and verify absence. Run this unconditionally
+at every worker start, on `runtime.onStartup`, `runtime.onInstalled` and on
+`permissions.onAdded` without a current armed acquisition. Cleanup never depends on grant
+ownership or a marker. Popup load and Review also remove unexpected idle grants before sharing.
+Keep only a display marker (`agentCaptureCleanup: true`) in `storage.local` while removal is
+in progress or failed, and clear it after verified absence. No session-storage ownership record
+is needed. Show "Cleaning up a previous sharing" during removal. If automatic cleanup fails,
+keep the warning and **Remove cookie access** retry button, even on invalid or withheld sites;
+failed removal blocks review, permission requests and native messages and directs the person to
+Chrome's extension settings. Worker cleanup failure sets a toolbar `!` badge.
+Request only optional `cookies` from the worker-armed popup click. The exclusive capture lease
+(review -> acquiring -> confirming -> sending -> cleaning -> idle) expires after two minutes.
+A second popup receives "Another sharing is in progress" without another request or native
+message. Success, failure, Cancel, timeout and port disconnect all remove cookie access and
+verify absence before releasing the lease. Cancellation invalidates in-flight work immediately
+and terminal views never move backwards. An unresolved prompt fences new captures after the
+lease ends until its result/onAdded grant has been cleaned; a missing outcome blocks sharing
+for that worker lifetime. A delayed armed click after expiry may still request permission in
+Chrome, but its grant is removed without a current acquiring lease. A replacement worker also
+removes it at start, even with cleared session storage and no marker.
 Required `<all_urls>` stays in place and host grants never change; temporary cookie access
 is extension-wide, so exact-origin filtering and explicit confirmation still apply.
 

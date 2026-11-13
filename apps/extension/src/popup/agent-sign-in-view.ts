@@ -66,7 +66,7 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
     warning.hidden = !view.warning;
     warningMessage.textContent = view.cleanupFailed
       ? "Cookie access could not be removed or its absence verified. Sharing is blocked. Remove it from Chrome's extension settings before sharing."
-      : 'Cookie access is present or could not be checked. Sharing is blocked. Remove cookie access before sharing a sign-in.';
+      : 'Cleaning up a previous sharing. Cookie access is being removed before sharing a sign-in.';
     if (view.site) element('agent-site').textContent = view.site;
     if (view.choices !== choices) {
       choices = view.choices;

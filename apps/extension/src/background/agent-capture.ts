@@ -18,7 +18,7 @@ import {
   releaseCapturePermissions,
 } from '../shared/agent-capture-permissions';
 import {
-  captureCleanupMarkers,
+  captureCleanupPending,
   clearCaptureCleanup,
   markCaptureCleanup,
 } from './agent-capture-cleanup';
@@ -40,19 +40,14 @@ interface Lease {
   id: number;
   owner: Owner;
   tab: Tab;
-  phase: 'reviewing' | 'confirming' | 'sending' | 'cleaning';
+  phase: 'reviewing' | 'acquiring' | 'confirming' | 'sending' | 'cleaning';
   expectsCookies: boolean;
   authorizationInvalid: boolean;
-  cleanupMarked: boolean;
-  resultReceived: boolean;
   choices: CaptureChoices;
   count?: number;
   persona: string;
   profile: string;
-  requestedCookies: boolean;
-  // These ingress latches fence cancellation and prompts even while the mutex awaits Chrome.
-  promptStarted: boolean;
-  promptPending: boolean;
+  // Ingress latches interrupt pending Chrome/native work without waiting for the mutex.
   cancelled: boolean;
   stop(): void;
   stopped: Promise<never>;
@@ -75,8 +70,7 @@ export function installAgentCapture(
     });
   };
   let active: Lease | undefined;
-  const pendingPrompts = new Set<Lease>();
-  let orphanGrant = false;
+  let pendingPrompt: Lease | undefined;
   let nextId = 0;
   let warning = false;
   let cleanupFailed = false;
@@ -86,7 +80,7 @@ export function installAgentCapture(
     owner.view.armedLease =
       active?.owner === owner &&
       active.expectsCookies &&
-      !active.promptStarted &&
+      active.phase === 'reviewing' &&
       !active.authorizationInvalid &&
       !active.cancelled &&
       owner.view.phase === 'permission' &&
@@ -114,17 +108,6 @@ export function installAgentCapture(
     }
     warnings();
   };
-  const remove = async () => {
-    let failed = false;
-    try {
-      await releaseCapturePermissions(browser.permissions);
-      if (![...pendingPrompts].some((lease) => lease.promptPending))
-        await clearCaptureCleanup(browser.storage);
-    } catch {
-      failed = true;
-    }
-    await cleanupStatus(failed);
-  };
   const cookieAccess = async () => {
     try {
       return await browser.permissions.contains(capturePermissions());
@@ -132,25 +115,51 @@ export function installAgentCapture(
       return undefined;
     } // Unknown authority is neither confirmed absent nor granted.
   };
-  const recover = async () => {
+  const cookieWindow = () =>
+    active &&
+    !active.cancelled &&
+    !active.authorizationInvalid &&
+    ['acquiring', 'confirming', 'sending'].includes(active.phase);
+  const remove = async () => {
+    warning = true;
+    cleanupFailed = false;
+    warnings();
+    // Persistence helps explain interrupted cleanup, but never controls revocation.
     try {
-      const markers = await captureCleanupMarkers(browser.storage);
-      if (
-        !markers.length ||
-        markers.some(
-          ({ marker }) =>
-            (active !== undefined && marker?.leaseId === active.id) ||
-            [...pendingPrompts].some((lease) => lease.id === marker?.leaseId),
-        )
-      )
-        return;
-      if ((await cookieAccess()) !== false) await remove();
-      else {
-        await clearCaptureCleanup(browser.storage);
-        await cleanupStatus(false);
+      await markCaptureCleanup(browser.storage);
+    } catch {
+      /* Still remove authority if the display notice cannot be stored. */
+    }
+    let failed = false;
+    try {
+      await releaseCapturePermissions(browser.permissions);
+      await clearCaptureCleanup(browser.storage);
+    } catch {
+      failed = true;
+    }
+    await cleanupStatus(failed);
+  };
+  const recover = async () => {
+    if (cookieWindow()) return;
+    try {
+      if (await captureCleanupPending(browser.storage)) {
+        warning = true;
+        warnings();
       }
     } catch {
-      await cleanupStatus(true);
+      /* A missing/unreadable display marker never prevents authority cleanup. */
+    }
+    if (cookieWindow()) return;
+    const present = await cookieAccess();
+    if (cookieWindow()) return;
+    if (present !== false) await remove();
+    else {
+      try {
+        await clearCaptureCleanup(browser.storage);
+        await cleanupStatus(false);
+      } catch {
+        await cleanupStatus(true);
+      }
     }
   };
   const current = async (): Promise<Tab> => {
@@ -169,16 +178,17 @@ export function installAgentCapture(
     if (active !== lease || lease.cancelled || lease.authorizationInvalid || lease.owner.closed)
       throw new Error(unavailable);
   };
-  const wait = async <T>(lease: Lease, result: Promise<T>): Promise<T> => {
-    const value = await Promise.race([result, lease.stopped]);
+  const wait = async <T>(lease: Lease, work: () => Promise<T>): Promise<T> => {
+    alive(lease);
+    const value = await Promise.race([work(), lease.stopped]);
     alive(lease);
     return value;
   };
   const validate = async (lease: Lease) => {
     alive(lease);
-    const tab = await wait(lease, current());
+    const tab = await wait(lease, current);
     // Validate the CURRENT active tab before checking its existing host grant.
-    await wait(lease, host(tab));
+    await wait(lease, () => host(tab));
     if (tab.id !== lease.tab.id || tab.site !== lease.tab.site) throw new Error(unavailable);
     return tab;
   };
@@ -200,16 +210,7 @@ export function installAgentCapture(
       message: lease.cancelled ? 'Sharing cancelled.' : message,
       preview: undefined,
     });
-    if (lease.requestedCookies || lease.promptStarted) await remove();
-    else if (lease.cleanupMarked) {
-      try {
-        if ((await cookieAccess()) !== false) throw 0;
-        await clearCaptureCleanup(browser.storage);
-        await cleanupStatus(false);
-      } catch {
-        await cleanupStatus(true);
-      }
-    }
+    if (!cleanupFailed) await recover();
     // Cancel can arrive while removal is pending. Never publish an older completion.
     emit(lease.owner, {
       phase: lease.cancelled ? 'cancelled' : phase,
@@ -240,11 +241,11 @@ export function installAgentCapture(
     if (owner.closed) return;
     // Cookie checking precedes even invalid-tab/withheld-site validation on EVERY load.
     const present = await cookieAccess();
-    if (active || pendingPrompts.size || orphanGrant) {
+    if (active || pendingPrompt) {
       emit(owner, { phase: 'busy', message: busy });
       return;
     }
-    warning ||= present !== false;
+    if (!warning && present !== false) await remove();
     emit(owner, {
       phase: 'loading',
       message: 'Loading sign-in sharing…',
@@ -281,7 +282,7 @@ export function installAgentCapture(
   };
   const start = async (owner: Owner, profile: string, persona: string) => {
     if (owner.closed) return;
-    if (active || pendingPrompts.size || orphanGrant) {
+    if (active || pendingPrompt) {
       emit(owner, { phase: 'busy', message: busy });
       return;
     }
@@ -305,14 +306,9 @@ export function installAgentCapture(
       phase: 'reviewing',
       expectsCookies: false,
       authorizationInvalid: false,
-      cleanupMarked: false,
-      resultReceived: false,
       choices,
       persona,
       profile,
-      requestedCookies: false,
-      promptStarted: false,
-      promptPending: false,
       cancelled: false,
       stopped,
       stop,
@@ -322,16 +318,13 @@ export function installAgentCapture(
     owner.lastLease = lease;
     emit(owner, { phase: 'reviewing', lease: lease.id, message: 'Checking the current site…' });
     await run(lease, async () => {
-      const present = await wait(lease, cookieAccess());
-      if (present !== false || warning) {
-        warning = true;
-        throw new Error(unavailable); // A pre-existing grant is NEVER automatically removed.
+      const present = await wait(lease, cookieAccess);
+      if (warning) throw new Error(unavailable);
+      if (present !== false) {
+        await wait(lease, remove);
+        if (warning) throw new Error(unavailable);
       }
       await validate(lease);
-      await markCaptureCleanup(browser.storage, lease.id);
-      lease.cleanupMarked = true;
-      // Browser events can invalidate validation while the storage write is pending.
-      alive(lease);
       lease.expectsCookies = true;
       emit(owner, {
         phase: 'permission',
@@ -340,26 +333,19 @@ export function installAgentCapture(
     });
   };
   const granted = async (lease: Lease, allowed: boolean) => {
-    lease.promptPending = false;
+    if (pendingPrompt === lease) pendingPrompt = undefined;
     if (active !== lease) {
-      // A cancelled prompt can resolve after cleanup. Keep its acquisition fence through
-      // this removal; never let the grant be observed by a newer capture.
-      if (pendingPrompts.has(lease)) await remove();
-      pendingPrompts.delete(lease);
+      // A stale result cannot claim a newer lease's authority.
+      if (!active) await recover();
       return;
     }
-    pendingPrompts.delete(lease);
+    if (lease.phase !== 'acquiring') return;
+    lease.phase = 'confirming';
     await run(lease, async () => {
-      if (
-        lease.phase !== 'reviewing' ||
-        !allowed ||
-        !lease.requestedCookies ||
-        (await wait(lease, cookieAccess())) !== true
-      )
-        throw 0;
+      if (!allowed || (await wait(lease, cookieAccess)) !== true) throw 0;
       await validate(lease); // Access withdrawn DURING the prompt cannot reach beginLogin.
-      const begun = await wait(
-        lease,
+      alive(lease);
+      const begun = await wait(lease, () =>
         request({
           type: 'beginLogin',
           site: lease.tab.site,
@@ -372,13 +358,12 @@ export function installAgentCapture(
       const tab = await validate(lease);
       const cookies = captureCookies(
         tab.site,
-        await wait(lease, browser.cookies.getAll({ url: tab.url })),
+        await wait(lease, () => browser.cookies.getAll({ url: tab.url })),
         lease.choices.cookieDomains,
         Date.now(),
       );
       await validate(lease);
       if (!cookies.length) throw 0;
-      lease.phase = 'confirming';
       lease.count = cookies.length;
       emit(lease.owner, {
         phase: 'confirming',
@@ -395,20 +380,14 @@ export function installAgentCapture(
   };
   const confirm = async (lease: Lease) =>
     run(lease, async () => {
-      if (
-        lease.phase !== 'confirming' ||
-        !lease.token ||
-        !lease.requestedCookies ||
-        lease.promptPending
-      )
-        throw 0;
+      if (lease.phase !== 'confirming' || !lease.token || pendingPrompt === lease) throw 0;
       lease.phase = 'sending';
       emit(lease.owner, { phase: 'sending', message: 'Sharing sign-in…' });
-      if ((await wait(lease, cookieAccess())) !== true) throw 0;
+      if ((await wait(lease, cookieAccess)) !== true) throw 0;
       const tab = await validate(lease);
       const cookies = captureCookies(
         tab.site,
-        await wait(lease, browser.cookies.getAll({ url: tab.url })),
+        await wait(lease, () => browser.cookies.getAll({ url: tab.url })),
         lease.choices.cookieDomains,
         Date.now(),
       );
@@ -422,22 +401,27 @@ export function installAgentCapture(
       };
       if (new TextEncoder().encode(JSON.stringify(input)).byteLength > NATIVE_MESSAGE_LIMIT - 100)
         throw 0;
-      await wait(lease, request(input));
+      alive(lease); // No await between this authorization latch and native dispatch.
+      await wait(lease, () => request(input));
       await finish(lease, 'shared', 'Sign-in shared.');
     });
 
   const invalidate = () => {
     const lease = active;
-    if (lease?.phase !== 'reviewing' || lease.authorizationInvalid) return;
+    if (!lease || lease.phase === 'cleaning' || lease.cancelled || lease.authorizationInvalid)
+      return;
+    const reviewing = lease.phase === 'reviewing' || lease.phase === 'acquiring';
     lease.authorizationInvalid = true;
     lease.stop();
     emit(lease.owner, {
-      phase: 'reviewing',
+      phase: 'failed',
+      preview: undefined,
       message: 'Site access changed. Review sign-in sharing again.',
     });
     enqueue(async () => {
       await finish(lease, 'failed', 'Site access changed. Review sign-in sharing again.');
-      if (!lease.cancelled && !lease.owner.closed && !pendingPrompts.size) await load(lease.owner);
+      if (reviewing && !lease.cancelled && !lease.owner.closed && !pendingPrompt && !warning)
+        await load(lease.owner);
     });
   };
   browser.tabs.onActivated.addListener(invalidate);
@@ -447,38 +431,29 @@ export function installAgentCapture(
   browser.windows.onFocusChanged.addListener(invalidate);
   browser.permissions.onRemoved.addListener(invalidate);
   browser.permissions.onAdded.addListener((permissions) => {
-    // The expected cookies addition is the outcome of this gesture, not a host change.
-    if (permissions.origins?.length || !permissions.permissions?.includes('cookies')) invalidate();
-    else if (active && !active.promptStarted) invalidate();
-    if (!permissions.permissions?.includes('cookies')) return;
-    const solePrompt = pendingPrompts.size === 1 ? [...pendingPrompts][0] : undefined;
-    // A grant is usable only by the live, expected request. A stale click from a
-    // revoked view invalidates the current lease before any of its steps continue.
+    const cookies = permissions.permissions?.includes('cookies');
+    // Only the current armed gesture may acquire authority. Every permission change
+    // during confirmation/sending invalidates the authorization latch.
     if (
-      active?.promptStarted &&
-      !active.cancelled &&
-      !active.authorizationInvalid &&
-      (!pendingPrompts.size || solePrompt === active)
+      cookies &&
+      permissions.permissions?.length === 1 &&
+      !permissions.origins?.length &&
+      active?.phase === 'acquiring' &&
+      cookieWindow() &&
+      pendingPrompt === active
     ) {
-      active.promptPending = false;
-      pendingPrompts.delete(active);
+      pendingPrompt = undefined;
       return;
     }
-    orphanGrant = true;
-    if (active) cancel(active);
-    enqueue(async () => {
-      if (solePrompt) solePrompt.promptPending = false;
-      await remove();
-      if (solePrompt) {
-        pendingPrompts.delete(solePrompt);
-      }
-      orphanGrant = false;
-    });
+    invalidate();
+    if (cookies) pendingPrompt = undefined;
+    enqueue(recover);
   });
 
   // Queue recovery at top-level before any port work, and serialize startup events too.
   enqueue(recover);
   browser.runtime.onStartup.addListener(() => enqueue(recover));
+  browser.runtime.onInstalled.addListener(() => enqueue(recover));
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== CAPTURE_PERMISSION_PORT) return;
     if (
@@ -495,6 +470,7 @@ export function installAgentCapture(
       view: { phase: 'loading', message: 'Loading sign-in sharing…', warning, cleanupFailed },
     };
     owners.add(owner);
+    emit(owner, {});
     port.onDisconnect.addListener(() => {
       void browser.runtime.lastError;
       owner.closed = true;
@@ -505,11 +481,12 @@ export function installAgentCapture(
       const intent = captureIntent(input);
       if (!intent || owner.closed) return;
       if (intent.type === 'load') {
+        emit(owner, {});
         enqueue(() => load(owner));
         return;
       }
       if (intent.type === 'start') {
-        if (active || pendingPrompts.size || orphanGrant) {
+        if (active || pendingPrompt) {
           emit(owner, { phase: 'busy', message: busy });
           return;
         }
@@ -518,7 +495,7 @@ export function installAgentCapture(
       }
       if (intent.type === 'removeCookieAccess') {
         enqueue(async () => {
-          if (active || pendingPrompts.size || orphanGrant) {
+          if (active || pendingPrompt) {
             emit(owner, { phase: 'busy', message: busy });
             return;
           }
@@ -541,26 +518,23 @@ export function installAgentCapture(
         return;
       }
       if (intent.type === 'requesting') {
-        if (!lease.expectsCookies || lease.promptStarted) return;
-        lease.promptStarted = true;
-        lease.promptPending = true;
-        pendingPrompts.add(lease);
-        if (active !== lease || lease.cancelled || lease.authorizationInvalid) {
-          // The worker may have timed out while the popup still displays the armed
-          // click. Quarantine that prompt too, and stop any newer capture immediately.
+        if (!lease.expectsCookies) return;
+        lease.expectsCookies = false;
+        pendingPrompt = lease;
+        if (active !== lease || lease.cancelled || lease.authorizationInvalid || warning) {
           if (active) cancel(active);
+          enqueue(recover);
           return;
         }
+        // Synchronous ingress: onAdded can arrive before the queued prompt update.
+        lease.phase = 'acquiring';
         enqueue(async () => {
-          lease.requestedCookies = true;
           if (!lease.cancelled && !lease.authorizationInvalid && active === lease)
             emit(owner, { phase: 'prompt', message: 'Waiting for cookie permission…' });
         });
         return;
       }
       if (intent.type === 'permission') {
-        if (!lease.promptStarted || lease.resultReceived) return;
-        lease.resultReceived = true;
         enqueue(() => granted(lease, intent.granted));
         return;
       }

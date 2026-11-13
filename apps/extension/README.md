@@ -384,15 +384,17 @@ before contacting the native host and again on review. If Chrome withholds this 
 ("On click" or "On specific sites"), sharing refuses without requesting permission or sending
 a native message. Allow the extension on this site from Chrome's own extension menu first,
 then try again. Capture never requests or removes a host origin.
-Every popup load first checks optional `cookies` access, independently of site validation.
-If it is already granted or cannot be checked, sharing is blocked: no review, permission
-request or native message. The warning stays visible even on invalid pages or withheld
-sites. Click **Remove cookie access** to remove it and verify absence before sharing is
-enabled. Interrupted captures with a cleanup marker are recovered automatically before
-popup intents run; an unowned stale grant still requires this explicit removal. If removal
-or verification fails, sharing stays blocked; remove cookie access
-from Chrome's extension settings before retrying. The review click rechecks absence, so
-each capture starts without cookie permission.
+The extension uses optional `cookies` access only during an active capture. Whenever no
+lease is acquiring cookies, confirming or sending, a present grant is removed and its absence
+verified. This runs at every worker start (including after a browser restart), on
+`runtime.onStartup`, `runtime.onInstalled` and idle `permissions.onAdded` events. Cleanup does
+not depend on a marker or on who acquired the permission. Popup loads and Review also check
+for unexpected access before sharing, independently of site validation.
+During removal the popup shows **Cleaning up a previous sharing**. If automatic removal or
+verification fails, the warning and **Remove cookie access** button stay visible, including
+on invalid pages and withheld sites. Sharing stays blocked until a retry verifies absence;
+Chrome's extension settings can also remove the permission. The button is a retry for failed
+automatic cleanup. Each capture starts without cookie permission.
 The service worker owns one capture lease across all popups, from Review until cleanup.
 A second popup receives **Another sharing is in progress** and cannot request cookies or
 start another capture. Review checks the current active tab and existing host access before
@@ -406,7 +408,10 @@ Chrome's gesture requirement. In a sub-second race Chrome may still show the coo
 after authorization changes, but nothing is read or sent and the grant is removed.
 Click **Share this sign-in with my agent** to confirm. The worker verifies this lease's cookie
 grant and the current tab and host access again, reads a fresh exact-origin snapshot, and
-sends it only if its count still matches the review. Nothing is sent to the page.
+sends it only if its count still matches the review. From confirmation through native dispatch,
+any tab activation, lease-tab URL change, window focus change or permission change latches the
+lease invalid, even if the original tab or access is restored. Every pending step checks that
+latch when it resumes, and dispatch checks it immediately before sending. Nothing is sent to the page.
 
 Cookie access lasts only for this exclusive review/confirmation lease, which expires after
 two minutes. Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
@@ -415,13 +420,13 @@ change. Cancellation is final even if an older async step completes afterward. A
 permission prompt fences new captures after cancellation/closure until its result or late
 grant is cleaned; an old grant can never become another capture's authority. If Chrome never
 reports a closed prompt's outcome, sharing stays blocked for that worker lifetime.
-Before arming the permission click, the worker stores only a cleanup marker
-`{ leaseId, requestedAt }` in `chrome.storage.session`, falling back to `storage.local` if
-session storage is unavailable. Every worker start and `runtime.onStartup` recover a marker
-without a live owner under the same capture mutex: remove `cookies`, verify absence, then
-clear the marker. A marker without a grant is cleared after checking absence. Failed removal
-keeps the marker, popup warning and sharing block for retry. An unresolved prompt retains
-its marker even after cancellation cleanup, so worker termination cannot lose a late grant.
+Only a small display marker (`agentCaptureCleanup: true`) is stored in `chrome.storage.local`
+while removal is in progress or has failed; it is cleared after verified absence. No ownership
+metadata or session-storage fallback is needed. The marker contains no cookie values and never
+controls whether cleanup runs. A delayed armed click can still show Chrome's permission prompt
+after its lease expires; its grant is removed because there is no current acquiring lease.
+A replacement worker removes any surviving grant at start, even if session storage was cleared
+or no marker exists.
 
 Profiles/personas come from `@jeswr/agent-vault`, separately from the extension's Solid
 accounts. Configure an account for the exact site in the agent's store first. Install the
@@ -434,9 +439,9 @@ Required Solid host permissions remain unchanged; optional cookie access is exte
 while held, so the exact-origin query and filtering remain necessary.
 If cookie removal rejects or its absence cannot be confirmed, the popup shows a warning
 alongside the review or sharing outcome and blocks further sharing until removal is verified.
-Worker cleanup failure leaves a toolbar `!` badge; a surviving grant also blocks sharing
-when the popup reopens. Cookie permission belongs only to one exclusive capture lease;
-cleanup failure stays visible alongside the actual sharing outcome.
+Worker cleanup failure leaves a toolbar `!` badge and stays visible alongside the actual sharing
+outcome. A surviving idle grant is automatically removed when the popup reopens; failed cleanup
+keeps sharing blocked and the removal button available.
 
 Hostile same-OS-user processes are outside the vault's threat model: they can read its
 store/key or forge the public extension-ID caller argument. No code-signature checks or

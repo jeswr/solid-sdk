@@ -87,7 +87,7 @@ it.each([
   f.button('review').dispatchEvent(new MouseEvent('click'));
   await phase(f.p, 'failed');
   expect(f.button('review').disabled).toBe(true);
-  expect(f.text()).toContain("Chrome's extension menu");
+  await vi.waitFor(() => expect(f.text()).toContain("Chrome's extension menu"));
   expect(f.h.browser.permissions.request).not.toHaveBeenCalled();
   expect(f.h.browser.cookies.getAll).not.toHaveBeenCalled();
   expect(f.h.native).not.toHaveBeenCalled();
@@ -174,7 +174,7 @@ it('refuses acquisition when an invalidation push arrives during the click befor
   expect(f.h.browser.cookies.getAll).not.toHaveBeenCalled();
   expect(f.h.native).not.toHaveBeenCalled();
   await vi.waitFor(() =>
-    expect(f.h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined(),
+    expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined(),
   );
 });
 it.each([
@@ -205,7 +205,7 @@ it.each([
   expect(f.h.browser.permissions.request).toHaveBeenCalledTimes(1);
   await vi.waitFor(() => expect(f.h.state.cookies).toBe(false));
   await vi.waitFor(() =>
-    expect(f.h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined(),
+    expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined(),
   );
   expect(f.h.browser.permissions.remove).toHaveBeenCalled();
   expect(f.h.browser.permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] });
@@ -228,7 +228,7 @@ it('renders the recovery warning and keeps sharing blocked after restart removal
     expect(f.warning().hidden).toBe(false);
     expect(f.warning().textContent).toContain("Chrome's extension settings");
     expect(f.button('review').disabled).toBe(true);
-    expect(f.h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeDefined();
+    expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeDefined();
     expect(f.root.textContent).not.toContain('fixture-secret');
   } finally {
     vi.useRealTimers();
@@ -300,80 +300,100 @@ it('renders a second popup rejection without requesting permission or contacting
   expect(f.h.native).not.toHaveBeenCalled();
   other.cancel();
 });
-it.each([
-  'valid',
-  'withheld',
-  'invalid',
-  'host check rejects',
-  'cookie check rejects',
-])('shows stale cookie warning and removal on every popup load: %s', async (kind) => {
+it('shows cleanup in progress and enables sharing only after automatic removal verifies absence', async () => {
   const f = fixture();
   f.h.state.cookies = true;
-  if (kind === 'withheld') f.h.state.origins.shift();
-  if (kind === 'invalid')
-    f.h.browser.tabs.query.mockResolvedValue([
-      { id: 7, url: 'chrome://settings', incognito: false },
-    ]);
-  if (kind === 'host check rejects')
-    f.h.browser.permissions.contains
-      .mockResolvedValueOnce(true)
-      .mockRejectedValueOnce(new Error('fixture-secret'));
-  if (kind === 'cookie check rejects')
-    f.h.browser.permissions.contains.mockRejectedValueOnce(new Error('fixture-secret'));
-  f.mount();
-  await phase(f.p, 'failed');
-  expect(f.warning().hidden).toBe(false);
-  expect(f.button('remove-cookie-access').disabled).toBe(false);
-  expect(f.button('remove-cookie-access').textContent).toBe('Remove cookie access');
-  expect(f.button('review').disabled).toBe(true);
-  expect(f.button('confirm').disabled).toBe(true);
-  expect(f.h.browser.permissions.contains).toHaveBeenNthCalledWith(1, { permissions: ['cookies'] });
-  expect(f.h.browser.permissions.request).not.toHaveBeenCalled();
-  expect(f.h.browser.permissions.remove).not.toHaveBeenCalled();
-  expect(f.h.native).not.toHaveBeenCalled();
-  expect(f.root.textContent).not.toContain('fixture-secret');
-  if (kind === 'withheld') expect(f.text()).toContain("Chrome's extension menu");
-});
-it('only enables sharing after explicit removal verifies absence', async () => {
-  const f = fixture();
-  f.h.state.cookies = true;
-  f.mount();
-  await phase(f.p, 'failed');
   const absent = deferred<boolean>();
-  f.h.browser.permissions.contains.mockImplementationOnce(() => absent.promise);
-  f.button('remove-cookie-access').click();
-  await vi.waitFor(() => expect(f.h.browser.permissions.remove).toHaveBeenCalled());
+  f.h.browser.permissions.remove.mockImplementationOnce(async () => {
+    f.h.state.cookies = false;
+    f.h.browser.permissions.contains.mockImplementationOnce(() => absent.promise);
+    return true;
+  });
+  f.mount();
+  await vi.waitFor(() => expect(f.h.browser.permissions.remove).toHaveBeenCalledTimes(1));
+  expect(f.warning().hidden).toBe(false);
+  expect(f.warning().textContent).toContain('Cleaning up a previous sharing');
   expect(f.button('review').disabled).toBe(true);
   expect(f.button('remove-cookie-access').disabled).toBe(true);
+  expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBe(true);
   expect(f.h.native).not.toHaveBeenCalled();
   absent.resolve(false);
   await phase(f.p, 'ready');
   expect(f.warning().hidden).toBe(true);
+  expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
   await f.review();
   f.button('confirm').click();
   await phase(f.p, 'shared');
   expect(f.h.state).toEqual(f.h.before);
 });
 it.each([
+  'valid',
+  'withheld',
+  'invalid',
+  'host check rejects',
+  'cookie check rejects',
+])('keeps automatic removal failure warning and button on every popup load: %s', async (kind) => {
+  const f = fixture();
+  f.h.state.cookies = true;
+  f.h.browser.permissions.remove.mockRejectedValueOnce(new Error('fixture-secret'));
+  if (kind === 'withheld') f.h.state.origins.shift();
+  if (kind === 'invalid')
+    f.h.browser.tabs.query.mockResolvedValue([
+      { id: 7, url: 'chrome://settings', incognito: false },
+    ]);
+  if (kind === 'host check rejects') {
+    const contains = f.h.browser.permissions.contains.getMockImplementation()!;
+    f.h.browser.permissions.contains.mockImplementation(async (input) => {
+      if (input.origins) throw new Error('fixture-secret');
+      return contains(input);
+    });
+  }
+  if (kind === 'cookie check rejects')
+    f.h.browser.permissions.contains.mockRejectedValueOnce(new Error('fixture-secret'));
+  f.mount();
+  await phase(f.p, 'failed');
+  expect(f.warning().hidden).toBe(false);
+  expect(f.warning().textContent).toContain("Chrome's extension settings");
+  expect(f.button('remove-cookie-access').disabled).toBe(false);
+  expect(f.button('remove-cookie-access').textContent).toBe('Remove cookie access');
+  expect(f.button('review').disabled).toBe(true);
+  expect(f.button('confirm').disabled).toBe(true);
+  expect(f.h.browser.permissions.request).not.toHaveBeenCalled();
+  expect(f.h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+  expect(f.h.native).not.toHaveBeenCalled();
+  expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBe(true);
+  expect(f.root.textContent).not.toContain('fixture-secret');
+  if (kind === 'withheld') expect(f.text()).toContain("Chrome's extension menu");
+});
+it.each([
   'rejects',
   'still present',
   'verification rejects',
-])('keeps removal failure visible with Chrome settings instructions: %s', async (failure) => {
+])('keeps automatic removal failure visible until the Remove cookie access retry succeeds: %s', async (failure) => {
   const f = fixture();
   f.h.state.cookies = true;
-  f.mount();
-  await phase(f.p, 'failed');
   if (failure === 'rejects')
     f.h.browser.permissions.remove.mockRejectedValueOnce(new Error('fixture-secret'));
   if (failure === 'still present') f.h.browser.permissions.remove.mockResolvedValueOnce(false);
   if (failure === 'verification rejects')
-    f.h.browser.permissions.contains.mockRejectedValueOnce(new Error('fixture-secret'));
-  f.button('remove-cookie-access').click();
-  await vi.waitFor(() => expect(f.warning().textContent).toContain("Chrome's extension settings"));
+    f.h.browser.permissions.remove.mockImplementationOnce(async () => {
+      f.h.state.cookies = false;
+      f.h.browser.permissions.contains.mockRejectedValueOnce(new Error('fixture-secret'));
+      return true;
+    });
+  f.mount();
+  await phase(f.p, 'failed');
   expect(f.warning().hidden).toBe(false);
+  expect(f.warning().textContent).toContain("Chrome's extension settings");
+  expect(f.button('remove-cookie-access').disabled).toBe(false);
   expect(f.button('review').disabled).toBe(true);
   expect(f.h.native).not.toHaveBeenCalled();
   expect(f.root.textContent).not.toContain('fixture-secret');
+  f.button('remove-cookie-access').click();
+  await phase(f.p, 'ready');
+  expect(f.warning().hidden).toBe(true);
+  expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+  expect(f.h.state).toEqual(f.h.before);
 });
 it.each([
   'shared',
@@ -412,4 +432,73 @@ it('disconnect reports failure and cannot request from a stale permission view',
   expect(f.text()).toContain('Sharing disconnected');
   f.button('review').click();
   expect(f.h.browser.permissions.request).not.toHaveBeenCalled();
+});
+
+it.each([
+  'live worker',
+  'replacement worker',
+])('removes a delayed armed click grant after timeout with a %s', async (kind) => {
+  vi.useFakeTimers();
+  const f = fixture();
+  try {
+    f.mount();
+    await f.choose();
+    f.button('review').click();
+    await phase(f.p, 'permission');
+    const lease = f.p.view.lease;
+    const push = f.p.worker.postMessage.getMockImplementation()!;
+    // Hold the disarm notification in transit; the popup still has its old armed view.
+    f.p.worker.postMessage.mockImplementation((view) => {
+      if (view.lease !== lease || view.phase === 'permission') push(view);
+    });
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(f.button('review').disabled).toBe(false);
+    expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    f.h.native.mockClear();
+    const interrupted = deferred<boolean>();
+    if (kind === 'replacement worker')
+      f.h.browser.permissions.contains.mockImplementationOnce(() => interrupted.promise);
+    f.button('review').click();
+    expect(f.h.browser.permissions.request).toHaveBeenCalledTimes(1);
+    expect(f.h.state.cookies).toBe(true);
+    if (kind === 'replacement worker') {
+      // Stop the old worker before its first cleanup check returns. Its promises
+      // remain unresolved, modelling discarded worker tasks rather than onDisconnect.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+      f.h.restart();
+      const next = f.h.popup();
+      mountAgentSignIn(f.root, next.browser);
+      await phase(next, 'ready');
+    }
+    await vi.waitFor(() => expect(f.h.state.cookies).toBe(false));
+    expect(f.h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+    expect(f.h.browser.permissions.contains).toHaveBeenLastCalledWith(
+      kind === 'replacement worker' ? { origins: [`${site}:443/*`] } : { permissions: ['cookies'] },
+    );
+    expect(f.h.browser.cookies.getAll).not.toHaveBeenCalled();
+    expect(nativeTypes(f)).not.toContain('beginLogin');
+    expect(nativeTypes(f)).not.toContain('capture');
+    expect(f.h.state).toEqual(f.h.before);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('restores the local cleanup notice while the replacement worker is still checking permission', async () => {
+  const f = fixture();
+  f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY] = true;
+  f.h.state.cookies = true;
+  const checked = deferred<boolean>();
+  f.h.browser.permissions.contains.mockImplementationOnce(() => checked.promise);
+  f.mount();
+  await vi.waitFor(() => expect(f.warning().hidden).toBe(false));
+  expect(f.warning().textContent).toContain('Cleaning up a previous sharing');
+  expect(f.button('review').disabled).toBe(true);
+  expect(f.h.browser.permissions.remove).not.toHaveBeenCalled();
+  checked.resolve(true);
+  await phase(f.p, 'ready');
+  expect(f.h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+  expect(f.warning().hidden).toBe(true);
+  expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
 });
