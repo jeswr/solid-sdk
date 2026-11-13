@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { applySetCookies, cookieHeader, cookiesFor, jsonPointer } from "@jeswr/site-executor";
 import type { LoginRoute } from "@jeswr/site-model";
 import { boundary, origin, sameSiteUrl, VaultError } from "./safe.js";
@@ -87,9 +88,9 @@ export class KeepAlive {
         if (job.cancelled) return;
         try {
           const state = await this.#store.state(site, account);
-          if (!state) return;
+          if (!state || job.cancelled) return;
           await state.use(async (r) => {
-            if (r.stale) return;
+            if (r.stale || job.cancelled) return;
             if (
               r.tokens?.refresh &&
               route.refresh &&
@@ -122,6 +123,7 @@ export class KeepAlive {
     const url = sameSiteUrl(r.site, route.refresh.urlTemplate);
     if (r.tokens.tokenEndpoint && url.href !== sameSiteUrl(r.site, r.tokens.tokenEndpoint).href)
       throw new VaultError("invalid");
+    if (cancelled()) return;
     const response = await this.#transport(url.href, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -133,7 +135,7 @@ export class KeepAlive {
     });
     if (cancelled()) return;
     if (response.status === 401) {
-      await this.#store.stale(r.site, r.account);
+      await this.#store.commit({ ...r, stale: true }, cancelled);
       return;
     }
     if (response.status < 200 || response.status >= 300) throw new VaultError("unavailable");
@@ -164,7 +166,7 @@ export class KeepAlive {
       ...(typeof rotated === "string" ? { refresh: rotated } : {}),
     };
     if (cancelled()) return;
-    await this.#store.store({ ...r, tokens });
+    await this.#store.commit({ ...r, tokens }, cancelled);
   }
   async #probe(r: SessionState, probe: string, cancelled: () => boolean) {
     const url = sameSiteUrl(r.site, probe);
@@ -172,6 +174,7 @@ export class KeepAlive {
     if (r.tokens && r.tokens.expiresAt <= this.#clock.now()) delete headers.authorization;
     const cookies = cookieHeader(cookiesFor(r.bundle.cookies, url, new Date(this.#clock.now())));
     if (cookies) headers.cookie = cookies;
+    if (cancelled()) return;
     const response = await this.#transport(url.href, {
       method: "GET",
       headers,
@@ -179,7 +182,7 @@ export class KeepAlive {
     });
     if (cancelled()) return;
     if (response.status === 401) {
-      await this.#store.stale(r.site, r.account);
+      await this.#store.commit({ ...r, stale: true }, cancelled);
       return;
     }
     if (response.status < 200 || response.status >= 300) throw new VaultError("unavailable");
@@ -190,7 +193,7 @@ export class KeepAlive {
         url,
         new Date(this.#clock.now()),
       );
-      await this.#store.store({ ...r, bundle: { ...r.bundle, cookies: merged.jar } });
+      await this.#store.commit({ ...r, bundle: { ...r.bundle, cookies: merged.jar } }, cancelled);
     }
   }
 }

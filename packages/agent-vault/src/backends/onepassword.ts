@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 import { spawn } from "child_process";
 import { homedir } from "os";
@@ -210,11 +211,9 @@ export class OnePasswordCliBackend implements SecretBackend {
         const site = origin(value.site);
         // New saves require an explicit account selector in ref: '<account>/new'.
         const { account: a, id } = this.#select(value.ref ?? "");
-        if (id !== "new") {
-          const old = parse(itemSchema, JSON.parse(await this.#run(a, ["item", "get", id])));
-          if (old.id !== id || !old.urls?.some((u) => this.#matches(site, u.href)))
-            throw new VaultError("denied");
-        }
+        // op JSON-template edits can erase passkeys and fields absent from the template.
+        // This adapter has no preserving update seam; require an explicit separate item.
+        if (id !== "new") throw new VaultError("denied");
         const template = {
           category: "LOGIN",
           title: value.title,
@@ -226,15 +225,8 @@ export class OnePasswordCliBackend implements SecretBackend {
         };
         const saved = parse(
           itemSchema,
-          JSON.parse(
-            await this.#run(
-              a,
-              id === "new" ? ["item", "create", "-"] : ["item", "edit", id],
-              JSON.stringify(template),
-            ),
-          ),
+          JSON.parse(await this.#run(a, ["item", "create", "-"], JSON.stringify(template))),
         );
-        if (id !== "new" && saved.id !== id) throw new VaultError("invalid");
         return this.#ref(a, saved.id);
       }),
     );

@@ -1,5 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 import type { Cookie, SessionBundle, SessionProvider } from "@jeswr/site-executor";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import {
   boundary,
@@ -48,6 +51,7 @@ export const stateSchema = z.strictObject({
   tokens: tokensSchema.optional(),
   capturedAt: z.number().finite(),
   stale: z.boolean(),
+  revision: z.string().uuid().optional(),
 });
 export type SessionState = z.infer<typeof stateSchema>;
 export class SessionStore implements SessionProvider {
@@ -101,14 +105,34 @@ export class SessionStore implements SessionProvider {
       return new Secret(r);
     });
   }
+  #prepare(state: SessionState): SessionState {
+    const r = parse(stateSchema, state);
+    r.site = origin(r.site);
+    r.bundle = this.validate(r.site, r.bundle);
+    if (r.tokens?.tokenEndpoint) sameSiteUrl(r.site, r.tokens.tokenEndpoint);
+    if (r.tokens) r.bundle.headers = { authorization: `Bearer ${r.tokens.access}` };
+    r.revision = randomUUID();
+    return r;
+  }
   store(state: SessionState): Promise<void> {
     return boundary(async () => {
-      const r = parse(stateSchema, state);
-      r.site = origin(r.site);
-      r.bundle = this.validate(r.site, r.bundle);
-      if (r.tokens?.tokenEndpoint) sameSiteUrl(r.site, r.tokens.tokenEndpoint);
-      if (r.tokens) r.bundle.headers = { authorization: `Bearer ${r.tokens.access}` };
+      const r = this.#prepare(state);
       await this.#records.put("sessions", this.#key(r.site, r.account), stateSchema, r);
+    });
+  }
+  /** Scheduler-only commit: compare the snapshot and cancellation under the record lock. */
+  commit(state: SessionState, cancelled: () => boolean): Promise<void> {
+    return boundary(async () => {
+      const snapshot = parse(stateSchema, state);
+      await this.#records.update(
+        "sessions",
+        this.#key(snapshot.site, snapshot.account),
+        stateSchema,
+        (current) => {
+          if (cancelled() || !current || current.revision !== snapshot.revision) return undefined;
+          return this.#prepare(snapshot);
+        },
+      );
     });
   }
   get(site: string, account?: string): Promise<SessionBundle | undefined> {
@@ -129,18 +153,16 @@ export class SessionStore implements SessionProvider {
   }
   update(site: string, account: string | undefined, bundle: SessionBundle): Promise<void> {
     return boundary(async () => {
-      const existing = await this.state(site, account ?? "");
-      const save = (r?: SessionState) =>
-        this.store({
+      await this.#records.update("sessions", this.#key(site, account), stateSchema, (r) =>
+        this.#prepare({
           site: origin(site),
           account: account ?? "",
           bundle,
           tokens: r?.tokens,
           capturedAt: r?.capturedAt ?? this.#now(),
           stale: r?.stale ?? false,
-        });
-      if (existing) await existing.use(save);
-      else await save();
+        }),
+      );
     });
   }
   /** Explicit host login boundary; discard stale bearer metadata before executor cookie updates. */
@@ -155,8 +177,9 @@ export class SessionStore implements SessionProvider {
   }
   stale(site: string, account: string): Promise<void> {
     return boundary(async () => {
-      const state = await this.state(site, account);
-      if (state) await state.use((r) => this.store({ ...r, stale: true }));
+      await this.#records.update("sessions", this.#key(site, account), stateSchema, (r) =>
+        r ? this.#prepare({ ...r, stale: true }) : undefined,
+      );
     });
   }
 }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 import { inspect } from "util";
 import { describe, expect, it, vi } from "vitest";
@@ -68,7 +69,7 @@ describe("1Password CLI adapter", () => {
       }).find(SITE),
     ).toEqual([{ backend: "onepassword", ref: "family/sub", profile: "personal" }]);
   });
-  it("reads secrets through stdout and creates or edits using JSON stdin exclusively", async () => {
+  it("reads secrets through stdout and creates using JSON stdin exclusively", async () => {
     const requests: RunRequest[] = [];
     const runner = async (r: RunRequest) => {
       requests.push(r);
@@ -82,12 +83,29 @@ describe("1Password CLI adapter", () => {
       ref: "business/created",
       profile: "work",
     });
-    await b.save(login("family/item-a"));
     const writes = requests.filter((r) => r.stdin);
-    expect(writes).toHaveLength(2);
+    expect(writes).toHaveLength(1);
     expect(JSON.parse(writes[0]?.stdin ?? "{}").fields[1].value).toBe(PASSWORD);
     expect(writes[0]?.argv).toContain("-");
     expect(JSON.stringify(requests.map((r) => r.argv))).not.toContain(PASSWORD);
+  });
+  it("refuses existing-item saves to preserve passkeys, secondary URLs, notes and unknown fields", async () => {
+    const existing = {
+      ...item(),
+      urls: [
+        { href: SITE, primary: true },
+        { href: "https://other.test", label: "Other" },
+      ],
+      fields: [...item().fields, { id: "notesPlain", value: "Keep this note" }],
+      passkeys: [{ credentialId: "fictional-passkey" }],
+      futureField: { value: "preserve me" },
+    };
+    const before = structuredClone(existing);
+    const runner = vi.fn(async () => ({ stdout: JSON.stringify(existing) }));
+    const b = new OnePasswordCliBackend({ accounts, runner });
+    await expect(b.save(login("family/item-a"))).rejects.toThrow("Vault denied");
+    expect(runner).not.toHaveBeenCalled();
+    expect(existing).toEqual(before);
   });
   it.each([
     '"012345"',

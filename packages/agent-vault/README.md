@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-vault
 
@@ -77,11 +78,17 @@ to a planner. `find` returns only opaque references, backend ids and profile ids
 `PermissionAsker.ask({ site, account, backend, purpose })` returns `once`, `always-for-site`
 or `never`. Persistent decisions bind backend, item, exact site origin, account and purpose;
 `never` also survives restart. `revoke(request, item)` removes that decision by recording a
-revoked tombstone so the next request asks again. A save for a new item uses item `new`;
+revoked tombstone so the next request asks again. Decisions carry persisted revisions;
+prompt responses are checked under the store's cross-process record lock. A `never` or
+revocation invalidates every outstanding approval, including `once`. An old denial still
+wins over an intervening grant; a fresh prompt after revocation can grant access again.
+A save for a new item uses item `new`;
 a known destination ref binds that exact ref. Different purposes never inherit a grant.
 
 Local items use AES-256-GCM with independent random IVs. Additional authenticated data binds
 each envelope to its namespace and record key, preventing ciphertext substitution. The
+format requires exactly 12 IV bytes and a 16-byte (128-bit) authentication tag; neither
+encryption nor decryption lets envelope metadata select a shorter tag. The
 index and sessions are also encrypted. `KeyProvider.key()` returns `Secret<Uint8Array>`
 containing exactly 32 bytes. Default `FileKeyProvider` initializes one random key under the
 credential store's cross-process lock, in `vault/encryption-key.json`. Inject a key provider
@@ -103,8 +110,11 @@ const backend = new OnePasswordCliBackend({ accounts: [
 Use the account's configured CLI shorthand or id and the intended vault id/name. Every
 invocation supplies `--account`, `--vault`, and `--format json`. References contain the
 account and item id (`family/<item-id>`), and cannot silently fall back to another account.
-New saves require `ref: 'family/new'`; updates use the existing ref. The save chooser must
-supply that reference. Both create and update send the full Login template through stdin;
+New saves require `ref: 'family/new'`. Saves targeting existing refs refuse with `denied`
+before invoking the CLI: JSON-template edits cannot guarantee preservation of passkeys,
+secondary URLs, notes or unknown fields. Select an explicit `'<account>/new'` destination
+to create a separate item, or update the original through 1Password's own UI. The save
+chooser must supply that reference. Creates send the Login template through stdin;
 username/password never appear in argv. Reads parse stdout only; errors never retain stdout
 or stderr. TOTP uses `op item get <id> --otp`, accepting its digit output or JSON string.
 
@@ -152,11 +162,17 @@ accept only bearer Authorization headers derived from tokens. Cookie domains def
 exact host; `cookieDomains` explicitly permits trusted parent domains for RFC domain matching.
 Host-only cookies always require the exact host; IPs never suffix-match. No guessed
 public-suffix acceptance. Cookie prefixes, control characters and unrelated headers refuse.
+Every session write changes its persisted revision, including login reset, capture,
+executor updates and marking stale. Legacy records without a revision remain readable;
+their first write assigns one. Scheduler `SessionStore.commit(snapshot, cancelled)` compares
+the snapshot revision and checks cancellation under the record lock, after key acquisition,
+then writes synchronously. Superseded snapshots are discarded, including delayed 401s.
 
 `KeepAlive({ sessions, clock, transport, floorMs, leadMs })` has no global timers or network.
 `clock` provides `now`, `set`, `clear`; `transport` accepts manual-redirect GET/POST requests and
 returns `{ status, text(), setCookies? }`. `start(site, account, route, { frequent, intervalMs })`
-replaces that account's old job. `stop` prevents late in-flight updates and future timers.
+replaces that account's old job. Synchronous `stop` prevents requests after delayed state
+loading, late in-flight persistence (including pending key acquisition), and future timers.
 Refresh POSTs use an OAuth refresh-token form, only on the exact site origin; a captured
 `tokenEndpoint`, if present, must match the learned URL. JSON pointer extraction uses
 `tokenPointer` and `expiresInPointer` (default `/expires_in`, numeric seconds). Missing or
@@ -184,9 +200,9 @@ the ciphertext by default, so stealing the whole store compromises confidentiali
 external key provider for a stronger disk boundary. Never send vault return objects or
 host adapters to the planner; only render account questions and executor RDF observations.
 The host owns DNS/network policy, browser identity verification, timeouts for injected
-transports, session revocation, vault selection and trusted site models. Multiple processes
-may share atomic records, but session refresh scheduling requires a single host owner;
-there is no cross-process compare-and-swap between executor updates and refreshes.
+transports, session revocation, vault selection and trusted site models. Session commits and
+permission changes use cross-process record locks and persisted revisions. Session refresh
+scheduling still requires a single host owner; locks do not coordinate timers across hosts.
 
 ## Validate offline
 

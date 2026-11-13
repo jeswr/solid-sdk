@@ -1,10 +1,77 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { PermissionPolicy, type PermissionRequest } from "../src/index.js";
-import { SITE, setup } from "./helpers.js";
+import { deferred, SITE, setup } from "./helpers.js";
 
 const r: PermissionRequest = { site: SITE, account: "alex", backend: "local", purpose: "login" };
 describe("permission persistence and revocation", () => {
+  it.each([
+    "once",
+    "always-for-site",
+  ] as const)("never invalidates a pending %s approval across policy instances", async (answer) => {
+    const { store } = setup();
+    const prompt = deferred<typeof answer>();
+    const asked = deferred<void>();
+    const pending = new PermissionPolicy(store, {
+      ask: () => {
+        asked.resolve();
+        return prompt.promise;
+      },
+    }).check(r, "x");
+    const denied = expect(pending).rejects.toThrow("Vault denied");
+    await asked.promise;
+    const policy = new PermissionPolicy(store, { ask: async () => "never" });
+    await expect(policy.check(r, "x")).rejects.toThrow("Vault denied");
+    prompt.resolve(answer);
+    await denied;
+    const ask = vi.fn(async () => "always-for-site" as const);
+    await expect(new PermissionPolicy(store, { ask }).check(r, "x")).rejects.toThrow(
+      "Vault denied",
+    );
+    expect(ask).not.toHaveBeenCalled();
+  });
+  it.each([
+    "once",
+    "always-for-site",
+  ] as const)("revocation invalidates a pending %s approval even after a fresh grant", async (answer) => {
+    const { store } = setup();
+    const prompt = deferred<typeof answer>();
+    const asked = deferred<void>();
+    const pending = new PermissionPolicy(store, {
+      ask: () => {
+        asked.resolve();
+        return prompt.promise;
+      },
+    }).check(r, "x");
+    const denied = expect(pending).rejects.toThrow("Vault denied");
+    await asked.promise;
+    const policy = new PermissionPolicy(store, { ask: async () => "always-for-site" });
+    await policy.revoke(r, "x");
+    await policy.check(r, "x");
+    prompt.resolve(answer);
+    await denied;
+  });
+  it("a late never wins over a newer persistent approval", async () => {
+    const { store } = setup();
+    const prompt = deferred<"never">();
+    const asked = deferred<void>();
+    const pending = new PermissionPolicy(store, {
+      ask: () => {
+        asked.resolve();
+        return prompt.promise;
+      },
+    }).check(r, "x");
+    const denied = expect(pending).rejects.toThrow("Vault denied");
+    await asked.promise;
+    const ask = vi.fn(async () => "always-for-site" as const);
+    const policy = new PermissionPolicy(store, { ask });
+    await policy.check(r, "x");
+    prompt.resolve("never");
+    await denied;
+    await expect(policy.check(r, "x")).rejects.toThrow("Vault denied");
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
   it("once prompts each time; always persists per backend/item/site/account/purpose", async () => {
     const { store } = setup();
     const ask = vi.fn(async () => "once" as const);

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 
 import { CredentialStore } from "@jeswr/agent-credentials";
@@ -18,6 +19,16 @@ export const PASSWORD = "fixture-password-secret";
 export const ACCESS = "fixture-access-secret";
 export const REFRESH = "fixture-refresh-secret";
 export const COOKIE = "fixture-cookie-secret";
+export function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+export async function drain() {
+  for (let i = 0; i < 100; i++) await Promise.resolve();
+}
 export const login = (ref?: string) =>
   new Secret({
     site: SITE,

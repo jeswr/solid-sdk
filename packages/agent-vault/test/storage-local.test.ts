@@ -1,5 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
+
+import { createCipheriv } from "crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -23,6 +26,43 @@ import {
 import { login, PASSWORD, SITE, setup } from "./helpers.js";
 
 describe("private encryption and local backend", () => {
+  it.each([4, 8, 12, 13, 14, 15])("refuses a truncated GCM tag of %i bytes", async (length) => {
+    const { store, dir } = setup();
+    const records = new EncryptedRecords(store, {
+      key: async () => new Secret(Buffer.alloc(32, 7)),
+    });
+    await records.put("tags", "a", z.string(), PASSWORD);
+    const path = join(dir, "vault", `${recordKey("tags", "a")}.json`);
+    const envelope = JSON.parse(readFileSync(path, "utf8"));
+    expect(Buffer.from(envelope.iv, "base64")).toHaveLength(12);
+    expect(Buffer.from(envelope.tag, "base64")).toHaveLength(16);
+    expect(await records.get("tags", "a", z.string())).toBe(PASSWORD);
+    envelope.tag = Buffer.from(envelope.tag, "base64").subarray(0, length).toString("base64");
+    writeFileSync(path, JSON.stringify(envelope));
+    await expect(records.get("tags", "a", z.string())).rejects.toThrow();
+  });
+  it.each([8, 16])("refuses an authenticated envelope with a %i-byte IV", async (length) => {
+    const { store } = setup();
+    const key = Buffer.alloc(32, 7);
+    const iv = Buffer.alloc(length, 1);
+    const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
+    cipher.setAAD(Buffer.from(JSON.stringify(["iv", "a"])));
+    const data = Buffer.concat([cipher.update(JSON.stringify(PASSWORD)), cipher.final()]);
+    const schema = z.strictObject({
+      version: z.literal(1),
+      iv: z.string(),
+      tag: z.string(),
+      data: z.string(),
+    });
+    store.putPrivateRecord(recordKey("iv", "a"), schema, {
+      version: 1,
+      iv: iv.toString("base64"),
+      tag: cipher.getAuthTag().toString("base64"),
+      data: data.toString("base64"),
+    });
+    const records = new EncryptedRecords(store, { key: async () => new Secret(key) });
+    await expect(records.get("iv", "a", z.string())).rejects.toThrow();
+  });
   it("encrypts per item, persists key, finds exact origin, updates and hides diagnostics", async () => {
     const { store, dir } = setup();
     const backend = new LocalEncryptedBackend({ store, profile: "personal" });
