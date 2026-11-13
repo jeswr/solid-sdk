@@ -45,6 +45,11 @@ export class AgentSiteAccessRequired extends Error {
     super("Allow this extension on this site from Chrome's extension menu first, then try again.");
   }
 }
+export class AgentCookieAccessRequired extends Error {
+  constructor(message = 'Remove cookie access before sharing a sign-in.') {
+    super(message);
+  }
+}
 
 /** Only cookies for the chosen host, or an explicitly vetted parent, survive the browser query. */
 export function captureCookies(
@@ -113,6 +118,15 @@ export class AgentSignIn {
   get permissionWarning(): boolean {
     return this.#permissionWarning;
   }
+  async #checkCookieAccess(): Promise<boolean> {
+    try {
+      this.#permissionWarning = await this.browser.permissions.contains(capturePermissions());
+    } catch {
+      // Sharing requires confirmed absence, even when Chrome cannot report its state.
+      this.#permissionWarning = true;
+    }
+    return this.#permissionWarning;
+  }
   async #requireHost(site: string): Promise<void> {
     let granted: boolean;
     try {
@@ -128,6 +142,18 @@ export class AgentSignIn {
       this.#permissionWarning = false;
     } catch {
       this.#permissionWarning = true;
+    }
+  }
+  /** Only the warning's explicit removal click may clear a grant found before capture. */
+  async removeCookieAccess(): Promise<boolean> {
+    if (this.#busy) throw failed();
+    this.cancel();
+    this.#busy = true;
+    try {
+      await this.#removePermissions();
+      return !this.#permissionWarning;
+    } finally {
+      this.#busy = false;
     }
   }
   async #active() {
@@ -146,14 +172,11 @@ export class AgentSignIn {
     this.cancel();
     this.#tab = undefined;
     this.#choices = undefined;
+    // Check independently of tab/site validation, so failures cannot hide surviving authority.
+    const cookieAccess = await this.#checkCookieAccess();
     const tab = await this.#active();
     await this.#requireHost(tab.site);
-    // Also surface a grant left behind by an interrupted/failed cleanup on a previous popup.
-    try {
-      this.#permissionWarning = await this.browser.permissions.contains(capturePermissions());
-    } catch {
-      this.#permissionWarning = true;
-    }
+    if (cookieAccess) throw new AgentCookieAccessRequired();
     const result = await this.#request({ type: 'list', site: tab.site });
     if (result.type !== 'list') throw failed();
     this.#tab = tab;
@@ -174,6 +197,7 @@ export class AgentSignIn {
     let cleanup = false;
     try {
       await this.#requireHost(tab.site);
+      if (await this.#checkCookieAccess()) throw new AgentCookieAccessRequired();
       if (version !== this.#version) throw failed();
       const port = this.browser.runtime.connect({ name: CAPTURE_PERMISSION_PORT });
       this.#permissionPort = port;
@@ -214,7 +238,8 @@ export class AgentSignIn {
       };
     } catch (error) {
       this.#pending = undefined;
-      if (error instanceof AgentSiteAccessRequired) throw error;
+      if (error instanceof AgentSiteAccessRequired || error instanceof AgentCookieAccessRequired)
+        throw error;
       throw failed();
     } finally {
       // The preview retains only its in-memory snapshot; browser authority ends after reading.
@@ -242,6 +267,14 @@ export class AgentSignIn {
     if (!pending || this.#busy) throw failed();
     this.#busy = true;
     try {
+      // Review has already released its grant. Any authority now is unexpected (e.g. a late
+      // prompt), so refuse this snapshot and clean up rather than sending a capture.
+      if (await this.#checkCookieAccess()) {
+        await this.#removePermissions();
+        throw new AgentCookieAccessRequired(
+          'Cookie access appeared after review. Sharing refused. Review again to retry.',
+        );
+      }
       await this.#requireHost(pending.message.site);
       const tab = await this.#active();
       if (

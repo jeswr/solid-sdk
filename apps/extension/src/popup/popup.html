@@ -50,7 +50,10 @@
         <button id="agent-confirm" type="button" disabled>Share this sign-in with my agent</button>
         <button id="agent-cancel" type="button">Cancel sharing</button>
         <p id="agent-sign-in-status" role="status" aria-live="polite"></p>
-        <p id="agent-permission-warning" role="alert" hidden>Warning: Chrome could not confirm that cookie access was removed. Check this extension's permissions in Chrome before continuing.</p>
+        <div id="agent-permission-warning" role="alert" hidden>
+          <p id="agent-permission-warning-message">Warning: Cookie access is still granted or could not be checked. Sharing is blocked until cookie access is removed.</p>
+          <button id="agent-remove-cookie-access" type="button">Remove cookie access</button>
+        </div>
       </section>
       <!-- Signed out: the suite-wide login surface, driven by MessageBridgeLoginController
            (see account-surface.ts, shared with the side panel) so the actual auth still

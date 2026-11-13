@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex GPT-6
-import { AgentSignIn, AgentSiteAccessRequired } from './agent-sign-in';
+import { AgentCookieAccessRequired, AgentSignIn, AgentSiteAccessRequired } from './agent-sign-in';
 
 /** The only capture UI. No page messages, credential rendering, storage or automatic capture. */
 export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
   const element = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!;
   const status = element('agent-sign-in-status');
   const warning = element('agent-permission-warning');
+  const warningMessage = element('agent-permission-warning-message');
+  const removeAccess = element<HTMLButtonElement>('agent-remove-cookie-access');
   const profile = element<HTMLSelectElement>('agent-profile');
   const persona = element<HTMLSelectElement>('agent-persona');
   const review = element<HTMLButtonElement>('agent-review');
@@ -25,6 +27,15 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
     return response.result;
   });
   let busy = false;
+  let loaded = false;
+  let personas: Awaited<ReturnType<AgentSignIn['load']>>['choices']['personas'] = [];
+  const warningText = warningMessage.textContent;
+  const removalFailed = () => {
+    warningMessage.textContent =
+      "Cookie access could not be removed or its absence verified. Remove it from Chrome's extension settings before sharing.";
+  };
+  const isAccessError = (error: unknown): error is Error =>
+    error instanceof AgentSiteAccessRequired || error instanceof AgentCookieAccessRequired;
   const showWarning = () => {
     warning.hidden = !controller.permissionWarning;
   };
@@ -32,16 +43,35 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
     controller.cancel();
     preview.hidden = true;
     confirm.disabled = true;
-    review.disabled = busy || !persona.value;
+    review.disabled = busy || controller.permissionWarning || !loaded || !persona.value;
   };
   const setBusy = (value: boolean) => {
     busy = value;
-    review.disabled = value || !persona.value;
-    profile.disabled = value;
-    persona.disabled = value;
-    confirm.disabled = value || preview.hidden;
+    showWarning();
+    const blocked = value || controller.permissionWarning || !loaded;
+    review.disabled = blocked || !persona.value;
+    profile.disabled = blocked;
+    persona.disabled = blocked;
+    confirm.disabled = blocked || preview.hidden;
+    removeAccess.disabled = value;
   };
-  profile.addEventListener('change', discard);
+  const option = (value: string, label: string) => {
+    const node = document.createElement('option');
+    node.value = value;
+    node.textContent = label;
+    return node;
+  };
+  const fillPersonas = () => {
+    persona.replaceChildren(
+      option('', 'Choose a persona'),
+      ...personas.filter((p) => p.profile === profile.value).map((p) => option(p.id, p.label)),
+    );
+  };
+  profile.addEventListener('change', () => {
+    discard();
+    fillPersonas();
+    setBusy(busy);
+  });
   persona.addEventListener('change', discard);
   cancel.addEventListener('click', () => {
     discard();
@@ -63,10 +93,9 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
         },
         (error: unknown) => {
           discard();
-          status.textContent =
-            error instanceof AgentSiteAccessRequired
-              ? error.message
-              : 'Could not prepare sharing. Check the native host, selected site and cookie permission.';
+          status.textContent = isAccessError(error)
+            ? error.message
+            : 'Could not prepare sharing. Check the native host, selected site and cookie permission.';
         },
       )
       .finally(() => {
@@ -86,10 +115,9 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
             'Sign-in shared. When the vault reports it stale, sign in here and share again.';
         },
         (error: unknown) => {
-          status.textContent =
-            error instanceof AgentSiteAccessRequired
-              ? error.message
-              : 'Sharing was not confirmed. Review again to retry.';
+          status.textContent = isAccessError(error)
+            ? error.message
+            : 'Sharing was not confirmed. Review again to retry.';
         },
       )
       .finally(() => {
@@ -98,38 +126,39 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
         setBusy(false);
       });
   });
-  void controller.load().then(
-    ({ site, choices }) => {
-      showWarning();
+  const load = async () => {
+    loaded = false;
+    setBusy(true);
+    try {
+      const { site, choices } = await controller.load();
       element('agent-site').textContent = site;
-      const option = (value: string, label: string) => {
-        const node = document.createElement('option');
-        node.value = value;
-        node.textContent = label;
-        return node;
-      };
       profile.replaceChildren(...choices.profiles.map((p) => option(p.id, p.label)));
-      const fillPersonas = () => {
-        persona.replaceChildren(
-          option('', 'Choose a persona'),
-          ...choices.personas
-            .filter((p) => p.profile === profile.value)
-            .map((p) => option(p.id, p.label)),
-        );
-        setBusy(false);
-      };
-      profile.addEventListener('change', fillPersonas);
+      personas = choices.personas;
       fillPersonas();
+      loaded = true;
       status.textContent = choices.personas.length
         ? 'Sign in on this site, then choose your vault profile and persona.'
         : 'Add an account for this exact site in the vault, then reopen this popup.';
-    },
-    (error: unknown) => {
-      showWarning();
-      status.textContent =
-        error instanceof AgentSiteAccessRequired
-          ? error.message
-          : 'Open a signed-in HTTPS site and install the agent vault native host to share its sign-in.';
-    },
-  );
+    } catch (error: unknown) {
+      status.textContent = isAccessError(error)
+        ? error.message
+        : 'Open a signed-in HTTPS site and install the agent vault native host to share its sign-in.';
+    } finally {
+      setBusy(false);
+    }
+  };
+  removeAccess.addEventListener('click', () => {
+    if (busy) return;
+    discard();
+    setBusy(true);
+    warningMessage.textContent = warningText;
+    void controller
+      .removeCookieAccess()
+      .then(async (removed) => {
+        if (removed) await load();
+        else removalFailed();
+      }, removalFailed)
+      .finally(() => setBusy(false));
+  });
+  void load();
 }
