@@ -45,6 +45,63 @@ Build, setters, live sets and `mark` never consult scopes. Without `parse(..., {
 the existing per-check 10,000-read behavior is unchanged. `parseDocument` owns a new dataset
 and does not accept a scope; scopes are for `parse` on existing datasets.
 
+## Ordered collection rules
+
+Ordered item class checks also use the supplied parse scope. The field retains its own
+10,000-read cap across links, positions, values and class reads; either budget can fail closed.
+
+The generator accepts `fields.instructions.ordered = { position: "http://schema.org/position",
+value: "http://schema.org/text" }` for a property referencing an item NodeShape. Its
+manifest projection is:
+
+```json
+{
+  "name": "instructions",
+  "predicate": "http://schema.org/recipeInstructions",
+  "kind": "literal",
+  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+  "collection": "ordered",
+  "ordered": {
+    "itemClass": "http://schema.org/HowToStep",
+    "position": "http://schema.org/position",
+    "value": "http://schema.org/text",
+    "minPosition": 1,
+    "severity": "Violation"
+  }
+}
+```
+
+```ts
+const store = recipe.build(resourceUrl, { instructions: ["Boil water", "Add pasta", "Add pasta"] });
+const wrapper = new recipe.Wrapper(recipe.subject(resourceUrl), store, DataFactory);
+wrapper.instructions = ["New first step", "New second step"];
+// Getter: readonly string[] snapshot; assigning replaces. Local array mutation is not persisted.
+
+// The getter returns undefined for an absent AND for a present-but-invalid field, so the
+// setter refuses (TypeError) to replace links that fail validation: a snapshot edit such as
+// `w.instructions = [...(w.instructions ?? []), "Serve"]` after an untrusted append would
+// otherwise delete every valid item. Discard invalid data only explicitly:
+resetOrderedField(wrapper, "instructions", ["Serve"]); // values default to [] (clear)
+```
+
+| Contract | Behavior |
+|---|---|
+| Item admission | Same lexical document, safe absolute http(s) NamedNode, distinct from the document and owner subjects; blank/literal/foreign/unsafe links fail. Require the item class through actual data-graph types/subclasses. |
+| Position | Exactly one `xsd:integer` term, validated by the existing integer mapper (safe-integer precision cap); apply optional `minPosition`. Numeric ascending order, gaps allowed, duplicate positions invalid even for equal values. Negative integers are allowed without a restricting lower bound. |
+| Value | Exactly one term, read/written with the same datatype, enum, IRI scheme, pattern, length, range and text sanitization rules as scalar fields. Duplicate values survive. No new string-size or lexical policy is invented. |
+| Failure grading | Any invalid item, duplicate position or outer cardinality failure rejects at Violation severity (even on a present optional field); Warning/Info omit the whole field. `requiredFailClosed` still enforces absence. Strict `sh:node` children retain their all-constraints policy. |
+| Bounds | `MAX_ORDERED_ITEMS = 256` per field, plus 10,000 shared raw link/position/value/class reads per ordered read. Existing shared migration budgets also apply. Reads fail closed; oversized/nonarray writes and surviving item counts outside outer `sh:minCount`/`sh:maxCount` throw `TypeError` before mutation, at every severity. Ordered `minCount`/`maxCount` above 256 fail manifest validation. |
+| Write identity | `<document>#<resolvedFieldName>-<n>`, where n is a positive decimal integer without leading zeros; occupied unrelated/shared IRIs, and cleaned-up item IRIs that still carry any other triple, are skipped and the item class is asserted. Invalid scalar writes drop members just as other collection writes do; surviving positions are consecutive. |
+| Replacement | Clear owner links; remove only matching item class, position and value triples from safe same-document nodes explicitly typed with the item class, matching exactly `#<resolvedFieldName>-<n>` (positive decimal n without leading zeros), distinct from document/owner subjects, and exclusively referenced by that owner/field. Preserve every other node's triples, unrelated predicates/types, and shared/foreign data; preserved triples stay on their old node, whose IRI is not reused for a new member. |
+| Accessors/migration | Fresh array snapshots with a replacing setter; `undefined`/empty arrays clear when the minimum permits. When owner links are present but fail validation, every setter assignment (including `undefined`/`[]`) throws `TypeError` before mutation; `resetOrderedField(wrapper, name, values = [])` is the only explicit discard (same array/cap/outer-cardinality checks, and it stays usable past the 256-link stored cap). Arrays preserve order and multiplicity during migration preservation checks. Composite and generated node views share the same implementation. |
+
+Manifest validation rejects missing/unknown descriptor keys, unsafe or overlapping predicate
+IRIs, invalid severity or unwritable position bounds, outer counts above `MAX_ORDERED_ITEMS`, item classes owned as migration aliases,
+and scalar defaults, aliases or set policies on ordered fields. The generator's closed item
+profile requires exactly position + one value property, each with minCount/maxCount 1.
+It emits explicit item-class and IRI node-kind SHACL constraints because targetClass alone
+does not constrain a linked item. See federation-codegen's ordered admission table.
+
 ## Rules
 
 - Never hand-write a manifest for production use. Manifests come from `federation-codegen`,
@@ -83,6 +140,8 @@ and does not accept a scope; scopes are for `parse` on existing datasets.
 - build does not enforce requiredFailClosed: missing or invalid values are dropped and a
   typed shell may be returned. This preserves the bookmark facade's write contract. Parse
   the built store and require a defined result before publishing it if MUST validation is needed.
+  Ordered fields enforce their outer minimum/maximum on the surviving item count and throw
+  before mutation when those bounds fail, including omitted fields below their minimum.
 - Closed `in` enums are enforced on reads, build, setters and live-set adds. Invalid enum
   values drop, consistently with other invalid writes; they do not throw.
   Reads compare raw literal lexical forms and datatypes against canonical enum

@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * L1 (tier-a) — the STRUCTURAL admission validator (design §4). Pure JS,
  * FAIL-CLOSED, run on every generation: it refuses to generate from an ontology /
@@ -21,6 +22,7 @@ import { literalMapper, VALIDATED_DATATYPES } from "@jeswr/model-runtime";
 import type { NormalizedOntology } from "./adapter.js";
 import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
+import { orderedItemTargets } from "./ordered.js";
 import { Graph, RDF, SH } from "./rdf.js";
 import {
   implicitClassTargets,
@@ -77,6 +79,15 @@ export function admit(
   const violations: AdmissionViolation[] = [];
   const add = (code: string, severity: AdmissionSeverity, subject: string, message: string) =>
     violations.push({ code, severity, subject, message });
+  try {
+    orderedItemTargets(shapes, config);
+  } catch (error) {
+    if (!(error instanceof AdmissionError)) throw error;
+    violations.push(...error.violations);
+    // The ordinary scalar admission pass assumes a validated item projection.
+    // Return its closed diagnostic rather than mapping a rejected datatype.
+    return { ok: false, namespace, violations };
+  }
 
   // Inspect the ORIGINAL constraint graph, not just the lossy normalized projection.
   // Metadata never constrains accepted instance data. Every other sh:* predicate
@@ -139,6 +150,31 @@ export function admit(
     ),
   );
   const nestedShapeIris = new Set<string>();
+  // The sh:node / sh:class exemption below is decided per property-shape subject,
+  // but a named property shape can be referenced by several NodeShapes. Exempt it
+  // only when EVERY referencing constraint is ordered with the same descriptor;
+  // a shape shared with a plain owner would otherwise compile that owner's field
+  // without its sh:node / sh:class constraint.
+  const orderedUses = new Map<string, Set<string>>();
+  for (const s of shapes.nodeShapes)
+    for (const c of s.properties)
+      for (const source of propertySources(c)) {
+        const uses = orderedUses.get(source.shapeIri) ?? new Set<string>();
+        uses.add(c.ordered ? JSON.stringify([c.ordered.position, c.ordered.value]) : "");
+        orderedUses.set(source.shapeIri, uses);
+      }
+  const orderedShapeIris = new Set<string>();
+  for (const [shapeIri, uses] of orderedUses) {
+    if (![...uses].some((use) => use !== "")) continue;
+    if (uses.size === 1) orderedShapeIris.add(shapeIri);
+    else
+      add(
+        "invalid-ordered",
+        "error",
+        shapeIri,
+        "ordered property shape is shared with a non-ordered or differently ordered owner",
+      );
+  }
   for (const entity of config?.entities ?? []) {
     if (!isCompositeConfig(entity)) continue;
     for (const node of Object.values(entity.nodes)) {
@@ -278,12 +314,13 @@ export function admit(
         ) {
           unsupported("inline or unprojected sh:node reference");
         }
-        if (config !== undefined && !isNested)
+        if (config !== undefined && !isNested && !orderedShapeIris.has(subject.value))
           unsupported("sh:node requires a projected composite link");
       }
       if (
         component === "class" &&
         !isNested &&
+        !orderedShapeIris.has(subject.value) &&
         c?.conceptIris === undefined &&
         config !== undefined
       ) {

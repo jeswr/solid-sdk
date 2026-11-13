@@ -30,6 +30,7 @@ import {
 import type { Quad, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import type { NodeViews } from "./nodeviews.js";
+import { resolveOrdered } from "./ordered.js";
 import { Graph, RDF, SH, serializeCanonicalTurtle } from "./rdf.js";
 import { enumValues, type NormalizedShapes, propertySources } from "./shapes.js";
 
@@ -145,6 +146,8 @@ function propKey(name: string): string {
 function dataFieldLine(field: ManifestField, canRequire = true): string {
   const base = baseTsType(field);
   const opt = canRequire && isRequired(field) ? "" : "?";
+  if (field.collection === "ordered")
+    return `  ${propKey(field.name)}${opt}: readonly (${base})[];`;
   if (field.collection === "set") {
     const member = field.in !== undefined ? `(${base})` : base;
     return `  ${propKey(field.name)}${opt}: ${member}[];`;
@@ -154,6 +157,7 @@ function dataFieldLine(field: ManifestField, canRequire = true): string {
 
 function wrapperFieldLine(field: ManifestField): string {
   const base = baseTsType(field);
+  if (field.collection === "ordered") return `  ${propKey(field.name)}?: readonly (${base})[];`;
   if (field.collection === "set") {
     return `  readonly ${propKey(field.name)}: Set<${base}>;`;
   }
@@ -371,6 +375,22 @@ export function emitShapesTtl(shapes: NormalizedShapes, prefixes: Record<string,
       .map((t) => t.value),
   );
   const nn = DataFactory.namedNode;
+  // Ordered encoding requires typed, named items. Make that runtime policy explicit
+  // in the normalized SHACL without altering any non-ordered profile's bytes.
+  for (const outer of shapes.nodeShapes.flatMap((s) => s.properties).filter((c) => c.ordered)) {
+    const { descriptor } = resolveOrdered(shapes, outer);
+    for (const source of propertySources(outer)) {
+      for (const [predicate, value] of [
+        [`${SH}class`, descriptor.itemClass],
+        [`${SH}nodeKind`, `${SH}IRI`],
+      ] as const) {
+        if (
+          !quads.some((q) => q.subject.value === source.shapeIri && q.predicate.value === predicate)
+        )
+          quads.push(DataFactory.quad(nn(source.shapeIri), nn(predicate), nn(value)));
+      }
+    }
+  }
   for (const c of concepts.values()) {
     const values = enumValues(c) as string[];
     const cells = values.map((_, i) => {

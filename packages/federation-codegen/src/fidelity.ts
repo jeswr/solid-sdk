@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * THE P0 EXIT CRITERION — the build-time FIDELITY ASSERTION (design §7.2). model.json
  * is a VERIFIED PROJECTION of shapes.ttl, not a bespoke schema: at generation time
@@ -24,8 +25,10 @@ import {
   expandDatatype,
   isCompositeEntity,
   literalMapper,
+  type ManifestEntity,
   type ManifestField,
   type ManifestFieldGuards,
+  type ManifestNode,
   type ModelManifest,
 } from "@jeswr/model-runtime";
 import {
@@ -36,6 +39,7 @@ import {
   isHttpPattern,
   linkTargetConforms,
 } from "./compile.js";
+import { orderedItemTargets, orderedScalar, resolveOrdered } from "./ordered.js";
 import { compareStrings, SH } from "./rdf.js";
 import {
   enumValues,
@@ -57,7 +61,7 @@ interface FieldProjection {
   datatype: string | null;
   minCount: number | null;
   maxCount: number | null;
-  collection: boolean;
+  collection: "set" | "ordered" | null;
   /** JSON of the closed `sh:in` value set, or null when the field has none. */
   inValues: string | null;
 }
@@ -92,7 +96,7 @@ function projectShapes(shapes: NormalizedShapes): Map<string, FieldProjection[]>
       datatype: norm(c.datatype),
       minCount: c.minCount ?? null,
       maxCount: c.maxCount ?? null,
-      collection: c.maxCount !== 1,
+      collection: c.ordered ? "ordered" : c.maxCount !== 1 ? "set" : null,
       inValues: inJson(enumValues(c)),
     }));
     out.set(shape.targetClass, sortFields(fields));
@@ -114,7 +118,7 @@ function projectManifest(manifest: ModelManifest): Map<string, FieldProjection[]
       datatype: norm(f.datatype),
       minCount: f.minCount ?? null,
       maxCount: f.maxCount ?? null,
-      collection: f.collection === "set",
+      collection: f.collection ?? null,
       inValues: inJson(f.in as ShapeScalar[] | undefined),
     }));
     for (const typeIri of entity.typeIris) out.set(typeIri, sortFields(fields));
@@ -528,7 +532,7 @@ function assertCompositeFidelity(
         datatype: norm(constraint.datatype),
         minCount: constraint.minCount ?? null,
         maxCount: constraint.maxCount ?? null,
-        collection: constraint.maxCount !== 1,
+        collection: constraint.ordered ? "ordered" : constraint.maxCount !== 1 ? "set" : null,
         inValues: inJson(enumValues(constraint)),
       };
       const manifestProj: FieldProjection = {
@@ -539,7 +543,7 @@ function assertCompositeFidelity(
         datatype: norm(field.datatype),
         minCount: field.minCount ?? null,
         maxCount: field.maxCount ?? null,
-        collection: field.collection === "set",
+        collection: field.collection ?? null,
         inValues: inJson(field.in as ShapeScalar[] | undefined),
       };
       const diffs = diffField(shapeProj, manifestProj).filter((d) => !d.startsWith("name:"));
@@ -637,6 +641,62 @@ function assertConjunctionCoversSources(c: ShapeConstraint): void {
  * is projected inside that composite, never also as a flat entity).
  */
 export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult): void {
+  // Validate the complete item shape again, then independently check every descriptor
+  // and project its scalar constraints through the ordinary structural/guard checks.
+  const itemTargets = orderedItemTargets(shapes);
+  const owners = compiled.manifest.entities.flatMap<ManifestEntity | ManifestNode>((e) =>
+    isCompositeEntity(e) ? e.nodes : [e],
+  );
+  for (const owner of owners)
+    for (const field of owner.fields) {
+      const c = shapes.nodeShapes
+        .find((s) => owner.typeIris.includes(s.targetClass))
+        ?.properties.find((p) => p.pathIri === field.predicate);
+      if (field.ordered !== undefined && !c?.ordered)
+        throw new FidelityError(`unsourced ordered field ${field.name}`);
+      // A flat (non-nested) field must never silently drop a node/class constraint:
+      // sh:node is projected only by an ordered field (composite links are `nested`),
+      // and a fail-closed sh:class only by an ordered field or a concept enum.
+      if (field.kind === "nested" || c === undefined || field.collection === "ordered") continue;
+      if (c.node !== undefined)
+        throw new FidelityError(`flat field ${field.name} drops sh:node ${c.node}`);
+      if (
+        c.hasClass !== undefined &&
+        c.conceptIris === undefined &&
+        propertySources(c).some((source) => isFailClosedSeverity(source.severity))
+      )
+        throw new FidelityError(`flat field ${field.name} drops sh:class ${c.hasClass}`);
+    }
+  for (const shape of shapes.nodeShapes)
+    for (const c of shape.properties) {
+      if (!c.ordered) continue;
+      const { descriptor } = resolveOrdered(shapes, c);
+      const field = owners
+        .find((o) => o.typeIris.includes(shape.targetClass))
+        ?.fields.find((f) => f.predicate === c.pathIri);
+      if (
+        field?.collection !== "ordered" ||
+        !field.ordered ||
+        Object.keys(field.ordered).length !== Object.keys(descriptor).length ||
+        Object.entries(descriptor).some(
+          ([key, value]) => field.ordered?.[key as keyof typeof descriptor] !== value,
+        )
+      )
+        throw new FidelityError(
+          `ordered field ${c.name ?? c.pathIri} changes or drops its item shape ${c.node}`,
+        );
+    }
+  shapes = {
+    ...shapes,
+    nodeShapes: shapes.nodeShapes
+      .filter((s) => !itemTargets.has(s.targetClass))
+      .map((s) => ({
+        ...s,
+        properties: s.properties.map((c) =>
+          c.ordered ? orderedScalar(c, resolveOrdered(shapes, c).value) : c,
+        ),
+      })),
+  };
   if (implicitClassTargets(shapes.quads).length)
     throw new FidelityError("implicit class targets are not modeled by the runtime");
   if (sharedAliasPredicates(shapes).length)

@@ -33,6 +33,7 @@ import {
   type FieldConfig,
   isCompositeConfig,
 } from "./config.js";
+import { orderedItemTargets, orderedScalar, resolveOrdered } from "./ordered.js";
 import { SH } from "./rdf.js";
 import {
   enumValues,
@@ -151,7 +152,32 @@ function compileField(
   fieldConfig: FieldConfig | undefined,
   provenance: FieldProvenance,
   resolvedName?: string,
+  shapes?: NormalizedShapes,
 ): ManifestField {
+  if (constraint.ordered) {
+    if (!shapes) throw new TypeError("ordered field requires its item shape");
+    const { value, descriptor } = resolveOrdered(shapes, constraint);
+    for (const key of [
+      "default",
+      "defaultNow",
+      "materializeDefault",
+      "trim",
+      "dropBlank",
+      "sortOnRead",
+      "emptyStringDrop",
+    ] as const)
+      if (fieldConfig?.[key] !== undefined)
+        throw new TypeError(`ordered field ${constraint.name} cannot configure ${key}`);
+    const field = compileField(
+      orderedScalar({ ...constraint, ordered: undefined }, value),
+      fieldConfig,
+      provenance,
+      resolvedName,
+    );
+    field.collection = "ordered";
+    field.ordered = descriptor;
+    return field;
+  }
   const name = resolvedName ?? constraint.name ?? localName(constraint.pathIri);
   const field: ManifestField = {
     name,
@@ -271,6 +297,7 @@ function compileEntity(
   shape: NodeShapeModel,
   config: CodegenConfig,
   provenance: FieldProvenance[],
+  shapes: NormalizedShapes,
 ): ManifestEntity {
   const entityConfig = entityConfigFor(config, shape.targetClass);
   if (!entityConfig) {
@@ -285,7 +312,7 @@ function compileEntity(
       configGuards: [],
     };
     const fieldConfig = entityConfig.fields?.[name];
-    const field = compileField(constraint, fieldConfig, prov);
+    const field = compileField(constraint, fieldConfig, prov, undefined, shapes);
     provenance.push(prov);
     return field;
   });
@@ -468,6 +495,7 @@ function compileCompositeEntity(
       if (
         nodeName !== compConfig.root &&
         constraint.hasClass !== undefined &&
+        !constraint.ordered &&
         constraint.conceptIris === undefined
       )
         throw new Error(
@@ -481,7 +509,7 @@ function compileCompositeEntity(
         fieldName: resolvedName,
         configGuards: [],
       };
-      const field = compileField(constraint, fieldConfig, prov, resolvedName);
+      const field = compileField(constraint, fieldConfig, prov, resolvedName, shapes);
       provenance.push(prov);
       fields.push(field);
     }
@@ -495,12 +523,27 @@ function compileCompositeEntity(
     };
   });
 
+  for (const node of nodes) {
+    for (const field of nodes.flatMap((owner) => owner.fields)) {
+      const prefix = `${field.name}-`;
+      if (
+        field.collection === "ordered" &&
+        node.fragment.startsWith(prefix) &&
+        /^[1-9][0-9]*$/.test(node.fragment.slice(prefix.length))
+      )
+        throw new Error(
+          `composite ${compConfig.name} node "${node.name}" fragment "${node.fragment}" collides with ordered field "${field.name}" item fragments`,
+        );
+    }
+  }
+
   return { name: compConfig.name, kind: "composite", root: compConfig.root, nodes };
 }
 
 /** Compile the normalized shapes + config into a validated manifest + provenance. */
 export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig): CompileResult {
   assertClassOwnership(config);
+  const orderedTargets = orderedItemTargets(shapes, config);
   if (implicitClassTargets(shapes.quads).length)
     throw new TypeError("implicit class targets are not modeled by the runtime");
   if (sharedAliasPredicates(shapes).length)
@@ -551,8 +594,11 @@ export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig)
   // Flat entities in shape order (skipping composite-claimed shapes); then composites in
   // config order — a deterministic ordering.
   const flatEntities: AnyManifestEntity[] = shapes.nodeShapes
-    .filter((shape) => !claimedByComposite.has(shape.targetClass))
-    .map((shape) => compileEntity(shape, config, provenance));
+    .filter(
+      (shape) =>
+        !claimedByComposite.has(shape.targetClass) && !orderedTargets.has(shape.targetClass),
+    )
+    .map((shape) => compileEntity(shape, config, provenance, shapes));
   const compositeEntities: AnyManifestEntity[] = config.entities
     .filter(isCompositeConfig)
     .map((c) => compileCompositeEntity(c, shapeByTarget, shapes, typeAliases, provenance));

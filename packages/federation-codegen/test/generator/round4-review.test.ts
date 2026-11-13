@@ -329,6 +329,9 @@ it("H1/M2: walks every production writer and quad emission call site in both pac
     "model-runtime/src/rdf.ts",
   ]);
   expect(sites.sort()).toEqual([
+    // Ordered lowering adds explicit class/node-kind constraints at this same
+    // validated generator writer boundary; runtime writes still use wrappers.
+    "federation-codegen/src/emit.ts:emitShapesTtl:DataFactory.quad",
     // Concept-class lowering constructs sh:in and RDF-list quads. All three
     // pass through the same validated serializeCanonicalTurtle boundary.
     "federation-codegen/src/emit.ts:emitShapesTtl:DataFactory.quad",
