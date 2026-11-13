@@ -48,6 +48,7 @@ import type {
   JsonObject,
   OutcomeConclusion,
 } from "../core/types.js";
+import type { ContextItem } from "../gates/common.js";
 import type { TransmissionRecord } from "../runtime/transmission.js";
 
 export interface SeenEntry {
@@ -158,6 +159,9 @@ export interface RuntimeState {
   tasks: Record<Iri, TaskState>;
   /** Provider transmissions of outbound messages, keyed by message id (see transmission.ts). */
   transmissions: Record<Iri, TransmissionRecord>;
+  contextItems: Record<Iri, ContextItem[]>;
+  /** Single-use approvals remain remembered after their permitted release. */
+  usedApprovals: Record<Iri, true>;
 }
 
 /** Explicit conversation/task ownership. Legacy JSON without this envelope has no owner. */
@@ -188,6 +192,8 @@ export function emptyState(): RuntimeState {
     revokedMandates: [],
     tasks: {},
     transmissions: {},
+    contextItems: {},
+    usedApprovals: {},
   };
 }
 

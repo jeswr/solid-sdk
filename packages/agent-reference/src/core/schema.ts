@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Structural validation of decoded messages. Strict: an unknown field anywhere in the
  * envelope or a core body is refused (`unsupported-term`), because an unrecognised
@@ -64,9 +65,16 @@ const bodies = {
     ref: id,
     reason,
     detail,
-    needs: z.strictObject({ approval: id, label: z.string().min(1).max(256) }),
+    needs: z.strictObject({
+      approval: id,
+      label: z.string().min(1).max(256),
+      id,
+      nonce: id,
+      expiresAt: iso,
+    }),
   }),
   invoke: z.strictObject({
+    challenge: z.strictObject({ id, nonce: id }).optional(),
     operation: operationRef,
     input: jsonObject,
     basis,
@@ -116,6 +124,7 @@ const envelope = z.strictObject({
   expiresAt: iso,
   inReplyTo: id.optional(),
   body: jsonObject,
+  authorship: z.strictObject({ method: z.literal("model-output"), onBehalfOf: id }).optional(),
   evidence: z.array(evidenceItem).max(64).optional(),
 });
 

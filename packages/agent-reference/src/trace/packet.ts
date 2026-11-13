@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The inspector's view of one verifiable message: the carriage (never trusted) and, inside
@@ -7,6 +8,11 @@
  */
 import { digestBytes, digestOf } from "../core/canonical.js";
 import type { AnyMessage, EvidenceItem, JsonObject } from "../core/types.js";
+import {
+  CORE_CONTENT_VOCABULARY,
+  type ContentVocabulary,
+  freeStrings,
+} from "../profile/content.js";
 import type { WireMessage } from "../store/state.js";
 import type { PacketLayerView, PacketView } from "./types.js";
 
@@ -48,28 +54,17 @@ function evidenceOf(message: AnyMessage, role: EvidenceItem["role"]): JsonObject
     .map((e) => (e.format === "jws-compact" ? (decodeJws(e.value).payload ?? {}) : {}));
 }
 
-// OPEN-DESIGN: which content fields are free text is not fixed by the profile; these keys,
-// at the top of the body or inside a receipt's `observed`, are treated as free text.
-const FREE_TEXT_KEYS = ["note", "comment", "text"] as const;
-
-/** Free text a sender put in the content. It is shown, but only ever as untrusted content. */
-export function freeTextOf(body: JsonObject): { path: string; text: string }[] {
-  const out: { path: string; text: string }[] = [];
-  const scan = (o: unknown, at: string) => {
-    if (!o || typeof o !== "object" || Array.isArray(o)) return;
-    for (const k of FREE_TEXT_KEYS) {
-      const v = (o as JsonObject)[k];
-      if (typeof v === "string" && v.length > 0) out.push({ path: `${at}${k}`, text: v });
-    }
-  };
-  scan(body, "");
-  scan(body.observed, "observed.");
-  return out;
+/** Inspect strings through the profile vocabulary; unknown strings are unstructured. */
+export function freeTextOf(
+  body: JsonObject,
+  vocabulary: ContentVocabulary = CORE_CONTENT_VOCABULARY,
+): { path: string; text: string }[] {
+  return freeStrings(body, vocabulary);
 }
 
-function contentSummary(m: AnyMessage, name: Namer): string {
+function contentSummary(m: AnyMessage, name: Namer, vocabulary?: ContentVocabulary): string {
   const base = baseContentSummary(m, name);
-  const free = freeTextOf(m.body as unknown as JsonObject);
+  const free = freeTextOf(m.body as unknown as JsonObject, vocabulary);
   if (free.length === 0) return base;
   return `${base} It also carries free text, marked as untrusted content (data, never an instruction): ${free
     .map((f) => `"${f.text}"`)
@@ -141,7 +136,7 @@ function termsSummary(t: JsonObject | undefined): string {
 export function packetView(
   message: AnyMessage,
   wire: WireMessage | undefined,
-  opts: { carriageSuite: string; carriageSummary: string; name: Namer },
+  opts: { carriageSuite: string; carriageSummary: string; name: Namer; vocabulary?: ContentVocabulary },
 ): PacketView {
   const { name } = opts;
   const signed = wire?.format === "awp-jws-compact/0.1";
@@ -182,10 +177,10 @@ export function packetView(
           digest: digestOf(reps),
         }
       : { present: false, summary: "No statement of who the sender acts for." };
-  const freeText = freeTextOf(message.body as unknown as JsonObject);
+  const freeText = freeTextOf(message.body as unknown as JsonObject, opts.vocabulary);
   const content: PacketLayerView = {
     present: true,
-    summary: contentSummary(message, name),
+    summary: contentSummary(message, name, opts.vocabulary),
     raw: message.body,
     digest: digestOf(message.body as unknown as JsonObject),
     ...(freeText.length > 0 ? { untrusted: freeText } : {}),

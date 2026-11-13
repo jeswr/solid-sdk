@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The inbound gate. Every message is checked before the core sees it: integrity, source,
@@ -132,6 +133,7 @@ export class InboundGate {
           carriageSuite: transport,
           carriageSummary: `Arrived over ${binding ?? "an unnamed binding"}.`,
           name: this.name,
+          vocabulary: this.deps.gate.vocabulary,
         }),
         ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
         caption: `${/^[aeiou]/.test(peek.kind) ? "An" : "A"} ${peek.kind} message from ${this.name(peek.from?.actor)} reaches the inbound gate.`,
@@ -457,11 +459,21 @@ export class InboundGate {
     if (check.verification.outcome === "unknown-key") check = await verify("party");
     const s = check.payload;
     if (!s || check.verification.outcome !== "valid")
-      return { verdict: "fail", reason: "evidence-invalid" };
+      return {
+        verdict: "fail",
+        reason: check.verification.outcome === "unknown-key" ? "unknown-key" : "evidence-invalid",
+      };
     if (check.signer?.subject !== s.issuer)
       return { verdict: "fail", reason: "evidence-invalid", claim: s };
     // The claim's own subject, when it names one: a bank's statement relayed by the bank's
     // agent is still about the account holder.
+    const permittedSources = this.deps.gate.claimSources?.[s.claimType];
+    if (permittedSources && !permittedSources.includes(s.issuer))
+      return {
+        verdict: "fail",
+        reason: "source-not-authoritative",
+        claim: s,
+      };
     const about = s.subject ?? subject;
     const input = {
       evaluator: this.deps.identity.actor,
@@ -604,6 +616,7 @@ export class InboundGate {
       label,
       claimType: c.claimType,
       source: c.issuer,
+      subject: c.subject ?? "unknown",
       ...(c.method ? { method: c.method } : {}),
       ...(c.asOf ? { asOf: c.asOf } : {}),
       ...(terms ? { terms } : {}),
@@ -648,7 +661,12 @@ export class InboundGate {
    */
   async admitStatements(
     items: readonly { readonly jws: string }[],
-    opts: { readonly subject?: Iri; readonly task: string; readonly purpose?: Iri },
+    opts: {
+      readonly subject?: Iri;
+      readonly task: string;
+      readonly purpose?: Iri;
+      readonly taskId?: Iri;
+    },
   ): Promise<{ admitted: number; refused: number }> {
     let admitted = 0;
     let refused = 0;
@@ -658,15 +676,11 @@ export class InboundGate {
       const r = await this.assessClaim(ev, opts.subject);
       cache.set(item.jws, r);
       const label = r.claim ? this.labelOf(r.claim) : "A statement";
-      if (r.reason === "evidence-invalid") {
+      if (r.reason === "evidence-invalid" || r.reason === "unknown-key") {
         this.verdictEvent("integrity", "fail", `${label} does not verify against a pinned key.`, {
-          reason: "evidence-invalid",
+          reason: r.reason,
         });
-        this.decisionEvent(
-          "refuse",
-          `${label} is refused and kept out of memory.`,
-          "evidence-invalid",
-        );
+        this.decisionEvent("refuse", `${label} is refused and kept out of memory.`, r.reason);
         refused++;
         continue;
       }
@@ -697,7 +711,15 @@ export class InboundGate {
         continue;
       }
       this.decisionEvent("admit", `${label} is admitted.`);
-      this.storeEvent(r.claim as Claim);
+      const claim = r.claim as Claim;
+      this.storeEvent(claim);
+      const fact = this.deps.memory.facts.get(claim.id ?? digestOf(claim));
+      if (fact)
+        this.deps.memory.enter(this.deps.gate.taskId ?? opts.taskId ?? "*", {
+          ...fact,
+          kind: "statement",
+          digest: digestOf(claim),
+        });
       admitted++;
     }
     return { admitted, refused };
@@ -868,7 +890,20 @@ export class Admission {
           r.verdict === "pass" &&
           r.claim?.claimType === need.claimType &&
           r.claim.subject === rep.party &&
-          (r.claim as JsonObject).level === need.level,
+          (r.claim as JsonObject).level === need.level &&
+          (!conv.challenge ||
+            (() => {
+              const approves = (r.claim as JsonObject).approves as JsonObject | undefined;
+              const citation = approves?.challenge as JsonObject | undefined;
+              return (
+                citation?.id === conv.challenge.id &&
+                citation?.nonce === conv.challenge.nonce &&
+                approves?.actor === msg.from.actor &&
+                approves?.operation === handler.description.id &&
+                typeof r.claim.validUntil === "string" &&
+                Date.parse(r.claim.validUntil) > Date.parse(this.deps.now())
+              );
+            })()),
       )?.claim;
       const rule = {
         id: need.level,

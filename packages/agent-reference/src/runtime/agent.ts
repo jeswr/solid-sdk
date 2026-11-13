@@ -56,6 +56,7 @@ import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.
 import { TYP, verifyStatement } from "../mechanisms/statements.js";
 import type { TrustStore } from "../mechanisms/trust.js";
 import { CONFIGURATIONS, configurationById, POLICY_PROFILE } from "../profile/configurations.js";
+import { CORE_CONTENT_VOCABULARY, freeStrings } from "../profile/content.js";
 import {
   buildDescription,
   type ConformanceClaim,
@@ -203,7 +204,14 @@ type Continuation =
   | { type: "propose"; operation: OperationRef; terms: JsonObject }
   | { type: "invoke"; operation: OperationRef; input: JsonObject; basis: JsonObject; purpose?: Iri }
   | { type: "message"; plan: OutboundPlan }
-  | { type: "effect"; plan: EffectPlan; basis?: Iri };
+  | { type: "effect"; plan: EffectPlan; basis?: Iri }
+  | {
+      type: "release-message";
+      message: AnyMessage;
+      intent?: ActionIntent;
+      force?: boolean;
+      conditions?: readonly DisclosureCondition[];
+    };
 
 interface StartPlan {
   readonly type: "propose" | "invoke";
@@ -246,6 +254,13 @@ export class RejectError extends Error {
   }
 }
 
+/** Internal non-local return: no caller may continue after an emission was held. */
+class MessageReleaseError extends Error {
+  constructor(readonly result: StepResult) {
+    super(result.reason);
+  }
+}
+
 export class AgentRuntime {
   readonly identity: AgentIdentity;
   readonly limits: PilotLimits;
@@ -278,6 +293,7 @@ export class AgentRuntime {
   private carriage: string | undefined;
   /** Set while a task the core took from a received message is being proposed. */
   private proposalOrigin: ProposalOrigin | undefined;
+  private readonly gateMemory: GateMemory;
 
   private constructor(private readonly options: AgentRuntimeOptions) {
     this.retention = { ...DEFAULT_RETENTION, ...(options.retention ?? {}) };
@@ -293,7 +309,12 @@ export class AgentRuntime {
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
     const gate: GateContext = { ...(options.gates ?? {}), carriage: () => this.carriage };
-    const memory = new GateMemory();
+    const memory = new GateMemory(this.state.contextItems);
+    this.gateMemory = memory;
+    for (const items of Object.values(memory.contexts))
+      for (const item of items) {
+        if (item.kind === "statement" || item.kind === "reading") memory.facts.set(item.id, item);
+      }
     this.inbound = new InboundGate({
       identity: this.identity,
       trust: this.trust,
@@ -315,13 +336,15 @@ export class AgentRuntime {
     this.outbound = new OutboundGate({
       identity: this.identity,
       now: () => this.now(),
-      mandate: () => this.mandate?.mandate,
+      mandate: () => this.mandate && !this.isRevoked(this.mandate) ? this.mandate.mandate : undefined,
+      policyEngine: options.policyEngine,
       gate,
       memory,
       isReplyTo: (id, party) => {
         const conv = this.state.conversations[id];
         return conv?.role === "responder" && conv.peer.party === party;
       },
+      conversationPurpose: (id) => this.purposeOf(id),
       offerTerms: (termsDigest) => {
         for (const [key, entry] of Object.entries(this.state.domain)) {
           if (!key.startsWith("_offer:")) continue;
@@ -333,7 +356,7 @@ export class AgentRuntime {
       },
       demandedApproval: (intent) => {
         if (!intent.recipient) return undefined;
-        const needs = this.getDomain(`_challenge:${intent.recipient}|${intent.operation}`);
+        const needs = this.getDomain(`_challenge:${intent.conversation}`);
         if (!needs || typeof needs !== "object" || Array.isArray(needs)) return undefined;
         const given = this.state.approvals[actionDigest(intent)];
         const approved =
@@ -364,7 +387,16 @@ export class AgentRuntime {
         this.decisions = [];
         this.current = undefined;
         this.carriage = undefined;
-        return fn();
+        return fn().catch((error: unknown) => {
+          if (!(error instanceof MessageReleaseError)) throw error;
+          if (this.current) {
+            const seen = this.state.seen[this.current.id];
+            if (seen)
+              this.state.seen[this.current.id] = { ...seen, disposition: error.result.disposition };
+          }
+          this.persist();
+          return error.result as T;
+        });
       });
     const result = this.queue.then(run, run);
     this.queue = result.then(
@@ -529,7 +561,7 @@ export class AgentRuntime {
   }> {
     return Object.values(this.state.pending).map((p) => ({
       actionDigest: p.actionDigest,
-      intent: p.intent,
+      intent: structuredClone(p.intent),
       conversation: p.conversation,
     }));
   }
@@ -677,9 +709,69 @@ export class AgentRuntime {
    */
   admitStatements(
     items: readonly { readonly jws: string }[],
-    opts: { readonly subject?: Iri; readonly task: string; readonly purpose?: Iri },
+    opts: {
+      readonly subject?: Iri;
+      readonly task: string;
+      readonly purpose?: Iri;
+      readonly taskId?: Iri;
+    },
   ) {
-    return this.exclusive(() => this.inbound.admitStatements(items, opts));
+    return this.exclusive(async () => {
+      const result = await this.inbound.admitStatements(items, opts);
+      this.persist();
+      return result;
+    });
+  }
+
+  /** UNS-3: the runtime, not the core, fixes authorship, method and provenance. */
+  recordReading(input: {
+    task: Iri;
+    originalDigest: string;
+    claimType: string;
+    subject: Iri;
+    value: Json;
+    terms?: import("../gates/common.js").ItemTerms;
+  }): Promise<{ statement: JsonObject; jws: string }> {
+    return this.exclusive(async () => {
+      const original = this.gateMemory
+        .context(input.task)
+        .find((item) => item.digest === input.originalDigest);
+      if (!original)
+        throw new RejectError(
+          "missing-context",
+          "the reading does not name content in this task's context",
+        );
+      const key = this.keysByAlg.get("EdDSA");
+      if (!key) throw new RejectError("unknown-key", "no authoring agent key");
+      const statement: JsonObject = {
+        id: this.newId(),
+        issuer: this.identity.actor,
+        subject: input.subject,
+        claimType: input.claimType,
+        value: input.value,
+        method: "model-output",
+        asOf: this.now(),
+        originalDigest: input.originalDigest,
+        implementation: digestOf(this.description()),
+      };
+      // A reading inherits the original's terms. The caller cannot loosen them.
+      if (original.terms) statement.terms = original.terms as unknown as Json;
+      const jws = await signCompact(key, TYP.statement, statement);
+      this.record({ type: "reading", statement, digest: digestOf(statement), at: this.now() });
+      this.gateMemory.enter(input.task, {
+        ...original,
+        id: String(statement.id),
+        label: `Reading of ${original.label}`,
+        source: this.identity.actor,
+        subject: input.subject,
+        claimType: input.claimType,
+        method: "model-output",
+        kind: "reading",
+        digest: digestOf(statement),
+      });
+      this.persist();
+      return { statement, jws };
+    });
   }
 
   /** Check this agent's own record and show it in the trace. */
@@ -897,7 +989,18 @@ export class AgentRuntime {
         ],
       };
     }
-    const intent = handler.intentForInvoke?.(ctx, plan.input ?? {});
+    let intent = handler.intentForInvoke?.(ctx, plan.input ?? {});
+    const challenge = conv.phase === "challenged" ? conv.challenge : undefined;
+    if (challenge && Date.parse(challenge.expiresAt) <= Date.parse(this.now()))
+      throw new RejectError("expired", "challenge expired");
+    if (intent && challenge)
+      intent = {
+        ...intent,
+        parameters: {
+          ...intent.parameters,
+          challenge: { id: challenge.id, nonce: challenge.nonce },
+        },
+      };
     if (intent) {
       const decision = this.authorise(intent);
       if (decision.outcome === "approval-required") {
@@ -925,6 +1028,7 @@ export class AgentRuntime {
     const body = {
       operation: plan.operation,
       input: plan.input ?? {},
+      ...(challenge ? { challenge: { id: challenge.id, nonce: challenge.nonce } } : {}),
       basis: plan.basis ?? { kind: "public" },
       ...(plan.purpose ? { purpose: plan.purpose } : {}),
     };
@@ -938,6 +1042,24 @@ export class AgentRuntime {
         }),
       ],
     };
+  }
+
+  /** Retry a held invocation in its original conversation, bound to its challenge. */
+  retryChallenge(conversation: Iri): Promise<StepResult> {
+    return this.exclusive(async () => {
+      const conv = this.mustConversation(conversation);
+      if (conv.phase !== "challenged" || !conv.challenge)
+        return this.result("rejected", { reason: "protocol-violation", outbound: [] });
+      if (Date.parse(conv.challenge.expiresAt) <= Date.parse(this.now()))
+        return this.result("rejected", { reason: "expired", outbound: [] });
+      const result = await this.continueStart(conversation);
+      this.persist();
+      return this.result(result.pending ? "pending-approval" : "local", {
+        conversation,
+        outbound: result.messages,
+        ...(result.pending ? { pendingApproval: result.pending } : {}),
+      });
+    });
   }
 
   /**
@@ -1228,6 +1350,14 @@ export class AgentRuntime {
       this.reject(next.reason, next.detail, { conversation: conv.id });
     }
     conv = this.saveConversation(next.state);
+    const declaredPurpose =
+      msg.kind === "invoke"
+        ? msg.body.purpose
+        : msg.kind === "propose"
+          ? msg.body.terms.purpose
+          : undefined;
+    if (typeof declaredPurpose === "string")
+      this.setDomain(`_purpose:${conv.id}`, declaredPurpose, conv.id);
 
     switch (msg.kind) {
       case "describe":
@@ -1290,7 +1420,12 @@ export class AgentRuntime {
   }
 
   private async onDescribe(conv: ConversationState, msg: Message<"describe">) {
-    const refused = await this.admitToCore(conv, msg);
+    // Fixed protocol processing is outside the core. Track it if a core hook reads it.
+    const refused = await this.admitToCore(
+      conv,
+      msg,
+      [...this.handlers.values()].some((h) => !!h.describeFor),
+    );
     if (refused) return refused;
     let extensions: JsonObject | undefined;
     for (const h of this.handlers.values()) {
@@ -1303,7 +1438,10 @@ export class AgentRuntime {
   }
 
   private async onDescription(conv: ConversationState, msg: Message<"description">) {
-    const refused = await this.admitToCore(conv, msg);
+    const startPlan = this.getDomain(`_start:${conv.id}`) as unknown as StartPlan | undefined;
+    const readsDescription =
+      startPlan && !!this.handlers.get(operationKey(startPlan.operation))?.vetDescription;
+    const refused = await this.admitToCore(conv, msg, !!readsDescription);
     if (refused) return refused;
     const peer = readPeerDescription(msg.body.description);
     const plan = this.getDomain(`_start:${conv.id}`) as unknown as StartPlan | undefined;
@@ -1530,13 +1668,15 @@ export class AgentRuntime {
     msg: Extract<AnyMessage, { kind: "refuse" | "challenge" | "unsupported" | "indeterminate" }>,
   ) {
     await this.admission?.complete(conv, msg);
-    if (msg.kind === "challenge" && conv.peer.party && conv.operation) {
-      // Kept so the outbound gate asks the principal for that approval next time (CORE-OUT-8).
-      this.setDomain(
-        `_challenge:${conv.peer.party}|${conv.operation.id}`,
-        msg.body.needs as unknown as Json,
-        conv.id,
-      );
+    if (msg.kind === "challenge") {
+      this.setDomain(`_challenge:${conv.id}`, msg.body.needs as unknown as Json, conv.id);
+      this.record({
+        type: "challenged-by-peer",
+        conversation: conv.id,
+        challenge: msg.body.needs,
+        at: this.now(),
+      });
+      return { disposition: "accepted" as const, outbound: [] };
     }
     this.record({
       type: "closed-by-peer",
@@ -1655,9 +1795,33 @@ export class AgentRuntime {
   }
 
   /** The inbound gate's remaining checks and decision, right before the core sees `msg`. */
-  private async admitToCore(conv: ConversationState, msg: AnyMessage) {
+  private async admitToCore(conv: ConversationState, msg: AnyMessage, entersCore = true) {
     const r = await this.admission?.complete(conv, msg);
     if (r && !r.ok) return this.replyClose(conv, msg, "refuse", r.reason, r.detail);
+    if (!entersCore) return undefined;
+    const task = this.options.gates?.taskId ?? conv.id;
+    for (const item of msg.evidence ?? []) {
+      if (item.role !== "credential") continue;
+      try {
+        const claim = JSON.parse(
+          Buffer.from(item.value.split(".")[1] ?? "", "base64url").toString(),
+        ) as JsonObject;
+        const fact = this.gateMemory.facts.get(String(claim.id));
+        if (fact)
+          this.gateMemory.enter(task, { ...fact, kind: "statement", digest: digestOf(claim) });
+      } catch {
+        /* An unaccepted claim is never a fact. The message below retains its labels. */
+      }
+    }
+    this.gateMemory.enter(task, {
+      id: msg.id,
+      label: `${msg.kind} from ${msg.from.actor ?? "anonymous"}`,
+      kind: "message",
+      digest: digestOf(msg),
+      subject: msg.from.onBehalfOf ?? "unknown",
+      source: msg.from.actor ?? "anonymous",
+      claimType: `message:${msg.kind}`,
+    });
     return undefined;
   }
 
@@ -1856,6 +2020,24 @@ export class AgentRuntime {
       outbound.push(...(await this.runEffect(conversationId, e, agreement.id)));
     }
     return { disposition: "accepted" as const, outbound };
+  }
+
+  /** A scripted or model core can propose a follow-up only through this executor. */
+  sendMessage(conversation: Iri, plan: OutboundPlan): Promise<StepResult> {
+    return this.exclusive(async () => {
+      const outbound = await this.performPlanMessage(conversation, plan);
+      this.persist();
+      const pending = Object.values(this.state.pending).find(
+        (p) => p.conversation === conversation,
+      );
+      return this.result(pending ? "pending-approval" : "local", {
+        conversation,
+        outbound,
+        ...(pending
+          ? { pendingApproval: { actionDigest: pending.actionDigest, intent: pending.intent } }
+          : {}),
+      });
+    });
   }
 
   private async performPlanMessage(
@@ -2741,9 +2923,9 @@ export class AgentRuntime {
     const digest = actionDigest(intent);
     this.state.pending[digest] = {
       actionDigest: digest,
-      intent,
+      intent: structuredClone(intent),
       conversation: ownerId,
-      continuation: continuation as unknown as Json,
+      continuation: structuredClone(continuation) as unknown as Json,
       createdAt: this.now(),
     };
     if (continuation.type === "effect")
@@ -2792,6 +2974,20 @@ export class AgentRuntime {
       return this.result("rejected", { reason: "approval-denied", detail: v.reason, outbound: [] });
     }
     const a = v.approval;
+    if (this.state.usedApprovals[a.id])
+      return this.result("rejected", {
+        reason: "approval-denied",
+        detail: "approval already used",
+        outbound: [],
+      });
+    const waiting = this.state.pending[a.actionDigest];
+    if (!waiting) return this.result("rejected", { reason: "approval-denied", detail: "no action is waiting with this digest", outbound: [] });
+    if (waiting && a.conversation !== waiting.conversation)
+      return this.result("rejected", {
+        reason: "approval-denied",
+        detail: "approval names another conversation",
+        outbound: [],
+      });
     this.state.approvals[a.actionDigest] = {
       id: a.id,
       decision: a.decision,
@@ -2868,6 +3064,40 @@ export class AgentRuntime {
         detail: "conversation closed; approval not used",
         outbound: [],
       });
+    }
+    if (cont.type === "release-message") {
+      if (digestOf(cont.message) !== pending.intent.parameters.messageDigest || actionDigest(pending.intent) !== a.actionDigest) {
+        this.persist();
+        return this.result("rejected", { reason: "approval-denied", detail: "held message does not match the approved digest", outbound: [] });
+      }
+      if (a.decision === "deny") {
+        this.state.usedApprovals[a.id] = true;
+        this.persist();
+        return this.result("local", { reason: "approval-denied", outbound: [] });
+      }
+      if (Date.parse(cont.message.expiresAt) <= Date.parse(this.now())) {
+        this.persist();
+        return this.result("rejected", { reason: "expired", outbound: [] });
+      }
+      const currentDecision = this.authorise(pending.intent, true);
+      if (currentDecision.outcome !== "permit") {
+        this.persist();
+        return this.result("rejected", {
+          reason: "not-authorised",
+          detail: "the current mandate no longer permits this release",
+          outbound: [],
+        });
+      }
+      const out = await this.emit(conv.id, cont.message.kind, cont.message.body, {
+        resume: cont.message,
+        approved: true,
+        ...(cont.intent ? { intent: cont.intent } : {}),
+        ...(cont.force ? { force: true } : {}),
+        ...(cont.conditions ? { conditions: cont.conditions } : {}),
+      });
+      this.state.usedApprovals[a.id] = true;
+      this.persist();
+      return this.result("accepted", { conversation: conv.id, outbound: [out] });
     }
     const resumed = this.apply(conv, { type: "approval-resolved", at: this.now() });
     let outbound: OutboundMessage[] = [];
@@ -2969,6 +3199,8 @@ export class AgentRuntime {
       intent?: ActionIntent;
       /** Authorisation basis of a protected disclosure; re-checked at every transmission. */
       conditions?: readonly DisclosureCondition[];
+      resume?: AnyMessage;
+      approved?: boolean;
     },
   ): Promise<OutboundMessage> {
     const conv = this.mustConversation(conversationId);
@@ -2985,24 +3217,70 @@ export class AgentRuntime {
     );
     const anonymousRequester =
       cfg.requesterAuthentication === "not-applicable" && conv.role === "initiator";
-    const message = {
-      profile: PILOT_PROFILE,
-      configuration,
-      id: this.newId(),
-      conversation: conversationId,
-      kind,
-      from: anonymousRequester ? {} : this.selfRef(),
-      ...(conv.peer.actor
-        ? { to: { actor: conv.peer.actor, ...(conv.peer.party ? { party: conv.peer.party } : {}) } }
-        : {}),
-      createdAt: at.toISOString(),
-      expiresAt: new Date(at.getTime() + lifetime).toISOString(),
-      ...(opts.inReplyTo ? { inReplyTo: opts.inReplyTo } : {}),
-      body,
-      ...(opts.evidence && opts.evidence.length > 0 ? { evidence: opts.evidence } : {}),
-    } as unknown as AnyMessage;
+    const free = freeStrings(body, {
+      ...CORE_CONTENT_VOCABULARY,
+      ...this.options.gates?.vocabulary,
+    });
+    const message =
+      opts.resume ??
+      ({
+        profile: PILOT_PROFILE,
+        configuration,
+        id: this.newId(),
+        conversation: conversationId,
+        kind,
+        from: anonymousRequester ? {} : this.selfRef(),
+        ...(conv.peer.actor
+          ? {
+              to: {
+                actor: conv.peer.actor,
+                ...(conv.peer.party ? { party: conv.peer.party } : {}),
+              },
+            }
+          : {}),
+        createdAt: at.toISOString(),
+        expiresAt: new Date(at.getTime() + lifetime).toISOString(),
+        ...(opts.inReplyTo ? { inReplyTo: opts.inReplyTo } : {}),
+        body,
+        ...(free.length > 0 && this.identity.party
+          ? { authorship: { method: "model-output", onBehalfOf: this.identity.party } }
+          : {}),
+        ...(opts.evidence && opts.evidence.length > 0 ? { evidence: opts.evidence } : {}),
+      } as unknown as AnyMessage);
     const checked = validateMessage(message);
     if (!checked.ok) throw new Error(`internal: outbound ${kind} invalid: ${checked.detail}`);
+    const release = this.outbound.checkMessage(message, {
+      ...(opts.intent ? { intent: opts.intent } : {}),
+      ...(this.operationOf(conv) ? { operation: this.operationOf(conv) } : {}),
+      ...(opts.approved ? { approved: true } : {}),
+    });
+    if (release.outcome !== "go") {
+      const pending =
+        release.outcome === "ask-principal"
+          ? this.park(conv.id, release.intent, {
+              type: "release-message",
+              message,
+              ...(opts.intent ? { intent: opts.intent } : {}),
+              ...(opts.force ? { force: true } : {}),
+              ...(opts.conditions ? { conditions: opts.conditions } : {}),
+            })
+          : undefined;
+      this.record({
+        type: "message-held",
+        conversation: conv.id,
+        digest: release.digest,
+        reason: release.reason,
+        at: this.now(),
+      });
+      throw new MessageReleaseError(
+        this.result(pending ? "pending-approval" : "rejected", {
+          conversation: conv.id,
+          reason: release.reason,
+          outbound: [],
+          ...(pending ? { pendingApproval: pending } : {}),
+        }),
+      );
+    }
     if (!opts.force || !isTerminal(conv.phase)) {
       const next = transition(
         conv,
@@ -3018,6 +3296,12 @@ export class AgentRuntime {
         this.limits,
       );
       if (!next.ok) {
+        if (next.reason === "round-limit") {
+          this.outbound.stopLimit(message.id, "round-limit");
+          throw new MessageReleaseError(
+            this.result("rejected", { reason: "round-limit", conversation: conv.id, outbound: [] }),
+          );
+        }
         if (!opts.force)
           throw new Error(`internal: outbound ${kind} violates state machine: ${next.detail}`);
       } else {
@@ -3046,17 +3330,6 @@ export class AgentRuntime {
       ...(opts.intent ? { intent: opts.intent } : {}),
       ...(opts.conditions ? { conditions: opts.conditions } : {}),
     };
-    this.state.outbox[message.id] = entry;
-    // Associate the response with the inbound message being processed NOW, so any
-    // mid-dispatch snapshot already links them (a replay then returns this response).
-    const seen = this.current ? this.state.seen[this.current.id] : undefined;
-    if (this.current && seen && !seen.responses.includes(message.id)) {
-      this.state.seen[this.current.id] = { ...seen, responses: [...seen.responses, message.id] };
-    }
-    this.outbound.seal(message, wire, {
-      ...(opts.intent ? { intent: opts.intent } : {}),
-      ...(this.operationOf(conv) ? { operation: this.operationOf(conv) as Iri } : {}),
-    });
     this.record({
       type: "message-out",
       id: message.id,
@@ -3067,7 +3340,31 @@ export class AgentRuntime {
       // The payload-free authorisation basis of a protected disclosure (kind + reference).
       ...(opts.conditions ? { conditions: opts.conditions } : {}),
     });
+    // Evidence and the write-ahead record must succeed before the outbox can expose it.
+    this.outbound.seal(message, wire, {
+      ...(opts.intent ? { intent: opts.intent } : {}),
+      ...(this.operationOf(conv) ? { operation: this.operationOf(conv) as Iri } : {}),
+    });
+    this.state.outbox[message.id] = entry;
+    // Associate the response with the inbound message being processed NOW, so any
+    // mid-dispatch snapshot already links them (a replay then returns this response).
+    const seen = this.current ? this.state.seen[this.current.id] : undefined;
+    if (this.current && seen && !seen.responses.includes(message.id)) {
+      this.state.seen[this.current.id] = { ...seen, responses: [...seen.responses, message.id] };
+    }
     return this.outboundFromEntry(entry, message);
+  }
+
+  private purposeOf(id: Iri): Iri | undefined {
+    const conv = this.state.conversations[id];
+    const agreement = conv?.agreement ? this.state.agreements[conv.agreement] : undefined;
+    const plan = this.getDomain(`_start:${id}`) as unknown as StartPlan | undefined;
+    const purpose =
+      agreement?.terms.purpose ??
+      plan?.purpose ??
+      plan?.terms?.purpose ??
+      this.getDomain(`_purpose:${id}`);
+    return typeof purpose === "string" ? purpose : undefined;
   }
 
   /** The operation a conversation is about (the start plan's, before the first proposal). */
@@ -3149,6 +3446,12 @@ export class AgentRuntime {
   ) {
     const reason = "assurance-insufficient" as const;
     const detail = `needs ${needs.label}`;
+    const challenge = {
+      ...needs,
+      id: this.newId(),
+      nonce: this.newId(),
+      expiresAt: new Date(this.clock().getTime() + 5 * 60_000).toISOString(),
+    };
     this.record({
       type: "challenge",
       conversation: conv.id,
@@ -3160,7 +3463,7 @@ export class AgentRuntime {
     const out = await this.emit(
       conv.id,
       "challenge",
-      { ref: msg.id, reason, detail, needs: { ...needs } },
+      { ref: msg.id, reason, detail, needs: challenge },
       { inReplyTo: msg.id },
     );
     return { disposition: "accepted" as const, outbound: [out], reason, detail };
@@ -3193,7 +3496,15 @@ export class AgentRuntime {
       ...(representation ? { representation } : {}),
       trust: this.trust,
       assessRepresentation: (jws, expect) => this.inbound.assessRepresentation(jws, expect),
-      getState: <T extends Json>(key: string) => this.getDomain(`${opKey}:${key}`) as T | undefined,
+      getState: <T extends Json>(key: string) => {
+        const value = this.getDomain(`${opKey}:${key}`);
+        if (value !== undefined) this.gateMemory.enter(this.options.gates?.taskId ?? conv.id, {
+          id: derivedUrn("memory", { operation: opKey, key, digest: digestOf(value) }),
+          kind: "memory", digest: digestOf(value), label: `Memory entry ${key}`,
+          claimType: `memory:${key}`, source: this.identity.actor, subject: this.identity.party ?? "unknown",
+        });
+        return structuredClone(value) as T | undefined;
+      },
       setState: (key: string, value: Json, owner?: Iri | null) =>
         this.setDomain(`${opKey}:${key}`, value, owner === null ? undefined : (owner ?? conv.id)),
       record: (r) => this.record(r),

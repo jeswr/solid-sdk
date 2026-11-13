@@ -1,0 +1,1487 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "x-authored-by": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string",
+      "const": "agent-scenario/0.1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "profile": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "parties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "identity": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "actor": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "principal",
+              "agent",
+              "source",
+              "register"
+            ]
+          },
+          "runs": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "issuer-only"
+            ]
+          },
+          "actsFor": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        },
+        "required": [
+          "id",
+          "identity",
+          "name",
+          "role",
+          "runs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "trust": {
+      "type": "object",
+      "properties": {
+        "introductions": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              }
+            ]
+          }
+        },
+        "ownLists": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                },
+                "tasks": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  }
+                },
+                "block": {
+                  "type": "boolean"
+                },
+                "note": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "party",
+                "tasks"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "sources": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                },
+                "claimTypes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "subjects": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "any"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                      }
+                    }
+                  ]
+                },
+                "validFrom": {
+                  "type": "string"
+                },
+                "validUntil": {
+                  "type": "string"
+                },
+                "framework": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "version",
+                "source",
+                "claimTypes",
+                "subjects"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "root": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+            },
+            "name": {
+              "type": "string"
+            },
+            "delegates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "answersFor": {
+                    "type": "string"
+                  },
+                  "entries": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "party": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                        },
+                        "authorizedFor": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                          }
+                        },
+                        "claimTypes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "authorized",
+                            "suspended",
+                            "withdrawn"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                        }
+                      },
+                      "required": [
+                        "party",
+                        "authorizedFor",
+                        "status",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "answerTtlMs": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "answersFor",
+                  "entries",
+                  "answerTtlMs"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "delegates"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "introductions",
+        "ownLists",
+        "sources"
+      ],
+      "additionalProperties": false
+    },
+    "statements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "issuer": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "subject": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "value": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "method": {
+            "type": "string"
+          },
+          "asOf": {
+            "type": "string"
+          },
+          "terms": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "issuer",
+          "subject",
+          "kind",
+          "value",
+          "method",
+          "asOf"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "mandates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "autonomous": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/__schema0"
+              }
+            }
+          },
+          "withApproval": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/__schema0"
+              }
+            }
+          },
+          "prohibitions": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/__schema0"
+              }
+            }
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "maxRetentionDays": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "standingRules": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/__schema0"
+              }
+            }
+          }
+        },
+        "required": [
+          "agent",
+          "autonomous",
+          "withApproval",
+          "prohibitions",
+          "standingRules"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "script": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "instruct"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "admit"
+              },
+              "statements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "subject": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "statements",
+              "purpose"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "start"
+              },
+              "peer": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "propose",
+                  "invoke"
+                ]
+              },
+              "operation": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "contents": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "intent": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "discover": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "peer",
+              "kind",
+              "operation",
+              "contents",
+              "intent",
+              "discover"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "receive"
+              },
+              "from": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "reply": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "agreementPlan": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "approve"
+              },
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "approve",
+                  "deny"
+                ]
+              },
+              "note": {
+                "type": "string"
+              },
+              "evidence": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "decision",
+              "note",
+              "evidence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "message"
+              },
+              "conversation": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "invoke",
+                  "deliver",
+                  "receipt"
+                ]
+              },
+              "body": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "intent": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "evidence": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "conversation",
+              "kind",
+              "body",
+              "evidence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "effect"
+              },
+              "intent": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "params": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "activityType": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "intent",
+              "params",
+              "activityType"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "reading"
+              },
+              "originalDigest": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "claimType": {
+                "type": "string"
+              },
+              "subject": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "value": {
+                "$ref": "#/$defs/__schema0"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "originalDigest",
+              "claimType",
+              "subject",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "record"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "type": {
+                "type": "string",
+                "const": "advance"
+              },
+              "milliseconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "milliseconds"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "inject": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "wire",
+              "body"
+            ]
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "value": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "resign": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "step",
+          "target",
+          "path",
+          "value",
+          "resign"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "branches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "what": {
+            "type": "string"
+          },
+          "change": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "expect": {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "go",
+                  "stop",
+                  "ask-more",
+                  "ask-principal",
+                  "admit",
+                  "refuse"
+                ]
+              },
+              "check": {
+                "type": "string",
+                "enum": [
+                  "integrity",
+                  "source",
+                  "authority",
+                  "terms",
+                  "fitness",
+                  "mandate",
+                  "recipient",
+                  "disclosure",
+                  "data-terms",
+                  "limits-approval",
+                  "evidence"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "malformed",
+                  "bounds-exceeded",
+                  "unsigned-not-allowed",
+                  "unknown-key",
+                  "bad-signature",
+                  "configuration-mismatch",
+                  "sender-key-mismatch",
+                  "wrong-audience",
+                  "expired",
+                  "not-yet-valid",
+                  "lifetime-too-long",
+                  "replay-conflict",
+                  "unsupported-configuration",
+                  "unsupported-operation",
+                  "unsupported-kind",
+                  "unsupported-term",
+                  "protocol-violation",
+                  "terms-digest-mismatch",
+                  "round-limit",
+                  "conversation-closed",
+                  "source-accepted",
+                  "source-not-authoritative",
+                  "source-unknown",
+                  "lookup-failed",
+                  "status-withdrawn",
+                  "rule-not-accepted",
+                  "deriver-not-accepted",
+                  "representation-missing",
+                  "representation-invalid",
+                  "representation-expired",
+                  "representation-out-of-scope",
+                  "mandate-invalid",
+                  "mandate-withdrawn",
+                  "assurance-insufficient",
+                  "not-authorised",
+                  "prohibited",
+                  "purpose-not-permitted",
+                  "insufficient-scope",
+                  "missing-context",
+                  "indeterminate-policy",
+                  "terms-not-acceptable",
+                  "no-agreement",
+                  "stale-data",
+                  "method-not-accepted",
+                  "confidence-too-low",
+                  "superseded-by-better-source",
+                  "partial-result",
+                  "completeness-not-established",
+                  "structured-form-required",
+                  "excessive-scope",
+                  "minimal-disclosure",
+                  "form-not-available",
+                  "rule-unbounded",
+                  "context-not-clear",
+                  "approval-required",
+                  "approval-denied",
+                  "limit-exceeded",
+                  "budget-exceeded",
+                  "stopped-by-principal",
+                  "evidence-invalid",
+                  "evidence-missing",
+                  "record-unavailable",
+                  "derivation-not-verified",
+                  "execution-failed",
+                  "result-uncertain",
+                  "intact",
+                  "authority-valid",
+                  "terms-acceptable",
+                  "fit-for-use",
+                  "within-mandate",
+                  "recipient-established",
+                  "terms-allow",
+                  "within-limits",
+                  "approval-given",
+                  "evidence-complete",
+                  "established-earlier",
+                  "no-action",
+                  "no-claims",
+                  "no-principal",
+                  "no-data",
+                  "no-personal-data"
+                ]
+              }
+            },
+            "required": [
+              "outcome",
+              "check",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "agent": {
+                  "type": "string"
+                },
+                "part": {
+                  "type": "string",
+                  "enum": [
+                    "principal",
+                    "transport",
+                    "inbound-gate",
+                    "core",
+                    "memory",
+                    "outbound-gate",
+                    "record"
+                  ]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "check",
+                    "decision",
+                    "message-in",
+                    "message-out",
+                    "ask-principal"
+                  ]
+                },
+                "check": {
+                  "type": "string",
+                  "enum": [
+                    "integrity",
+                    "source",
+                    "authority",
+                    "terms",
+                    "fitness",
+                    "mandate",
+                    "recipient",
+                    "disclosure",
+                    "data-terms",
+                    "limits-approval",
+                    "evidence"
+                  ]
+                },
+                "verdict": {
+                  "type": "string",
+                  "enum": [
+                    "pass",
+                    "fail",
+                    "ask-more",
+                    "ask-principal",
+                    "indeterminate",
+                    "not-applicable"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "malformed",
+                    "bounds-exceeded",
+                    "unsigned-not-allowed",
+                    "unknown-key",
+                    "bad-signature",
+                    "configuration-mismatch",
+                    "sender-key-mismatch",
+                    "wrong-audience",
+                    "expired",
+                    "not-yet-valid",
+                    "lifetime-too-long",
+                    "replay-conflict",
+                    "unsupported-configuration",
+                    "unsupported-operation",
+                    "unsupported-kind",
+                    "unsupported-term",
+                    "protocol-violation",
+                    "terms-digest-mismatch",
+                    "round-limit",
+                    "conversation-closed",
+                    "source-accepted",
+                    "source-not-authoritative",
+                    "source-unknown",
+                    "lookup-failed",
+                    "status-withdrawn",
+                    "rule-not-accepted",
+                    "deriver-not-accepted",
+                    "representation-missing",
+                    "representation-invalid",
+                    "representation-expired",
+                    "representation-out-of-scope",
+                    "mandate-invalid",
+                    "mandate-withdrawn",
+                    "assurance-insufficient",
+                    "not-authorised",
+                    "prohibited",
+                    "purpose-not-permitted",
+                    "insufficient-scope",
+                    "missing-context",
+                    "indeterminate-policy",
+                    "terms-not-acceptable",
+                    "no-agreement",
+                    "stale-data",
+                    "method-not-accepted",
+                    "confidence-too-low",
+                    "superseded-by-better-source",
+                    "partial-result",
+                    "completeness-not-established",
+                    "structured-form-required",
+                    "excessive-scope",
+                    "minimal-disclosure",
+                    "form-not-available",
+                    "rule-unbounded",
+                    "context-not-clear",
+                    "approval-required",
+                    "approval-denied",
+                    "limit-exceeded",
+                    "budget-exceeded",
+                    "stopped-by-principal",
+                    "evidence-invalid",
+                    "evidence-missing",
+                    "record-unavailable",
+                    "derivation-not-verified",
+                    "execution-failed",
+                    "result-uncertain",
+                    "intact",
+                    "authority-valid",
+                    "terms-acceptable",
+                    "fit-for-use",
+                    "within-mandate",
+                    "recipient-established",
+                    "terms-allow",
+                    "within-limits",
+                    "approval-given",
+                    "evidence-complete",
+                    "established-earlier",
+                    "no-action",
+                    "no-claims",
+                    "no-principal",
+                    "no-data",
+                    "no-personal-data"
+                  ]
+                }
+              },
+              "required": [
+                "agent",
+                "part",
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "blocked": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "what",
+          "change",
+          "expect",
+          "outline"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "expect": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "part": {
+            "type": "string",
+            "enum": [
+              "principal",
+              "transport",
+              "inbound-gate",
+              "core",
+              "memory",
+              "outbound-gate",
+              "record"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "check",
+              "decision",
+              "message-in",
+              "message-out",
+              "ask-principal"
+            ]
+          },
+          "check": {
+            "type": "string",
+            "enum": [
+              "integrity",
+              "source",
+              "authority",
+              "terms",
+              "fitness",
+              "mandate",
+              "recipient",
+              "disclosure",
+              "data-terms",
+              "limits-approval",
+              "evidence"
+            ]
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "ask-more",
+              "ask-principal",
+              "indeterminate",
+              "not-applicable"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "malformed",
+              "bounds-exceeded",
+              "unsigned-not-allowed",
+              "unknown-key",
+              "bad-signature",
+              "configuration-mismatch",
+              "sender-key-mismatch",
+              "wrong-audience",
+              "expired",
+              "not-yet-valid",
+              "lifetime-too-long",
+              "replay-conflict",
+              "unsupported-configuration",
+              "unsupported-operation",
+              "unsupported-kind",
+              "unsupported-term",
+              "protocol-violation",
+              "terms-digest-mismatch",
+              "round-limit",
+              "conversation-closed",
+              "source-accepted",
+              "source-not-authoritative",
+              "source-unknown",
+              "lookup-failed",
+              "status-withdrawn",
+              "rule-not-accepted",
+              "deriver-not-accepted",
+              "representation-missing",
+              "representation-invalid",
+              "representation-expired",
+              "representation-out-of-scope",
+              "mandate-invalid",
+              "mandate-withdrawn",
+              "assurance-insufficient",
+              "not-authorised",
+              "prohibited",
+              "purpose-not-permitted",
+              "insufficient-scope",
+              "missing-context",
+              "indeterminate-policy",
+              "terms-not-acceptable",
+              "no-agreement",
+              "stale-data",
+              "method-not-accepted",
+              "confidence-too-low",
+              "superseded-by-better-source",
+              "partial-result",
+              "completeness-not-established",
+              "structured-form-required",
+              "excessive-scope",
+              "minimal-disclosure",
+              "form-not-available",
+              "rule-unbounded",
+              "context-not-clear",
+              "approval-required",
+              "approval-denied",
+              "limit-exceeded",
+              "budget-exceeded",
+              "stopped-by-principal",
+              "evidence-invalid",
+              "evidence-missing",
+              "record-unavailable",
+              "derivation-not-verified",
+              "execution-failed",
+              "result-uncertain",
+              "intact",
+              "authority-valid",
+              "terms-acceptable",
+              "fit-for-use",
+              "within-mandate",
+              "recipient-established",
+              "terms-allow",
+              "within-limits",
+              "approval-given",
+              "evidence-complete",
+              "established-earlier",
+              "no-action",
+              "no-claims",
+              "no-principal",
+              "no-data",
+              "no-personal-data"
+            ]
+          }
+        },
+        "required": [
+          "agent",
+          "part",
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "stress": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "integrity",
+          "source",
+          "authority",
+          "terms",
+          "fitness",
+          "mandate",
+          "recipient",
+          "disclosure",
+          "data-terms",
+          "limits-approval",
+          "evidence"
+        ]
+      }
+    },
+    "suites": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "assurance": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "proved",
+            "joint"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "blocked": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "x-authored-by",
+    "schema",
+    "id",
+    "title",
+    "profile",
+    "parties",
+    "trust",
+    "statements",
+    "mandates",
+    "script",
+    "inject",
+    "branches",
+    "expect",
+    "stress",
+    "suites",
+    "assurance",
+    "blocked"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema0"
+          }
+        }
+      ]
+    }
+  },
+  "x-authored-by": "Codex GPT-6",
+  "$id": "urn:agent-reference:schema:agent-scenario:0.1"
+}

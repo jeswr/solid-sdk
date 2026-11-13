@@ -1,0 +1,156 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-outline/0.1",
+  "entries": [
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "not-authorised"
+    }
+  ]
+}

@@ -99,5 +99,59 @@
     },
     "configuration": "baseline",
     "events": 260
+  },
+  {
+    "file": "probing-counterparty--baseline.json",
+    "scenario": {
+      "id": "probing-counterparty",
+      "title": "A service agent that keeps asking",
+      "steps": {
+        "1": "instruct",
+        "2": "load-contact",
+        "3": "request",
+        "4": "answer",
+        "5": "acceptance-arrives",
+        "6": "contact-arrives",
+        "7": "audit"
+      }
+    },
+    "configuration": "baseline",
+    "events": 60
+  },
+  {
+    "file": "probing-counterparty--tenth-request--baseline.json",
+    "scenario": {
+      "id": "probing-counterparty--tenth-request",
+      "title": "A service agent that keeps asking",
+      "steps": {
+        "1": "outside-1",
+        "2": "outside-2",
+        "3": "outside-3",
+        "4": "outside-4",
+        "5": "outside-5",
+        "6": "outside-6",
+        "7": "outside-7",
+        "8": "outside-8",
+        "9": "outside-9",
+        "10": "outside-10"
+      }
+    },
+    "configuration": "baseline",
+    "events": 30
+  },
+  {
+    "file": "probing-counterparty--round-limit--baseline.json",
+    "scenario": {
+      "id": "probing-counterparty--round-limit",
+      "title": "A service agent that keeps asking",
+      "steps": {
+        "1": "request",
+        "2": "counter-1",
+        "3": "counter-2",
+        "4": "counter-3"
+      }
+    },
+    "configuration": "baseline",
+    "events": 60
   }
 ]

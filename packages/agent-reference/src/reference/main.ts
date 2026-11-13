@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * `mortgage-main`: the worked example end to end under the baseline configuration. Sam's agent
@@ -43,6 +44,7 @@ import {
   DEPOSIT_ID,
   decisionInPrinciple,
   HARBOUR,
+  MORTGAGE_CONTENT,
   MORTGAGE_RELIANCE,
   PAYWELL,
   referenceLenderRules,
@@ -211,6 +213,7 @@ export async function runMain(
       taskLabel,
       claimLabel: (st) => claimLabel(st, name),
       reliance: MORTGAGE_RELIANCE,
+      ...MORTGAGE_CONTENT,
       tellPrincipal: tellSam,
       resolver: new TrustResolver({
         principal,
@@ -351,7 +354,7 @@ export async function runMain(
     // named. Sam does a face check with the identity provider (a stand-in service), which
     // attests it, and approves the exact action.
     recorder.step(8);
-    const again = await sam.runtime.startInvocation(ask);
+    const again = await sam.runtime.retryChallenge(first.conversation as Iri);
     const pending = sam.runtime
       .pendingApprovals()
       .find((p) => p.conversation === again.conversation);
@@ -363,6 +366,7 @@ export async function runMain(
         at: now().toISOString(),
         actionDigest: pending.actionDigest,
         operation: BALANCE_OP.id,
+        challenge: pending.intent.parameters.challenge as JsonObject,
       }),
     );
     const answered = await sam.runtime.submitApproval(
@@ -432,39 +436,70 @@ export async function runMain(
   const balance = Number(data(depositId)?.balance ?? 0);
   const eligible = 380000 / annual <= 4.5 && balance >= 450000 - 380000;
   recorder.step(13);
-  // OPEN-DESIGN: as in the core runs, the signed decision travels on the final receipt; the
-  // pilot protocol has no lender-side deliver in an acceptor-delivers agreement.
-  const final = await nb.runtime.sendReceipt(
-    conv,
-    {
-      activity: `${conv}#decision`,
-      outcome: "completed",
-      final: true,
-      observed: {
-        stage: "decided",
-        decided: {
-          status: eligible ? "indicatively-eligible" : "not-eligible",
-          by: NORTH.party,
-          basis: "synthetic decision-in-principle rule; indicative only",
-        },
-        notClaimed: ["loan approval", "truth of evidence", "complete financial picture"],
-      },
+  const decision = decisionInPrinciple({
+    amount: eligible ? 380000 : 0,
+    at: now().toISOString(),
+    conversation: conv,
+  });
+  const requested = await sam.runtime.invokeUnderAgreement({
+    conversation: conv,
+    operation: PREQUAL_OP,
+    input: { request: "decision-in-principle" },
+    purpose: PURPOSE.mortgageApplication,
+  });
+  await deliver(
+    recorder,
+    byActor,
+    requested.outbound.map((out) => ({ out })),
+    stepOf,
+  );
+  const request = requested.outbound[0];
+  if (!request) throw new Error("decision request did not leave the outbound gate");
+  const returned = await nb.runtime.sendMessage(conv, {
+    kind: "deliver",
+    body: {
+      ref: request.id,
+      basis: { kind: "agreement", agreement: nb.runtime.conversation(conv)?.agreement as Iri },
+      operation: PREQUAL_OP,
+      output: { statement: decision.id as string },
     },
-    [
+    intent: {
+      operation: PREQUAL_OP.id,
+      action: "use",
+      target: PREQUAL_OP.id,
+      purpose: PURPOSE.creditAssessment,
+      recipient: SAM.party,
+      conversation: conv,
+      parameters: {},
+    },
+    evidence: [
       {
         role: "credential",
         format: "jws-compact",
-        value: await signClaim(
-          cast.get("northbank-intake").ownerKey,
-          decisionInPrinciple({
-            amount: eligible ? 380000 : 0,
-            at: now().toISOString(),
-            conversation: conv,
-          }),
-        ),
+        value: await signClaim(cast.get("northbank-intake").ownerKey, decision),
       },
     ],
+  });
+  await deliver(
+    recorder,
+    byActor,
+    returned.outbound.map((out) => ({ out })),
+    stepOf,
   );
+  const final = await nb.runtime.sendReceipt(conv, {
+    activity: `${conv}#decision`,
+    outcome: "completed",
+    final: true,
+    observed: {
+      stage: "decided",
+      decided: {
+        status: eligible ? "indicatively-eligible" : "not-eligible",
+        by: NORTH.party,
+        basis: "synthetic-decision-in-principle",
+      },
+      notClaimed: ["loan-approval", "truth-of-evidence", "complete-financial-picture"],
+    },
+  });
   for (const out of final.outbound) queue.push({ out });
   await deliver(recorder, byActor, queue, stepOf);
 

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Synthetic fixtures for the reference runs: the issuers named in the explorer model
@@ -5,9 +6,13 @@
  * and terms of use, North Bank's decision in principle, the reliance profile for a mortgage
  * application, and the plain names shown to Sam. Everyone and every figure is fictional.
  */
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
+import { fileURLToPath } from "url";
 import type { Iri, JsonObject } from "../core/types.js";
 import { CLAIM, type EvidenceStatement, PREQUAL_OP, type WalletItem } from "../domains/mortgage.js";
+import { loadProfile } from "../engine/load.js";
 import { NORTH, SAM } from "../fixtures/mortgage.js";
 import type { ItemTerms, RelianceProfile } from "../gates/common.js";
 import type { SigningKey } from "../mechanisms/jws.js";
@@ -301,3 +306,12 @@ export function tellSam(s: Readonly<Record<string, unknown>>): string | undefine
   const d = s.decision as { amount: number; currency: string };
   return `North Bank has given you a decision in principle: they would lend up to $${d.amount.toLocaleString("en-US")}. It is valid until ${dateWords(String(s.validUntil))}, and it is not a binding offer.`;
 }
+
+/** Vocabulary and purpose boundaries come from the same profile the data engine loads. */
+export const MORTGAGE_PROFILE = loadProfile(
+  fileURLToPath(new URL("../../profiles/mortgage.json", import.meta.url)),
+);
+export const MORTGAGE_CONTENT = {
+  vocabulary: MORTGAGE_PROFILE.vocabulary,
+  purposes: Object.fromEntries(MORTGAGE_PROFILE.purposes.map((p) => [p.id, p.claims])),
+};

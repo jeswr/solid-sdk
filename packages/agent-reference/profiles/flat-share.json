@@ -1,0 +1,32 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "flat-share",
+  "claims": [
+    {
+      "kind": "person.identity",
+      "sources": [
+        "urn:fictional:identity-office"
+      ],
+      "methods": [
+        "attested"
+      ],
+      "maxAgeDays": 365
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:flat-share",
+      "claims": [
+        "person.identity"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [
+    "trust-stranger"
+  ],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

@@ -1,0 +1,41 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "pay-an-invoice",
+  "claims": [
+    {
+      "kind": "invoice",
+      "sources": [
+        "urn:fictional:supplier"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "bank.account-owner",
+      "sources": [
+        "urn:fictional:supplier-bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:pay-an-invoice",
+      "claims": [
+        "invoice",
+        "bank.account-owner"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

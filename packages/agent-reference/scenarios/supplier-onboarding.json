@@ -1,0 +1,60 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "supplier-onboarding",
+  "title": "Taking on a new supplier",
+  "profile": "supplier-onboarding",
+  "parties": [],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {}
+  },
+  "statements": [],
+  "mandates": [],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "A certificate was withdrawn last week",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "check": "source",
+        "reason": "status-withdrawn"
+      },
+      "outline": [],
+      "blocked": "DID resolution and mandate-credential suites are unavailable. Certificate revocation status and role-scoped multi-entity authority are not checked by the current source/fitness gates."
+    },
+    {
+      "id": "branch-2",
+      "what": "The account belongs to a different legal entity",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "check": "source",
+        "reason": "source-not-authoritative"
+      },
+      "outline": [],
+      "blocked": "DID resolution and mandate-credential suites are unavailable. Certificate revocation status and role-scoped multi-entity authority are not checked by the current source/fitness gates."
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "source",
+    "authority",
+    "fitness"
+  ],
+  "suites": {
+    "authority": "mandate-credential",
+    "identity": "did"
+  },
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "DID resolution and mandate-credential suites are unavailable. Certificate revocation status and role-scoped multi-entity authority are not checked by the current source/fitness gates."
+    }
+  ]
+}

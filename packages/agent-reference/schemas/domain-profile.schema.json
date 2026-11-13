@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "x-authored-by": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string",
+      "const": "agent-profile/0.1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+            }
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxAgeDays": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "kind",
+          "sources",
+          "methods",
+          "maxAgeDays"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "purposes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "claims"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "version": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "result": {
+            "type": "string"
+          },
+          "assurances": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "by-source",
+                "by-agent",
+                "attested",
+                "proved",
+                "joint"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "inputs",
+          "result",
+          "assurances"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "decisionsForPerson": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "modelReadings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "vocabulary": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "identifier",
+              "code",
+              "number",
+              "date",
+              "term"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "claimType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "version": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string",
+            "enum": [
+              "negotiate",
+              "invoke"
+            ]
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "public",
+              "represented"
+            ]
+          },
+          "models": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "purposes": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+            }
+          },
+          "requiresRepresentation": {
+            "type": "boolean"
+          },
+          "agreementDelivery": {
+            "type": "string",
+            "enum": [
+              "offeror",
+              "acceptor"
+            ]
+          },
+          "requiredApproval": {
+            "type": "object",
+            "properties": {
+              "level": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "label": {
+                "type": "string"
+              },
+              "claimType": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "level",
+              "label",
+              "claimType"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "label",
+          "pattern",
+          "access",
+          "models",
+          "purposes",
+          "requiresRepresentation"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "x-authored-by",
+    "schema",
+    "id",
+    "claims",
+    "purposes",
+    "rules",
+    "decisionsForPerson",
+    "modelReadings",
+    "vocabulary",
+    "operations"
+  ],
+  "additionalProperties": false,
+  "x-authored-by": "Codex GPT-6",
+  "$id": "urn:agent-reference:schema:domain-profile:0.1"
+}

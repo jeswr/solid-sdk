@@ -1,0 +1,59 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "health-referral",
+  "title": "A referral from a family doctor to a specialist",
+  "profile": "health-referral",
+  "parties": [],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {}
+  },
+  "statements": [],
+  "mandates": [],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The clinic asks for the full record",
+      "change": {},
+      "expect": {
+        "outcome": "ask-principal",
+        "check": "disclosure",
+        "reason": "approval-required"
+      },
+      "outline": [],
+      "blocked": "by-reference-solid and Solid access-control suites are absent from agent-reference. There is no protected-reference resolver or clinical selection/judgement gate. A by-value substitute would not exercise the catalogue suite."
+    },
+    {
+      "id": "branch-2",
+      "what": "The referrer is not on the professional register",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "check": "disclosure",
+        "reason": "source-unknown"
+      },
+      "outline": [],
+      "blocked": "by-reference-solid and Solid access-control suites are absent from agent-reference. There is no protected-reference resolver or clinical selection/judgement gate. A by-value substitute would not exercise the catalogue suite."
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "disclosure",
+    "recipient",
+    "terms"
+  ],
+  "suites": {
+    "data-access": "by-reference-solid"
+  },
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "by-reference-solid and Solid access-control suites are absent from agent-reference. There is no protected-reference resolver or clinical selection/judgement gate. A by-value substitute would not exercise the catalogue suite."
+    }
+  ]
+}

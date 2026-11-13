@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Protected statements other than interaction messages: owner mandates, representation
  * statements, owner approvals, and domain statements (evidence credentials, grants,
@@ -115,6 +116,22 @@ export async function verifyStatement<T>(
       error: result.reason,
     };
   }
+  const claimType = (result.payload as { claimType?: unknown })?.claimType;
+  if (
+    !options.trust.recordKeyAllowed(
+      result.kid,
+      typeof claimType === "string" ? claimType : undefined,
+      options.at,
+    )
+  )
+    return {
+      verification: {
+        ...base,
+        outcome: "unknown-key",
+        limitations: ["record key is not delegated for this claim and time"],
+      },
+      error: "unknown-key",
+    };
   const parsed = options.schema.safeParse(result.payload);
   const verification: VerificationResult = {
     ...base,

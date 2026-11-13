@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * What both gates share: the verdict record every check returns, the context a runtime hands
@@ -6,6 +7,7 @@
  */
 import type { OdrlRule } from "@jeswr/solid-odrl";
 import type { Iri } from "../core/types.js";
+import type { ContentVocabulary } from "../profile/content.js";
 import type { Configuration, LayerId } from "../suites/registry.js";
 import type { Namer } from "../trace/packet.js";
 import type { TraceSink } from "../trace/recorder.js";
@@ -90,14 +92,30 @@ export interface AdmittedFact {
   readonly label: string;
   readonly claimType: string;
   readonly source: string;
+  readonly subject?: string;
   readonly method?: string;
   readonly asOf?: string;
   readonly terms?: ItemTerms;
 }
 
-/** What the two gates of one agent share: the labels of admitted facts. */
+/** Every item actually shown to the core, with labels retained across restarts. */
+export interface ContextItem extends AdmittedFact {
+  readonly kind: "statement" | "memory" | "message" | "reading";
+  readonly digest: string;
+}
+
 export class GateMemory {
   readonly facts = new Map<string, AdmittedFact>();
+  constructor(readonly contexts: Record<string, ContextItem[]> = {}) {}
+  context(task: string): readonly ContextItem[] {
+    return [...(this.contexts["*"] ?? []), ...(this.contexts[task] ?? [])];
+  }
+  enter(task: string, item: ContextItem): void {
+    this.contexts[task] ??= [];
+    const items = this.contexts[task];
+    if (!items.some((prior) => prior.id === item.id && prior.digest === item.digest))
+      items.push(item);
+  }
 }
 
 export interface GateContext {
@@ -118,6 +136,13 @@ export interface GateContext {
   /** Plain name for a statement ("Harbour Bank's balance at 31 October 2026"). */
   readonly claimLabel?: (statement: Readonly<Record<string, unknown>>) => string;
   readonly reliance?: RelianceProfile;
+  readonly claimSources?: Readonly<Record<string, readonly Iri[]>>;
+  /** Shared across conversations only when the hosting application declares one task. */
+  readonly taskId?: Iri;
+  readonly vocabulary?: ContentVocabulary;
+  /** The claims necessary for each declared purpose. Unknown purposes never pass. */
+  readonly purposes?: Readonly<Record<Iri, readonly string[]>>;
+  readonly freeTextApproval?: boolean;
   /** What the agent tells its principal when a claim is admitted, if anything. */
   readonly tellPrincipal?: (statement: Readonly<Record<string, unknown>>) => string | undefined;
 }

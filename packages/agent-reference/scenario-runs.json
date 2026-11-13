@@ -1,0 +1,192 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario-runs/0.1",
+  "paths": [
+    {
+      "scenario": "discharge-letter",
+      "path": "main",
+      "status": "blocked",
+      "reason": "The plain-language-upgrade suite and digest-bound incoming content parts are absent. UNS-3 readings now exist, but source-signed unstructured content is not admitted as a letter with its own media type/digest. A scripted coded diagnosis would bypass that missing admission."
+    },
+    {
+      "scenario": "discharge-letter",
+      "path": "branch-1",
+      "status": "blocked",
+      "reason": "The plain-language-upgrade suite and digest-bound incoming content parts are absent. UNS-3 readings now exist, but source-signed unstructured content is not admitted as a letter with its own media type/digest. A scripted coded diagnosis would bypass that missing admission."
+    },
+    {
+      "scenario": "emergency-access",
+      "path": "main",
+      "status": "blocked",
+      "reason": "The mandate subset cannot express registered-clinician emergency predicates, standing break-glass rules, or mandatory notifications to patient and trusted contact. A scripted emergency permission would bypass the missing checks."
+    },
+    {
+      "scenario": "emergency-access",
+      "path": "branch-1",
+      "status": "blocked",
+      "reason": "The mandate subset cannot express registered-clinician emergency predicates, standing break-glass rules, or mandatory notifications to patient and trusted contact. A scripted emergency permission would bypass the missing checks."
+    },
+    {
+      "scenario": "emergency-access",
+      "path": "branch-2",
+      "status": "blocked",
+      "reason": "The mandate subset cannot express registered-clinician emergency predicates, standing break-glass rules, or mandatory notifications to patient and trusted contact. A scripted emergency permission would bypass the missing checks."
+    },
+    {
+      "scenario": "false-but-signed",
+      "path": "main",
+      "status": "blocked",
+      "reason": "The corroboration reliance suite is absent. Baseline source/method/age checks can accept a false signed value, but do not exercise the catalogue corroboration suite. No truth-detection claim is made."
+    },
+    {
+      "scenario": "false-but-signed",
+      "path": "branch-1",
+      "status": "blocked",
+      "reason": "The corroboration reliance suite is absent. Baseline source/method/age checks can accept a false signed value, but do not exercise the catalogue corroboration suite. No truth-detection claim is made."
+    },
+    {
+      "scenario": "flat-share",
+      "path": "main",
+      "status": "blocked",
+      "reason": "The own-list resolver exists, but an unestablished identity yields lookup-failed/not-authorised, not an ask-principal with source-unknown. A trust decision by a person and a pinned-list configuration are not implemented."
+    },
+    {
+      "scenario": "flat-share",
+      "path": "branch-1",
+      "status": "blocked",
+      "reason": "The own-list resolver exists, but an unestablished identity yields lookup-failed/not-authorised, not an ask-principal with source-unknown. A trust decision by a person and a pinned-list configuration are not implemented."
+    },
+    {
+      "scenario": "health-referral",
+      "path": "main",
+      "status": "blocked",
+      "reason": "by-reference-solid and Solid access-control suites are absent from agent-reference. There is no protected-reference resolver or clinical selection/judgement gate. A by-value substitute would not exercise the catalogue suite."
+    },
+    {
+      "scenario": "health-referral",
+      "path": "branch-1",
+      "status": "blocked",
+      "reason": "by-reference-solid and Solid access-control suites are absent from agent-reference. There is no protected-reference resolver or clinical selection/judgement gate. A by-value substitute would not exercise the catalogue suite."
+    },
+    {
+      "scenario": "health-referral",
+      "path": "branch-2",
+      "status": "blocked",
+      "reason": "by-reference-solid and Solid access-control suites are absent from agent-reference. There is no protected-reference resolver or clinical selection/judgement gate. A by-value substitute would not exercise the catalogue suite."
+    },
+    {
+      "scenario": "master-data-change",
+      "path": "main",
+      "status": "blocked",
+      "reason": "The approval verifier accepts only the local owner key. There is no independently verified staff-role approval or separation-of-duties check. Encoding an approver verdict in a script would bypass the missing gate."
+    },
+    {
+      "scenario": "master-data-change",
+      "path": "branch-1",
+      "status": "blocked",
+      "reason": "The approval verifier accepts only the local owner key. There is no independently verified staff-role approval or separation-of-duties check. Encoding an approver verdict in a script would bypass the missing gate."
+    },
+    {
+      "scenario": "master-data-change",
+      "path": "branch-2",
+      "status": "blocked",
+      "reason": "The approval verifier accepts only the local owner key. There is no independently verified staff-role approval or separation-of-duties check. Encoding an approver verdict in a script would bypass the missing gate."
+    },
+    {
+      "scenario": "mortgage-core",
+      "path": "main",
+      "status": "blocked",
+      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+    },
+    {
+      "scenario": "mortgage-injected-fee",
+      "path": "main",
+      "status": "blocked",
+      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+    },
+    {
+      "scenario": "mortgage-main",
+      "path": "main",
+      "status": "blocked",
+      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+    },
+    {
+      "scenario": "mortgage-out-of-limit",
+      "path": "main",
+      "status": "blocked",
+      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+    },
+    {
+      "scenario": "mortgage-over-ask",
+      "path": "main",
+      "status": "blocked",
+      "reason": "Migration stopped: annualise-12-consecutive-months and the purpose-bound internal assessment are implemented only in domains/mortgage.ts. The general gates do not verify a DER rule from profile data. Replacing this with a scripted assertion would remove real checks. The existing driver is retained; its changed outlines are documented in ENGINE-REPORT.md."
+    },
+    {
+      "scenario": "pay-an-invoice",
+      "path": "main",
+      "status": "blocked",
+      "reason": "The payment commitments suite and cumulative monthly spend accounting are absent. The gate does not bind a payment payee account to an accepted bank statement. A synthetic effect is not the required payment suite."
+    },
+    {
+      "scenario": "pay-an-invoice",
+      "path": "branch-1",
+      "status": "blocked",
+      "reason": "The payment commitments suite and cumulative monthly spend accounting are absent. The gate does not bind a payment payee account to an accepted bank statement. A synthetic effect is not the required payment suite."
+    },
+    {
+      "scenario": "pay-an-invoice",
+      "path": "branch-2",
+      "status": "blocked",
+      "reason": "The payment commitments suite and cumulative monthly spend accounting are absent. The gate does not bind a payment payee account to an accepted bank statement. A synthetic effect is not the required payment suite."
+    },
+    {
+      "scenario": "probing-counterparty",
+      "path": "main",
+      "status": "runs",
+      "trace": "probing-counterparty--baseline.json"
+    },
+    {
+      "scenario": "probing-counterparty",
+      "path": "tenth-request",
+      "status": "runs",
+      "trace": "probing-counterparty--tenth-request--baseline.json"
+    },
+    {
+      "scenario": "probing-counterparty",
+      "path": "round-limit",
+      "status": "runs",
+      "trace": "probing-counterparty--round-limit--baseline.json"
+    },
+    {
+      "scenario": "right-to-work",
+      "path": "main",
+      "status": "blocked",
+      "reason": "needs the proof system; selective-disclosure credentials and a real proof verifier are unavailable in this offline lane. A signed boolean is not a proof."
+    },
+    {
+      "scenario": "right-to-work",
+      "path": "branch-1",
+      "status": "blocked",
+      "reason": "needs the proof system; selective-disclosure credentials and a real proof verifier are unavailable in this offline lane. A signed boolean is not a proof."
+    },
+    {
+      "scenario": "supplier-onboarding",
+      "path": "main",
+      "status": "blocked",
+      "reason": "DID resolution and mandate-credential suites are unavailable. Certificate revocation status and role-scoped multi-entity authority are not checked by the current source/fitness gates."
+    },
+    {
+      "scenario": "supplier-onboarding",
+      "path": "branch-1",
+      "status": "blocked",
+      "reason": "DID resolution and mandate-credential suites are unavailable. Certificate revocation status and role-scoped multi-entity authority are not checked by the current source/fitness gates."
+    },
+    {
+      "scenario": "supplier-onboarding",
+      "path": "branch-2",
+      "status": "blocked",
+      "reason": "DID resolution and mandate-credential suites are unavailable. Certificate revocation status and role-scoped multi-entity authority are not checked by the current source/fitness gates."
+    }
+  ]
+}

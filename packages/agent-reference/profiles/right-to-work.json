@@ -1,0 +1,41 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "right-to-work",
+  "claims": [
+    {
+      "kind": "work.entitled",
+      "sources": [
+        "urn:fictional:immigration-office"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "degree",
+      "sources": [
+        "urn:fictional:university"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 3650
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:right-to-work",
+      "claims": [
+        "work.entitled",
+        "degree"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

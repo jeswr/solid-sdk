@@ -1,0 +1,52 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "supplier-onboarding",
+  "claims": [
+    {
+      "kind": "company.exists",
+      "sources": [
+        "urn:fictional:company-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "bank.account-owner",
+      "sources": [
+        "urn:fictional:supplier-bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "certificate",
+      "sources": [
+        "urn:fictional:certifier"
+      ],
+      "methods": [
+        "attested"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:supplier-onboarding",
+      "claims": [
+        "company.exists",
+        "bank.account-owner",
+        "certificate"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

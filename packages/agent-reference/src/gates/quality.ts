@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Fitness and item terms: the parts of the gates that read the quality information and the
@@ -117,6 +118,12 @@ export function evaluateItemTerms(
   },
   engine: PolicyEngine = solidOdrlEngine,
 ): TermsVerdict {
+  if (!terms && need.action === "distribute")
+    return {
+      verdict: "fail",
+      reason: "purpose-not-permitted",
+      text: "Default terms permit this interaction only and prohibit onward sharing.",
+    };
   if (!terms)
     return {
       verdict: "pass",

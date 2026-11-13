@@ -40,6 +40,7 @@ export type Phase =
   | "awaiting-approval"
   | "agreed"
   | "invoked"
+  | "challenged"
   | "uncertain"
   | (typeof TERMINAL_PHASES)[number];
 
@@ -62,6 +63,12 @@ export interface ConversationState {
   };
   readonly agreement?: Iri;
   readonly invocation?: Iri;
+  readonly challenge?: {
+    readonly id: Iri;
+    readonly nonce: Iri;
+    readonly expiresAt: string;
+    readonly by: Side;
+  };
   /** Recorded requests, including operations invoked under a different negotiated operation. */
   readonly requests?: Readonly<
     Record<
@@ -214,7 +221,12 @@ export function transition(
     }
     case "propose": {
       const body = message.body;
-      if (phase === "open" || phase === "described" || phase === "discovering") {
+      if (
+        phase === "open" ||
+        phase === "described" ||
+        phase === "challenged" ||
+        phase === "discovering"
+      ) {
         if (body.round !== 1 || body.counters) {
           return fail("protocol-violation", "an opening proposal must be round 1");
         }
@@ -278,9 +290,23 @@ export function transition(
       };
       break;
     }
-    // OPEN-DESIGN: a challenge closes the conversation like a refusal; the sender answers it
-    // by sending the request again, in a new conversation, with what the challenge asked for.
-    case "challenge":
+    case "challenge": {
+      if (!state.invocation || message.body.ref !== state.invocation)
+        return fail("protocol-violation", "challenge must refer to the current invocation");
+      if (Date.parse(message.body.needs.expiresAt) <= Date.parse(event.at))
+        return fail("expired", "challenge expired");
+      next = {
+        ...base,
+        phase: "challenged",
+        challenge: {
+          id: message.body.needs.id,
+          nonce: message.body.needs.nonce,
+          expiresAt: message.body.needs.expiresAt,
+          by,
+        },
+      };
+      break;
+    }
     case "refuse": {
       if (phase === "open" || phase === "discovering") {
         return fail("protocol-violation", `nothing to refuse in ${phase}`);
@@ -294,6 +320,22 @@ export function transition(
       break;
     }
     case "invoke": {
+      if (phase === "challenged") {
+        const challenge = state.challenge;
+        if (
+          !challenge ||
+          challenge.by === by ||
+          message.body.challenge?.id !== challenge.id ||
+          message.body.challenge.nonce !== challenge.nonce
+        )
+          return fail(
+            "protocol-violation",
+            "retry does not cite this conversation's challenge and nonce",
+          );
+        if (Date.parse(challenge.expiresAt) <= Date.parse(event.at))
+          return fail("expired", "challenge expired");
+      } else if (message.body.challenge)
+        return fail("protocol-violation", "no challenge is pending in this conversation");
       const basis = message.body.basis;
       if (basis.kind === "agreement") {
         if (phase !== "agreed" && phase !== "uncertain") {
@@ -304,7 +346,7 @@ export function transition(
         }
         next = { ...base, invocation: message.id };
       } else {
-        if (phase !== "open" && phase !== "described") {
+        if (phase !== "open" && phase !== "described" && phase !== "challenged") {
           return fail("protocol-violation", `cannot invoke in ${phase}`);
         }
         next = {

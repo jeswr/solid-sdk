@@ -1,0 +1,32 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "health-referral",
+  "claims": [
+    {
+      "kind": "referral.history",
+      "sources": [
+        "urn:fictional:family-practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 90
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:health-referral",
+      "claims": [
+        "referral.history"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [
+    "clinical-relevance"
+  ],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

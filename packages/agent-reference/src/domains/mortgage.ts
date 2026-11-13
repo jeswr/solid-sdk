@@ -198,7 +198,7 @@ export function prequalDescription(
   return {
     id: PREQUAL_OP.id,
     version: PREQUAL_OP.version,
-    label: "Mortgage prequalification with a bounded evidence request (synthetic)",
+    label: "Mortgage decision in principle with a bounded evidence request (synthetic)",
     pattern: "negotiate",
     access: "represented",
     roles,
@@ -247,6 +247,18 @@ export class ConsumerMortgageHandler implements OperationHandler {
       ...(ctx.peer.party ? { recipient: ctx.peer.party } : {}),
       parameters: { termsDigest: digestOf(terms), disclosed: ["propertyPrice", "loanAmount"] },
       conversation: ctx.conversation.id,
+    };
+  }
+
+  intentForInvoke(ctx: HandlerContext, _input: JsonObject): ActionIntent {
+    return {
+      operation: PREQUAL_OP.id,
+      action: "use",
+      target: PREQUAL_OP.id,
+      purpose: PURPOSE.mortgageApplication,
+      recipient: ctx.peer.party,
+      conversation: ctx.conversation.id,
+      parameters: {},
     };
   }
 
@@ -341,7 +353,7 @@ export class ConsumerMortgageHandler implements OperationHandler {
             operation: PREQUAL_OP,
             output: {
               evidenceCount: items.length,
-              note: "issuer-signed statements relayed in evidence; the consumer's agent is not their author",
+              provenance: "relayed-source-statements",
             },
           },
           intent: this.disclosureIntent(ctx, t, agreement.termsDigest),
@@ -515,6 +527,12 @@ export class LenderPrequalHandler implements OperationHandler {
     return { requiredOutcomes: ["self"] };
   }
 
+  onInvoke(_ctx: HandlerContext, body: import("../core/types.js").InvokeBody): HandlerReply {
+    return body.input.request === "decision-in-principle"
+      ? { type: "none" }
+      : { type: "unsupported", reason: "unsupported-term" };
+  }
+
   async onDeliver(
     ctx: HandlerContext,
     body: DeliverBody,
@@ -677,12 +695,8 @@ export class LenderPrequalHandler implements OperationHandler {
         checked,
         ...(derived ? { derived } : {}),
         missing,
-        completeness: missing.length === 0 ? "all requested evidence types accepted" : "incomplete",
-        notClaimed: [
-          "approval",
-          "truth of the income figures",
-          "completeness of the applicant's finances",
-        ],
+        completeness: missing.length === 0 ? "all-requested-types-accepted" : "incomplete",
+        notClaimed: ["approval", "truth-of-income", "complete-finances"],
       },
     };
   }

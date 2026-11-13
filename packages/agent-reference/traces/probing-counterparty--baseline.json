@@ -1,0 +1,2003 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "scenario": {
+    "id": "probing-counterparty",
+    "title": "A service agent that keeps asking",
+    "steps": {
+      "1": "instruct",
+      "2": "load-contact",
+      "3": "request",
+      "4": "answer",
+      "5": "acceptance-arrives",
+      "6": "contact-arrives",
+      "7": "audit"
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "person-agent",
+      "name": "Rowan's agent",
+      "actsFor": "rowan",
+      "role": "agent"
+    },
+    {
+      "id": "service-agent",
+      "name": "Cedar's agent",
+      "actsFor": "cedar",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "unknown",
+    "core": "scripted"
+  },
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "person-agent",
+      "part": "principal",
+      "kind": "principal-instruction",
+      "chat": {
+        "who": "principal",
+        "text": "Share my contact code only for this service query."
+      },
+      "caption": "Rowan Vale asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does."
+    },
+    {
+      "seq": 2,
+      "step": 2,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "Rowan Vale's contact statement is intact and signed with Rowan Vale's pinned key."
+    },
+    {
+      "seq": 3,
+      "step": 2,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:rule:rowan-contact",
+        "text": "Rowan Vale is accepted for contact claims."
+      },
+      "resolution": {
+        "question": "Is Rowan Vale an authority for contact claims about Rowan Vale?",
+        "path": [
+          {
+            "at": "Rowan Vale's own list",
+            "kind": "own-list",
+            "says": "Rowan Vale is accepted for contact."
+          }
+        ],
+        "answer": "Accepted, for contact claims only."
+      },
+      "caption": "Rowan Vale's contact statement: Rowan Vale is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 4,
+      "step": 2,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "Rowan Vale's contact statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 5,
+      "step": 2,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:contact",
+        "text": "Its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+      },
+      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+    },
+    {
+      "seq": 6,
+      "step": 2,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:probing-counterparty:contact",
+        "text": "Accept contact from urn:fictional:rowan by self-reported, at most 30 days old."
+      },
+      "caption": "Rowan Vale's contact statement is fit for urn:scenario:probing-counterparty:task: self-reported, 0 days old."
+    },
+    {
+      "seq": 7,
+      "step": 2,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "Rowan Vale's contact statement is admitted."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "person-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:probing-counterparty:contact",
+        "label": "Rowan Vale's contact statement",
+        "claimType": "contact",
+        "subject": "urn:fictional:rowan",
+        "value": null,
+        "source": "urn:fictional:rowan",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00Z",
+        "terms": {
+          "id": "urn:terms:contact",
+          "summary": "use for urn:purpose:service query; share for urn:purpose:service query"
+        },
+        "provenance": "signed by Rowan Vale"
+      },
+      "caption": "Rowan Vale's contact statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 9,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+    },
+    {
+      "seq": 10,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "Cedar Service's mandate covers this action."
+    },
+    {
+      "seq": 11,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "reason": "recipient-established",
+      "resolution": {
+        "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+        "path": [
+          {
+            "at": "Cedar Service's own list",
+            "kind": "own-list",
+            "says": "Rowan Vale is accepted for urn:operation:service query."
+          }
+        ],
+        "answer": "Accepted, for urn:operation:service query only."
+      },
+      "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+    },
+    {
+      "seq": 12,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 14,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+    },
+    {
+      "seq": 15,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 16,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "reason": "evidence-complete",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 17,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The propose message goes to Rowan's agent."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "service-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
+        "from": "Cedar's agent",
+        "to": "Rowan's agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:493c3776d8e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Cedar's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:service-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:cedar-agent",
+                "onBehalfOf": "urn:fictional:cedar-service"
+              },
+              "to": {
+                "actor": "urn:fictional:rowan-agent",
+                "party": "urn:fictional:rowan"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "bl8gaNvvMntzerjh9VxPFazz2WWbVeZKaMyf6sQiOGU",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:c934fc585bc3ad51f7cba435c669fbf2025a96306954d7edfdf991d445b4b890"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): Cedar Service says Cedar's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:2a26df0df87f54e40c0217cc5834a93f:1794560400000",
+                "party": "urn:fictional:cedar-service",
+                "actor": "urn:fictional:cedar-agent",
+                "actorKid": "bl8gaNvvMntzerjh9VxPFazz2WWbVeZKaMyf6sQiOGU",
+                "operations": [
+                  "urn:operation:service-query"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:51494cd6142c3d3c5093a1552d754baef7f50ad9998bf6731a5699ae7221920c"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start urn:operation:service-query, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "raw": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:service-query",
+                "evidenceRequest": [
+                  {
+                    "claimType": "contact"
+                  }
+                ],
+                "topic": "contact-request"
+              },
+              "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
+              "round": 1
+            },
+            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54",
+            "untrusted": [
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:service-query"
+              },
+              {
+                "path": "terms.evidenceRequest.0.claimType",
+                "text": "contact"
+              },
+              {
+                "path": "terms.topic",
+                "text": "contact-request"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:service-query.",
+            "raw": {
+              "purpose": "urn:purpose:service-query",
+              "evidenceRequest": [
+                {
+                  "claimType": "contact"
+                }
+              ],
+              "topic": "contact-request"
+            },
+            "digest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "Cedar's agent sends a propose message to Rowan's agent."
+    },
+    {
+      "seq": 19,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
+        "from": "Cedar's agent",
+        "to": "Rowan's agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:493c3776d8e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Cedar's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:service-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:cedar-agent",
+                "onBehalfOf": "urn:fictional:cedar-service"
+              },
+              "to": {
+                "actor": "urn:fictional:rowan-agent",
+                "party": "urn:fictional:rowan"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "bl8gaNvvMntzerjh9VxPFazz2WWbVeZKaMyf6sQiOGU",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:c934fc585bc3ad51f7cba435c669fbf2025a96306954d7edfdf991d445b4b890"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): Cedar Service says Cedar's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:2a26df0df87f54e40c0217cc5834a93f:1794560400000",
+                "party": "urn:fictional:cedar-service",
+                "actor": "urn:fictional:cedar-agent",
+                "actorKid": "bl8gaNvvMntzerjh9VxPFazz2WWbVeZKaMyf6sQiOGU",
+                "operations": [
+                  "urn:operation:service-query"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:51494cd6142c3d3c5093a1552d754baef7f50ad9998bf6731a5699ae7221920c"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start urn:operation:service-query, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:purpose:service-query\"; \"contact\"; \"contact-request\"",
+            "raw": {
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:service-query",
+                "evidenceRequest": [
+                  {
+                    "claimType": "contact"
+                  }
+                ],
+                "topic": "contact-request"
+              },
+              "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
+              "round": 1
+            },
+            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54",
+            "untrusted": [
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:service-query"
+              },
+              {
+                "path": "terms.evidenceRequest.0.claimType",
+                "text": "contact"
+              },
+              {
+                "path": "terms.topic",
+                "text": "contact-request"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:service-query.",
+            "raw": {
+              "purpose": "urn:purpose:service-query",
+              "evidenceRequest": [
+                {
+                  "claimType": "contact"
+                }
+              ],
+              "topic": "contact-request"
+            },
+            "digest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A propose message from Cedar's agent reaches the inbound gate."
+    },
+    {
+      "seq": 20,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 21,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 22,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:2a26df0df87f54e40c0217cc5834a93f:1794560400000",
+        "text": "A representation statement signed with Cedar Service's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "Cedar Service signed a statement that Cedar's agent acts for them in this operation."
+    },
+    {
+      "seq": 23,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 24,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 25,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 26,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share Rowan Vale's contact statement with Cedar Service."
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "Rowan Vale's mandate covers this action."
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "reason": "recipient-established",
+      "resolution": {
+        "question": "Is Cedar Service a party I can send urn:operation:service query to?",
+        "path": [
+          {
+            "at": "Rowan Vale's own list",
+            "kind": "own-list",
+            "says": "Cedar Service is accepted for urn:operation:service query."
+          }
+        ],
+        "answer": "Accepted, for urn:operation:service query only."
+      },
+      "caption": "Cedar Service: Accepted, for urn:operation:service query only."
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "rule": {
+        "id": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
+        "text": "The request asks for contact; by value is the only form in this configuration."
+      },
+      "caption": "Only what the request needs goes: Rowan Vale's contact statement."
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "rule": {
+        "id": "urn:terms:contact",
+        "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
+      },
+      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within Rowan Vale's limits."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "reason": "evidence-complete",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with Rowan's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The accept message goes to Cedar's agent."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-probing-counterparty-main:person-agent:0001",
+        "from": "Rowan's agent",
+        "to": "Cedar's agent",
+        "kind": "accept",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:01b29ef5cdc…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Rowan's agent to Cedar's agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-probing-counterparty-main:person-agent:0001",
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "kind": "accept",
+              "from": {
+                "actor": "urn:fictional:rowan-agent",
+                "onBehalfOf": "urn:fictional:rowan"
+              },
+              "to": {
+                "actor": "urn:fictional:cedar-agent",
+                "party": "urn:fictional:cedar-service"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "VZdR3KLfwo2ZNJHf5kL6fZ7wjm-vkRWzFAx7etKcqWA",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:de14abcde9a275c1e810c310cb09c5de263db689377cb94da4564422934b1df9"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): Rowan Vale says Rowan's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:8085bb433c522764582542add66f79ce:1794560400000",
+                "party": "urn:fictional:rowan",
+                "actor": "urn:fictional:rowan-agent",
+                "actorKid": "VZdR3KLfwo2ZNJHf5kL6fZ7wjm-vkRWzFAx7etKcqWA",
+                "operations": [
+                  "urn:operation:service-query"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d3b241411c8d6e73ac2495ff59ccde46051e769b1c64021787880f1d7129e27f"
+          },
+          "content": {
+            "present": true,
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id.",
+            "raw": {
+              "proposal": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
+              "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
+              "agreement": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300"
+            },
+            "digest": "sha-256:57353ff092b7a13a2dff3b68231fd39d2a9c862e1bb6edc6d141f3f1e4d589b5"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Binds to the offered terms by their digest.",
+            "raw": {
+              "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6"
+            },
+            "digest": "sha-256:65f6f675620dfb628ce33a67ab2878a98820249159c927b2fe70d41cce726d97"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-probing-counterparty-main:service-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "inReplyTo": "urn:awp:engine-probing-counterparty-main:service-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "Rowan's agent sends an accept message to Cedar's agent."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share Rowan Vale's contact statement with Cedar Service."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "Rowan Vale's mandate covers this action."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "reason": "recipient-established",
+      "resolution": {
+        "question": "Is Cedar Service a party I can send urn:operation:service query to?",
+        "path": [
+          {
+            "at": "Rowan Vale's own list",
+            "kind": "own-list",
+            "says": "Cedar Service is accepted for urn:operation:service query."
+          }
+        ],
+        "answer": "Accepted, for urn:operation:service query only."
+      },
+      "caption": "Cedar Service: Accepted, for urn:operation:service query only."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "rule": {
+        "id": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
+        "text": "The request asks for contact; by value is the only form in this configuration."
+      },
+      "caption": "Only what the request needs goes: Rowan Vale's contact statement."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "rule": {
+        "id": "urn:terms:contact",
+        "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
+      },
+      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+    },
+    {
+      "seq": 40,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within Rowan Vale's limits."
+    },
+    {
+      "seq": 41,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 42,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "reason": "evidence-complete",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "caption": "Signed (JWS EdDSA) with Rowan's agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 43,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The deliver message goes to Cedar's agent."
+    },
+    {
+      "seq": 44,
+      "step": 4,
+      "agent": "person-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-probing-counterparty-main:person-agent:0002",
+        "from": "Rowan's agent",
+        "to": "Cedar's agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:b5e21867bdc…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Rowan's agent to Cedar's agent; deliver; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-probing-counterparty-main:person-agent:0002",
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "urn:fictional:rowan-agent",
+                "onBehalfOf": "urn:fictional:rowan"
+              },
+              "to": {
+                "actor": "urn:fictional:cedar-agent",
+                "party": "urn:fictional:cedar-service"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "VZdR3KLfwo2ZNJHf5kL6fZ7wjm-vkRWzFAx7etKcqWA",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:5b05590d4179e08510fc732ce0c722960ece4cb4ae07f9cc2db5dcd0d31215ae"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:scenario:probing-counterparty:contact\"",
+            "raw": {
+              "ref": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300",
+              "basis": {
+                "kind": "agreement",
+                "agreement": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300"
+              },
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "output": {
+                "items": [
+                  "urn:scenario:probing-counterparty:contact"
+                ]
+              }
+            },
+            "digest": "sha-256:84465e23450db2f7644e35cf30899348e34be69aac3a5229eefdf42c69260ca5",
+            "untrusted": [
+              {
+                "path": "output.items.0",
+                "text": "urn:scenario:probing-counterparty:contact"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: contact from Rowan Vale.",
+            "raw": [
+              {
+                "value": 42,
+                "id": "urn:scenario:probing-counterparty:contact",
+                "issuer": "urn:fictional:rowan",
+                "subject": "urn:fictional:rowan",
+                "claimType": "contact",
+                "method": "self-reported",
+                "asOf": "2026-11-13T09:00:00Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:contact",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:probing-counterparty:contact",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:service-query"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:probing-counterparty:contact",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:service-query"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:1bf461a03e1c46149981e5a046f9ad526fb14e229e50357a0b6e5c543c3352f5"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Sent under agreement urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300; its terms bind the data.",
+            "raw": {
+              "kind": "agreement",
+              "agreement": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300"
+            },
+            "digest": "sha-256:c276079ea058139d62acd16800d7478fd56d11e7879605799705eaee9ddcaa97"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by Rowan's agent; as of 2026-11-13T09:00:00Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:probing-counterparty:contact",
+                  "issuer": "urn:fictional:rowan",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "Rowan's agent sends a deliver message to Cedar's agent."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "service-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-probing-counterparty-main:person-agent:0001",
+        "from": "Rowan's agent",
+        "to": "Cedar's agent",
+        "kind": "accept",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:01b29ef5cdc…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Rowan's agent to Cedar's agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-probing-counterparty-main:person-agent:0001",
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "kind": "accept",
+              "from": {
+                "actor": "urn:fictional:rowan-agent",
+                "onBehalfOf": "urn:fictional:rowan"
+              },
+              "to": {
+                "actor": "urn:fictional:cedar-agent",
+                "party": "urn:fictional:cedar-service"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "VZdR3KLfwo2ZNJHf5kL6fZ7wjm-vkRWzFAx7etKcqWA",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:de14abcde9a275c1e810c310cb09c5de263db689377cb94da4564422934b1df9"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): Rowan Vale says Rowan's agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:8085bb433c522764582542add66f79ce:1794560400000",
+                "party": "urn:fictional:rowan",
+                "actor": "urn:fictional:rowan-agent",
+                "actorKid": "VZdR3KLfwo2ZNJHf5kL6fZ7wjm-vkRWzFAx7etKcqWA",
+                "operations": [
+                  "urn:operation:service-query"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d3b241411c8d6e73ac2495ff59ccde46051e769b1c64021787880f1d7129e27f"
+          },
+          "content": {
+            "present": true,
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id.",
+            "raw": {
+              "proposal": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
+              "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
+              "agreement": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300"
+            },
+            "digest": "sha-256:57353ff092b7a13a2dff3b68231fd39d2a9c862e1bb6edc6d141f3f1e4d589b5"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Binds to the offered terms by their digest.",
+            "raw": {
+              "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6"
+            },
+            "digest": "sha-256:65f6f675620dfb628ce33a67ab2878a98820249159c927b2fe70d41cce726d97"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-probing-counterparty-main:service-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "inReplyTo": "urn:awp:engine-probing-counterparty-main:service-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An accept message from Rowan's agent reaches the inbound gate."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with Rowan's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 47,
+      "step": 5,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 48,
+      "step": 5,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:8085bb433c522764582542add66f79ce:1794560400000",
+        "text": "A representation statement signed with Rowan Vale's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "Rowan Vale signed a statement that Rowan's agent acts for them in this operation."
+    },
+    {
+      "seq": 49,
+      "step": 5,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 50,
+      "step": 5,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 51,
+      "step": 5,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 52,
+      "step": 6,
+      "agent": "service-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-probing-counterparty-main:person-agent:0002",
+        "from": "Rowan's agent",
+        "to": "Cedar's agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:b5e21867bdc…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From Rowan's agent to Cedar's agent; deliver; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-probing-counterparty-main:person-agent:0002",
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "urn:fictional:rowan-agent",
+                "onBehalfOf": "urn:fictional:rowan"
+              },
+              "to": {
+                "actor": "urn:fictional:cedar-agent",
+                "party": "urn:fictional:cedar-service"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "VZdR3KLfwo2ZNJHf5kL6fZ7wjm-vkRWzFAx7etKcqWA",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:5b05590d4179e08510fc732ce0c722960ece4cb4ae07f9cc2db5dcd0d31215ae"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:scenario:probing-counterparty:contact\"",
+            "raw": {
+              "ref": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300",
+              "basis": {
+                "kind": "agreement",
+                "agreement": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300"
+              },
+              "operation": {
+                "id": "urn:operation:service-query",
+                "version": "0.1"
+              },
+              "output": {
+                "items": [
+                  "urn:scenario:probing-counterparty:contact"
+                ]
+              }
+            },
+            "digest": "sha-256:84465e23450db2f7644e35cf30899348e34be69aac3a5229eefdf42c69260ca5",
+            "untrusted": [
+              {
+                "path": "output.items.0",
+                "text": "urn:scenario:probing-counterparty:contact"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: contact from Rowan Vale.",
+            "raw": [
+              {
+                "value": 42,
+                "id": "urn:scenario:probing-counterparty:contact",
+                "issuer": "urn:fictional:rowan",
+                "subject": "urn:fictional:rowan",
+                "claimType": "contact",
+                "method": "self-reported",
+                "asOf": "2026-11-13T09:00:00Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:contact",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:probing-counterparty:contact",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:service-query"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:probing-counterparty:contact",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:service-query"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:1bf461a03e1c46149981e5a046f9ad526fb14e229e50357a0b6e5c543c3352f5"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Sent under agreement urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300; its terms bind the data.",
+            "raw": {
+              "kind": "agreement",
+              "agreement": "urn:awp:agreement:97760de2ec453fa8bd0742aa4d83e300"
+            },
+            "digest": "sha-256:c276079ea058139d62acd16800d7478fd56d11e7879605799705eaee9ddcaa97"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by Rowan's agent; as of 2026-11-13T09:00:00Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:probing-counterparty:contact",
+                  "issuer": "urn:fictional:rowan",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A deliver message from Rowan's agent reaches the inbound gate."
+    },
+    {
+      "seq": 53,
+      "step": 6,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with Rowan's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 54,
+      "step": 6,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:rule:rowan-contact",
+        "text": "Rowan Vale is accepted for contact claims."
+      },
+      "resolution": {
+        "question": "Is Rowan Vale an authority for contact claims about Rowan Vale?",
+        "path": [
+          {
+            "at": "Cedar Service's own list",
+            "kind": "own-list",
+            "says": "Rowan Vale is accepted for contact."
+          }
+        ],
+        "answer": "Accepted, for contact claims only."
+      },
+      "caption": "Rowan Vale's contact statement: Rowan Vale is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 55,
+      "step": 6,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "established-earlier",
+      "rule": {
+        "id": "urn:awp:representation:8085bb433c522764582542add66f79ce:1794560400000",
+        "text": "The representation accepted earlier in this conversation, still valid."
+      },
+      "caption": "Settled when this conversation opened: Rowan Vale's signed representation statement still covers it."
+    },
+    {
+      "seq": 56,
+      "step": 6,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:contact",
+        "text": "Its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+      },
+      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+    },
+    {
+      "seq": 57,
+      "step": 6,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:probing-counterparty:contact",
+        "text": "Accept contact from urn:fictional:rowan by self-reported, at most 30 days old."
+      },
+      "caption": "Rowan Vale's contact statement is fit for a mortgage application: self-reported, 0 days old."
+    },
+    {
+      "seq": 58,
+      "step": 6,
+      "agent": "service-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 59,
+      "step": 6,
+      "agent": "service-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:probing-counterparty:contact",
+        "label": "Rowan Vale's contact statement",
+        "claimType": "contact",
+        "subject": "urn:fictional:rowan",
+        "value": null,
+        "source": "urn:fictional:rowan",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00Z",
+        "terms": {
+          "id": "urn:terms:contact",
+          "summary": "use for urn:purpose:service query; share for urn:purpose:service query"
+        },
+        "provenance": "signed by Rowan Vale"
+      },
+      "caption": "Rowan Vale's contact statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 60,
+      "step": 7,
+      "agent": "person-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "11 entries in this agent's hash-chained record; the chain verifies."
+    }
+  ]
+}

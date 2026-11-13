@@ -1,0 +1,46 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "discharge-letter",
+  "title": "A discharge letter in a doctor's own words",
+  "profile": "discharge-letter",
+  "parties": [],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {}
+  },
+  "statements": [],
+  "mandates": [],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "An agent turns \"cannot be ruled out\" into a coded diagnosis",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "check": "fitness",
+        "reason": "method-not-accepted"
+      },
+      "outline": [],
+      "blocked": "The plain-language-upgrade suite and digest-bound incoming content parts are absent. UNS-3 readings now exist, but source-signed unstructured content is not admitted as a letter with its own media type/digest. A scripted coded diagnosis would bypass that missing admission."
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "fitness",
+    "terms"
+  ],
+  "suites": {
+    "meaning": "plain-language-upgrade"
+  },
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "The plain-language-upgrade suite and digest-bound incoming content parts are absent. UNS-3 readings now exist, but source-signed unstructured content is not admitted as a letter with its own media type/digest. A scripted coded diagnosis would bypass that missing admission."
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The extra parties and fixtures of `mortgage-main`: the mortgage product index, Harbour Bank
@@ -112,6 +113,7 @@ export function faceCheckAttestation(input: {
   at: string;
   actionDigest: string;
   operation: Iri;
+  challenge?: JsonObject;
 }): JsonObject {
   return {
     type: "ApprovalAttestation",
@@ -121,7 +123,12 @@ export function faceCheckAttestation(input: {
     subject: SAM.party,
     method: "certified-face-check",
     level: FACE_CHECK,
-    approves: { actor: SAM.actor, operation: input.operation, actionDigest: input.actionDigest },
+    approves: {
+      actor: SAM.actor,
+      operation: input.operation,
+      actionDigest: input.actionDigest,
+      ...(input.challenge ? { challenge: input.challenge } : {}),
+    },
     issuedAt: input.at,
     validUntil: new Date(Date.parse(input.at) + 3_600_000).toISOString(),
     synthetic: true,

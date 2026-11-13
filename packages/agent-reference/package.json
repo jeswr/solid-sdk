@@ -29,10 +29,12 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/generate-traces.mjs",
+    "build": "tsc -p tsconfig.build.json && node scripts/export-schemas.mjs --check && node scripts/generate-traces.mjs && node scripts/run-scenarios.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check src test scripts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "scenarios": "node scripts/run-scenarios.mjs",
+    "schemas": "node scripts/export-schemas.mjs"
   },
   "dependencies": {
     "@jeswr/solid-odrl": "workspace:*",

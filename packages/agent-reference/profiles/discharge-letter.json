@@ -1,0 +1,32 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "discharge-letter",
+  "claims": [
+    {
+      "kind": "clinical.diagnosis",
+      "sources": [
+        "urn:fictional:hospital"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:discharge-letter",
+      "claims": [
+        "clinical.diagnosis"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [
+    "administrative-summary"
+  ],
+  "vocabulary": {},
+  "operations": []
+}
