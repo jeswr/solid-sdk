@@ -15,8 +15,9 @@
     { id: 'layers', label: 'Layers' },
     { id: 'usecases', label: 'Use cases', when: function () { return !!AX.data.useCases; } },
     { id: 'requirements', label: 'Requirements', when: function () { return !!AX.model.requirements; } },
-    { id: 'specs', label: 'Specifications' },
+    { id: 'specs', label: 'Specs' },
     { id: 'tests', label: 'Evaluation' },
+    { id: 'start', label: 'Get an agent' },
     { id: 'roadmap', label: 'Roadmap', when: function () { return !!AX.data.roadmap; } },
   ].filter(function (v) { return !v.when || v.when(); });
   AX.views = VIEWS;
@@ -145,5 +146,6 @@
   // ---- Start -----------------------------------------------------------------------
   document.getElementById('tour-btn').addEventListener('click', function () { if (AX.tour) AX.tour.start(); });
   route();
-  if (AX.tour) AX.tour.maybeInvite();
+  // Someone arriving from an email footer came to read one page: do not put the tour invite over it.
+  if (AX.tour && current !== 'start') AX.tour.maybeInvite();
 })();

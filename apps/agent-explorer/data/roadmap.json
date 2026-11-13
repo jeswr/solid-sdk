@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-13T03:05Z",
+  "updated": "2026-11-13T15:45Z",
   "note": "Everything to build, in the order it will be done. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
   "phases": [
     {
@@ -24,14 +24,14 @@
         {
           "id": "P1.3",
           "title": "Explorer site",
-          "detail": "Step-through and play modes, a selector per layer, message inspector, guided tour.",
-          "status": "doing",
+          "detail": "Step-through and play modes, a selector per layer, message inspector, guided tour, use cases, evaluation. Public copy live; the address answerableagents.org follows once its DNS is set.",
+          "status": "done",
           "owner": "Fable (design), Opus (plumbing)"
         },
         {
           "id": "P1.4",
           "title": "Reference agent package",
-          "detail": "Lifted from the September pilot: named gates, a suite registry, a trace for every decision.",
+          "detail": "Two gates, stores, a suite registry and a trace for every decision. Built; in review before merge (pull request 635).",
           "status": "doing",
           "owner": "Opus (to Fable's brief)"
         },
@@ -45,8 +45,8 @@
         {
           "id": "P1.6",
           "title": "Swap the transport",
-          "detail": "The same flow over email, MCP and A2A, with the same verdicts.",
-          "status": "next",
+          "detail": "Direct transport and plain email both run through the same gates. MCP and A2A transports are not built yet.",
+          "status": "doing",
           "owner": "Opus (to Fable's brief)"
         },
         {
@@ -66,28 +66,28 @@
         {
           "id": "P1.9",
           "title": "Joint computation as a data-sharing option",
-          "detail": "Two banks and the agent work out a total; the lender sees only the total.",
-          "status": "next",
+          "detail": "Design and the seam are being built; the computation itself waits on packages from the engine project, due before 17 Nov.",
+          "status": "doing",
           "owner": "Fable (design), Opus (plumbing)"
         },
         {
           "id": "P1.10",
           "title": "Data by reference on Solid",
           "detail": "Grant read access in the pod and send a pointer with terms, instead of a copy.",
-          "status": "next",
+          "status": "done",
           "owner": "Opus (to Fable's brief)"
         },
         {
           "id": "P1.11",
           "title": "When things go wrong",
           "detail": "Accountability flows you can switch between: a claim to a regulator, fault passed to the vendor, reputation.",
-          "status": "next",
+          "status": "done",
           "owner": "Fable (design), Opus (plumbing)"
         },
         {
           "id": "P1.12",
           "title": "Narrated walkthrough video",
-          "detail": "A six-minute narrated walkthrough exists with a stand-in voice. It is re-recorded against the real main flow once the runtime's next changes land.",
+          "detail": "First narrated version made. A re-record against the current site is owed.",
           "status": "doing",
           "owner": "Fable"
         },
@@ -95,14 +95,14 @@
           "id": "P1.13",
           "title": "Comparison with the agents already built",
           "detail": "The pilot, the suite agent and the policy sandbox drawn against the reference design, with gaps.",
-          "status": "doing",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P1.14",
           "title": "A core that is a real model",
-          "detail": "Recorded runs with a model as the core, after the weekly usage reset on 17 Nov.",
-          "status": "later",
+          "detail": "AgentDojo with a real model as the core: 1,325 runs, five conditions, three attacks. See the Evaluation view.",
+          "status": "done",
           "owner": "Opus (to Fable's brief)"
         }
       ]
@@ -116,35 +116,35 @@
           "id": "P2.1",
           "title": "Core specification",
           "detail": "Roles, the verifiable message, the checks and their outcomes, the record, configurations.",
-          "status": "doing",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P2.2",
           "title": "Ten layer specifications",
           "detail": "For each layer: what a suite must define, and the suites registered so far.",
-          "status": "doing",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P2.3",
           "title": "Baseline configuration",
           "detail": "The recommended default, one suite per layer, so two strangers' agents can always talk.",
-          "status": "doing",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P2.4",
           "title": "Conformance",
           "detail": "The trace format, expected outlines, and the rule: no suite without a trace.",
-          "status": "doing",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P2.5",
           "title": "Mortgage profile",
           "detail": "The claims, accepted sources and assurance levels for the worked example.",
-          "status": "doing",
+          "status": "done",
           "owner": "Fable"
         },
         {
@@ -157,8 +157,8 @@
         {
           "id": "P2.7",
           "title": "Zero-knowledge query proof suite",
-          "detail": "Bring the existing zero-knowledge specifications in as an authenticity suite.",
-          "status": "later",
+          "detail": "Drafted as an authenticity suite. Waits on the engine project for a proof that binds issuer and subject.",
+          "status": "doing",
           "owner": "Fable"
         },
         {
@@ -192,7 +192,7 @@
         {
           "id": "P6.2",
           "title": "A real run for every use case",
-          "detail": "A general scenario engine so that a use case is a profile and a scenario file with no new code. Then every use case and each of its branches runs for real. Twelve need a live proof or joint computation from the engine project. This is the gate.",
+          "detail": "151 of 166 paths are real runs. The other 15 are listed by name: nine wait on a proof system, six on a joint computation.",
           "status": "doing",
           "owner": "Fable (design and review), Codex (build)"
         },
@@ -213,15 +213,15 @@
         {
           "id": "P6.5",
           "title": "Evaluation without a model",
-          "detail": "One change at a time to every real message; a worst-case core that proposes what an attacker wants; injected faults; AgentDojo replayed through the gates.",
-          "status": "next",
+          "detail": "Worst-case core, one-change and injected-fault runs: being built now.",
+          "status": "doing",
           "owner": "Fable (design and review), Codex (build)"
         },
         {
           "id": "P6.6",
           "title": "Benchmarks with a real model",
-          "detail": "AgentDojo and ConVerse with a model as the core, then health, policy and negotiation benchmarks. Needs a model key.",
-          "status": "later",
+          "detail": "First run done with one model. Repeats, a second model and an attack written against the model are still to do.",
+          "status": "done",
           "owner": "Fable (design and review), Codex (build)"
         }
       ]
@@ -235,14 +235,14 @@
           "id": "P3.1",
           "title": "Review the paper against the implementation",
           "detail": "Where the seven gaps held up, where the design changed, what is missing.",
-          "status": "later",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P3.2",
           "title": "Propose a new version",
-          "detail": "A set of changes, laid as suggestions in the paper's document.",
-          "status": "later",
+          "detail": "Version 2 and a CACM-length version are in the paper document.",
+          "status": "done",
           "owner": "Fable"
         }
       ]
@@ -256,21 +256,21 @@
           "id": "P4.1",
           "title": "Review the zero-knowledge specifications and architecture",
           "detail": "Against the authenticity layer and the query-proof suite.",
-          "status": "later",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P4.2",
           "title": "Review the joint computation specification and paper",
           "detail": "Against the data-sharing suite built in P1.9.",
-          "status": "later",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P4.3",
           "title": "Updated specifications, papers and implementations",
-          "detail": "Proposed as changes on the engine's own project.",
-          "status": "later",
+          "detail": "Findings sent to the engine project, which is building four packages in answer.",
+          "status": "doing",
           "owner": "Fable, with the engine project"
         }
       ]
@@ -284,21 +284,21 @@
           "id": "P5.1",
           "title": "Landscape study of governance",
           "detail": "eIDAS, the UK digital identity and attributes trust framework, GLEIF and vLEI, sector registers, legal accountability, agent registries.",
-          "status": "later",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P5.2",
           "title": "Which frameworks to build on",
           "detail": "What can be used as it is, what is missing, and the shortest path to working infrastructure.",
-          "status": "later",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P5.3",
           "title": "Full first draft",
-          "detail": "All chapters, drawing on the paper, the specifications and the implementation.",
-          "status": "later",
+          "detail": "First full draft, about 97,000 words, with a reading view.",
+          "status": "done",
           "owner": "Fable"
         }
       ]
@@ -319,14 +319,14 @@
           "id": "P7.2",
           "title": "Email footer upgrade path",
           "detail": "\"I use an agent that supports this\" with a link; plain email still works, and both sides upgrade when they can.",
-          "status": "later",
+          "status": "next",
           "owner": "Fable"
         },
         {
           "id": "P7.3",
           "title": "Setup page",
           "detail": "How to get an agent: connect an existing assistant through an adapter, or sign up to a hosted one.",
-          "status": "later",
+          "status": "next",
           "owner": "Fable (design), Opus (plumbing)"
         },
         {
