@@ -33,6 +33,7 @@ describe("Tasks preferences", () => {
       groupBy: {},
       viewMode: { home: "board" },
       collapsedSections: ["one"],
+      collapsedProjects: [],
       sidebar: { labelsOpen: false, projectsOpen: false },
       showCompletedInProject: true,
       weekStart: "monday",
