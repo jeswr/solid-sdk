@@ -140,6 +140,40 @@ beforeEach(() => {
   ];
 });
 afterEach(() => vi.restoreAllMocks());
+it("renders a message-backed row, links to its message and selects it for bulk actions", async () => {
+  const iri = `${client.root("imported")}messages/orphan.ttl#it`;
+  const message = await client.store.load(iri.split("#")[0]!, true);
+  const m = message.mailbox.createMessage(iri);
+  m.partOfThread = `${client.root("imported")}threads/missing.ttl#it`;
+  m.subjectLine = "Recovered mail";
+  m.body = "Still here";
+  m.sender = "mailto:noel@example.org";
+  await client.store.save(message);
+  const folder = await client.store.load(folders[0]!.iri.split("#")[0]!, true);
+  folder.mailbox.createFolder(folders[0]!.iri).addMessage(iri);
+  await client.store.save(folder);
+  rows = (await client.threads("imported", folders[0]!.iri)).items;
+  const view = await mount(h(ThreadList, { rows, title: "Inbox", refresh: vi.fn() }));
+  const row = view.host.querySelector(`tr[data-thread="${iri}"]`)!;
+  expect(row.textContent).toContain("Recovered mail");
+  expect(row.textContent).toContain("Still here");
+  expect(row.textContent).toContain("noel@example.org");
+  expect(row.getAttribute("data-unread")).toBe("true");
+  expect(row.querySelector("a")?.getAttribute("href")).toBe(
+    `/mail/t/${encodeRef(iri)}?back=${encodeURIComponent("/mail/inbox")}`,
+  );
+  await click(row.querySelector("input")!);
+  await click(view.host.querySelector('[aria-label="Mark read"]')!);
+  expect(mocks.actions.forRows).toHaveBeenCalledWith(rows, "read", true);
+  await view.unmount();
+  conversation = await client.thread(iri);
+  const threadView = await mount(h(ThreadView, { iri }));
+  expect(threadView.host.querySelector("h1")?.textContent).toBe("Recovered mail");
+  expect(threadView.host.querySelectorAll("article.mail-message")).toHaveLength(1);
+  expect(threadView.host.textContent).toContain("Still here");
+  expect(mocks.actions.markRead).toHaveBeenCalledWith([iri], true, iri);
+  await threadView.unmount();
+});
 async function startWizard() {
   mocks.pathname = "/mail/import";
   history.replaceState({}, "", "/mail/import");

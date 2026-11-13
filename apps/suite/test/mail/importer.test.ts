@@ -487,7 +487,7 @@ it("sorts equal-dated threads stably and resolves message-side membership alone"
     m.folderIris.add(`${root}folder`);
     m.dateSent = new Date("2026-10-24T00:00:00Z");
   }
-  expect(pageThreads(mailbox, `${root}folder`).items.map((x) => x.thread.value)).toEqual([
+  expect(pageThreads(mailbox, `${root}folder`).items.map((x) => x.id)).toEqual([
     `${root}a`,
     `${root}b`,
   ]);

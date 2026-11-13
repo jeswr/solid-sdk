@@ -393,7 +393,8 @@ describe("Sparse and bounded account snapshots", () => {
       messages: [],
     });
     const rows = await client.search(account, "");
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
+    expect(rows.find((r) => r.iri.endsWith("messages/sparse-2.ttl#it"))?.count).toBe(1);
     expect(rows.every((r) => r.subject === "(No subject)" && r.latest.getTime() === 0)).toBe(true);
     expect(rows.find((r) => r.count === 0)).toMatchObject({
       participants: [],
@@ -419,7 +420,9 @@ describe("Sparse and bounded account snapshots", () => {
     }
     await client.store.save(loaded);
     expect(await client.search(account, "subject:outside-bound")).toEqual([]);
-    expect(await client.search(account, "subject:inside-bound")).toEqual([]); // No conversation relation invented.
+    expect(await client.search(account, "subject:inside-bound", 1)).toMatchObject([
+      { iri: `${loaded.url}#message-5000`, count: 1 },
+    ]);
   }, 120_000);
   it("preserves final unterminated MIME bytes, and mboxrd prefixes split at each position", async () => {
     const { client } = setup();

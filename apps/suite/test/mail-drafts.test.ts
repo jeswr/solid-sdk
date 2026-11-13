@@ -202,7 +202,10 @@ describe("mail drafts", () => {
     });
     // No thread to retitle; the missing Drafts entry is created by the save.
     const updated = await updateDraft(client.store, mailRoot, sparse, input, new Date());
-    expect((await client.threads(account, drafts)).total).toBe(0);
+    expect(await client.threads(account, drafts)).toMatchObject({
+      total: 1,
+      items: [{ iri: `${url}#it`, count: 1 }],
+    });
     expect(
       (await client.store.load(drafts.split("#")[0] as string)).mailbox
         .folder(drafts)

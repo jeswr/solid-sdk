@@ -37,6 +37,7 @@ export async function loadFolders(store: MailStore, root: string) {
     [...messages.messages].flatMap((message) =>
       message.partOfThread ? [documentOf(message.partOfThread)] : [],
     ),
+    true,
   );
   const loaded = new Set([...messages.messages].map((message) => documentOf(message.value)));
   const members = await snapshotPresent(
@@ -45,26 +46,8 @@ export async function loadFolders(store: MailStore, root: string) {
       .flatMap((thread) => [...thread.messageIris].map(documentOf))
       .filter((url) => !loaded.has(url)),
   );
-  const combined = combine([folders, messages, members]);
-  const all = [...combined.messages];
-  const unread = new Set(
-    all
-      .filter((message) => !message.isRead)
-      .map((message) => message.partOfThread ?? message.value),
-  );
-  return folderCounts(combined).map((count) => ({
-    ...count,
-    unreadThreads: new Set(
-      all
-        .filter(
-          (message) =>
-            count.folder.messageIris.has(message.value) ||
-            message.folderIris.has(count.folder.value),
-        )
-        .map((message) => message.partOfThread ?? message.value)
-        .filter((thread) => unread.has(thread)),
-    ).size,
-  }));
+  const combined = combine([folders, messages, threads, members]);
+  return folderCounts(combined);
 }
 export async function loadThreads(store: MailStore, folderIri: string, offset = 0, limit = 50) {
   const folder = await store.load(documentOf(folderIri));
@@ -75,6 +58,7 @@ export async function loadThreads(store: MailStore, folderIri: string, offset = 
   const threads = await snapshotPresent(
     store,
     [...messages.messages].flatMap((m) => (m.partOfThread ? [documentOf(m.partOfThread)] : [])),
+    true,
   );
   const members = await snapshotPresent(
     store,
@@ -89,14 +73,24 @@ export async function loadThreads(store: MailStore, folderIri: string, offset = 
 }
 export async function loadThread(store: MailStore, threadIri: string) {
   const thread = await store.load(documentOf(threadIri));
+  const message = thread.mailbox.findMessage(threadIri);
+  if (message) return [message];
   const messages = await snapshotPresent(
     store,
     [...thread.mailbox.thread(threadIri).messageIris].map(documentOf),
   );
   return threadMessages(combine([thread.mailbox, messages]), threadIri);
 }
-/** Loads documents with bounded concurrency, skipping ones that no longer exist (404). */
-async function snapshotPresent(store: MailStore, urls: string[]): Promise<MailboxDataset> {
+/** Referenced thread metadata may be absent or unreadable without hiding readable messages. */
+export function unavailableThread(error: unknown): boolean {
+  return error instanceof MailError && [401, 403, 404, 410].includes(error.status);
+}
+/** Loads documents with bounded concurrency, skipping absent documents. */
+async function snapshotPresent(
+  store: MailStore,
+  urls: string[],
+  threadMetadata = false,
+): Promise<MailboxDataset> {
   const unique = [...new Set(urls)];
   const dataset = new Store();
   let next = 0;
@@ -107,7 +101,11 @@ async function snapshotPresent(store: MailStore, urls: string[]): Promise<Mailbo
       try {
         dataset.addQuads([...(await store.load(url)).mailbox]);
       } catch (error) {
-        if (error instanceof MailError && error.code === "not-found") continue;
+        if (
+          (error instanceof MailError && error.code === "not-found") ||
+          (threadMetadata && unavailableThread(error))
+        )
+          continue;
         failed = true;
         throw error;
       }
