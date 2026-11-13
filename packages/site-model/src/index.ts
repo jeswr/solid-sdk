@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * `@jeswr/site-model`: the site model of the semantic agent browser. A site model lists the
@@ -7,6 +8,7 @@
  */
 export {
   type ActionRequestOptions,
+  actionRequestTerms,
   isSchemaActionType,
   parseActionRequest,
 } from "./action-request.js";

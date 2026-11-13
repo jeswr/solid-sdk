@@ -53,6 +53,8 @@ export interface RunTaskOptions {
   observationBudget?: number;
   /** Permit writes whose canonical requests already committed in this task. Default false. */
   allowRepeats?: boolean;
+  /** Host recovery authorization for these specific committed/uncertain requests. */
+  allowRetryOf?: string[];
 }
 
 export interface TraceStep {

@@ -19,6 +19,7 @@ import type {
   Operation,
   SiteModel,
 } from "@jeswr/site-model";
+import { actionRequestTerms } from "@jeswr/site-model";
 import {
   applyCsrfToken,
   bodyInit,
@@ -93,7 +94,7 @@ export type ErrorKind =
   | "gate"
   | "repeat";
 
-/** Local extension of the shared receipt contract for confirmed writes with an incomplete result. */
+/** Local extension of the shared receipt contract for possible effects with an incomplete result. */
 export type ExecutionOutcome = Omit<ActionOutcome, "status"> & {
   status: ActionOutcome["status"] | "uncertain";
 };
@@ -111,7 +112,7 @@ export interface ExecutionResult {
   target?: Target;
   /** Executor-authored receipt; also the first observation for terminal writes. */
   outcome?: ExecutionOutcome;
-  /** Writes with a 2xx/3xx response, recorded before processing that response. */
+  /** Successful or uncertain write attempts; only HTTP 4xx rejects a sent write without commitment. */
   committed: CommittedWrite[];
   /** Safe unresolved required names for the closest no-path candidate. */
   missing?: string[];
@@ -217,6 +218,7 @@ interface RunContext {
   /** The vault's headers exactly as stored, written back unchanged with cookie updates. */
   storedHeaders?: Record<string, string>;
   revision?: string;
+  persistRejected?: boolean;
   requests: number;
   secrets: Set<string>;
   controller: AbortController;
@@ -296,7 +298,6 @@ interface Progress {
   secrets: Set<string>;
   requests: number;
   spent: string;
-  writes: MoneyWrite[];
   committed: CommittedWrite[];
   currency?: string;
   authorizedMoney?: { amount?: string; currency?: string };
@@ -395,12 +396,15 @@ export function createExecutor(options: ExecutorOptions): Executor {
     if (!changed) return;
     ctx.jar = jar;
     addSecrets(ctx);
+    if (ctx.persistRejected) return;
     const bundle: SessionBundle = {
       cookies: jar,
       ...(ctx.revision !== undefined ? { revision: ctx.revision } : {}),
       ...(ctx.storedHeaders ? { headers: { ...ctx.storedHeaders } } : {}),
     };
-    await budget(ctx, sessions.update(origin, persona, bundle));
+    const update = await budget(ctx, sessions.update(origin, persona, bundle));
+    if (update?.accepted === false) ctx.persistRejected = true;
+    else if (update?.revision !== undefined) ctx.revision = update.revision;
   }
 
   async function send(
@@ -445,10 +449,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
           }),
         );
       } catch {
+        committed?.();
+        committed = undefined;
         checkDeadline(ctx);
         throw new NetworkError(`${currentMethod} ${describeUrl(url)} failed (network error)`);
       }
-      if (committed && res.status >= 200 && res.status < 400) {
+      if (committed && !(res.status >= 400 && res.status < 500)) {
         committed();
         committed = undefined;
       }
@@ -739,9 +745,20 @@ export function createExecutor(options: ExecutorOptions): Executor {
     // A planner implementation may return mutable arrays: snapshot each lookup.
     const original = request;
     const lookups = new Map<string, string[]>();
+    const termLookups = new Map<string, ReturnType<typeof actionRequestTerms>>();
     request = {
       node: original.node,
       types: [...original.types],
+      ...{
+        terms: (path: string[]) => {
+          const key = JSON.stringify(path);
+          if (!termLookups.has(key)) {
+            const terms = actionRequestTerms(original, path);
+            termLookups.set(key, terms ? [...terms] : undefined);
+          }
+          return termLookups.get(key);
+        },
+      },
       values(path) {
         const key = JSON.stringify(path);
         if (!lookups.has(key)) lookups.set(key, [...original.values(path)]);
@@ -765,7 +782,6 @@ export function createExecutor(options: ExecutorOptions): Executor {
       secrets: ctx.secrets,
       requests: 0,
       spent: "0",
-      writes: [],
       committed: [],
     };
     const observations = async (): Promise<Observation[]> =>
@@ -1002,81 +1018,49 @@ export function createExecutor(options: ExecutorOptions): Executor {
               error: "already done in this task; ask the person if they really want another",
             });
           let evidence: MoneyEvidence | undefined;
-          let paymentPreview: MoneyWrite | undefined;
-          const nextPayment = steps.findIndex(
-            (step, index) => index >= i && normaliseEffect(step.effect) === "payment",
-          );
-          if (flow && normaliseEffect(op.effect) !== "read" && nextPayment >= i) {
-            const writes = [...progress.writes];
-            for (let n = i; n <= nextPayment; n++) {
-              const write = steps[n] as Operation;
-              if (normaliseEffect(write.effect) === "read") continue;
-              let bound: Record<string, string>;
-              try {
-                bound =
-                  n === i
-                    ? resolved
-                    : operationValues(
-                        write,
-                        stepValues(flow, n, write, inputs, progress.stepItems),
-                      );
-              } catch (error) {
-                // Future write inputs may require an as-yet unexecuted step.
-                if (n === i || !(error instanceof BindingError)) throw error;
-                continue;
-              }
-              const prepared = {
-                step: n,
-                operation: write,
-                values: bound,
-                sources: stepSources(flow, n),
-                compiled: n === i ? compiled : compileOperation(write, bound, origin),
-                identities: writeIdentities(flow, n, write, bound, progress.stepItems, request),
-              };
-              writes.push(prepared);
-              if (n === nextPayment) paymentPreview = prepared;
-            }
-            const lastWrite = steps
-              .slice(0, nextPayment)
-              .findLastIndex((step) => normaliseEffect(step.effect) !== "read");
-            evidence = factsMoney(
-              origin,
-              progress.observations.flatMap((record, n) => {
-                const read = steps[n] as Operation;
-                return normaliseEffect(read.effect) === "read"
-                  ? [
-                      {
-                        step: n,
-                        operation: read,
-                        url: record.url,
-                        items: progress.stepItems[n] ?? [],
-                      },
-                    ]
-                  : [];
-              }),
-              writes,
-              lastWrite,
-              request,
-            );
-          }
-          let money = resolvedMoney(request, op, resolved, sources, compiled, evidence);
-          if (normaliseEffect(op.effect) !== "read" && nextPayment > i) {
-            if (paymentPreview)
-              money = resolvedMoney(
-                request,
-                paymentPreview.operation,
-                paymentPreview.values,
-                paymentPreview.sources,
-                paymentPreview.compiled,
-                evidence,
-              );
-            if (money.amount === undefined || money.currency === undefined)
-              throw new MoneyRefusal(
-                "payment flow requires wire-mapped amount and currency or trusted site facts before a write",
-              );
-          }
-          // The host's spending limit sees the cumulative charge in this flow.
           const payment = normaliseEffect(op.effect) === "payment";
+          if (flow && normaliseEffect(op.effect) !== "read") {
+            const lastWrite = steps
+              .slice(0, i)
+              .findLastIndex((step) => normaliseEffect(step.effect) !== "read");
+            // Earlier write approvals can show a product quote. Only payment requires
+            // evidence; after any preceding write that evidence must be a fresh total.
+            const current: MoneyWrite = {
+              step: i,
+              operation: op,
+              values: resolved,
+              sources,
+              compiled,
+              identities: writeIdentities(flow, i, op, resolved, progress.stepItems, request),
+            };
+            if (
+              payment ||
+              (steps.slice(i + 1).some((step) => normaliseEffect(step.effect) === "payment") &&
+                lastWrite < 0 &&
+                current.identities?.length)
+            )
+              evidence = factsMoney(
+                origin,
+                progress.observations.flatMap((record, n) => {
+                  const read = steps[n] as Operation;
+                  return normaliseEffect(read.effect) === "read"
+                    ? [
+                        {
+                          step: n,
+                          operation: read,
+                          url: record.url,
+                          items: progress.stepItems[n] ?? [],
+                        },
+                      ]
+                    : [];
+                }),
+                [current],
+                lastWrite,
+                request,
+              );
+          }
+          const money = resolvedMoney(request, op, resolved, sources, compiled, evidence);
+          // The host's spending limit sees the cumulative charge in this flow.
           if (
             money.currency !== undefined &&
             progress.currency !== undefined &&
@@ -1084,7 +1068,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
           )
             throw new BindingError("flow payments use different currencies");
           const total =
-            money.amount !== undefined && (payment || nextPayment > i)
+            money.amount !== undefined && payment
               ? addAmounts(progress.spent, money.amount)
               : undefined;
           const authorizedMoney = total !== undefined ? { ...money, amount: total } : money;
@@ -1228,15 +1212,6 @@ export function createExecutor(options: ExecutorOptions): Executor {
           progress.observations.push(out.observation);
           progress.stepItems.push(out.items);
           progress.index = i + 1;
-          if (normaliseEffect(op.effect) !== "read")
-            progress.writes.push({
-              step: i,
-              operation: op,
-              values: resolved,
-              sources,
-              compiled,
-              identities: writeIdentities(flow, i, op, resolved, progress.stepItems, request),
-            });
           if (payment) {
             progress.spent = total as string;
             progress.currency = money.currency;

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Static assets. APP_JS is written the way a small production bundle looks (short names, a fetch
 // wrapper, a cookie reader) so the profiler's script analysis meets realistic code, not a toy.
@@ -9,6 +10,7 @@ const p=$("[data-product-id]");p&&a("/api/products/"+p.dataset.productId).then(d
 const b=$("#add-to-cart");b&&b.addEventListener("click",()=>{const q=parseInt($("#qty").value,10)||1;a("/api/cart/items",{method:"POST",headers:Object.assign({},h,{"X-CSRF-Token":c("csrf")}),body:JSON.stringify({sku:b.dataset.sku,qty:q})}).then(d=>{$("#cart-count").textContent=String(d.count);$("#cart-status").textContent="Added to basket"}).catch(e=>{$("#cart-status").textContent="Could not add: "+e.message})});
 document.querySelectorAll("[data-remove-sku]").forEach(x=>x.addEventListener("click",()=>{a("/api/cart/items/"+encodeURIComponent(x.dataset.removeSku),{method:"DELETE",headers:{"X-CSRF-Token":c("csrf")}}).then(()=>location.reload())}));
 const m=$("#load-more");m&&m.addEventListener("click",()=>{const n=Number(m.dataset.page)+1;a("/api/search?q="+encodeURIComponent(m.dataset.q)+"&page="+n).then(d=>{const l=$("#results");d.items.forEach(i=>{const e=document.createElement("li");e.className="product-card";e.textContent=i.name+" "+i.price;l.appendChild(e)});m.dataset.page=String(d.page);d.page*5>=d.total&&m.remove()})});
+const d=$("#delivery");if(d){const total=()=>a("/api/checkout?delivery="+encodeURIComponent(d.value)).then(x=>{$(".total").textContent="Total "+x.currency+" "+x.totalPaymentDue});d.addEventListener("change",total);total()}
 const t={get:()=>localStorage.getItem("shop.rt"),set:d=>{localStorage.setItem("shop.at",d.access_token);localStorage.setItem("shop.rt",d.refresh_token)}};
 window.shopApi={me:()=>fetch("/api/me",{headers:{Authorization:"Bearer "+localStorage.getItem("shop.at")}}).then(r=>r.json()),refresh:()=>fetch("/api/token/refresh",{method:"POST",body:new URLSearchParams({refresh_token:t.get()})}).then(r=>r.json()).then(t.set),token:(u,w)=>fetch("/api/token",{method:"POST",body:new URLSearchParams({username:u,password:w})}).then(r=>r.json()).then(t.set)};
 })();

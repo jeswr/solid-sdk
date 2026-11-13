@@ -6,12 +6,12 @@ import type { PermissionPolicy } from "./permission.js";
 import { type AccountResolution, type PersonaContext, PersonaResolver } from "./persona.js";
 import type { Account, AccountRoute, Profiles } from "./profiles.js";
 import { boundary, origin, Secret, VaultError } from "./safe.js";
-import type { LoginTransaction, SessionBundle, SessionStore } from "./sessions.js";
+import type { LoginTransaction, SessionBundle, SessionProvider, SessionStore } from "./sessions.js";
 export interface LoginRequest {
   site: string;
   account: Account;
   route: AccountRoute;
-  sessions: SessionStore;
+  sessions: SessionProvider;
   transaction: LoginTransaction;
 }
 export type PasswordLogin = (
@@ -77,7 +77,13 @@ export class AgentVault {
     const existing = await o.sessions.get(site, account.id);
     if (existing && matchesRoute(existing)) return { session: existing, account };
     if (!route) throw new VaultError("missing");
-    const request = { site, account, route, sessions: o.sessions };
+    const request = (transaction: LoginTransaction): LoginRequest => ({
+      site,
+      account,
+      route,
+      sessions: o.sessions.forLogin(transaction),
+      transaction,
+    });
     let selected: { backend: SecretBackend; ref: SecretRef } | undefined;
     const select = async () => {
       if (selected) return selected;
@@ -143,13 +149,12 @@ export class AgentVault {
         });
         transaction = await o.sessions.beginLogin(site, account.id);
         capture =
-          (await o.passwordLogin({ ...request, transaction, credentials: credential, otp })) ||
+          (await o.passwordLogin({ ...request(transaction), credentials: credential, otp })) ||
           undefined;
       } else {
         transaction = await o.sessions.beginLogin(site, account.id);
         capture = await o.interactiveLogin({
-          ...request,
-          transaction,
+          ...request(transaction),
           ...(route.method === "otp" ? { otp: await otp() } : {}),
         });
       }

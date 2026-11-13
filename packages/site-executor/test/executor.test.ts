@@ -378,6 +378,7 @@ describe("CSRF sources", () => {
   it("html source not found -> csrf error", async () => {
     const model = shopModel(shop.url);
     const checkout = model.operations.find((o) => o.id === "urn:op:checkout");
+    if (checkout) checkout.effect = "irreversible-write";
     if (checkout?.csrf?.[0])
       checkout.csrf[0].source = {
         kind: "html",
@@ -421,24 +422,26 @@ describe("flows", () => {
       "urn:flow:buy",
       "urn:op:search",
       "urn:op:add-to-cart",
+      "urn:op:total",
       "urn:op:checkout",
     ]);
     expect(shop.state.orders).toEqual([
       { id: 1000, sid: SID, delivery: "express", items: [{ sku: "TR-20", qty: 1 }] },
     ]);
-    // search, price re-read at each approval, add, CSRF page, checkout POST, 303 GET
-    expect(r.requests).toBe(7);
+    // Product quote retry, add, fresh total and retry, CSRF, payment and receipt.
+    expect(r.requests).toBe(8);
     expect(shop.requests.map((q) => `${q.method} ${q.url}`)).toEqual([
       "GET /api/search?q=Trail%20Runner&page=1",
       "GET /api/search?q=Trail%20Runner&page=1",
       "POST /api/cart/items",
-      "GET /api/search?q=Trail%20Runner&page=1",
+      "GET /api/total",
+      "GET /api/total",
       "GET /checkout",
       "POST /checkout",
       "GET /orders/1000",
     ]);
-    expect(shop.requests[6]?.body).toBe("");
-    expect(shop.requests[5]?.body).toBe(
+    expect(shop.requests[7]?.body).toBe("");
+    expect(shop.requests[6]?.body).toBe(
       `delivery=express&amount=20.0&currency=GBP&csrf_token=${CSRF}`,
     );
     expect(r.outcome).toEqual({
@@ -555,12 +558,13 @@ describe("dry run", () => {
     expect(plan.requests.map((r) => `${r.method} ${r.url}`)).toEqual([
       "GET https://shop.test/api/search?q=Trail%20Runner&page=1",
       "POST https://shop.test/api/cart/items",
+      "GET https://shop.test/api/total",
       "POST https://shop.test/checkout",
     ]);
     expect(plan.requests[1]?.body).toBe(`{"sku":"$step0.${S}sku","qty":1}`);
     expect(plan.requests[1]?.session).toBe(true);
     expect(plan.requests[1]?.csrf).toEqual(["header X-CSRF-Token <- cookie csrf"]);
-    expect(plan.requests[2]?.body).toBe(
+    expect(plan.requests[3]?.body).toBe(
       `delivery=standard&amount=%24step0.https%3A%2F%2Fschema.org%2Fprice&currency=%24step0.https%3A%2F%2Fschema.org%2FpriceCurrency`,
     );
     noSecrets(plan, true);

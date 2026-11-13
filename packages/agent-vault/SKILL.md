@@ -44,6 +44,13 @@ login and interactive login are injected seams.
   `{ site, account, generation }` binding. Require it in `acceptCapture`; never mint a
   transaction on message receipt or accept its generation from the message. AgentVault
   supplies the pre-callback binding as `LoginRequest.transaction` for both login methods.
+  Supply only `sessions.forLogin(transaction)` as `LoginRequest.sessions` to password and
+  interactive callbacks. Use this provider throughout password login, including executor
+  construction, probes and retries; never close over the unrestricted host store. The
+  provider exposes only get/update and binds site, account and generation. Check reads
+  under the record lock after key acquisition; check generation AND revision there for
+  writes. Superseded/revoked reads return undefined and writes return accepted:false,
+  even if a callback obtains a newer login's revision. Keep the binding immutable.
   Check the generation and stale/revoked state under the record lock after key acquisition.
   Preserve the generation through executor/refresh writes so a valid capture still works.
   Failed login cleanup must pass that transaction to `stale`, preserving newer logins.
@@ -55,9 +62,13 @@ login and interactive login are injected seams.
   probe cookies. Compare persisted revisions and cancellation at the synchronous record
   commit after key acquisition. Every host session write changes the revision; read/modify/
   write updates and revocation use the same record lock, never a pre-lock snapshot.
-  Provider `get` returns the record revision; `update` silently drops missing/mismatched
-  revisions and stale records under that lock, then rotates the revision on acceptance.
-  Keep the additive executor field typed structurally here when its dependency lacks it.
+  Provider `get` returns the record revision. `update(site, persona, bundle)` returns
+  `{ accepted: boolean; revision?: string }`: missing/mismatched revisions, missing records
+  and stale records return accepted:false without writing. On acceptance, rotate the
+  revision and acknowledge that exact new revision atomically under the record lock.
+  The executor carries the acknowledged revision into its next update in the execution;
+  rejection must never pair an old cookie jar with a newly fetched revision. Keep these
+  additive bundle/provider/result types structural here while the executor lane updates.
   An empty login-reset bundle must carry a revision for the executor's first cookie write;
   do not treat that empty bundle as authentication. Immediate host `store` and login resets
   compare invocation snapshots after key acquisition; supplied stale snapshot revisions

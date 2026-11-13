@@ -5,49 +5,13 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { ActionRequest } from "@jeswr/site-model";
-import { Parser, Store, type Term } from "n3";
+import { type ActionRequest, parseActionRequest } from "@jeswr/site-model";
 
-const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-
-function norm(iri: string): string {
-  return iri.replace(/^http:\/\/schema\.org\//, "https://schema.org/");
-}
-
-const PREFIXES = `@prefix schema: <https://schema.org/> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-`;
-
-/** Parse Turtle and expose the single schema.org *Action node as an ActionRequest. */
+/** Use the production parser so regression fixtures preserve RDF term kinds. */
 export function actionRequest(turtle: string): ActionRequest {
-  const store = new Store(
-    new Parser({ baseIRI: "https://planner.test/" }).parse(PREFIXES + turtle),
-  );
-  const nodes = store
-    .getQuads(null, RDF_TYPE, null, null)
-    .filter((q) => /^https?:\/\/schema\.org\/\w*Action$/.test(q.object.value))
-    .map((q) => q.subject);
-  const unique = [...new Map(nodes.map((n) => [n.value, n])).values()];
-  if (unique.length !== 1) throw new Error(`expected one action node, found ${unique.length}`);
-  const node = unique[0] as Term;
-  const types = store.getQuads(node, RDF_TYPE, null, null).map((q) => norm(q.object.value));
-  return {
-    node: node.termType === "BlankNode" ? `_:${node.value}` : node.value,
-    types,
-    values(path: string[]): string[] {
-      let current: Term[] = [node];
-      for (const step of path) {
-        const want = norm(step);
-        current = current.flatMap((t) =>
-          store
-            .getQuads(t, null, null, null)
-            .filter((q) => norm(q.predicate.value) === want)
-            .map((q) => q.object),
-        );
-      }
-      return current.map((t) => (t.termType === "BlankNode" ? `_:${t.value}` : t.value));
-    },
-  };
+  return parseActionRequest(`@prefix schema: <https://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+${turtle}`);
 }
 
 export interface LoggedRequest {

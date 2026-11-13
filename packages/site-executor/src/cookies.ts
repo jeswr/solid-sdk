@@ -23,16 +23,28 @@ export interface Cookie {
 }
 
 export interface SessionBundle {
-  /** Opaque session generation, returned unchanged with updates from this execution. */
+  /** Opaque revision for compare-and-swap cookie updates. */
   revision?: string;
   cookies: Cookie[];
   /** Extra request headers (e.g. a bearer token from the vault). Sent only to the site origin. */
   headers?: Record<string, string>;
 }
 
+export interface SessionUpdate {
+  accepted: boolean;
+  revision?: string;
+}
+
+// biome-ignore lint/suspicious/noConfusingVoidType: Existing session providers return Promise<void>.
+export type SessionUpdateResult = void | SessionUpdate;
+
 export interface SessionProvider {
   get(site: string, persona?: string): Promise<SessionBundle | undefined>;
-  update(site: string, persona: string | undefined, bundle: SessionBundle): Promise<void>;
+  update(
+    site: string,
+    persona: string | undefined,
+    bundle: SessionBundle,
+  ): Promise<SessionUpdateResult>;
 }
 
 function cloneBundle(bundle: SessionBundle): SessionBundle {
@@ -53,17 +65,20 @@ export class InMemorySessions implements SessionProvider {
 
   async get(site: string, persona?: string): Promise<SessionBundle | undefined> {
     const bundle = this.#store.get(this.#key(site, persona));
-    // Anonymous cookie updates share the execution's undefined generation until
-    // a host/another execution obtains the newly established session.
-    if (bundle && bundle.revision === undefined) bundle.revision = randomUUID();
     return bundle ? cloneBundle(bundle) : undefined;
   }
 
-  async update(site: string, persona: string | undefined, bundle: SessionBundle): Promise<void> {
+  async update(
+    site: string,
+    persona: string | undefined,
+    bundle: SessionBundle,
+  ): Promise<SessionUpdate> {
     const key = this.#key(site, persona);
     const current = this.#store.get(key);
-    if (bundle.revision !== current?.revision) return;
-    this.#store.set(key, cloneBundle(bundle));
+    if (bundle.revision !== current?.revision) return { accepted: false };
+    const revision = randomUUID();
+    this.#store.set(key, { ...cloneBundle(bundle), revision });
+    return { accepted: true, revision };
   }
 
   /** Seed a session (e.g. after the host signs in). */

@@ -1,11 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
-import type {
-  Cookie,
-  SessionBundle as ExecutorSessionBundle,
-  SessionProvider,
-} from "@jeswr/site-executor";
+import type { Cookie, SessionBundle as ExecutorSessionBundle } from "@jeswr/site-executor";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import {
@@ -46,6 +42,19 @@ export const tokensSchema = z.strictObject({
 export type Tokens = z.infer<typeof tokensSchema>;
 // Structural until the executor's additive revision field is available in this lane.
 export type SessionBundle = ExecutorSessionBundle & { revision?: string };
+// Structural until the executor's acknowledged-update contract is available in this lane.
+export interface SessionUpdateResult {
+  accepted: boolean;
+  revision?: string;
+}
+export interface SessionProvider {
+  get(site: string, persona?: string): Promise<SessionBundle | undefined>;
+  update(
+    site: string,
+    persona: string | undefined,
+    bundle: SessionBundle,
+  ): Promise<SessionUpdateResult>;
+}
 /** Host-held binding created before starting a password or interactive login. */
 export interface LoginTransaction {
   readonly site: string;
@@ -199,32 +208,86 @@ export class SessionStore implements SessionProvider {
     return boundary(async () => {
       const state = await this.state(site, account ?? "");
       return state?.use((r) => {
-        if (
-          r.stale ||
-          (generation !== undefined && r.generation !== generation) ||
-          (r.tokens && r.tokens.expiresAt <= this.#now())
-        )
-          return undefined;
-        const cookies = r.bundle.cookies
-          .filter((c) => c.expires === undefined || c.expires < 0 || c.expires * 1000 > this.#now())
-          .map((c) => ({ ...c }));
-        // An explicit login reset supplies a revision even before its first cookie arrives.
-        if (!cookies.length && !r.bundle.headers && r.bundle.cookies.length) return undefined;
-        return opaque({
-          cookies,
-          ...(r.bundle.headers ? { headers: { ...r.bundle.headers } } : {}),
-          revision: r.revision,
-        });
+        if (generation !== undefined && r.generation !== generation) return undefined;
+        return this.#bundle(r);
       });
     });
   }
-  update(site: string, account: string | undefined, bundle: SessionBundle): Promise<void> {
+  #bundle(r: SessionState): SessionBundle | undefined {
+    if (r.stale || (r.tokens && r.tokens.expiresAt <= this.#now())) return undefined;
+    const bundle = this.validate(r.site, r.bundle);
+    const cookies = bundle.cookies
+      .filter((c) => c.expires === undefined || c.expires < 0 || c.expires * 1000 > this.#now())
+      .map((c) => ({ ...c }));
+    // An explicit login reset supplies a revision even before its first cookie arrives.
+    if (!cookies.length && !bundle.headers && bundle.cookies.length) return undefined;
+    return opaque({
+      cookies,
+      ...(bundle.headers ? { headers: { ...bundle.headers } } : {}),
+      revision: r.revision,
+    });
+  }
+  /** Callback capability restricted to this site, account and login generation. */
+  forLogin(transaction: LoginTransaction): SessionProvider {
+    const expected = Object.freeze({
+      site: origin(transaction.site),
+      account: transaction.account,
+      generation: transaction.generation,
+    });
+    return Object.freeze({
+      get: (site: string, account?: string) => this.#getLogin(site, account, expected),
+      update: (site: string, account: string | undefined, bundle: SessionBundle) =>
+        this.#update(site, account, bundle, expected),
+    });
+  }
+  #getLogin(
+    site: string,
+    account: string | undefined,
+    expected: LoginTransaction,
+  ): Promise<SessionBundle | undefined> {
     return boundary(async () => {
-      const { revision, ...material } = bundle;
+      if (origin(site) !== expected.site || account !== expected.account) return undefined;
+      let bundle: SessionBundle | undefined;
+      // Read after key acquisition under the same lock as writes and revocation.
       await this.#records.update("sessions", this.#key(site, account), stateSchema, (r) => {
-        if (!r || r.stale || !revision || revision !== r.revision) return undefined;
-        return this.#prepare({ ...r, bundle: material });
+        if (r && this.#sameLogin(r, expected)) bundle = this.#bundle(r);
+        return undefined;
       });
+      return bundle;
+    });
+  }
+  update(
+    site: string,
+    account: string | undefined,
+    bundle: SessionBundle,
+  ): Promise<SessionUpdateResult> {
+    return this.#update(site, account, bundle);
+  }
+  #update(
+    site: string,
+    account: string | undefined,
+    bundle: SessionBundle,
+    expected?: LoginTransaction,
+  ): Promise<SessionUpdateResult> {
+    return boundary(async () => {
+      if (expected && (origin(site) !== expected.site || account !== expected.account))
+        return { accepted: false };
+      const { revision, ...material } = bundle;
+      let result: SessionUpdateResult = { accepted: false };
+      await this.#records.update("sessions", this.#key(site, account), stateSchema, (r) => {
+        if (
+          !r ||
+          r.stale ||
+          !revision ||
+          revision !== r.revision ||
+          (expected && !this.#sameLogin(r, expected))
+        )
+          return undefined;
+        const next = this.#prepare({ ...r, bundle: material });
+        result = { accepted: true, revision: next.revision };
+        return next;
+      });
+      return result;
     });
   }
   /** Explicit host login boundary; discard stale bearer metadata before executor cookie updates. */

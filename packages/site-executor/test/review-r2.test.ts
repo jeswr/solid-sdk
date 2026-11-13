@@ -260,7 +260,7 @@ describe("review r2 money regressions", () => {
       Response.json({ items: [product({ price: effect === "payment" ? "0" : "20" })] }),
     );
     expect(result.status).toBe("refused");
-    expect(result.error).toContain("needs a fresh basket total");
+    expect(result.error).toMatch(/needs one fresh basket total|product identity/);
   });
 
   it("refuses two distinct fresh total readings", async () => {
@@ -268,7 +268,15 @@ describe("review r2 money regressions", () => {
     const a = total(f, "urn:totalA"),
       b = total(f, "urn:totalB");
     f.pay.inputs = [];
+    const prepare = {
+      ...f.pay,
+      inputs: [],
+      id: "urn:prepare",
+      effect: "irreversible-write" as const,
+    };
+    f.model.operations.push(prepare);
     f.flow.steps = [
+      { operation: prepare.id, bind: {} },
       { operation: a.id, bind: {} },
       { operation: b.id, bind: {} },
       { operation: f.pay.id, bind: {} },
@@ -301,7 +309,7 @@ describe("review r2 money regressions", () => {
     const result = await f.run();
     expect(result).toMatchObject({
       status: "refused",
-      error: expect.stringContaining("needs a fresh basket total"),
+      error: expect.stringContaining("needs one fresh basket total"),
     });
   });
 
@@ -320,7 +328,7 @@ describe("review r2 money regressions", () => {
     const result = await f.run();
     expect(result).toMatchObject({
       status: "refused",
-      error: expect.stringContaining("needs a fresh basket total"),
+      error: expect.stringContaining("needs one fresh basket total"),
     });
   });
 });
@@ -356,7 +364,7 @@ describe("review r2 evidence binding boundaries", () => {
     );
     expect(result).toMatchObject({
       status: "refused",
-      error: expect.stringContaining("needs a fresh basket total"),
+      error: expect.stringContaining("needs one unambiguous product price"),
     });
   });
 
@@ -364,11 +372,19 @@ describe("review r2 evidence binding boundaries", () => {
     const f = fixture();
     const a = total(f, "urn:totalA"),
       b = total(f, "urn:totalB");
-    f.pay.inputs = [];
+    f.pay.inputs = [param("order", ["referencesOrder"])];
+    const prepare = {
+      ...f.pay,
+      inputs: [],
+      id: "urn:prepare",
+      effect: "irreversible-write" as const,
+    };
+    f.model.operations.push(prepare);
     f.flow.steps = [
+      { operation: prepare.id, bind: {} },
       { operation: a.id, bind: {} },
       { operation: b.id, bind: {} },
-      { operation: f.pay.id, bind: {} },
+      { operation: f.pay.id, bind: { order: `${O}/totalA` } },
     ];
     const result = await f.run(async (url) =>
       Response.json({
@@ -379,7 +395,7 @@ describe("review r2 evidence binding boundaries", () => {
     );
     expect(result).toMatchObject({
       status: "refused",
-      error: expect.stringContaining("conflicting"),
+      error: expect.stringContaining("order identity"),
     });
   });
 
@@ -388,7 +404,15 @@ describe("review r2 evidence binding boundaries", () => {
     const a = total(f, "urn:totalA"),
       b = total(f, "urn:totalB");
     f.pay.inputs = [];
+    const prepare = {
+      ...f.pay,
+      inputs: [],
+      id: "urn:prepare",
+      effect: "irreversible-write" as const,
+    };
+    f.model.operations.push(prepare);
     f.flow.steps = [
+      { operation: prepare.id, bind: {} },
       { operation: a.id, bind: {} },
       { operation: b.id, bind: {} },
       { operation: f.pay.id, bind: {} },
@@ -400,18 +424,24 @@ describe("review r2 evidence binding boundaries", () => {
         items: [product({ price: changed && String(url).endsWith("B") ? "1000" : "20" })],
       }),
     );
-    const gate = createApprovalGate();
+    const approvals = createApprovalGate();
+    const gate = {
+      authorize: (req: Parameters<typeof approvals.authorize>[0]) =>
+        req.inputs.$step === "0"
+          ? Promise.resolve({ kind: "allow" as const })
+          : approvals.authorize(req),
+    };
     const ex = createExecutor({ model: f.model, fetch, gate, sessions: new InMemorySessions() });
     const first = await ex.execute(f.buy());
     expect(first.status).toBe("needs-approval");
-    gate.approve(first.approval?.id ?? "");
+    approvals.approve(first.approval?.id ?? "");
     changed = true;
     const next = await ex.execute(f.buy(), { approvalId: first.approval?.id ?? "" });
     expect(next.status).toBe("refused");
-    expect(fetch.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
 
-  it("accepts exact WHATWG normalized IRIs and a unique identifier-free suffix fallback", async () => {
+  it("accepts exact WHATWG normalized IRIs and refuses untyped suffix fallback", async () => {
     for (const byIri of [false, true]) {
       const f = fixture();
       f.pay.inputs[0] = param("id", ["object"], { range: `${S}Product` });
@@ -430,7 +460,7 @@ describe("review r2 evidence binding boundaries", () => {
             )
           : f.buy(),
       );
-      expect(result.approval?.amount).toBe("20");
+      expect(byIri ? result.approval?.amount : result.status).toBe(byIri ? "20" : "refused");
     }
   });
 });
@@ -445,6 +475,7 @@ describe("review r2 execution regressions", () => {
   ])("retains a committed write before %s processing fails", async (failure) => {
     const f = fixture();
     f.pay.inputs = [
+      param("id", ["object", "productID"], { default: "104" }),
       param("amount", ["amount"], { default: "20" }),
       param("currency", ["currency"], { default: "GBP" }),
     ];
@@ -503,7 +534,7 @@ describe("review r2 execution regressions", () => {
     const one = ex.planToRequests(actionRequest("[] a schema:PayAction; schema:orderQuantity 1."));
     const two = ex.planToRequests(
       actionRequest(
-        '[] a schema:PayAction; schema:orderQuantity "+01"^^xsd:integer; schema:name [schema:name "ignored"].',
+        '[] a schema:PayAction; schema:orderQuantity "+01"^^xsd:integer; schema:name "ignored".',
       ),
     );
     f.pay.request.urlTemplate = `${O}/checkout?a=1&b=2`;

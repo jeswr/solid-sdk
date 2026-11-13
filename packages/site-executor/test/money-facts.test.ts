@@ -308,10 +308,10 @@ describe("money from trusted reads in the same flow", () => {
           request('schema:price "30";'),
         )
       ).status,
-    ).toBe("done");
+    ).toBe(fresh ? "done" : "refused");
     expect(
       gate.authorize.mock.calls.filter(([r]) => r.effect === "payment").map(([r]) => r.amount),
-    ).toEqual(["20", fresh ? "23.45" : "20"]);
+    ).toEqual(fresh ? ["20", "23.45"] : ["20"]);
   });
 
   it("voids approval for a changed price and refuses a different source item", async () => {
@@ -397,18 +397,41 @@ describe("money from trusted reads in the same flow", () => {
   });
 
   it("revalidates the price without replaying a completed basket write", async () => {
-    const { model, pay, flow, payStep } = fixture();
+    const { model, read, pay, flow, payStep } = fixture();
     const add: Operation = {
       ...pay,
       id: "urn:add",
       effect: "reversible-write",
       request: { ...pay.request, urlTemplate: `${O}/cart` },
     };
-    model.operations.push(add);
-    flow.steps.splice(1, 0, { operation: add.id, bind: { ...payStep.bind } });
+    const total: Operation = {
+      ...read,
+      id: "urn:total",
+      inputs: [],
+      request: { method: "GET", urlTemplate: `${O}/total` },
+      extraction: {
+        format: "json",
+        itemType: `${S}Order`,
+        fields: [
+          { property: `${S}price`, path: "/price" },
+          { property: `${S}currency`, path: "/currency" },
+        ],
+      },
+    };
+    model.operations.push(add, total);
+    flow.steps.splice(
+      1,
+      0,
+      { operation: add.id, bind: { ...payStep.bind } },
+      { operation: total.id, bind: {} },
+    );
     let price = "20";
-    const fetch = vi.fn<typeof globalThis.fetch>(async (_url, init) =>
-      init?.method === "GET" ? Response.json({ items: [product({ price })] }) : Response.json({}),
+    const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) =>
+      String(url).endsWith("/total")
+        ? Response.json({ price, currency: "GBP" })
+        : init?.method === "GET"
+          ? Response.json({ items: [product({ price })] })
+          : Response.json({}),
     );
     const approvals = createApprovalGate();
     const gate: Gate = {

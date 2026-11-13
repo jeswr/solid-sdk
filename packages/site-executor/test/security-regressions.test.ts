@@ -46,6 +46,7 @@ const payment = (extra: Partial<Operation> = {}) =>
     label: "Pay",
     effect: "payment",
     inputs: [
+      p("item", ["object", "productID"], { default: "104", required: false }),
       p("charge", ["amount", "value"], { range: `${X}decimal` }),
       p("currency", ["amount", "currency"]),
     ],
@@ -77,13 +78,21 @@ const pay = (amount = "20", claims = "") =>
 const buy = () =>
   actionRequest('[] a schema:BuyAction; schema:price "20"; schema:priceCurrency "GBP" .');
 const json = (value: unknown) =>
-  new Response(JSON.stringify(value), { headers: { "content-type": "application/json" } });
+  new Response(
+    JSON.stringify(
+      value && typeof value === "object" && !Array.isArray(value)
+        ? { productID: "104", ...value }
+        : value,
+    ),
+    { headers: { "content-type": "application/json" } },
+  );
 const quote = () =>
   op({
     extraction: {
       format: "json",
-      itemType: `${S}PriceSpecification`,
+      itemType: `${S}Product`,
       fields: [
+        { property: `${S}productID`, path: "/productID" },
         { property: `${S}price`, path: "/amount" },
         { property: `${S}priceCurrency`, path: "/currency" },
       ],
@@ -99,7 +108,7 @@ const quotedFlow = () =>
   ]);
 
 describe("security review regressions", () => {
-  it("F1 refuses conflicting planner money and gates the actual mapped charge", async () => {
+  it("F1 refuses conflicting planner money and wire-only charges without site evidence", async () => {
     const authorize = vi.fn<Gate["authorize"]>(async (req) =>
       Number(req.amount) <= 20 ? { kind: "allow" } : { kind: "deny", reason: "limit" },
     );
@@ -113,8 +122,8 @@ describe("security review regressions", () => {
     const conflict = await ex.execute(pay("1000", 'schema:price "1";'));
     expect(conflict.status).toBe("error");
     expect(fetch).not.toHaveBeenCalled();
-    expect((await ex.execute(pay("1000"))).status).toBe("denied");
-    expect(authorize.mock.calls.at(-1)?.[0]).toMatchObject({ amount: "1000", currency: "GBP" });
+    expect((await ex.execute(pay("1000"))).status).toBe("refused");
+    expect(authorize).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -175,16 +184,9 @@ describe("security review regressions", () => {
     gate.approve(first.approval?.id ?? "");
     amount = 1000;
     const second = await ex.execute(buy(), { approvalId: first.approval?.id ?? "" });
-    expect(second.status).toBe("needs-approval");
-    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body)).charge).toBe(20);
-    gate.approve(second.approval?.id ?? "");
-    const done = await ex.execute(buy(), { approvalId: second.approval?.id ?? "" });
-    expect(done.status).toBe("done");
-    expect(fetch.mock.calls.map((c) => String(c[0]))).toEqual([
-      `${O}/quote`,
-      `${O}/pay`,
-      `${O}/finish`,
-    ]);
+    expect(second.status).toBe("refused");
+    expect(fetch.mock.calls.map((c) => String(c[0]))).toEqual([`${O}/quote`, `${O}/quote`]);
+    expect(second.committed).toEqual([]);
   });
 
   it.each([
@@ -435,51 +437,35 @@ describe("security review regressions", () => {
     expect(signal?.aborted).toBe(true);
     if (stage === "body") expect(cancel).toHaveBeenCalled();
   });
-  it("F1 enforces unit-price quantities and cumulative flow spending", async () => {
+  it("F1 enforces cumulative spending using fresh site totals", async () => {
     const authorize = vi.fn<Gate["authorize"]>(async (req) =>
       req.effect === "read" || Number(req.amount) <= 15
         ? { kind: "allow" }
         : { kind: "deny", reason: "limit" },
     );
-    const fetch = vi.fn<typeof globalThis.fetch>(async () => json({}));
-    const priced = payment({
-      inputs: [
-        p("charge", ["price"], { range: `${X}decimal` }),
-        p("currency", ["priceCurrency"]),
-        p("qty", ["orderQuantity"], { range: `${X}positiveInteger` }),
-      ],
-    });
-    const ex = createExecutor({
-      model: model([priced]),
-      sessions: sessions(),
-      gate: { authorize },
-      fetch,
-    });
-    expect(
-      (
-        await ex.execute(
-          actionRequest(
-            '[] a schema:PayAction; schema:price "10.10"; schema:priceCurrency "GBP"; schema:orderQuantity 2 .',
-          ),
-        )
-      ).status,
-    ).toBe("denied");
-    expect(authorize.mock.calls.at(-1)?.[0].amount).toBe("20.2");
+    const total = quote();
+    total.id = "urn:total";
+    total.request.urlTemplate = `${O}/total`;
+    if (!total.extraction) throw new Error("Missing extraction");
+    total.extraction = { ...total.extraction, itemType: `${S}Order` };
     const f = flow([
+      { operation: "urn:read", bind: {} },
       { operation: "urn:pay", bind: { charge: "10", currency: "GBP" } },
+      { operation: "urn:total", bind: {} },
       { operation: "urn:pay", bind: { charge: "10", currency: "GBP" } },
     ]);
-    const cumulative = createExecutor({
-      model: model([payment()], [f]),
+    const transport = vi.fn<NonNullable<ExecutorOptions["fetch"]>>(async () =>
+      json({ amount: "10", currency: "GBP" }),
+    );
+    const executor = createExecutor({
+      model: model([quote(), total, payment()], [f]),
       sessions: sessions(),
       gate: { authorize },
-      fetch,
+      fetch: transport,
     });
-    expect((await cumulative.execute(actionRequest("[] a schema:BuyAction ."))).status).toBe(
-      "denied",
-    );
+    expect((await executor.execute(actionRequest("[] a schema:BuyAction."))).status).toBe("denied");
     expect(authorize.mock.calls.at(-1)?.[0].amount).toBe("20");
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(transport.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
 
   it("F1 refuses contradictory currencies and multiple monetary values", async () => {
@@ -499,6 +485,7 @@ describe("security review regressions", () => {
   it("F2 refuses CSRF replacement of approved effectful inputs", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () => json({ token: "1000" }));
     const operation = payment({
+      effect: "irreversible-write",
       csrf: [
         {
           source: { kind: "json", urlTemplate: `${O}/csrf`, pointer: "/token" },
@@ -517,7 +504,7 @@ describe("security review regressions", () => {
   });
 
   it("F3 retains an immutable model snapshot for matching, effects and execution", async () => {
-    const m = model([payment()]);
+    const m = model([payment({ effect: "irreversible-write" })]);
     const fetch = vi.fn<typeof globalThis.fetch>(async () => json({}));
     const ex = createExecutor({ model: m, sessions: sessions(), fetch });
     if (m.operations[0]) m.operations[0].effect = "read";
@@ -555,7 +542,8 @@ describe("security review regressions", () => {
 
   it("F5 refuses untrusted fields as payment fact sources", async () => {
     const read = quote();
-    if (read.extraction?.fields[0]) read.extraction.fields[0].untrusted = true;
+    const price = read.extraction?.fields.find((f) => f.property === `${S}price`);
+    if (price) price.untrusted = true;
     const fetch = vi.fn<typeof globalThis.fetch>(async () => json({ amount: 20, currency: "GBP" }));
     const ex = createExecutor({
       model: model([read, payment()], [quotedFlow()]),

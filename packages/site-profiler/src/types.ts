@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Types local to the profiler. The output contract (SiteModel and friends) lives in @jeswr/site-model.
 
@@ -89,7 +90,7 @@ export type ParamKind = "numeric" | "uuid" | "sku" | "known-id" | "text";
 export interface CandidateParam {
   name: string;
   location: "path" | "query" | "body" | "form";
-  /** Values seen, in order, deduplicated. */
+  /** Values from this endpoint's successful requests or own form, in order, deduplicated. */
   examples: string[];
   required: boolean;
   kind?: ParamKind;
@@ -158,7 +159,7 @@ export interface ProfileOptions {
   now?: () => Date;
   /** IRI of the site model document; default urn:sab:model:<host>. */
   modelId?: string;
-  /** Replay learned reads once to verify them. Default true. */
+  /** Verify learned reads, with at most one retry using recorded successful values. Default true. */
   verify?: boolean;
   /** Version string for the model. Default 0.1.0. */
   version?: string;
