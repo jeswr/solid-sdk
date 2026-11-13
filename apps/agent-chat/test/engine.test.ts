@@ -4,6 +4,7 @@ import {
   type ApprovalRequest,
   type DeviceKey,
   type PrincipalResponse,
+  type SpendingRule,
   type SpendRecord,
   signRecord,
   verifyRecord,
@@ -217,6 +218,147 @@ function pauseSigning(matches: (payload: Record<string, unknown>) => boolean) {
   });
   return { entered: entered.promise, release: release.resolve, restore: () => spy.mockRestore() };
 }
+
+/** Pause exactly one WebCrypto signature, then continue through the real signer. */
+function pauseConsentSigning(type: "revocation" | "spending-rule") {
+  const entered = deferred();
+  const release = deferred();
+  const original = crypto.subtle.sign.bind(crypto.subtle);
+  let paused = false;
+  const spy = vi.spyOn(crypto.subtle, "sign").mockImplementation(async (algorithm, key, data) => {
+    const payload = new TextDecoder().decode(data).split(".")[1] as string;
+    const record = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (!paused && record.type === type) {
+      paused = true;
+      entered.resolve();
+      await release.promise;
+    }
+    return original(algorithm, key, data);
+  });
+  return { entered: entered.promise, release: release.resolve, restore: () => spy.mockRestore() };
+}
+
+describe("third adversarial review: explicit lineage revocation", () => {
+  it.each([
+    "revocation",
+    "spending-rule",
+  ] as const)("a revoke during the raise's %s signature prevents replacement activation", async (type) => {
+    const { session, asked, messages } = harness([limit(1500), raise(4000), deny, deny]);
+    await session.send("buy socks");
+    const engine = session.engine;
+    const original = engine.getState().rules[0]?.rule.id as string;
+    const pause = pauseConsentSigning(type);
+    const purchase = engine.buy(engine.getState().activeChat, "p:socks");
+    let result: unknown;
+    try {
+      await pause.entered;
+      await engine.revokeRule(original);
+      pause.release();
+      result = await purchase;
+    } finally {
+      pause.release();
+      pause.restore();
+    }
+    expect(result).toBe("denied");
+    expect(engine.getState().rules).toHaveLength(0);
+    expect(messages().some((m) => m.type === "rule-change" && m.change === "raised")).toBe(false);
+    const internals = engine as unknown as { ruleRecords: string[]; key: DeviceKey };
+    const records = await Promise.all(
+      internals.ruleRecords.map((jws) => verifyRecord(jws, internals.key.publicJwk)),
+    );
+    expect(records.filter((r) => r?.type === "spending-rule")).toHaveLength(1);
+    await expect(engine.buy(engine.getState().activeChat, "p:socks")).resolves.toBe("denied");
+    expect(asked.at(-1)?.kind).toBe("purchase");
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(1);
+  });
+
+  it("revoking the original after two raises immediately removes the active descendant", async () => {
+    const { session, messages } = harness([limit(1500), raise(2500), raise(4000), deny]);
+    await session.send("buy socks");
+    const engine = session.engine;
+    const original = engine.getState().rules[0]?.rule.id as string;
+    const chat = engine.getState().activeChat;
+    await engine.buy(chat, "p:socks");
+    await engine.buy(chat, "p:socks");
+    expect(engine.getState().rules[0]?.rule.supersedes).toContain(original);
+    const revocation = engine.revokeRule(original);
+    expect(engine.getState().rules).toHaveLength(0);
+    await revocation;
+    await expect(engine.buy(chat, "p:socks")).resolves.toBe("denied");
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(3);
+  });
+
+  it("follows transitive ancestry even when signed rules list only their direct predecessor", async () => {
+    const { session, asked, messages } = harness([deny]);
+    const engine = session.engine;
+    await engine.ready;
+    const internals = engine as unknown as {
+      ruleRecords: string[];
+      key: DeviceKey;
+      verifiedRules(): Promise<SpendingRule[]>;
+    };
+    const root: SpendingRule = {
+      id: "rule:root",
+      kind: "budget",
+      period: "month",
+      limit: { minor: 10000, currency: "USD" },
+      scope: { kind: "merchant", merchant: "store:stride", label: "Stride & Co" },
+      createdAt: NOW.toISOString(),
+    };
+    const middle: SpendingRule = { ...root, id: "rule:middle", supersedes: [root.id] };
+    const latest: SpendingRule = { ...root, id: "rule:latest", supersedes: [middle.id] };
+    for (const rule of [root, middle, latest]) {
+      internals.ruleRecords.push(
+        await signRecord(internals.key, {
+          type: "spending-rule",
+          rule,
+          issuedAt: NOW.toISOString(),
+        }),
+      );
+    }
+    for (const ruleId of [root.id, middle.id]) {
+      internals.ruleRecords.push(
+        await signRecord(internals.key, {
+          type: "revocation",
+          ruleId,
+          issuedAt: NOW.toISOString(),
+        }),
+      );
+    }
+    // Retiring predecessors during a raise must still allow the replacement to work.
+    expect(await internals.verifiedRules()).toEqual([latest]);
+    await engine.revokeRule(root.id);
+    expect(await internals.verifiedRules()).toEqual([]);
+    await expect(engine.buy(engine.getState().activeChat, "p:socks")).resolves.toBe("denied");
+    expect(asked).toHaveLength(1);
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(0);
+  });
+
+  it("rechecks a revoked ancestor after receipt signing and before committing the effect", async () => {
+    const { session, asked, messages } = harness([limit(1500), raise(10000), deny]);
+    await session.send("buy socks");
+    const engine = session.engine;
+    const chat = engine.getState().activeChat;
+    const original = engine.getState().rules[0]?.rule.id as string;
+    await engine.buy(chat, "p:socks");
+    const pause = pauseSigning((payload) => typeof payload.order === "string");
+    const purchase = engine.buy(chat, "p:socks");
+    let result: unknown;
+    try {
+      await pause.entered;
+      await engine.revokeRule(original);
+      pause.release();
+      result = await purchase;
+    } finally {
+      pause.release();
+      pause.restore();
+    }
+    expect(result).toBe("denied");
+    expect(asked.at(-1)?.kind).toBe("purchase");
+    expect(messages().filter((m) => m.type === "receipt")).toHaveLength(2);
+    expect((engine as unknown as { ledger: SpendRecord[] }).ledger).toHaveLength(2);
+  });
+});
 
 describe("second adversarial review", () => {
   it("revocation immediately disables a rule behind an approval and persists across Stop", async () => {

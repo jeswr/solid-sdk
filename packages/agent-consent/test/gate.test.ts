@@ -2,9 +2,10 @@
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import { CHECK_ORDER, evaluateAction } from "../src/gate.js";
-import { money } from "../src/money.js";
+import { MAX_MINOR, type Money, money } from "../src/money.js";
 import type { SpendingRule } from "../src/rules.js";
 import type { SpendRecord } from "../src/spend.js";
+import type { PurchaseAction } from "../src/types.js";
 import { budget, field, input, party, purchase, share, stepUp, usd } from "./fixtures.js";
 
 const spent = (amount: number): SpendRecord => ({
@@ -16,6 +17,127 @@ const spent = (amount: number): SpendRecord => ({
 });
 
 describe("evaluateAction: purchases", () => {
+  const item = { name: "Trail socks", qty: 1, price: usd(20) };
+  const each: SpendingRule = { ...budget, kind: "per-purchase", period: undefined, limit: usd(10) };
+
+  function expectInconsistent(action: PurchaseAction) {
+    for (const approvals of [new Set<string>(), new Set(["sha256:abc"])]) {
+      const result = evaluateAction(input({ action, rules: [each], approvals }));
+      expect(result).toMatchObject({
+        outcome: "stop",
+        decidedBy: { check: "mandate", reason: "inconsistent-amount" },
+      });
+      expect(result.checks[0]).toMatchObject({
+        check: "mandate",
+        result: "fail",
+        code: "inconsistent-amount",
+      });
+      expect(result.checks[0]?.plain).toMatch(/[A-Za-z]+ [A-Za-z]+/);
+      expect(result.checks.slice(1).every((check) => check.result === "pending")).toBe(true);
+      expect(result.basis).toBeUndefined();
+      expect(result.spend).toBeUndefined();
+    }
+  }
+
+  it.each<[string, Partial<PurchaseAction>]>([
+    ["ten $20 items declared as $1", { items: [{ ...item, qty: 10 }], total: usd(1) }],
+    ["a $500 fee omitted from the total", { fees: [{ label: "Fee", amount: usd(500) }] }],
+    ["GBP items with a USD total", { items: [{ ...item, price: money(20, "GBP") }] }],
+    ["a GBP fee with a USD total", { fees: [{ label: "Fee", amount: money(0, "GBP") }] }],
+    ["an overstated total", { items: [item], total: usd(21) }],
+    ["a product above MAX_MINOR", { items: [{ ...item, qty: MAX_MINOR, price: usd(1) }] }],
+    [
+      "an unsafe product",
+      {
+        items: [
+          { ...item, qty: Number.MAX_SAFE_INTEGER, price: { minor: MAX_MINOR, currency: "USD" } },
+        ],
+      },
+    ],
+    [
+      "an item sum above MAX_MINOR",
+      { items: [{ ...item, price: { minor: MAX_MINOR, currency: "USD" } }, item] },
+    ],
+    [
+      "a fee sum above MAX_MINOR",
+      {
+        items: [{ ...item, price: usd(0) }],
+        fees: [
+          { label: "Fee", amount: { minor: MAX_MINOR, currency: "USD" } },
+          { label: "Extra fee", amount: usd(1) },
+        ],
+      },
+    ],
+  ])("third review: rejects %s before rules or exact approval", (_name, overrides) => {
+    expectInconsistent(purchase(overrides));
+  });
+
+  it.each([
+    0,
+    -1,
+    0.5,
+    NaN,
+    Infinity,
+    Number.MAX_SAFE_INTEGER + 1,
+    "1",
+  ])("rejects invalid quantity %s", (qty) =>
+    expectInconsistent(purchase({ items: [{ ...item, qty: qty as number }] })));
+
+  it.each([
+    null,
+    {},
+    { minor: -1, currency: "USD" },
+    { minor: 0.5, currency: "USD" },
+    { minor: MAX_MINOR + 1, currency: "USD" },
+    { minor: 1, currency: "usd" },
+  ])("rejects invalid money %j in the total, any item or any fee", (value) => {
+    const invalid = value as Money;
+    expectInconsistent(purchase({ total: invalid }));
+    expectInconsistent(purchase({ items: [item, { ...item, price: invalid }] }));
+    expectInconsistent(
+      purchase({
+        fees: [
+          { label: "Fee", amount: usd(0) },
+          { label: "Bad fee", amount: invalid },
+        ],
+      }),
+    );
+  });
+
+  it("accepts reconciled quantities, multiple items and fees, including the maximum amount", () => {
+    const action = purchase({
+      items: [
+        { ...item, qty: 2, price: usd(2) },
+        { ...item, price: usd(3) },
+      ],
+      fees: [
+        { label: "Delivery", amount: usd(1) },
+        { label: "Handling", amount: usd(2) },
+      ],
+      total: usd(10),
+    });
+    expect(evaluateAction(input({ action, rules: [each] }))).toMatchObject({
+      outcome: "go",
+      basis: "rule",
+    });
+    for (const action of [
+      purchase({
+        items: [{ ...item, qty: 2, price: { minor: (MAX_MINOR - 2) / 2, currency: "USD" } }],
+        fees: [{ label: "Fee", amount: { minor: 2, currency: "USD" } }],
+        total: { minor: MAX_MINOR, currency: "USD" },
+      }),
+      purchase({
+        items: [{ ...item, qty: Number.MAX_SAFE_INTEGER, price: usd(0) }],
+        total: usd(0),
+      }),
+    ]) {
+      expect(evaluateAction(input({ action, approvals: new Set(["sha256:abc"]) }))).toMatchObject({
+        outcome: "go",
+        basis: "approval",
+      });
+    }
+  });
+
   it("always returns the six checks in order", () => {
     const r = evaluateAction(input());
     expect(r.checks.map((c) => c.check)).toEqual(CHECK_ORDER);

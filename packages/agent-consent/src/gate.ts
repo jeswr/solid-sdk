@@ -10,7 +10,7 @@
  * Inputs are already verified: spending rules and approvals come from records whose device
  * signatures the caller checked (signing.ts), never from the model or a counterparty.
  */
-import { formatMoney, type Money } from "./money.js";
+import { formatMoney, isMoney, MAX_MINOR, type Money } from "./money.js";
 import { checkSpend, type SpendCheck, type SpendRecord } from "./spend.js";
 import { describeRule } from "./summary.js";
 import type {
@@ -107,10 +107,41 @@ function recipientStep(action: ProposedAction, approved: boolean): Step {
   return pass(`${r.name} is who it says it is (${how}).`, "recipient-established");
 }
 
+/** Reconcile the whole purchase before trusting its declared total for any authority. */
+function purchaseAmountError(action: PurchaseAction): string | undefined {
+  if (!isMoney(action.total)) return "The purchase total is not a valid amount.";
+  let minor = 0;
+  for (const item of action.items) {
+    if (!isMoney(item.price)) return "Every item must have a valid non-negative price.";
+    if (!Number.isSafeInteger(item.qty) || item.qty <= 0)
+      return "Every item quantity must be a positive whole number within the safe integer range.";
+    if (item.price.currency !== action.total.currency)
+      return "Item prices and the total must use the same currency.";
+    // Check the remaining capacity before multiplying or adding, so arithmetic stays exact.
+    if (item.price.minor > Math.floor((MAX_MINOR - minor) / item.qty))
+      return "The items and fees exceed the maximum supported purchase amount.";
+    minor += item.price.minor * item.qty;
+  }
+  for (const fee of action.fees) {
+    if (!isMoney(fee.amount)) return "Every fee must be a valid non-negative amount.";
+    if (fee.amount.currency !== action.total.currency)
+      return "Fees and the total must use the same currency.";
+    if (fee.amount.minor > MAX_MINOR - minor)
+      return "The items and fees exceed the maximum supported purchase amount.";
+    minor += fee.amount.minor;
+  }
+  if (minor !== action.total.minor)
+    return "The total does not match the item prices, quantities and fees.";
+  return undefined;
+}
+
 function purchaseSteps(
   input: GateInput,
   a: PurchaseAction,
 ): { steps: Step[]; spend?: SpendCheck; basis?: GateResult["basis"] } {
+  const amountError = purchaseAmountError(a);
+  if (amountError)
+    return { steps: [{ result: "fail", plain: amountError, code: "inconsistent-amount" }] };
   const steps: Step[] = [];
   if (a.origin === "content")
     return {

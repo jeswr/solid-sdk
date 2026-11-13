@@ -93,6 +93,8 @@ export class Engine {
   private readonly ruleRecords: string[] = [];
   /** Fail closed immediately, including while the signed revocation is being persisted. */
   private readonly revokedRules = new Set<string>();
+  /** Verified ancestry includes retired rules, so direct links can be followed transitively. */
+  private readonly ruleLineage = new Map<string, readonly string[]>();
   private readonly approvalRecords = new Map<string, string>();
   private readonly attestations = new Map<string, string>();
   private readonly ledger: SpendRecord[] = [];
@@ -372,16 +374,33 @@ export class Engine {
 
   // ---- consent records -------------------------------------------------------------------
 
+  /** Explicit withdrawal follows replacements; a raise's signed retirement is ID-only. */
+  private isRuleRevoked(rule: SpendingRule): boolean {
+    const pending = [rule.id, ...(rule.supersedes ?? [])];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const id = pending.pop() as string;
+      if (this.revokedRules.has(id)) return true;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      pending.push(...(this.ruleLineage.get(id) ?? []));
+    }
+    return false;
+  }
+
   /** Verified, in-force spending rules: every record re-verified against the pinned key. */
   private async verifiedRules(): Promise<SpendingRule[]> {
     const rules = new Map<string, SpendingRule>();
     const revoked = new Set<string>();
     for (const jws of this.ruleRecords) {
       const r = await verifyRecord(jws, this.key.publicJwk);
-      if (r?.type === "spending-rule") rules.set(r.rule.id, r.rule);
+      if (r?.type === "spending-rule") {
+        rules.set(r.rule.id, r.rule);
+        this.ruleLineage.set(r.rule.id, r.rule.supersedes ?? []);
+      }
       if (r?.type === "revocation") revoked.add(r.ruleId);
     }
-    return [...rules.values()].filter((r) => !revoked.has(r.id) && !this.revokedRules.has(r.id));
+    return [...rules.values()].filter((r) => !revoked.has(r.id) && !this.isRuleRevoked(r));
   }
 
   private async verifiedApprovals(): Promise<Set<string>> {
@@ -404,7 +423,7 @@ export class Engine {
     this.guard(run);
     const now = this.now();
     const views: RuleView[] = rules
-      .filter((rule) => !this.revokedRules.has(rule.id))
+      .filter((rule) => !this.isRuleRevoked(rule))
       .map((rule) => {
         const u = ruleUsage(rule, this.ledger, { minor: 0, currency: rule.limit.currency }, now);
         const jws =
@@ -424,15 +443,18 @@ export class Engine {
 
   private readonly ruleJwsIds = new Map<string, string>();
 
-  private async signRule(rule: SpendingRule, run: RunToken): Promise<string> {
+  private async signRule(rule: SpendingRule, run: RunToken): Promise<string | undefined> {
+    if (this.isRuleRevoked(rule)) return undefined;
     const jws = await signRecord(this.key, {
       type: "spending-rule",
       rule,
       issuedAt: this.now().toISOString(),
     });
     this.guard(run);
+    if (this.isRuleRevoked(rule)) return undefined;
     this.ruleRecords.push(jws);
     this.ruleJwsIds.set(jws, rule.id);
+    this.ruleLineage.set(rule.id, rule.supersedes ?? []);
     return jws;
   }
 
@@ -440,7 +462,7 @@ export class Engine {
   async revokeRule(ruleId: string, chatId?: string): Promise<void> {
     this.revokedRules.add(ruleId);
     const view = this.state.rules.find((r) => r.rule.id === ruleId);
-    this.set({ rules: this.state.rules.filter((r) => r.rule.id !== ruleId) });
+    this.set({ rules: this.state.rules.filter((r) => !this.isRuleRevoked(r.rule)) });
     await this.ready;
     const jws = await signRecord(this.key, {
       type: "revocation",
@@ -486,7 +508,7 @@ export class Engine {
       action,
       digest,
       policy: SAM_POLICY,
-      rules: rules.filter((rule) => !this.revokedRules.has(rule.id)),
+      rules: rules.filter((rule) => !this.isRuleRevoked(rule)),
       records: this.ledger,
       approvals,
       attestations,
@@ -685,11 +707,14 @@ export class Engine {
             issuedAt: now.toISOString(),
           });
           this.guard(run);
+          if (this.isRuleRevoked(rule)) return { result: "denied", action };
           this.ruleRecords.push(revocation);
         }
         consentJws = await this.signRule(rule, run);
+        if (!consentJws) return { result: "denied", action };
         await this.refreshRules(run);
         this.guard(run);
+        if (this.isRuleRevoked(rule)) return { result: "denied", action };
         this.markStub(chatId, request.id, "standing-set");
         const sentence = ruleLabel(rule);
         this.push(chatId, {
@@ -959,7 +984,7 @@ export class Engine {
     if (
       outcome.gate.basis === "rule" &&
       outcome.gate.spend?.outcome === "covered" &&
-      this.revokedRules.has(outcome.gate.spend.usage.rule.id)
+      this.isRuleRevoked(outcome.gate.spend.usage.rule)
     )
       return this.completePurchase(chatId, outcome.action, summary, run);
     const a = outcome.action;
@@ -999,6 +1024,12 @@ export class Engine {
     const ruleId =
       g.basis === "rule" && g.spend?.outcome === "covered" ? g.spend.usage.rule.id : undefined;
     this.guard(run);
+    if (
+      g.basis === "rule" &&
+      g.spend?.outcome === "covered" &&
+      this.isRuleRevoked(g.spend.usage.rule)
+    )
+      return this.completePurchase(chatId, a, summary, run);
     // Commit the effect and its evidence together, before any cancellable presentation work.
     this.usedReceipts.add(receiptJws);
     this.ledger.push({

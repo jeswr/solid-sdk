@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /** Shared fixtures for the gate and approval tests. */
 import type { GateInput, PrincipalPolicy } from "../src/gate.js";
@@ -30,7 +31,10 @@ export function purchase(over: Partial<PurchaseAction> = {}): PurchaseAction {
     type: "purchase",
     recipient: party(),
     category: "shoes",
-    items: [{ name: "Roadrunner Lite", variant: "size 9, grey", qty: 1, price: usd(20) }],
+    // A total-only override describes a single item at that price; explicit items stay untouched.
+    items: [
+      { name: "Roadrunner Lite", variant: "size 9, grey", qty: 1, price: over.total ?? usd(20) },
+    ],
     fees: [],
     total: usd(20),
     paymentLabel: "Card ending 4417",
