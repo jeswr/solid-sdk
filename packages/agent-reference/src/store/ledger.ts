@@ -25,8 +25,10 @@ import {
   readFileSync,
   renameSync,
   rmSync,
-} from "node:fs";
-import { basename, dirname, join } from "node:path";
+  // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+} from "fs";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { basename, dirname, join } from "path";
 import { digestOf } from "../core/canonical.js";
 import { fsyncDir } from "./state.js";
 

@@ -29,8 +29,10 @@
  *    same item under the same grant is never stored again, and logs `data-erased`. It erases
  *    only this store's copy (see the governance register for copies elsewhere).
  */
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { existsSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { z } from "zod";
 import { digestOf, newUrn } from "../core/canonical.js";
 import type { Iri, Json } from "../core/types.js";

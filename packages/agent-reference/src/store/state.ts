@@ -19,7 +19,8 @@
  *    removed automatically: the operator must check and remove it;
  *  - close() removes the lock only if it still carries this store's token.
  */
-import { randomUUID } from "node:crypto";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { randomUUID } from "crypto";
 import {
   closeSync,
   existsSync,
@@ -32,9 +33,12 @@ import {
   rmSync,
   unlinkSync,
   writeSync,
-} from "node:fs";
-import { hostname } from "node:os";
-import { dirname } from "node:path";
+  // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+} from "fs";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { hostname } from "os";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { dirname } from "path";
 import type { ConversationState } from "../core/conversation.js";
 import type {
   ActionIntent,

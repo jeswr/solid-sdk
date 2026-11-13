@@ -14,10 +14,13 @@
  *   This engine never consults `@jeswr/solid-odrl`.
  * - Identity: every verdict carries the evaluator crate/version/function the binary reports.
  */
-import { spawnSync } from "node:child_process";
-import { basename } from "node:path";
+
 import type { OdrlPolicy, OdrlRule } from "@jeswr/solid-odrl";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { spawnSync } from "child_process";
 import { DataFactory, type Quad, type Term, Writer } from "n3";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { basename } from "path";
 import { derivedUrn } from "../core/canonical.js";
 import type { EngineRequest, EngineVerdict, PolicyEngine } from "./policy-engine.js";
 

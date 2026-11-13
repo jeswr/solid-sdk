@@ -10,7 +10,8 @@
  * A fee payable by the acceptor turns acceptance into a `compensate` action, which a
  * scheduling mandate does not grant.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { z } from "zod";
 import { digestOf } from "../core/canonical.js";
 import { iso } from "../core/schema.js";
@@ -150,12 +151,12 @@ export class SyntheticCalendar {
     return Date.parse(s.start) > now && this.withinWorkingHours(s) && this.isFree(s);
   }
 
-  /** Free, in-hours slots of `duration` in `window`, on a 30-minute grid, max `limit`. */
-  freeSlots(window: Slot, durationMinutes: number, now: number, limit = 8): Slot[] {
+  /** Free, in-hours slots of `duration` in `range`, on a 30-minute grid, max `limit`. */
+  freeSlots(range: Slot, durationMinutes: number, now: number, limit = 8): Slot[] {
     const out: Slot[] = [];
     const step = 30 * MINUTE;
-    let t = Math.ceil(Math.max(Date.parse(window.start), now + MINUTE) / step) * step;
-    const end = Date.parse(window.end);
+    let t = Math.ceil(Math.max(Date.parse(range.start), now + MINUTE) / step) * step;
+    const end = Date.parse(range.end);
     for (
       let i = 0;
       t + durationMinutes * MINUTE <= end && out.length < limit && i < 2000;

@@ -12,7 +12,8 @@
  * Integrity success, representation acceptance, source authority and authorisation are
  * four different records; none implies another.
  */
-import { AsyncLocalStorage } from "node:async_hooks";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { AsyncLocalStorage } from "async_hooks";
 import type { JWK } from "jose";
 import { derivedUrn, digestBytes, digestOf, newUrn } from "../core/canonical.js";
 import {

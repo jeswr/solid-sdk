@@ -17,9 +17,11 @@
  * Separate directories for the same OS user are a filesystem boundary only — not hardware
  * custody or OS-level isolation. No location is discovered: the operator names it each time.
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve, sep } from "node:path";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import type { JWK } from "jose";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { basename, dirname, join, resolve, sep } from "path";
 import { scopedUrn } from "./core/canonical.js";
 import type { Iri } from "./core/types.js";
 import {

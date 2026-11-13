@@ -6,8 +6,10 @@
  * approval or decision can refer to what was actually reviewed. It is NOT a signature and
  * says nothing about who produced the content.
  */
-import { createHash, randomUUID } from "node:crypto";
+
 import canonicalizeModule from "canonicalize";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { createHash, randomUUID } from "crypto";
 
 // `canonicalize` is CommonJS; under NodeNext its default import is the module object for
 // the type checker but the function itself at runtime. Accept either shape.
