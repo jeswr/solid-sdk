@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
@@ -5,8 +6,8 @@
 // guard) shows an empty state for a foreign / absent inbox. The view is wired to
 // `readInbox`, which is mocked here so the component test needs no live server.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InboxNotification } from "@/lib/inbox";
 
 const readInbox = vi.fn();
@@ -24,6 +25,7 @@ const AS = "https://www.w3.org/ns/activitystreams#";
 afterEach(() => {
   cleanup();
   readInbox.mockReset();
+  vi.unstubAllEnvs();
 });
 
 describe("InboxView", () => {
@@ -39,7 +41,7 @@ describe("InboxView", () => {
       },
     ];
     readInbox.mockResolvedValue({
-      inboxUrl: OWN[0] + "inbox/",
+      inboxUrl: `${OWN[0]}inbox/`,
       notifications,
       totalMembers: 1,
       truncated: false,
@@ -52,11 +54,16 @@ describe("InboxView", () => {
     expect(screen.getByText("announced")).toBeTruthy();
     expect(screen.getByText(/bob\.example/)).toBeTruthy();
     // readInbox was called with the WebID + own-storage allow-list (SSRF guard).
-    expect(readInbox).toHaveBeenCalledWith(WEBID, OWN);
+    expect(readInbox).toHaveBeenCalledWith(WEBID, OWN, undefined, 500, true);
   });
 
   it("shows the empty state when the profile advertises no own-pod inbox", async () => {
-    readInbox.mockResolvedValue({ inboxUrl: undefined, notifications: [], totalMembers: 0, truncated: false });
+    readInbox.mockResolvedValue({
+      inboxUrl: undefined,
+      notifications: [],
+      totalMembers: 0,
+      truncated: false,
+    });
 
     render(<InboxView webId={WEBID} ownStorageUrls={OWN} />);
 
@@ -66,7 +73,7 @@ describe("InboxView", () => {
 
   it("surfaces a truncation note when the inbox is larger than the fetch ceiling", async () => {
     readInbox.mockResolvedValue({
-      inboxUrl: OWN[0] + "inbox/",
+      inboxUrl: `${OWN[0]}inbox/`,
       notifications: [
         { url: "https://pod.example/alice/inbox/x.ttl", types: [`${AS}Announce`], summary: "One" },
       ],
@@ -88,4 +95,29 @@ describe("InboxView", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByText("network down")).toBeTruthy();
   });
+});
+
+it("retains the limit warning even when no children in the partial listing are readable", async () => {
+  readInbox.mockResolvedValue({
+    inboxUrl: `${OWN[0]}inbox/`,
+    notifications: [],
+    totalMembers: 0,
+    truncated: true,
+  });
+  render(<InboxView webId={WEBID} ownStorageUrls={OWN} />);
+  await waitFor(() =>
+    expect(screen.getByRole("status").textContent).toContain("Your inbox is large"),
+  );
+});
+
+it.each([
+  "production",
+  "development",
+])("loopback opt-in requires a development build (%s)", async (mode) => {
+  vi.stubEnv("NODE_ENV", mode);
+  readInbox.mockResolvedValue({ notifications: [], truncated: false });
+  render(<InboxView webId={WEBID} ownStorageUrls={OWN} />);
+  await waitFor(() =>
+    expect(readInbox).toHaveBeenCalledWith(WEBID, OWN, undefined, 500, mode !== "production"),
+  );
 });

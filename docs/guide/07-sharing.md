@@ -197,10 +197,12 @@ declare const webId: string;
 declare const fileUrl: string;
 declare const friendWebId: string;
 
-const notify = createNotify({ fetch: auth.fetch });
+// The notifier is bound to the signed-in WebID: an activity naming another actor is refused.
+const notify = createNotify({ fetch: auth.fetch, webId });
 const sent = await notify(friendWebId, { ...shareNotification(fileUrl, 'viewer'), actor: webId });
 if (!sent.delivered) {
-  // sent.reason: 'no-inbox' | 'forbidden' | 'lws-no-ldn' | 'network'. The share itself still stands.
+  // sent.reason: 'no-inbox' | 'forbidden' | 'network' | 'profile-unreadable' | ... (see the
+  // NotifyResult type). The share itself still stands.
 }
 ```
 

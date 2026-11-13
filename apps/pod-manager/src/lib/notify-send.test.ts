@@ -1,236 +1,150 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
-import { describe, it, expect, vi } from "vitest";
-import { Parser } from "n3";
-import { buildNotification, sendNotification } from "./notify-send.js";
-import { serializeTurtle } from "./pod-data.js";
-import { InvalidTargetError, NoInboxError, NotificationSendError } from "./errors.js";
+// AUTHORED-BY Codex GPT-6.1-Sol
 
-const AS = "https://www.w3.org/ns/activitystreams#";
-const ACTOR = "https://alice.example/profile/card#me";
-const RECIPIENT = "https://bob.example/profile/card#me";
-const RECIPIENT_DOC = "https://bob.example/profile/card";
-const INBOX = "https://bob.example/inbox/";
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { expect, test, vi } from "vitest";
+import {
+  InvalidTargetError,
+  NoInboxError,
+  NotificationSendError,
+  ProfileUnreadableError,
+} from "./errors.js";
+import { sendNotification } from "./notify-send.js";
 
-function ttl(body: string): Response {
-  return new Response(body, { status: 200, headers: { "content-type": "text/turtle" } });
+const recipient = "https://8.8.8.8/profile#me";
+const inbox = "https://8.8.4.4/inbox/";
+const args = { recipientWebId: recipient, actorWebId: "https://alice.example/#me" };
+function transport(status = 201, target = inbox) {
+  return vi.fn<typeof fetch>().mockImplementation(async (_input, init) =>
+    init?.method === "POST"
+      ? new Response(null, { status })
+      : new Response(`<${recipient}> <http://www.w3.org/ns/ldp#inbox> <${target}>.`, {
+          headers: { "content-type": "text/turtle" },
+        }),
+  );
 }
 
-const INBOX_TTL = `
-  @prefix ldp: <http://www.w3.org/ns/ldp#> .
-  <${RECIPIENT}> ldp:inbox <${INBOX}> .`;
+test("delivers invitations and RSVP content through the real SDK sender with cached discovery", async () => {
+  const fetch = transport();
+  await expect(
+    sendNotification(
+      {
+        ...args,
+        type: "Invite",
+        object: "https://alice.example/room/",
+        summary: " Join ",
+        content: " Response URL ",
+      },
+      fetch,
+    ),
+  ).resolves.toEqual({ inbox });
+  await sendNotification(args, fetch);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  const init = fetch.mock.calls[1][1];
+  expect.assert(init);
+  expect(new Headers(init.headers).get("content-type")).toBe("text/turtle");
+  expect(init.redirect).toBe("manual");
+  const ds = await parseRdf(String(init.body), "text/turtle", { baseIRI: `${inbox}n` });
+  const values = [...ds].map((q) => [q.predicate.value.split("#").at(-1), q.object.value]);
+  expect(values).toEqual(
+    expect.arrayContaining([
+      ["type", "https://www.w3.org/ns/activitystreams#Invite"],
+      ["actor", args.actorWebId],
+      ["object", "https://alice.example/room/"],
+      ["summary", "Join"],
+      ["content", "Response URL"],
+    ]),
+  );
+  const empty = await parseRdf(String(fetch.mock.calls[2][1]?.body), "text/turtle");
+  expect([...empty].some((q) => q.predicate.value.endsWith("#object"))).toBe(false);
+});
 
-describe("buildNotification — well-formed AS2.0", () => {
-  it("round-trips actor/object/target/summary/content/published/type into quads", async () => {
-    const published = new Date("2026-06-13T12:00:00.000Z");
-    const ds = buildNotification({
-      type: "Invite",
-      actor: ACTOR,
-      object: "https://alice.example/schedule/poll-1.ttl#it",
-      target: RECIPIENT,
-      summary: "You're invited",
-      content: "Pick a time",
-      published,
-    });
-    const turtle = await serializeTurtle(ds, { as: AS });
-    const quads = new Parser().parse(turtle);
-    const has = (p: string, o: string) =>
-      quads.some((q) => q.predicate.value === AS + p && q.object.value === o);
-    expect(
-      quads.some(
-        (q) =>
-          q.predicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" &&
-          q.object.value === `${AS}Invite`,
-      ),
-    ).toBe(true);
-    expect(has("actor", ACTOR)).toBe(true);
-    expect(has("object", "https://alice.example/schedule/poll-1.ttl#it")).toBe(true);
-    expect(has("target", RECIPIENT)).toBe(true);
-    expect(has("summary", "You're invited")).toBe(true);
-    expect(has("content", "Pick a time")).toBe(true);
-    expect(has("published", "2026-06-13T12:00:00.000Z")).toBe(true);
+test("adapts missing inboxes and structured delivery failures to UI errors", async () => {
+  const missing = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(new Response("", { headers: { "content-type": "text/turtle" } }));
+  await expect(sendNotification(args, missing)).rejects.toBeInstanceOf(NoInboxError);
+  for (const status of [403, 500, 307]) {
+    await expect(sendNotification(args, transport(status))).rejects.toBeInstanceOf(
+      NotificationSendError,
+    );
+  }
+});
+
+test.each([
+  "https://127.0.0.1/inbox/",
+  "http://169.254.169.254/",
+  "https://user:pass@8.8.4.4/inbox/",
+])("refuses unsafe inbox %s without POSTing", async (target) => {
+  const fetch = transport(201, target);
+  await expect(sendNotification(args, fetch)).rejects.toBeInstanceOf(InvalidTargetError);
+  expect(fetch.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
+});
+
+test("refuses a transport that followed a redirect despite manual mode", async () => {
+  const fetch = transport();
+  fetch.mockImplementationOnce(
+    async () =>
+      new Response(`<${recipient}> <http://www.w3.org/ns/ldp#inbox> <${inbox}>.`, {
+        headers: { "content-type": "text/turtle" },
+      }),
+  );
+  fetch.mockImplementationOnce(async () => {
+    const response = new Response(null, { status: 201 });
+    Object.defineProperty(response, "url", { value: "https://1.1.1.1/collect" });
+    return response;
   });
+  await expect(sendNotification(args, fetch)).rejects.toBeInstanceOf(NotificationSendError);
+});
 
-  it("serialises a RELATIVE `#it` subject (the inbox assigns the final IRI)", async () => {
-    const ds = buildNotification({ type: "Announce", actor: ACTOR });
-    const turtle = await serializeTurtle(ds, { as: AS });
-    // n3 emits the subject as a relative IRI `<#it>` (not absolute, not a blank
-    // node) so the LDN inbox resolves it against the POST request URL.
-    expect(turtle).toContain("<#it>");
-    expect(turtle).not.toMatch(/_:/); // no blank-node subject
-  });
-
-  it("emits an as:published triple by default when none is supplied", async () => {
-    const ds = buildNotification({ type: "Announce", actor: ACTOR });
-    const turtle = await serializeTurtle(ds, { as: AS });
-    const quads = new Parser().parse(turtle);
-    const published = quads.find((q) => q.predicate.value === `${AS}published`);
-    expect(published).toBeDefined();
-    // It is a valid ISO date-time literal.
-    expect(Number.isNaN(Date.parse(published!.object.value))).toBe(false);
-  });
-
-  it("drops non-http(s) actor/object rather than minting a malformed node", async () => {
-    const ds = buildNotification({ type: "Announce", actor: "not-a-url", object: "also bad" });
-    const turtle = await serializeTurtle(ds, { as: AS });
-    const quads = new Parser().parse(turtle);
-    expect(quads.some((q) => q.predicate.value === `${AS}actor`)).toBe(false);
-    expect(quads.some((q) => q.predicate.value === `${AS}object`)).toBe(false);
+test.each([
+  401, 403, 404, 429, 500, 503,
+])("retains the actual inbox HTTP %s for UI feedback", async (status) => {
+  await expect(sendNotification(args, transport(status))).rejects.toMatchObject({
+    name: "NotificationSendError",
+    status,
   });
 });
 
-describe("sendNotification — discover + validate BEFORE POST", () => {
-  it("POSTs Turtle to the validated discovered inbox", async () => {
-    const calls: { url: string; init?: RequestInit }[] = [];
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      calls.push({ url, init });
-      if (url === RECIPIENT_DOC) return ttl(INBOX_TTL);
-      if (url === INBOX && (init?.method ?? "GET") === "POST") {
-        return new Response(null, { status: 201 });
-      }
-      return new Response("nf", { status: 404 });
-    }) as unknown as typeof fetch;
+test.each([
+  401, 403, 404, 500,
+])("unreadable HTTP %s profiles retain a distinct error and status", async (status) => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status }));
+  await expect(sendNotification(args, fetch)).rejects.toMatchObject({
+    name: "ProfileUnreadableError",
+    status,
+    webId: recipient,
+  });
+});
 
-    const { inbox } = await sendNotification(
-      { recipientWebId: RECIPIENT, actorWebId: ACTOR, type: "Announce", summary: "Hi" },
-      fetchImpl,
+test("network failures remain distinct from an HTTP rejection", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("offline"));
+  await expect(sendNotification(args, fetch)).rejects.toMatchObject({
+    name: "NotificationSendError",
+    status: 0,
+  });
+});
+
+test("non-HTTPS object and target are omitted without rejecting the send", async () => {
+  const fetch = transport();
+  await expect(
+    sendNotification(
+      { ...args, object: "http://example.org/x", target: "javascript:alert(1)" },
+      fetch,
+    ),
+  ).resolves.toEqual({ inbox });
+  const ds = await parseRdf(String(fetch.mock.calls[1][1]?.body), "text/turtle");
+  expect(
+    [...ds].some(
+      (q) => q.predicate.value.endsWith("#object") || q.predicate.value.endsWith("#target"),
+    ),
+  ).toBe(false);
+});
+
+test("malformed readable profiles remain distinct from a readable profile with no inbox", async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockResolvedValue(
+      new Response("broken { RDF", { headers: { "content-type": "text/turtle" } }),
     );
-    expect(inbox).toBe(INBOX);
-
-    const post = calls.find((c) => (c.init?.method ?? "GET") === "POST");
-    expect(post?.url).toBe(INBOX);
-    expect((post?.init?.headers as Record<string, string>)["content-type"]).toBe("text/turtle");
-    // Body parses as valid AS2.0 Turtle carrying the actor.
-    const quads = new Parser().parse(post?.init?.body as string);
-    expect(quads.some((q) => q.predicate.value === `${AS}actor` && q.object.value === ACTOR)).toBe(
-      true,
-    );
-  });
-
-  it("succeeds (backstop does not reject) when the final response URL equals the inbox", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === RECIPIENT_DOC) return ttl(INBOX_TTL);
-      if (url === INBOX && (init?.method ?? "GET") === "POST") {
-        const r = new Response(null, { status: 201 });
-        Object.defineProperty(r, "url", { value: INBOX }); // final URL == target
-        return r;
-      }
-      return new Response("nf", { status: 404 });
-    }) as unknown as typeof fetch;
-    await expect(
-      sendNotification({ recipientWebId: RECIPIENT, actorWebId: ACTOR }, fetchImpl),
-    ).resolves.toEqual({ inbox: INBOX });
-  });
-
-  it("does NOT POST when the recipient advertises no inbox", async () => {
-    const posts: string[] = [];
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if ((init?.method ?? "GET") === "POST") posts.push(url);
-      if (url === RECIPIENT_DOC) return ttl(`<${RECIPIENT}> <http://x/y> "z" .`);
-      return new Response("nf", { status: 404 });
-    }) as unknown as typeof fetch;
-
-    await expect(
-      sendNotification({ recipientWebId: RECIPIENT, actorWebId: ACTOR }, fetchImpl),
-    ).rejects.toBeInstanceOf(NoInboxError);
-    expect(posts).toHaveLength(0); // host-leak guard: no POST ever issued
-  });
-
-  it("does NOT POST when the discovered inbox fails the SSRF validator", async () => {
-    const posts: string[] = [];
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if ((init?.method ?? "GET") === "POST") posts.push(url);
-      if (url === RECIPIENT_DOC) {
-        return ttl(`
-          @prefix ldp: <http://www.w3.org/ns/ldp#> .
-          <${RECIPIENT}> ldp:inbox <http://169.254.169.254/latest/> .`);
-      }
-      return new Response("nf", { status: 404 });
-    }) as unknown as typeof fetch;
-
-    await expect(
-      sendNotification({ recipientWebId: RECIPIENT, actorWebId: ACTOR }, fetchImpl),
-    ).rejects.toBeInstanceOf(InvalidTargetError);
-    expect(posts).toHaveLength(0); // never POSTed to the metadata endpoint
-  });
-
-  it("does NOT follow a 3xx redirect from the inbox (redirect bypass guard)", async () => {
-    // The validated public inbox answers with a redirect toward a private host.
-    // The send must POST with redirect:"manual" and treat the 3xx as a failure —
-    // it must NEVER issue a request to the redirect Location (token-leak guard).
-    const requested: string[] = [];
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      requested.push(url);
-      if (url === RECIPIENT_DOC) return ttl(INBOX_TTL);
-      if (url === INBOX && (init?.method ?? "GET") === "POST") {
-        expect(init?.redirect).toBe("manual"); // never follow
-        return new Response(null, {
-          status: 307,
-          headers: { location: "http://169.254.169.254/collect" },
-        });
-      }
-      return new Response("nf", { status: 404 });
-    }) as unknown as typeof fetch;
-
-    await expect(
-      sendNotification({ recipientWebId: RECIPIENT, actorWebId: ACTOR }, fetchImpl),
-    ).rejects.toBeInstanceOf(NotificationSendError);
-    // The metadata endpoint was never requested.
-    expect(requested.some((u) => u.includes("169.254.169.254"))).toBe(false);
-  });
-
-  it("rejects when the FINAL response URL is off-target (auth-retry redirect backstop)", async () => {
-    // Simulate a runtime that followed a redirect anyway: a 2xx response whose
-    // final url is a private host. The backstop must reject it.
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === RECIPIENT_DOC) return ttl(INBOX_TTL);
-      if (url === INBOX && (init?.method ?? "GET") === "POST") {
-        // Response.url is read-only; construct then redefine for the test.
-        const r = new Response(null, { status: 200 });
-        Object.defineProperty(r, "url", { value: "https://169.254.169.254/collect" });
-        return r;
-      }
-      return new Response("nf", { status: 404 });
-    }) as unknown as typeof fetch;
-
-    await expect(
-      sendNotification({ recipientWebId: RECIPIENT, actorWebId: ACTOR }, fetchImpl),
-    ).rejects.toBeInstanceOf(NotificationSendError);
-  });
-
-  it("rejects when the final response URL is a different (even public) origin", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === RECIPIENT_DOC) return ttl(INBOX_TTL);
-      if (url === INBOX && (init?.method ?? "GET") === "POST") {
-        const r = new Response(null, { status: 200 });
-        Object.defineProperty(r, "url", { value: "https://elsewhere.example/collect" });
-        return r;
-      }
-      return new Response("nf", { status: 404 });
-    }) as unknown as typeof fetch;
-    await expect(
-      sendNotification({ recipientWebId: RECIPIENT, actorWebId: ACTOR }, fetchImpl),
-    ).rejects.toBeInstanceOf(NotificationSendError);
-  });
-
-  it("throws NotificationSendError on a non-2xx inbox response", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === RECIPIENT_DOC) return ttl(INBOX_TTL);
-      if (url === INBOX && (init?.method ?? "GET") === "POST") {
-        return new Response("denied", { status: 403 });
-      }
-      return new Response("nf", { status: 404 });
-    }) as unknown as typeof fetch;
-
-    await expect(
-      sendNotification({ recipientWebId: RECIPIENT, actorWebId: ACTOR }, fetchImpl),
-    ).rejects.toBeInstanceOf(NotificationSendError);
-  });
+  await expect(sendNotification(args, fetch)).rejects.toBeInstanceOf(ProfileUnreadableError);
 });

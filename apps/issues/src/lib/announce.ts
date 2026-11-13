@@ -1,256 +1,47 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
-/**
- * LDN inbox WRITES (#75 / 5u9) — POST an ActivityStreams 2.0 `as:Announce`
- * notification into a COLLABORATOR's Linked Data Notifications inbox
- * (https://www.w3.org/TR/ldn/) when this app assigns them an issue, or when a
- * collaborator is @mentioned in a comment. This is the WRITE complement of the
- * read-only inbox reader in `inbox.ts`.
- *
- * The target inbox is on a FOREIGN pod (a collaborator's, a DIFFERENT origin from
- * the acting user's own pod), so — unlike the OWN-pod inbox reader, which pins to
- * the user's own `pim:storage` (`own-pod.ts`) — the write path is guarded by the
- * suite SSRF policy (`@jeswr/guarded-fetch`) instead:
- *
- *   1. INBOX DISCOVERY. The collaborator's `ldp:inbox` is read off THEIR OWN WebID
- *      profile (via `@jeswr/fetch-rdf` `fetchRdf` + `@rdfjs/wrapper` typed
- *      accessors — never a bespoke parser). The inbox URL therefore comes from the
- *      target's own self-description, not from attacker-supplied input; fail-closed
- *      when the profile advertises no inbox.
- *   2. SSRF GATE. Both the WebID we dereference AND the inbox URL we POST to are
- *      validated with `assertSafeUrl` — the browser-safe policy that refuses a
- *      non-http(s) scheme, a loopback / link-local / private / cloud-metadata
- *      target (e.g. `169.254.169.254`, `localhost`), userinfo, and (in production)
- *      a non-443 port. So a poisoned profile can never point the authenticated
- *      POST at an internal service.
- *   3. REDIRECT REFUSAL. The credentialed POST is issued through
- *      `refuseRedirects(fetch)`, which forces `redirect:"manual"` and REFUSES any
- *      3xx — the acting user's DPoP credential can only ever reach the ONE inbox
- *      host, never a `Location` the target's server chose.
- *
- * The user's OWN DPoP-authed `fetch` (the `@solid/reactive-authentication`-patched
- * global) carries the write: the acting user appends the notification AS THEMSELVES
- * (`as:actor` = the acting user's WebID; `as:target` = the collaborator). The
- * notification is built with `n3.Writer` (never hand-concatenated) and carries
- * PROV-O provenance asserting this app/user as the source (own-origin provenance).
- *
- * Non-blocking: {@link Announcer} fires each announce fire-and-forget (an
- * assignment/comment succeeds even if the notify fails — surfaced via `onError`)
- * and skips self-notification. An ASSIGNMENT is announced only when it actually
- * CHANGED to a new WebID, and is de-duped per (issue, assignee) so the same
- * assignment is never announced twice in a session; a MENTION is a per-comment
- * event (duplicate targets within one comment collapse, but a later comment
- * mentioning the same person notifies again).
- */
-
-import { TermWrapper, OptionalFrom, NamedNodeAs } from "@rdfjs/wrapper";
-import { DataFactory, Writer } from "n3";
-import { fetchRdf } from "@jeswr/fetch-rdf";
+/** Issues notification policy: transition dedupe, self skipping and best-effort feedback. */
 import {
-  assertSafeUrl,
-  createGuardedFetch,
-  refuseRedirects,
-  type GuardOptions,
-} from "@jeswr/guarded-fetch";
-import { AS, LDP, PROV, RDF, RDFS, XSD } from "./vocab";
+  createNotify,
+  issueAnnounce,
+  type NotificationDraft,
+  type NotifyOptions,
+} from "@jeswr/pod-access/notify";
 
-const { namedNode, literal, blankNode, quad } = DataFactory;
-
-/** Whether an announce is an assignment or an @mention. */
 export type AnnounceKind = "assignment" | "mention";
-
-/** The content of one AS2 `as:Announce` notification. */
 export interface AnnounceContent {
-  /** Which kind of activity this notification is about. */
   kind: AnnounceKind;
-  /** The acting user's WebID — `as:actor` (who triggered it). */
   actorWebId: string;
-  /** The issue/task resource IRI — `as:object` (what it is about). */
   objectIri: string;
-  /** The collaborator being notified — `as:target` (and the inbox owner). */
   targetWebId: string;
-  /** Human-readable one-liner — `as:summary`. */
   summary: string;
-  /** ISO-8601 timestamp — `as:published`. Defaults to now. */
-  published?: string;
 }
-
-/** Raised when the POST to a collaborator's inbox returns a non-2xx status. */
-export class AnnounceError extends Error {
-  readonly inboxUrl: string;
-  readonly status: number;
-  constructor(message: string, inboxUrl: string, status: number) {
-    super(message);
-    this.name = "AnnounceError";
-    this.inboxUrl = inboxUrl;
-    this.status = status;
-  }
-}
-
-/** Reads the `ldp:inbox` link off a WebID subject (typed accessor, never regex). */
-class ProfileInbox extends TermWrapper {
-  get inbox(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${LDP}inbox`, NamedNodeAs.string);
-  }
-}
-
-/**
- * Serialise an AS2 `as:Announce` notification to Turtle via `n3.Writer` (never
- * hand-concatenated). The activity subject is the EMPTY relative IRI `<>`, which
- * the receiving server resolves to the minted notification resource's own URL — so
- * when the notification is later read back (inbox.ts `parseNotification`), the AS2
- * activity sits AT the resource URL exactly as the reader expects. PROV-O
- * provenance (`prov:wasGeneratedBy` an activity `prov:wasAssociatedWith` the acting
- * user) records this app/user as the source (own-origin provenance).
- */
-export function buildAnnounceTurtle(content: AnnounceContent): Promise<string> {
-  const subject = namedNode(""); // the posted resource's own URL (LDN convention)
-  const activity = blankNode();
-  const published = content.published ?? new Date().toISOString();
-  const dateTime = namedNode(`${XSD}dateTime`);
-
-  const quads = [
-    quad(subject, namedNode(`${RDF}type`), namedNode(`${AS}Announce`)),
-    quad(subject, namedNode(`${AS}actor`), namedNode(content.actorWebId)),
-    quad(subject, namedNode(`${AS}object`), namedNode(content.objectIri)),
-    quad(subject, namedNode(`${AS}target`), namedNode(content.targetWebId)),
-    quad(subject, namedNode(`${AS}summary`), literal(content.summary)),
-    quad(subject, namedNode(`${AS}published`), literal(published, dateTime)),
-    // Own-origin provenance: THIS app/user generated the notification.
-    quad(subject, namedNode(`${PROV}wasGeneratedBy`), activity),
-    quad(activity, namedNode(`${RDF}type`), namedNode(`${PROV}Activity`)),
-    quad(activity, namedNode(`${PROV}wasAssociatedWith`), namedNode(content.actorWebId)),
-    quad(activity, namedNode(`${PROV}startedAtTime`), literal(published, dateTime)),
-    quad(activity, namedNode(`${RDFS}label`), literal("solid-issues assignment/mention notification")),
-  ];
-
-  const writer = new Writer({
-    format: "text/turtle",
-    prefixes: { as: AS, prov: PROV, rdf: RDF, rdfs: RDFS },
-  });
-  for (const q of quads) writer.addQuad(q);
-  return new Promise((resolve, reject) =>
-    writer.end((err, result) => (err ? reject(err) : resolve(result))),
-  );
-}
-
-/** Options threaded into the SSRF gate + the profile / inbox fetches. */
-export interface AnnounceNetworkOptions {
-  /**
-   * The fetch to carry BOTH the profile read and the credentialed inbox POST.
-   * Defaults to the (auth-patched) global `fetch` so the POST is DPoP-authed as
-   * the acting user. Injected in tests.
-   */
-  fetch?: typeof fetch;
-  /**
-   * SSRF-policy options for `assertSafeUrl` on the WebID + inbox URL. Production
-   * uses the strict browser-safe default (`{}`); tests inject `dnsLookup` to drive
-   * the classification deterministically without real DNS.
-   */
-  guardOptions?: GuardOptions;
-}
-
-/**
- * Resolve a collaborator's `ldp:inbox` from their WebID profile, SSRF-validated
- * both ways (the WebID we dereference AND the inbox URL we would POST to). Returns
- * `undefined` when the profile advertises no inbox (fail-closed — the caller does
- * not notify). THROWS ({@link SsrfError}/{@link GuardError} from
- * `@jeswr/guarded-fetch`, or an {@link RdfFetchError}) when the WebID/inbox is
- * SSRF-unsafe or the profile can't be read — the caller treats that as a failed
- * (not skipped) notify.
- */
-export async function resolveCollaboratorInbox(
-  collaboratorWebId: string,
-  options: AnnounceNetworkOptions = {},
-): Promise<string | undefined> {
-  // The discovery read is CREDENTIAL-BEARING (the auth-patched fetch) and the WebID
-  // is foreign/untrusted data, so it goes through a guarded fetch that validates
-  // the WebID host AND re-validates EVERY redirect hop (stripping credentials on a
-  // cross-origin redirect). A poisoned assignee value (e.g. a WebID that resolves
-  // or 30x-redirects to `169.254.169.254` / `localhost`) can therefore never drive
-  // the authenticated profile fetch at an internal target — closing the discovery
-  // redirect-SSRF that a bare `assertSafeUrl` on only the initial URL would leave.
-  const discoveryFetch = createGuardedFetch({
-    ...options.guardOptions,
-    ...(options.fetch ? { fetch: options.fetch } : {}),
-  });
-  // NB: no custom request headers here. The WebID is CROSS-ORIGIN, so adding a
-  // `Cache-Control` request header (as the own-pod reader does for same-origin
-  // reads) would make this a non-simple CORS request, forcing an OPTIONS preflight
-  // that many public profile servers reject — breaking discovery even for a
-  // perfectly readable profile. A plain GET keeps it a simple CORS request; a
-  // slightly-cached inbox URL is harmless (the `ldp:inbox` link rarely changes).
-  const { dataset } = await fetchRdf(collaboratorWebId, { fetch: discoveryFetch });
-  const inbox = new ProfileInbox(collaboratorWebId, dataset, DataFactory).inbox;
-  if (!inbox) return undefined; // no inbox advertised → fail-closed, silent
-
-  // The POST target host must itself be SSRF-safe (the inbox is server-controlled
-  // data read off the profile). Refuses non-http(s), loopback/link-local/private,
-  // cloud-metadata, userinfo, non-standard port. The credentialed POST
-  // (`postToInbox`) refuses ALL redirects, so validating the target host here is
-  // the POST's host gate.
-  await assertSafeUrl(inbox, options.guardOptions);
-  return inbox;
-}
-
-/**
- * POST a pre-serialised notification body to a collaborator's inbox. Self-guarding
- * (does NOT trust the caller): the target host is SSRF-validated with
- * `assertSafeUrl` at the POST site, and the write is issued through `refuseRedirects`
- * so the credentialed POST refuses ANY redirect (the DPoP credential never follows a
- * `Location` the target's server chose). Throws {@link SsrfError}/{@link GuardError}
- * for an unsafe target, {@link AnnounceError} on a non-2xx, and
- * {@link RedirectRefusedError} on a refused redirect.
- */
-export async function postToInbox(
-  inboxUrl: string,
-  body: string,
-  options: AnnounceNetworkOptions = {},
-): Promise<void> {
-  // Validate the credentialed-POST target host HERE (not only at discovery) so this
-  // exported function can never be pointed at an internal / metadata target.
-  await assertSafeUrl(inboxUrl, options.guardOptions);
-  const post = refuseRedirects(options.fetch ?? fetch);
-  const res = await post(inboxUrl, {
-    method: "POST",
-    headers: { "content-type": "text/turtle" },
-    body,
-  });
-  if (!res.ok && res.status !== 205) {
-    throw new AnnounceError(`Inbox POST failed (HTTP ${res.status}).`, inboxUrl, res.status);
-  }
-}
-
-/** The outcome of one {@link sendAnnounce} attempt. */
+export type AnnounceNetworkOptions = Partial<
+  Pick<NotifyOptions, "fetch" | "pinningFetch" | "devLoopback">
+>;
 export type SendResult =
   | { status: "sent"; inbox: string }
   | { status: "no-inbox" }
   | { status: "error"; stage: "resolve" | "post"; error: unknown };
 
-/**
- * End-to-end: discover the target's inbox (SSRF-validated), build the AS2 Announce
- * body, and POST it (redirect-refusing). Never throws — returns a discriminated
- * {@link SendResult} so the (fire-and-forget) caller can distinguish a silent
- * `no-inbox` from a surfaced `error`.
- */
+/** Delivery and its recipient cache belong to the SDK's authenticated transport. */
 export async function sendAnnounce(
   content: AnnounceContent,
   options: AnnounceNetworkOptions = {},
 ): Promise<SendResult> {
-  let inbox: string | undefined;
-  try {
-    inbox = await resolveCollaboratorInbox(content.targetWebId, options);
-  } catch (error) {
-    return { status: "error", stage: "resolve", error };
-  }
-  if (!inbox) return { status: "no-inbox" };
-
-  try {
-    const body = await buildAnnounceTurtle(content);
-    await postToInbox(inbox, body, options);
-    return { status: "sent", inbox };
-  } catch (error) {
-    return { status: "error", stage: "post", error };
-  }
+  const draft: NotificationDraft = issueAnnounce(
+    content.objectIri,
+    content.targetWebId,
+    content.summary,
+  );
+  const result = await createNotify({
+    ...options,
+    webId: content.actorWebId,
+    fetch: options.fetch ?? globalThis.fetch,
+  })(content.targetWebId, { ...draft, actor: content.actorWebId });
+  if (result.delivered && result.inbox) return { status: "sent", inbox: result.inbox };
+  if (result.reason === "no-inbox" || result.reason === "lws-no-ldn") return { status: "no-inbox" };
+  return { status: "error", stage: result.inbox ? "post" : "resolve", error: result };
 }
 
 /** A concise human summary for an announce, given the (optional) issue title. */
@@ -375,7 +166,11 @@ export class Announcer {
         targetWebId,
         summary: defaultSummary(kind, issueTitle),
       },
-      { fetch: this.opts.fetch, guardOptions: this.opts.guardOptions },
+      {
+        fetch: this.opts.fetch,
+        pinningFetch: this.opts.pinningFetch,
+        devLoopback: this.opts.devLoopback,
+      },
     );
 
     if (result.status === "sent") {

@@ -190,7 +190,7 @@ describe("buildTaskNotification + parseTaskFromNotification", () => {
     });
     const subject = findActivitySubject("https://x.example/n", ds);
     if (subject === undefined) throw new Error("expected an activity subject");
-    const task = parseTaskFromNotification(subject, ds);
+    const task = parseTaskFromNotification(subject.value, ds);
     expect(task).toEqual({
       task: TASK_IRI,
       state: "Open",

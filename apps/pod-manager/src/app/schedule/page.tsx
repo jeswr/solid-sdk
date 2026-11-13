@@ -1,6 +1,10 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 "use client";
 
+import { CalendarClock, Check, Loader2, Plus, X } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 /**
  * Scheduling / RSVP — propose an event poll with several time options, invite
  * agents (cross-pod via the SSRF-hardened sendNotification), collect RSVPs, and
@@ -9,37 +13,34 @@
  * opens a poll (scope-guarded by the store's assertInContainer); no id shows the
  * list + a "New poll" form.
  */
-import { Suspense, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarClock, Check, Loader2, Plus, X } from "lucide-react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useSession } from "@/components/session-provider";
-import { useStore, useItems, useItem } from "@/components/use-productivity";
-import { EmptyState, ErrorState } from "@/components/states";
 import { ItemRowSkeleton } from "@/components/item-row";
 import { PeoplePicker } from "@/components/people-picker";
+import { useSession } from "@/components/session-provider";
+import { EmptyState, ErrorState } from "@/components/states";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { useInbox } from "@/components/use-inbox";
+import { useItem, useItems, useStore } from "@/components/use-productivity";
+import { formatDateTime, fromDateTimeLocal } from "@/lib/format";
+import { sendNotification } from "@/lib/notify-send";
+import { isInOwnPods } from "@/lib/pod-scope";
 import {
-  scheduleStore,
-  tallyRsvps,
-  winningOption,
-  readPollAt,
-  respondToPoll,
   aggregatePollRsvps,
   type Poll,
   type Rsvp,
   type RsvpResponse,
+  readPollAt,
+  respondToPoll,
+  scheduleStore,
+  tallyRsvps,
+  winningOption,
 } from "@/lib/schedule";
-import { useInbox } from "@/components/use-inbox";
-import { sendNotification } from "@/lib/notify-send";
-import { isInOwnPods } from "@/lib/pod-scope";
-import { fromDateTimeLocal, formatDateTime } from "@/lib/format";
 
 export default function SchedulePage() {
   return (
@@ -88,8 +89,8 @@ function PollList() {
         <ErrorState error={error} onRetry={reload} />
       ) : loading ? (
         <ul className="flex flex-col gap-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <ItemRowSkeleton key={i} />
+          {["first", "second", "third"].map((slot) => (
+            <ItemRowSkeleton key={slot} />
           ))}
         </ul>
       ) : (data?.length ?? 0) === 0 ? (
@@ -130,12 +131,13 @@ function NewPoll({ onCreated }: { onCreated: () => void }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [options, setOptions] = useState<string[]>([""]);
+  const [options, setOptions] = useState([{ id: 0, value: "" }]);
+  const nextOptionId = useRef(1);
   const [invitees, setInvitees] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   function setOption(i: number, value: string) {
-    setOptions((opts) => opts.map((o, idx) => (idx === i ? value : o)));
+    setOptions((opts) => opts.map((o, idx) => (idx === i ? { ...o, value } : o)));
   }
 
   async function onCreate(e: React.FormEvent) {
@@ -146,7 +148,7 @@ function NewPoll({ onCreated }: { onCreated: () => void }) {
       return;
     }
     const isoOptions = options
-      .map((o) => fromDateTimeLocal(o))
+      .map((o) => fromDateTimeLocal(o.value))
       .filter((d): d is Date => d !== undefined)
       .map((d) => d.toISOString());
     if (isoOptions.length === 0) {
@@ -167,13 +169,16 @@ function NewPoll({ onCreated }: { onCreated: () => void }) {
       // Notify each invitee (strict-validated target). Failures don't block.
       await Promise.allSettled(
         invitees.map((recipient) =>
-          sendNotification({
-            recipientWebId: recipient,
-            actorWebId: webId,
-            type: "Invite",
-            summary: `${name.trim()} — please RSVP`,
-            object: url,
-          }, podFetch),
+          sendNotification(
+            {
+              recipientWebId: recipient,
+              actorWebId: webId,
+              type: "Invite",
+              summary: `${name.trim()} — please RSVP`,
+              object: url,
+            },
+            podFetch,
+          ),
         ),
       );
       toast.success("Poll created");
@@ -187,22 +192,34 @@ function NewPoll({ onCreated }: { onCreated: () => void }) {
   }
 
   return (
-    <form onSubmit={onCreate} className="flex flex-col gap-5 rounded-xl border border-border bg-muted/30 p-4">
+    <form
+      onSubmit={onCreate}
+      className="flex flex-col gap-5 rounded-xl border border-border bg-muted/30 p-4"
+    >
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="poll-name">Name</Label>
-        <Input id="poll-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Team dinner" />
+        <Input
+          id="poll-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Team dinner"
+        />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="poll-desc">Description (optional)</Label>
-        <Textarea id="poll-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <Textarea
+          id="poll-desc"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
       </div>
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-medium">Time options</legend>
         {options.map((o, i) => (
-          <div key={i} className="flex items-center gap-2">
+          <div key={o.id} className="flex items-center gap-2">
             <Input
               type="datetime-local"
-              value={o}
+              value={o.value}
               onChange={(e) => setOption(i, e.target.value)}
               aria-label={`Option ${i + 1}`}
             />
@@ -219,7 +236,15 @@ function NewPoll({ onCreated }: { onCreated: () => void }) {
             )}
           </div>
         ))}
-        <Button type="button" variant="outline" size="sm" onClick={() => setOptions((o) => [...o, ""])}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            const id = nextOptionId.current++;
+            setOptions((o) => [...o, { id, value: "" }]);
+          }}
+        >
           <Plus aria-hidden="true" />
           Add option
         </Button>
@@ -230,7 +255,11 @@ function NewPoll({ onCreated }: { onCreated: () => void }) {
       </div>
       <div>
         <Button type="submit" disabled={saving}>
-          {saving ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Plus aria-hidden="true" />}
+          {saving ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Plus aria-hidden="true" />
+          )}
           Create poll
         </Button>
       </div>
@@ -245,12 +274,10 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
   // Is this poll in one of the user's OWN pods (organiser view) or someone
   // else's (invitee view)? Organiser → same-pod store CRUD; invitee → validated
   // read-only fetch + respond-in-own-pod + notify.
-  const storageKey = (profile?.storages ?? []).join("|") || (activeStorage ?? "");
-  const storages = useMemo(() => {
-    const all = profile?.storages ?? [];
-    return all.length > 0 ? all : activeStorage ? [activeStorage] : [];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey]);
+  const storageKey = JSON.stringify(
+    profile?.storages.length ? profile.storages : activeStorage ? [activeStorage] : [],
+  );
+  const storages = useMemo(() => JSON.parse(storageKey) as string[], [storageKey]);
   const isOrganiser = useMemo(() => isInOwnPods(pollUrl, storages), [pollUrl, storages]);
 
   // Organiser path: the typed store (same-pod, scope-guarded).
@@ -262,6 +289,7 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
   });
   const [foreignNonce, setForeignNonce] = useState(0);
   useEffect(() => {
+    void foreignNonce; // Explicit refresh requests repeat the read.
     if (isOrganiser) return;
     let cancelled = false;
     setForeign({ loading: true });
@@ -270,7 +298,8 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
         if (!cancelled) setForeign({ loading: false, data: p });
       })
       .catch((e: unknown) => {
-        if (!cancelled) setForeign({ loading: false, error: e instanceof Error ? e : new Error(String(e)) });
+        if (!cancelled)
+          setForeign({ loading: false, error: e instanceof Error ? e : new Error(String(e)) });
       });
     return () => {
       cancelled = true;
@@ -328,10 +357,7 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
   const error = isOrganiser ? owned.error : foreign.error;
   const reload = isOrganiser ? owned.reload : () => setForeignNonce((n) => n + 1);
 
-  const tallies = useMemo(
-    () => (poll ? tallyRsvps(poll.options, poll.rsvps) : []),
-    [poll],
-  );
+  const tallies = useMemo(() => (poll ? tallyRsvps(poll.options, poll.rsvps) : []), [poll]);
   const winner = useMemo(() => winningOption(tallies), [tallies]);
 
   async function rsvp(option: string, response: RsvpResponse) {
@@ -359,15 +385,19 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
           toast.error("This poll has no organiser to notify.");
           return;
         }
-        await respondToPoll({
-          pollUrl,
-          organizerWebId: poll.organizer,
-          attendeeWebId: webId,
-          podRoot: activeStorage,
-          option,
-          response,
-          pollName: poll.name,
-        }, podFetch);
+        await respondToPoll(
+          {
+            pollUrl,
+            organizerWebId: poll.organizer,
+            attendeeWebId: webId,
+            sessionWebId: webId,
+            podRoot: activeStorage,
+            option,
+            response,
+            pollName: poll.name,
+          },
+          podFetch,
+        );
         // Reflect the invitee's own response locally (the organiser's poll we
         // read won't show it — the organiser aggregates it on their side).
         setMyOptimistic((prev) => [
@@ -401,8 +431,12 @@ function PollDetail({ pollUrl }: { pollUrl: string }) {
       ) : (
         <>
           <header>
-            <h1 className="text-2xl font-semibold tracking-tight">{poll.name.trim() || "Untitled poll"}</h1>
-            {poll.description && <p className="mt-1 text-sm text-muted-foreground">{poll.description}</p>}
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {poll.name.trim() || "Untitled poll"}
+            </h1>
+            {poll.description && (
+              <p className="mt-1 text-sm text-muted-foreground">{poll.description}</p>
+            )}
           </header>
 
           <ul className="flex flex-col gap-2" aria-label="Time options">

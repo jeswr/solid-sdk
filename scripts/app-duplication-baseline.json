@@ -41,29 +41,6 @@
         }
       ]
     },
-    "02b63c9e1ee3086f47d772cb074aab47ea84ddf32d7979cbb612ab9d4fa5143b": {
-      "tokens": 127,
-      "locations": [
-        {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 84,
-          "endLine": 106,
-          "tokens": 127
-        },
-        {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 95,
-          "endLine": 117,
-          "tokens": 127
-        },
-        {
-          "file": "packages/solid-agent-notify/src/task.ts",
-          "startLine": 98,
-          "endLine": 116,
-          "tokens": 127
-        }
-      ]
-    },
     "02e62805ae1cdccab23edb5b730897f4ab8b503e933c0f401cc52f8323b7050c": {
       "tokens": 173,
       "locations": [
@@ -1682,15 +1659,9 @@
           "tokens": 140
         },
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 108,
-          "endLine": 127,
-          "tokens": 140
-        },
-        {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 187,
-          "endLine": 208,
+          "startLine": 198,
+          "endLine": 219,
           "tokens": 140
         },
         {
@@ -1715,12 +1686,6 @@
           "file": "apps/suite/src/apps/photos/lib/model/album.ts",
           "startLine": 31,
           "endLine": 50,
-          "tokens": 140
-        },
-        {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 119,
-          "endLine": 138,
           "tokens": 140
         },
         {
@@ -1793,8 +1758,8 @@
       "locations": [
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 198,
-          "endLine": 214,
+          "startLine": 209,
+          "endLine": 225,
           "tokens": 125
         },
         {
@@ -1896,12 +1861,6 @@
           "tokens": 217
         },
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 89,
-          "endLine": 121,
-          "tokens": 217
-        },
-        {
           "file": "apps/pod-manager/src/lib/profile-edit.ts",
           "startLine": 77,
           "endLine": 129,
@@ -1909,8 +1868,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 117,
-          "endLine": 133,
+          "startLine": 118,
+          "endLine": 134,
           "tokens": 125
         },
         {
@@ -1981,8 +1940,8 @@
         },
         {
           "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 100,
-          "endLine": 132,
+          "startLine": 113,
+          "endLine": 145,
           "tokens": 217
         },
         {
@@ -1998,8 +1957,8 @@
       "locations": [
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 195,
-          "endLine": 213,
+          "startLine": 206,
+          "endLine": 224,
           "tokens": 138
         },
         {
@@ -2381,21 +2340,9 @@
       "tokens": 136,
       "locations": [
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 107,
-          "endLine": 123,
-          "tokens": 136
-        },
-        {
           "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
           "startLine": 64,
           "endLine": 81,
-          "tokens": 136
-        },
-        {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 118,
-          "endLine": 134,
           "tokens": 136
         },
         {
@@ -3397,29 +3344,6 @@
         }
       ]
     },
-    "5c08f8cc7a3a4d366a98431e23346c61e55df54a712e7cc64a687831139634ae": {
-      "tokens": 120,
-      "locations": [
-        {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 113,
-          "endLine": 135,
-          "tokens": 120
-        },
-        {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 124,
-          "endLine": 159,
-          "tokens": 120
-        },
-        {
-          "file": "packages/solid-agent-notify/src/task.ts",
-          "startLine": 117,
-          "endLine": 141,
-          "tokens": 120
-        }
-      ]
-    },
     "5c297ac33b55d50b94e31efcce2dcce1814dca6872b641678ed2fa5bc4553dd1": {
       "tokens": 233,
       "locations": [
@@ -3610,12 +3534,6 @@
           "tokens": 169
         },
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 92,
-          "endLine": 119,
-          "tokens": 169
-        },
-        {
           "file": "apps/pod-manager/src/lib/profile-edit.ts",
           "startLine": 80,
           "endLine": 127,
@@ -3647,8 +3565,8 @@
         },
         {
           "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 103,
-          "endLine": 130,
+          "startLine": 116,
+          "endLine": 143,
           "tokens": 169
         },
         {
@@ -4199,15 +4117,9 @@
           "tokens": 122
         },
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 84,
-          "endLine": 107,
-          "tokens": 122
-        },
-        {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 113,
-          "endLine": 131,
+          "startLine": 114,
+          "endLine": 132,
           "tokens": 122
         },
         {
@@ -4236,8 +4148,8 @@
         },
         {
           "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 95,
-          "endLine": 118,
+          "startLine": 108,
+          "endLine": 131,
           "tokens": 122
         },
         {
@@ -4329,18 +4241,6 @@
           "file": "apps/pod-manager/src/lib/notes.ts",
           "startLine": 62,
           "endLine": 79,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 111,
-          "endLine": 128,
-          "tokens": 120
-        },
-        {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 122,
-          "endLine": 139,
           "tokens": 120
         },
         {
@@ -4442,12 +4342,6 @@
           "tokens": 213
         },
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 85,
-          "endLine": 119,
-          "tokens": 213
-        },
-        {
           "file": "apps/pod-manager/src/lib/profile-edit.ts",
           "startLine": 80,
           "endLine": 127,
@@ -4455,8 +4349,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 114,
-          "endLine": 131,
+          "startLine": 115,
+          "endLine": 132,
           "tokens": 121
         },
         {
@@ -4533,8 +4427,8 @@
         },
         {
           "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 96,
-          "endLine": 130,
+          "startLine": 109,
+          "endLine": 143,
           "tokens": 213
         },
         {
@@ -4618,15 +4512,9 @@
           "tokens": 120
         },
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 107,
-          "endLine": 122,
-          "tokens": 120
-        },
-        {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 119,
-          "endLine": 135,
+          "startLine": 120,
+          "endLine": 136,
           "tokens": 120
         },
         {
@@ -4648,12 +4536,6 @@
           "tokens": 120
         },
         {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 118,
-          "endLine": 133,
-          "tokens": 120
-        },
-        {
           "file": "packages/solid-agent-notify/src/task.ts",
           "startLine": 110,
           "endLine": 127,
@@ -4668,12 +4550,6 @@
           "file": "apps/pod-manager/src/lib/contacts.ts",
           "startLine": 76,
           "endLine": 101,
-          "tokens": 183
-        },
-        {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 91,
-          "endLine": 117,
           "tokens": 183
         },
         {
@@ -4696,8 +4572,8 @@
         },
         {
           "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 102,
-          "endLine": 128,
+          "startLine": 115,
+          "endLine": 141,
           "tokens": 183
         },
         {
@@ -5353,8 +5229,8 @@
       "locations": [
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 194,
-          "endLine": 210,
+          "startLine": 205,
+          "endLine": 221,
           "tokens": 137
         },
         {
@@ -5713,8 +5589,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 183,
-          "endLine": 205,
+          "startLine": 194,
+          "endLine": 216,
           "tokens": 138
         },
         {
@@ -5783,14 +5659,14 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 108,
-          "endLine": 128,
+          "startLine": 109,
+          "endLine": 129,
           "tokens": 140
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 181,
-          "endLine": 203,
+          "startLine": 192,
+          "endLine": 214,
           "tokens": 140
         },
         {
@@ -5882,8 +5758,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 192,
-          "endLine": 209,
+          "startLine": 203,
+          "endLine": 220,
           "tokens": 122
         },
         {
@@ -5946,8 +5822,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 119,
-          "endLine": 135,
+          "startLine": 120,
+          "endLine": 136,
           "tokens": 120
         },
         {
@@ -7388,8 +7264,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 186,
-          "endLine": 206,
+          "startLine": 197,
+          "endLine": 217,
           "tokens": 122
         },
         {
@@ -7457,12 +7333,6 @@
           "tokens": 224
         },
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 88,
-          "endLine": 120,
-          "tokens": 224
-        },
-        {
           "file": "apps/pod-manager/src/lib/profile-edit.ts",
           "startLine": 76,
           "endLine": 128,
@@ -7470,8 +7340,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 116,
-          "endLine": 132,
+          "startLine": 117,
+          "endLine": 133,
           "tokens": 132
         },
         {
@@ -7554,8 +7424,8 @@
         },
         {
           "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 99,
-          "endLine": 131,
+          "startLine": 112,
+          "endLine": 144,
           "tokens": 224
         },
         {
@@ -7622,12 +7492,6 @@
       "tokens": 123,
       "locations": [
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 108,
-          "endLine": 125,
-          "tokens": 123
-        },
-        {
           "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
           "startLine": 65,
           "endLine": 83,
@@ -7637,12 +7501,6 @@
           "file": "apps/suite/src/apps/photos/lib/model/album.ts",
           "startLine": 31,
           "endLine": 48,
-          "tokens": 123
-        },
-        {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 119,
-          "endLine": 136,
           "tokens": 123
         },
         {
@@ -7675,12 +7533,6 @@
           "tokens": 168
         },
         {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 89,
-          "endLine": 122,
-          "tokens": 214
-        },
-        {
           "file": "apps/pod-manager/src/lib/profile-edit.ts",
           "startLine": 77,
           "endLine": 124,
@@ -7688,8 +7540,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 117,
-          "endLine": 135,
+          "startLine": 118,
+          "endLine": 136,
           "tokens": 122
         },
         {
@@ -7736,9 +7588,9 @@
         },
         {
           "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 100,
-          "endLine": 133,
-          "tokens": 214
+          "startLine": 113,
+          "endLine": 140,
+          "tokens": 168
         },
         {
           "file": "packages/solid-agent-notify/src/task.ts",
@@ -8152,23 +8004,6 @@
           "startLine": 65,
           "endLine": 151,
           "tokens": 369
-        }
-      ]
-    },
-    "c87cb684faf5d522e5ab7d0d260955c4cb5ae7d4e3c2f91ed1856fbc78aa376a": {
-      "tokens": 160,
-      "locations": [
-        {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 76,
-          "endLine": 105,
-          "tokens": 160
-        },
-        {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 87,
-          "endLine": 116,
-          "tokens": 160
         }
       ]
     },
@@ -8992,8 +8827,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 113,
-          "endLine": 130,
+          "startLine": 114,
+          "endLine": 131,
           "tokens": 120
         },
         {
@@ -9255,8 +9090,8 @@
         },
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 110,
-          "endLine": 129,
+          "startLine": 111,
+          "endLine": 130,
           "tokens": 137
         },
         {
@@ -10220,18 +10055,6 @@
           "file": "apps/pod-manager/src/lib/notes.ts",
           "startLine": 62,
           "endLine": 82,
-          "tokens": 124
-        },
-        {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 111,
-          "endLine": 135,
-          "tokens": 124
-        },
-        {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 122,
-          "endLine": 159,
           "tokens": 124
         },
         {

@@ -9,7 +9,9 @@
  * terms); {@link buildActivity} turns it into an n3 `Store`; {@link ActivityDoc}
  * is the typed view used both to write (send) and read (inbox parse).
  */
+
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
+import type { BlankNode } from "@rdfjs/types";
 import {
   LiteralAs,
   LiteralFrom,
@@ -24,7 +26,16 @@ import { DataFactory, Store } from "n3";
 import { AS, RDF_TYPE } from "./vocabulary.js";
 
 /** AS2.0 activity verbs this package emits. (Reads accept any `as:*` type.) */
-export type ActivityType = "Announce" | "Invite" | "Offer" | "Create" | "Update" | "Add" | "Remove";
+export type ActivityType =
+  | "Announce"
+  | "Invite"
+  | "Offer"
+  | "Create"
+  | "Update"
+  | "Add"
+  | "Remove"
+  | "Accept"
+  | "Reject";
 
 /** The plain shape of a notification (no RDF terms) callers build / consume. */
 export interface ActivityNotification {
@@ -42,6 +53,8 @@ export interface ActivityNotification {
   content?: string;
   /** `as:published` — when it was sent (defaults to now on send). */
   published?: Date;
+  /** Include own-origin PROV-O attribution and generation time. */
+  provenance?: boolean;
 }
 
 /** True for an absolute http(s) URL usable as an AS2.0 IRI object/actor/target. */
@@ -130,6 +143,12 @@ export class ActivityDoc extends TermWrapper {
   set content(v: string | undefined) {
     OptionalAs.object(this, `${AS}content`, v, LiteralFrom.string);
   }
+  set attributedTo(v: string) {
+    OptionalAs.object(this, "http://www.w3.org/ns/prov#wasAttributedTo", v, NamedNodeFrom.string);
+  }
+  set generatedAt(v: Date) {
+    OptionalAs.object(this, "http://www.w3.org/ns/prov#generatedAtTime", v, LiteralFrom.dateTime);
+  }
   get published(): Date | undefined {
     return OptionalFrom.subjectPredicate(this, `${AS}published`, LiteralAs.date);
   }
@@ -154,13 +173,21 @@ export class ActivityDoc extends TermWrapper {
  * a type, and free-text summary/content. We never sweep in arbitrary internal pod
  * URLs, so a notification cannot exfiltrate private resource locations.
  *
- * @throws TypeError if `subject` is neither a safe `#`-fragment nor an http(s) IRI.
+ * A supplied RDF/JS BlankNode keeps the dataset independent of the receiver URL
+ * when serializing it as either Turtle or JSON-LD.
+ *
+ * @throws TypeError if a string `subject` is neither a safe `#`-fragment nor an http(s) IRI.
  */
-export function buildActivity(notification: ActivityNotification, subject = "#it"): Store {
+export function buildActivity(
+  notification: ActivityNotification,
+  subject: string | BlankNode = "#it",
+): Store {
   const store = new Store();
-  const doc = new ActivityDoc(safeSubjectIri(subject), store, DataFactory).setType(
-    notification.type,
-  );
+  const doc = new ActivityDoc(
+    typeof subject === "string" ? DataFactory.namedNode(safeSubjectIri(subject)) : subject,
+    store,
+    DataFactory,
+  ).setType(notification.type);
   // Object-position IRIs: canonicalise (Turtle IRI-injection guard) and DROP the
   // triple when the value is not a safe http(s) IRI — never write a raw string.
   doc.actor = safeHttpIri(notification.actor);
@@ -169,6 +196,10 @@ export function buildActivity(notification: ActivityNotification, subject = "#it
   doc.summary = notification.summary?.trim() || undefined;
   doc.content = notification.content?.trim() || undefined;
   doc.published = notification.published ?? new Date();
+  if (notification.provenance) {
+    doc.attributedTo = notification.actor;
+    doc.generatedAt = doc.published as Date;
+  }
   return store;
 }
 

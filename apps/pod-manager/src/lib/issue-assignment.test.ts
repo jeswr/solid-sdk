@@ -1,12 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { describe, expect, it, vi } from "vitest";
-import { fetchRdf } from "@jeswr/fetch-rdf";
+
+import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import { NamedNodeFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { buildIssue, IssueAssignmentAnnouncer, IssueDoc, issuesStore, type Issue } from "./issues.js";
-import { ActivityDoc } from "./notify-send.js";
-import { serializeTurtle } from "./pod-data.js";
+import { describe, expect, it, vi } from "vitest";
 import {
   InvalidTargetError,
   ItemReadError,
@@ -14,16 +12,23 @@ import {
   NotificationSendError,
   ResourceWriteError,
 } from "./errors.js";
+import {
+  buildIssue,
+  type Issue,
+  IssueAssignmentAnnouncer,
+  IssueDoc,
+  issuesStore,
+} from "./issues.js";
+import { serializeTurtle } from "./pod-data.js";
 import type { StoredItem } from "./productivity-store.js";
 
-const ACTOR = "https://alice.example/profile/card#me";
+const ACTOR = "https://8.8.8.8/profile/card#me";
 const REPORTER = "https://reporter.example/profile/card#me";
-const RECIPIENT = "https://bob.example/profile/card#me";
-const PROFILE = "https://bob.example/profile/card";
-const INBOX = "https://bob.example/inbox/";
-const POD = "https://alice.example/";
+const RECIPIENT = "https://8.8.4.4/profile/card#me";
+const PROFILE = "https://8.8.4.4/profile/card";
+const INBOX = "https://8.8.4.4/inbox/";
+const POD = "https://8.8.8.8/";
 const ISSUE = `${POD}issues/repair.ttl`;
-const AS = "https://www.w3.org/ns/activitystreams#";
 
 class InboxProfile extends TermWrapper {
   set inbox(value: string | undefined) {
@@ -39,12 +44,14 @@ function previous(assignee?: string, url = ISSUE): StoredItem<Issue> {
   return { url, etag: '"v1"', data: { title: "Repair a hinge", state: "open", assignee } };
 }
 
-async function harness(opts: {
-  inbox?: string;
-  postStatus?: number;
-  putStatus?: number;
-  profileResponse?: Promise<Response>;
-} = {}) {
+async function harness(
+  opts: {
+    inbox?: string;
+    postStatus?: number;
+    putStatus?: number;
+    profileResponse?: Promise<Response>;
+  } = {},
+) {
   const dataset = new Store();
   new InboxProfile(RECIPIENT, dataset, DataFactory).inbox = (opts.inbox ?? INBOX) || undefined;
   const profile = await serializeTurtle(dataset);
@@ -53,9 +60,15 @@ async function harness(opts: {
     // IssuesStore.update reads the stored creator before its conditional PUT
     // (sst-kfx.1); keep that read on the real RDF parsing path.
     if (url.startsWith(`${POD}issues/`) && (init?.method ?? "GET") === "GET") {
-      return turtle(await serializeTurtle(buildIssue(url, {
-        ...previous().data, creator: REPORTER,
-      })), '"v1"');
+      return turtle(
+        await serializeTurtle(
+          buildIssue(url, {
+            ...previous().data,
+            creator: REPORTER,
+          }),
+        ),
+        '"v1"',
+      );
     }
     if (url.startsWith(`${POD}issues/`) && init?.method === "PUT") {
       return new Response(null, { status: opts.putStatus ?? 205, headers: { etag: '"v2"' } });
@@ -83,34 +96,41 @@ describe("user issue assignment announcements", () => {
       assignee: RECIPIENT,
       creator: ACTOR,
     };
-    await expect(
-      h.announcer.updateFromUser(h.store, previous(ACTOR), issue),
-    ).resolves.toEqual({ etag: '"v2"' });
+    await expect(h.announcer.updateFromUser(h.store, previous(ACTOR), issue)).resolves.toEqual({
+      etag: '"v2"',
+    });
     await vi.waitFor(() => expect(h.posts()).toHaveLength(1));
     const [input, init] = h.posts()[0];
     expect(String(input)).toBe(INBOX);
     expect(init?.redirect).toBe("manual");
     expect(new Headers(init?.headers).get("content-type")).toBe("text/turtle");
-    expect(h.fetchImpl.mock.calls.map(([url, request]) => [String(url), request?.method ?? "GET"]))
-      .toEqual([[ISSUE, "GET"], [ISSUE, "PUT"], [PROFILE, "GET"], [INBOX, "POST"]]);
+    expect(
+      h.fetchImpl.mock.calls.map(([url, request]) => [String(url), request?.method ?? "GET"]),
+    ).toEqual([
+      [ISSUE, "GET"],
+      [ISSUE, "PUT"],
+      [PROFILE, "GET"],
+      [INBOX, "POST"],
+    ]);
     const put = h.fetchImpl.mock.calls[1][1];
     expect(new Headers(put?.headers).get("if-match")).toBe('"v1"');
     const { dataset: saved } = await fetchRdf(ISSUE, {
       fetch: vi.fn<typeof fetch>(async () => turtle(String(put?.body))),
     });
     expect(new IssueDoc(`${ISSUE}#it`, saved, DataFactory).creator).toBe(REPORTER);
-    const { dataset } = await fetchRdf(`${INBOX}notification.ttl`, {
-      fetch: vi.fn<typeof fetch>(async () => turtle(String(init?.body))),
-    });
-    const activity = new ActivityDoc(`${INBOX}notification.ttl#it`, dataset, DataFactory);
-    expect([...activity.types]).toEqual([`${AS}Announce`]);
-    expect(activity.actor).toBe(ACTOR);
-    expect(activity.activityObject).toBe(`${ISSUE}#it`);
-    expect(activity.target).toBe(RECIPIENT);
-    expect(activity.summary).toBe('You were assigned to "Repair "a hinge""');
-    expect(activity.content).toBeUndefined();
-    expect(activity.published).toBeInstanceOf(Date);
-    expect(dataset.size).toBe(6);
+    const ds = await parseRdf(String(init?.body), "text/turtle", { baseIRI: `${INBOX}n` });
+    const values = [...ds].map((q) => [q.predicate.value, q.object.value]);
+    expect(values).toEqual(
+      expect.arrayContaining([
+        ["https://www.w3.org/ns/activitystreams#actor", ACTOR],
+        ["https://www.w3.org/ns/activitystreams#object", `${ISSUE}#it`],
+        ["https://www.w3.org/ns/activitystreams#target", RECIPIENT],
+        [
+          "https://www.w3.org/ns/activitystreams#summary",
+          'You were assigned to "Repair "a hinge""',
+        ],
+      ]),
+    );
     expect(String(init?.body)).not.toContain(issue.description);
     expect(h.onError).not.toHaveBeenCalled();
   });
@@ -124,7 +144,8 @@ describe("user issue assignment announcements", () => {
   ])("keeps $name silent", async ({ before, after }) => {
     const h = await harness();
     await h.announcer.updateFromUser(h.store, previous(before), {
-      ...previous().data, assignee: after,
+      ...previous().data,
+      assignee: after,
     });
     expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
     expect(h.onError).not.toHaveBeenCalled();
@@ -143,12 +164,16 @@ describe("user issue assignment announcements", () => {
 
   it("reserves the pair while inbox delivery is still pending", async () => {
     let release!: (response: Response) => void;
-    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    const pending = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
     const h = await harness({ profileResponse: pending });
     const issue = { ...previous().data, assignee: RECIPIENT };
     await h.announcer.updateFromUser(h.store, previous(), issue);
     await h.announcer.updateFromUser(h.store, previous(), issue);
-    expect(h.fetchImpl.mock.calls.filter(([url]) => String(url) === PROFILE)).toHaveLength(1);
+    await vi.waitFor(() =>
+      expect(h.fetchImpl.mock.calls.filter(([url]) => String(url) === PROFILE)).toHaveLength(1),
+    );
     expect(h.fetchImpl.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(2);
     expect(h.posts()).toHaveLength(0);
     release(turtle(h.profile));
@@ -165,12 +190,18 @@ describe("user issue assignment announcements", () => {
 
   it("does not fail the edit when POST fails and reports the failure", async () => {
     const h = await harness({ postStatus: 403 });
-    await expect(h.announcer.updateFromUser(h.store, previous(), {
-      ...previous().data, assignee: RECIPIENT,
-    })).resolves.toEqual({ etag: '"v2"' });
-    await vi.waitFor(() => expect(h.onError).toHaveBeenCalledWith(
-      "Couldn't notify the assignee.", expect.any(NotificationSendError),
-    ));
+    await expect(
+      h.announcer.updateFromUser(h.store, previous(), {
+        ...previous().data,
+        assignee: RECIPIENT,
+      }),
+    ).resolves.toEqual({ etag: '"v2"' });
+    await vi.waitFor(() =>
+      expect(h.onError).toHaveBeenCalledWith(
+        "Couldn't notify the assignee.",
+        expect.any(NotificationSendError),
+      ),
+    );
     expect(h.posts()).toHaveLength(1);
   });
 
@@ -187,10 +218,15 @@ describe("user issue assignment announcements", () => {
 
   it("contains a throwing error hook without failing the edit", async () => {
     const h = await harness({ postStatus: 403 });
-    h.onError.mockImplementation(() => { throw new Error("Reporting failed"); });
-    await expect(h.announcer.updateFromUser(h.store, previous(), {
-      ...previous().data, assignee: RECIPIENT,
-    })).resolves.toEqual({ etag: '"v2"' });
+    h.onError.mockImplementation(() => {
+      throw new Error("Reporting failed");
+    });
+    await expect(
+      h.announcer.updateFromUser(h.store, previous(), {
+        ...previous().data,
+        assignee: RECIPIENT,
+      }),
+    ).resolves.toEqual({ etag: '"v2"' });
     await vi.waitFor(() => expect(h.onError).toHaveBeenCalled());
   });
 
@@ -199,19 +235,23 @@ describe("user issue assignment announcements", () => {
     { name: "missing inbox", inbox: "", error: NoInboxError },
   ])("sends nothing after $name discovery refusal", async ({ inbox, error }) => {
     const h = await harness({ inbox });
-    await expect(h.announcer.updateFromUser(h.store, previous(), {
-      ...previous().data, assignee: RECIPIENT,
-    })).resolves.toEqual({ etag: '"v2"' });
-    await vi.waitFor(() => expect(h.onError).toHaveBeenCalledWith(
-      "Couldn't notify the assignee.", expect.any(error),
-    ));
+    await expect(
+      h.announcer.updateFromUser(h.store, previous(), {
+        ...previous().data,
+        assignee: RECIPIENT,
+      }),
+    ).resolves.toEqual({ etag: '"v2"' });
+    await vi.waitFor(() =>
+      expect(h.onError).toHaveBeenCalledWith("Couldn't notify the assignee.", expect.any(error)),
+    );
     expect(h.posts()).toHaveLength(0);
   });
 
   it("does not fetch an unsafe assignee profile", async () => {
     const h = await harness();
     await h.announcer.updateFromUser(h.store, previous(), {
-      ...previous().data, assignee: "https://127.0.0.1/profile#me",
+      ...previous().data,
+      assignee: "https://127.0.0.1/profile#me",
     });
     await vi.waitFor(() => expect(h.onError).toHaveBeenCalled());
     expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
@@ -219,9 +259,12 @@ describe("user issue assignment announcements", () => {
 
   it("does not announce a rejected issue write", async () => {
     const h = await harness({ putStatus: 412 });
-    await expect(h.announcer.updateFromUser(h.store, previous(), {
-      ...previous().data, assignee: RECIPIENT,
-    })).rejects.toBeInstanceOf(ResourceWriteError);
+    await expect(
+      h.announcer.updateFromUser(h.store, previous(), {
+        ...previous().data,
+        assignee: RECIPIENT,
+      }),
+    ).rejects.toBeInstanceOf(ResourceWriteError);
     expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
     expect(h.onError).not.toHaveBeenCalled();
   });
@@ -229,9 +272,12 @@ describe("user issue assignment announcements", () => {
   it("does not write or announce when the creator-preserving read fails", async () => {
     const h = await harness();
     h.fetchImpl.mockResolvedValueOnce(new Response(null, { status: 403 }));
-    await expect(h.announcer.updateFromUser(h.store, previous(), {
-      ...previous().data, assignee: RECIPIENT,
-    })).rejects.toBeInstanceOf(ItemReadError);
+    await expect(
+      h.announcer.updateFromUser(h.store, previous(), {
+        ...previous().data,
+        assignee: RECIPIENT,
+      }),
+    ).rejects.toBeInstanceOf(ItemReadError);
     expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET"]);
     expect(h.onError).not.toHaveBeenCalled();
   });
