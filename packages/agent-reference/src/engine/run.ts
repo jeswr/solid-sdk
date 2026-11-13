@@ -2714,11 +2714,14 @@ async function runPath(
         path === "main"
           ? scenario.title
           : `${scenario.title}: ${required(scenario.branches.find((b) => b.id === path)).what}`,
-      steps:
-        scenario.traceSteps ??
-        Object.fromEntries(
-          scenario.script.map((step, i) => [String(step.atStep ?? i + 1), step.id]),
-        ),
+      steps: Object.fromEntries(
+        Object.entries(
+          scenario.traceSteps ??
+            Object.fromEntries(
+              scenario.script.map((step, i) => [String(step.atStep ?? i + 1), step.id]),
+            ),
+        ).map(([id, caption]) => [id, /[.!?]$/.test(caption) ? caption : `${caption}.`]),
+      ),
     },
     configuration: { id: configuration.id, layers: { ...configuration.layers } },
     agents: [

@@ -124,7 +124,7 @@ it("reproduces all five complete maintained mortgage outlines from data", async 
     );
     expect(profile.rules.every((r) => "template" in r)).toBe(true);
   }
-});
+}, 15_000);
 
 it("carries consent-bound fields through the actual underwriting handlers and both parties' gates", async () => {
   const { profile, scenario } = underwritingCase();

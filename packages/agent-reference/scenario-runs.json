@@ -3,6 +3,1886 @@
   "schema": "agent-scenario-runs/0.1",
   "paths": [
     {
+      "scenario": "age-check",
+      "useCase": "age-check",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "blocked",
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+    },
+    {
+      "scenario": "age-check",
+      "useCase": "age-check",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The merchant asks for the identity document itself",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "excessive-scope"
+      },
+      "consequences": [],
+      "trace": "age-check--branch-1--baseline.json"
+    },
+    {
+      "scenario": "agent-handoff",
+      "useCase": "agent-handoff",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "consequences": [],
+      "trace": "agent-handoff--baseline.json"
+    },
+    {
+      "scenario": "agent-handoff",
+      "useCase": "agent-handoff",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The partner's agent uses the address for marketing",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "prohibited"
+      },
+      "consequences": [],
+      "trace": "agent-handoff--branch-1--baseline.json"
+    },
+    {
+      "scenario": "agent-handoff",
+      "useCase": "agent-handoff",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "The handoff passes on more than the retailer holds",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "representation-out-of-scope",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "representation-out-of-scope"
+      },
+      "consequences": [
+        {
+          "seq": 31,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "agent-handoff--branch-2--baseline.json"
+    },
+    {
+      "scenario": "benefit-claim",
+      "useCase": "benefit-claim",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "go",
+        "reason": "evidence-complete",
+        "check": "evidence"
+      },
+      "consequences": [],
+      "trace": "benefit-claim--baseline.json"
+    },
+    {
+      "scenario": "benefit-claim",
+      "useCase": "benefit-claim",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "Household composition is self-reported only",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "method-not-accepted",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "method-not-accepted"
+      },
+      "consequences": [
+        {
+          "seq": 29,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 37,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 41,
+          "agent": "owner-agent",
+          "outcome": "stop",
+          "reason": "method-not-accepted"
+        }
+      ],
+      "trace": "benefit-claim--branch-1--baseline.json"
+    },
+    {
+      "scenario": "cancel-subscription",
+      "useCase": "cancel-subscription",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "go",
+        "reason": "within-limits",
+        "check": "limits-approval"
+      },
+      "consequences": [],
+      "trace": "cancel-subscription--baseline.json"
+    },
+    {
+      "scenario": "cancel-subscription",
+      "useCase": "cancel-subscription",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The service offers three months free to stay",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "mandate"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "not-authorised"
+      },
+      "consequences": [],
+      "trace": "cancel-subscription--branch-1--baseline.json"
+    },
+    {
+      "scenario": "care-abroad",
+      "useCase": "care-abroad",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "care-abroad--baseline.json"
+    },
+    {
+      "scenario": "care-abroad",
+      "useCase": "care-abroad",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "No mapping exists for a medicine",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "unsupported-term",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "unsupported-term"
+      },
+      "consequences": [],
+      "trace": "care-abroad--branch-1--baseline.json"
+    },
+    {
+      "scenario": "carer-acts-for-parent",
+      "useCase": "carer-acts-for-parent",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "consequences": [],
+      "trace": "carer-acts-for-parent--baseline.json"
+    },
+    {
+      "scenario": "carer-acts-for-parent",
+      "useCase": "carer-acts-for-parent",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The agent tries to change where the father lives, outside the power",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "representation-out-of-scope",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "representation-out-of-scope"
+      },
+      "consequences": [
+        {
+          "seq": 22,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "carer-acts-for-parent--branch-1--baseline.json"
+    },
+    {
+      "scenario": "carer-acts-for-parent",
+      "useCase": "carer-acts-for-parent",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "The power is revoked",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "mandate-withdrawn",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "mandate-withdrawn"
+      },
+      "consequences": [
+        {
+          "seq": 22,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "carer-acts-for-parent--branch-2--baseline.json"
+    },
+    {
+      "scenario": "change-of-address",
+      "useCase": "change-of-address",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "go",
+        "reason": "evidence-complete",
+        "check": "evidence"
+      },
+      "consequences": [],
+      "trace": "change-of-address--baseline.json"
+    },
+    {
+      "scenario": "change-of-address",
+      "useCase": "change-of-address",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "A recipient the person never dealt with is on the list",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "trace": "change-of-address--branch-1--baseline.json"
+    },
+    {
+      "scenario": "cohort-count",
+      "useCase": "cohort-count",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "cohort-count--baseline.json",
+      "traceSha256": "b200cbbad61550487de130bca77cf54483884a63153ee85cc9e10df9b8f59059",
+      "recordedWith": {
+        "method": "sparq-aggregate/1",
+        "package": "sparq-verifiable-aggregate",
+        "commit": "61989f5",
+        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+        "notice": "Research-grade and unaudited."
+      }
+    },
+    {
+      "scenario": "cohort-count",
+      "useCase": "cohort-count",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The result would cover fewer than the minimum number of patients",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "prohibited"
+      },
+      "consequences": [
+        {
+          "seq": 932,
+          "agent": "computer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 942,
+          "agent": "requester-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "cohort-count--branch-1--baseline.json",
+      "traceSha256": "31c60cec27152496552ff65f9569aaacaa97af9ca5e5c72de5e229b4982284c7",
+      "recordedWith": {
+        "method": "sparq-aggregate/1",
+        "package": "sparq-verifiable-aggregate",
+        "commit": "61989f5",
+        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+        "notice": "Research-grade and unaudited."
+      }
+    },
+    {
+      "scenario": "cohort-count",
+      "useCase": "cohort-count",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "One hospital does not attest its input",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "derivation-not-verified",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "derivation-not-verified"
+      },
+      "consequences": [],
+      "trace": "cohort-count--branch-2--baseline.json",
+      "traceSha256": "9efd88df390bb65917acd0a8f41e6f83fa4cc0d9ab8275b00a67961913e90534",
+      "recordedWith": {
+        "method": "sparq-aggregate/1",
+        "package": "sparq-verifiable-aggregate",
+        "commit": "61989f5",
+        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+        "notice": "Research-grade and unaudited."
+      }
+    },
+    {
+      "scenario": "consent-for-a-child",
+      "useCase": "consent-for-a-child",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "consequences": [],
+      "trace": "consent-for-a-child--baseline.json"
+    },
+    {
+      "scenario": "consent-for-a-child",
+      "useCase": "consent-for-a-child",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The second parent has objected",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "trace": "consent-for-a-child--branch-1--baseline.json"
+    },
+    {
+      "scenario": "content-licence",
+      "useCase": "content-licence",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "authority-valid"
+      },
+      "consequences": [],
+      "trace": "content-licence--baseline.json"
+    },
+    {
+      "scenario": "content-licence",
+      "useCase": "content-licence",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The publisher's agent would pass the image to a sister company",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "prohibited"
+      },
+      "consequences": [],
+      "trace": "content-licence--branch-1--baseline.json"
+    },
+    {
+      "scenario": "contract-wording",
+      "useCase": "contract-wording",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "context-not-clear",
+        "check": "data-terms"
+      },
+      "consequences": [
+        {
+          "seq": 56,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 64,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 74,
+          "agent": "receiver-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        }
+      ],
+      "trace": "contract-wording--baseline.json"
+    },
+    {
+      "scenario": "contract-wording",
+      "useCase": "contract-wording",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "An agent accepts a clause its principal's policy does not cover",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "contract-wording--branch-1--baseline.json"
+    },
+    {
+      "scenario": "credit-file-dispute",
+      "useCase": "credit-file-dispute",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "consequences": [],
+      "trace": "credit-file-dispute--baseline.json"
+    },
+    {
+      "scenario": "credit-file-dispute",
+      "useCase": "credit-file-dispute",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The agency does not answer by its deadline",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "no-agreement",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "no-agreement"
+      },
+      "consequences": [],
+      "trace": "credit-file-dispute--branch-1--baseline.json"
+    },
+    {
+      "scenario": "cross-department-request",
+      "useCase": "cross-department-request",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "go",
+        "reason": "evidence-complete",
+        "check": "evidence"
+      },
+      "consequences": [],
+      "trace": "cross-department-request--baseline.json"
+    },
+    {
+      "scenario": "cross-department-request",
+      "useCase": "cross-department-request",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The request would reveal one named person's salary",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "excessive-scope"
+      },
+      "consequences": [],
+      "trace": "cross-department-request--branch-1--baseline.json"
+    },
+    {
+      "scenario": "degree-recognition",
+      "useCase": "degree-recognition",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "blocked",
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+    },
+    {
+      "scenario": "degree-recognition",
+      "useCase": "degree-recognition",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "No chain links the two national registers",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "source-unknown",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "source-unknown"
+      },
+      "consequences": [],
+      "trace": "degree-recognition--branch-1--baseline.json"
+    },
+    {
+      "scenario": "discharge-letter",
+      "useCase": "discharge-letter",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "structured-form-required",
+        "check": "fitness"
+      },
+      "consequences": [
+        {
+          "seq": 49,
+          "agent": "practice-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 57,
+          "agent": "hospital-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 64,
+          "agent": "hospital-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 72,
+          "agent": "practice-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 79,
+          "agent": "practice-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 84,
+          "agent": "practice-agent",
+          "outcome": "ask-more",
+          "reason": "structured-form-required"
+        }
+      ],
+      "trace": "discharge-letter--baseline.json"
+    },
+    {
+      "scenario": "discharge-letter",
+      "useCase": "discharge-letter",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "An agent turns \"cannot be ruled out\" into a coded diagnosis",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "method-not-accepted",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "method-not-accepted"
+      },
+      "consequences": [],
+      "trace": "discharge-letter--branch-1--baseline.json"
+    },
+    {
+      "scenario": "disruption-rebooking",
+      "useCase": "disruption-rebooking",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "go",
+        "reason": "within-limits",
+        "check": "limits-approval"
+      },
+      "consequences": [],
+      "trace": "disruption-rebooking--baseline.json"
+    },
+    {
+      "scenario": "disruption-rebooking",
+      "useCase": "disruption-rebooking",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The only alternative costs more than the pre-agreed margin",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "limit-exceeded",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "limit-exceeded"
+      },
+      "consequences": [],
+      "trace": "disruption-rebooking--branch-1--baseline.json"
+    },
+    {
+      "scenario": "emergency-access",
+      "useCase": "emergency-access",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "consequences": [],
+      "trace": "emergency-access--baseline.json"
+    },
+    {
+      "scenario": "emergency-access",
+      "useCase": "emergency-access",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The request comes from a registered clinician with an emergency flag",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "go",
+        "reason": "source-accepted",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "go",
+        "reason": "source-accepted"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "emergency-access--branch-1--baseline.json"
+    },
+    {
+      "scenario": "emergency-access",
+      "useCase": "emergency-access",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "The same flag is used by someone not on the register",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "source-unknown",
+        "check": "mandate"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "source-unknown"
+      },
+      "consequences": [],
+      "trace": "emergency-access--branch-2--baseline.json"
+    },
+    {
+      "scenario": "employment-reference",
+      "useCase": "employment-reference",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "context-not-clear",
+        "check": "data-terms"
+      },
+      "consequences": [
+        {
+          "seq": 56,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 64,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 74,
+          "agent": "receiver-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        }
+      ],
+      "trace": "employment-reference--baseline.json"
+    },
+    {
+      "scenario": "employment-reference",
+      "useCase": "employment-reference",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "An agent scores the reference and rejects the candidate on the score",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "employment-reference--branch-1--baseline.json"
+    },
+    {
+      "scenario": "energy-switch",
+      "useCase": "energy-switch",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "authority-valid"
+      },
+      "consequences": [],
+      "trace": "energy-switch--baseline.json"
+    },
+    {
+      "scenario": "energy-switch",
+      "useCase": "energy-switch",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "A supplier asks for half-hourly data to quote",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "excessive-scope"
+      },
+      "consequences": [],
+      "trace": "energy-switch--branch-1--baseline.json"
+    },
+    {
+      "scenario": "erasure-request",
+      "useCase": "erasure-request",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "consequences": [],
+      "trace": "erasure-request--baseline.json"
+    },
+    {
+      "scenario": "erasure-request",
+      "useCase": "erasure-request",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The company passed the data on with no duty to inform",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "no-agreement",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "no-agreement"
+      },
+      "consequences": [
+        {
+          "seq": 201,
+          "agent": "subject-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "erasure-request--branch-1--baseline.json"
+    },
+    {
+      "scenario": "expenses",
+      "useCase": "expenses",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "go",
+        "reason": "evidence-complete",
+        "check": "evidence"
+      },
+      "consequences": [],
+      "trace": "expenses--baseline.json"
+    },
+    {
+      "scenario": "expenses",
+      "useCase": "expenses",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "A meal is above the policy limit",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "limit-exceeded",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "limit-exceeded"
+      },
+      "consequences": [],
+      "trace": "expenses--branch-1--baseline.json"
+    },
+    {
+      "scenario": "false-but-signed",
+      "useCase": "false-but-signed",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "completeness-not-established",
+        "check": "fitness"
+      },
+      "consequences": [
+        {
+          "seq": 14,
+          "agent": "lender-agent",
+          "outcome": "ask-more",
+          "reason": "completeness-not-established"
+        }
+      ],
+      "trace": "false-but-signed--baseline.json"
+    },
+    {
+      "scenario": "false-but-signed",
+      "useCase": "false-but-signed",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "Nothing fails",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "go",
+        "reason": "source-accepted",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "go",
+        "reason": "source-accepted"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "false-but-signed--branch-1--baseline.json"
+    },
+    {
+      "scenario": "fee-dispute",
+      "useCase": "fee-dispute",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 64,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 76,
+          "agent": "lender-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 84,
+          "agent": "lender-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 90,
+          "agent": "forum",
+          "outcome": "admit",
+          "reason": "not-authorised"
+        },
+        {
+          "seq": 96,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "fee-dispute--baseline.json"
+    },
+    {
+      "scenario": "fee-dispute",
+      "useCase": "fee-dispute",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The lender's record has a gap",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "record-unavailable",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "record-unavailable"
+      },
+      "consequences": [
+        {
+          "seq": 96,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "fee-dispute--branch-1--baseline.json"
+    },
+    {
+      "scenario": "find-a-time",
+      "useCase": "find-a-time",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "find-a-time--baseline.json"
+    },
+    {
+      "scenario": "find-a-time",
+      "useCase": "find-a-time",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "One agent asks why the other person is busy on Tuesday",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "excessive-scope"
+      },
+      "consequences": [],
+      "trace": "find-a-time--branch-1--baseline.json"
+    },
+    {
+      "scenario": "fit-note-to-employer",
+      "useCase": "fit-note-to-employer",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "go",
+        "reason": "evidence-complete",
+        "check": "evidence"
+      },
+      "consequences": [],
+      "trace": "fit-note-to-employer--baseline.json"
+    },
+    {
+      "scenario": "fit-note-to-employer",
+      "useCase": "fit-note-to-employer",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The employer's agent asks what the condition is",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "excessive-scope"
+      },
+      "consequences": [],
+      "trace": "fit-note-to-employer--branch-1--baseline.json"
+    },
+    {
+      "scenario": "flat-share",
+      "useCase": "flat-share",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "source-unknown",
+        "check": "source"
+      },
+      "consequences": [
+        {
+          "seq": 22,
+          "agent": "blair-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 30,
+          "agent": "blair-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 38,
+          "agent": "alex-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "flat-share--baseline.json"
+    },
+    {
+      "scenario": "flat-share",
+      "useCase": "flat-share",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "One side's identity cannot be tied to any source the other accepts",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "source-unknown",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "source-unknown"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "flat-share--branch-1--baseline.json"
+    },
+    {
+      "scenario": "hardship-request",
+      "useCase": "hardship-request",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 46,
+          "agent": "owner-agent",
+          "outcome": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "seq": 64,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 72,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 82,
+          "agent": "receiver-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        }
+      ],
+      "trace": "hardship-request--baseline.json"
+    },
+    {
+      "scenario": "hardship-request",
+      "useCase": "hardship-request",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The agent would send a diagnosis to explain the request",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "hardship-request--branch-1--baseline.json"
+    },
+    {
+      "scenario": "health-referral",
+      "useCase": "health-referral",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 31,
+          "agent": "practice-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 39,
+          "agent": "clinic-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 45,
+          "agent": "clinic-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "health-referral--baseline.json"
+    },
+    {
+      "scenario": "health-referral",
+      "useCase": "health-referral",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The clinic asks for the full record",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "health-referral--branch-1--baseline.json"
+    },
+    {
+      "scenario": "health-referral",
+      "useCase": "health-referral",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "The referrer is not on the professional register",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "source-unknown",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "source-unknown"
+      },
+      "consequences": [
+        {
+          "seq": 8,
+          "agent": "practice-agent",
+          "outcome": "stop",
+          "reason": "source-unknown"
+        }
+      ],
+      "trace": "health-referral--branch-2--baseline.json"
+    },
+    {
+      "scenario": "home-purchase",
+      "useCase": "home-purchase",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "authority-valid",
+        "check": "authority"
+      },
+      "consequences": [],
+      "trace": "home-purchase--baseline.json"
+    },
+    {
+      "scenario": "home-purchase",
+      "useCase": "home-purchase",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "A message gives a new account for the deposit",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "source-not-authoritative",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "source-not-authoritative"
+      },
+      "consequences": [
+        {
+          "seq": 8,
+          "agent": "owner-agent",
+          "outcome": "stop",
+          "reason": "source-not-authoritative"
+        }
+      ],
+      "trace": "home-purchase--branch-1--baseline.json"
+    },
+    {
+      "scenario": "home-purchase",
+      "useCase": "home-purchase",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "The seller is not the registered owner",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "source-not-authoritative",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "source-not-authoritative"
+      },
+      "consequences": [
+        {
+          "seq": 8,
+          "agent": "owner-agent",
+          "outcome": "stop",
+          "reason": "source-not-authoritative"
+        }
+      ],
+      "trace": "home-purchase--branch-2--baseline.json"
+    },
+    {
+      "scenario": "incident-notice",
+      "useCase": "incident-notice",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "consequences": [],
+      "trace": "incident-notice--baseline.json"
+    },
+    {
+      "scenario": "incident-notice",
+      "useCase": "incident-notice",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "A customer's agent does not acknowledge receipt",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "result-uncertain",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "result-uncertain"
+      },
+      "consequences": [],
+      "trace": "incident-notice--branch-1--baseline.json"
+    },
+    {
+      "scenario": "insurance-claim-photos",
+      "useCase": "insurance-claim-photos",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "context-not-clear",
+        "check": "data-terms"
+      },
+      "consequences": [
+        {
+          "seq": 86,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 100,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 114,
+          "agent": "receiver-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        }
+      ],
+      "trace": "insurance-claim-photos--baseline.json"
+    },
+    {
+      "scenario": "insurance-claim-photos",
+      "useCase": "insurance-claim-photos",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The insurer's model reads the photo as minor damage; the garage says otherwise",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "structured-form-required",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "structured-form-required"
+      },
+      "consequences": [],
+      "trace": "insurance-claim-photos--branch-1--baseline.json"
+    },
+    {
+      "scenario": "insurance-claim-photos",
+      "useCase": "insurance-claim-photos",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "The estimate is from a garage the insurer does not accept",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "source-not-authoritative",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "source-not-authoritative"
+      },
+      "consequences": [
+        {
+          "seq": 105,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 110,
+          "agent": "receiver-agent",
+          "outcome": "stop",
+          "reason": "source-not-authoritative"
+        }
+      ],
+      "trace": "insurance-claim-photos--branch-2--baseline.json"
+    },
+    {
+      "scenario": "insurance-quote",
+      "useCase": "insurance-quote",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "blocked",
+      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
+    },
+    {
+      "scenario": "insurance-quote",
+      "useCase": "insurance-quote",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "An insurer's agent asks for date of birth and full address before quoting",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "excessive-scope"
+      },
+      "consequences": [],
+      "trace": "insurance-quote--branch-1--baseline.json"
+    },
+    {
+      "scenario": "insurance-quote",
+      "useCase": "insurance-quote",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "No register can state completeness",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "completeness-not-established",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "completeness-not-established"
+      },
+      "consequences": [],
+      "trace": "insurance-quote--branch-2--baseline.json"
+    },
+    {
+      "scenario": "introduction",
+      "useCase": "introduction",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "blocked",
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+    },
+    {
+      "scenario": "introduction",
+      "useCase": "introduction",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "One side can show only a self-made profile",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "method-not-accepted",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "method-not-accepted"
+      },
+      "consequences": [],
+      "trace": "introduction--branch-1--baseline.json"
+    },
+    {
+      "scenario": "invoice-finance",
+      "useCase": "invoice-finance",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "consequences": [],
+      "trace": "invoice-finance--baseline.json"
+    },
+    {
+      "scenario": "invoice-finance",
+      "useCase": "invoice-finance",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The same invoice is offered to a second financier",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "status-withdrawn",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "status-withdrawn"
+      },
+      "consequences": [],
+      "trace": "invoice-finance--branch-1--baseline.json"
+    },
+    {
+      "scenario": "joint-mortgage",
+      "useCase": "joint-mortgage",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "authority-valid",
+        "check": "authority"
+      },
+      "consequences": [],
+      "trace": "joint-mortgage--baseline.json"
+    },
+    {
+      "scenario": "joint-mortgage",
+      "useCase": "joint-mortgage",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "One applicant withdraws their mandate mid-way",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "mandate-withdrawn",
+        "check": "mandate"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "mandate-withdrawn"
+      },
+      "consequences": [],
+      "trace": "joint-mortgage--branch-1--baseline.json"
+    },
+    {
+      "scenario": "joint-mortgage",
+      "useCase": "joint-mortgage",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "One agent tries to send the other applicant's payslip",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "prohibited"
+      },
+      "consequences": [],
+      "trace": "joint-mortgage--branch-2--baseline.json"
+    },
+    {
+      "scenario": "master-data-change",
+      "useCase": "master-data-change",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 43,
+          "agent": "finance-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 59,
+          "agent": "finance-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 66,
+          "agent": "erp-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 74,
+          "agent": "erp-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 82,
+          "agent": "erp-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 90,
+          "agent": "erp-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 98,
+          "agent": "finance-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "master-data-change--baseline.json"
+    },
+    {
+      "scenario": "master-data-change",
+      "useCase": "master-data-change",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The same role requests and approves",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "not-authorised"
+      },
+      "consequences": [],
+      "trace": "master-data-change--branch-1--baseline.json"
+    },
+    {
+      "scenario": "master-data-change",
+      "useCase": "master-data-change",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "The new details come from an email",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "source-not-authoritative",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "source-not-authoritative"
+      },
+      "consequences": [
+        {
+          "seq": 10,
+          "agent": "finance-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 17,
+          "agent": "finance-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 24,
+          "agent": "finance-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 29,
+          "agent": "finance-agent",
+          "outcome": "stop",
+          "reason": "source-not-authoritative"
+        }
+      ],
+      "trace": "master-data-change--branch-2--baseline.json"
+    },
+    {
+      "scenario": "meeting-notes",
+      "useCase": "meeting-notes",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "context-not-clear",
+        "check": "data-terms"
+      },
+      "consequences": [
+        {
+          "seq": 56,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 64,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 73,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 82,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "meeting-notes--baseline.json"
+    },
+    {
+      "scenario": "meeting-notes",
+      "useCase": "meeting-notes",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The assistant commits to a date because its notes say the team agreed it",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "trace": "meeting-notes--branch-1--baseline.json"
+    },
+    {
+      "scenario": "mortgage-core",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 97,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 111,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 119,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 129,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 138,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 146,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 155,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 163,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 172,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 180,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 188,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 196,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-core--baseline.json"
+    },
+    {
+      "scenario": "mortgage-injected-fee",
+      "useCase": "mortgage-in-principle",
+      "cataloguePath": {
+        "index": 2,
+        "what": "A message tells the agent to pay a valuer"
+      },
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 97,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 111,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 119,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 129,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 138,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 146,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 155,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 163,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 172,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 180,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 188,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 196,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 199,
+          "agent": "sams-agent",
+          "outcome": "stop",
+          "reason": "not-authorised"
+        }
+      ],
+      "trace": "mortgage-injected-fee--baseline.json"
+    },
+    {
       "scenario": "mortgage-main",
       "useCase": "mortgage-in-principle",
       "path": "main",
@@ -1222,75 +3102,230 @@
       "trace": "mortgage-main--mcp-token-passed-on--transport-mcp.json"
     },
     {
-      "scenario": "shopping-agent",
-      "useCase": "shopping-agent",
+      "scenario": "mortgage-out-of-limit",
+      "useCase": "mortgage-in-principle",
+      "cataloguePath": {
+        "index": 3,
+        "what": "The offer is outside Sam's limits"
+      },
       "path": "main",
       "settlement": "rdf-order",
       "status": "runs",
       "actual": {
-        "outcome": "go",
-        "reason": "evidence-complete",
-        "check": "evidence"
-      },
-      "consequences": [],
-      "trace": "shopping-agent--baseline.json"
-    },
-    {
-      "scenario": "shopping-agent",
-      "useCase": "shopping-agent",
-      "path": "branch-1",
-      "settlement": "rdf-order",
-      "what": "Fees at checkout take the price above the budget",
-      "status": "runs",
-      "actual": {
         "outcome": "ask-principal",
         "reason": "limit-exceeded",
-        "check": "P5"
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 90,
+          "agent": "sams-agent",
+          "outcome": "stop",
+          "reason": "approval-denied"
+        },
+        {
+          "seq": 97,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 105,
+          "agent": "lender",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-out-of-limit--baseline.json"
+    },
+    {
+      "scenario": "mortgage-over-ask",
+      "useCase": "mortgage-in-principle",
+      "cataloguePath": {
+        "index": 1,
+        "what": "The lender asks for full statements"
+      },
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "mandate"
+      },
+      "consequences": [
+        {
+          "seq": 89,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 97,
+          "agent": "lender",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-over-ask--baseline.json"
+    },
+    {
+      "scenario": "no-agent-on-the-other-side",
+      "useCase": "no-agent-on-the-other-side",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 18,
+          "agent": "reader-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 22,
+          "agent": "reader-agent",
+          "outcome": "admit",
+          "reason": "fit-for-use"
+        }
+      ],
+      "trace": "no-agent-on-the-other-side--baseline.json"
+    },
+    {
+      "scenario": "no-agent-on-the-other-side",
+      "useCase": "no-agent-on-the-other-side",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The reply asks for payment details by email",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
       },
       "expected": {
         "outcome": "ask-principal",
-        "reason": "limit-exceeded"
+        "reason": "approval-required"
       },
       "consequences": [],
-      "trace": "shopping-agent--branch-1--baseline.json"
+      "trace": "no-agent-on-the-other-side--branch-1--baseline.json"
     },
     {
-      "scenario": "shopping-agent",
-      "useCase": "shopping-agent",
-      "path": "branch-2",
+      "scenario": "no-training-terms",
+      "useCase": "no-training-terms",
+      "path": "main",
       "settlement": "rdf-order",
-      "what": "A merchant's message tells the agent to pay to a different account",
       "status": "runs",
       "actual": {
-        "outcome": "stop",
-        "reason": "not-authorised",
-        "check": "P4"
+        "outcome": "ask-principal",
+        "reason": "context-not-clear",
+        "check": "data-terms"
+      },
+      "consequences": [
+        {
+          "seq": 56,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 64,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 75,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "no-training-terms--baseline.json"
+    },
+    {
+      "scenario": "no-training-terms",
+      "useCase": "no-training-terms",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The fetching agent has no rule for \"training\"",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "unsupported-term",
+        "check": "terms"
       },
       "expected": {
         "outcome": "stop",
-        "reason": "not-authorised"
+        "reason": "unsupported-term"
       },
-      "consequences": [],
-      "trace": "shopping-agent--branch-2--baseline.json"
+      "consequences": [
+        {
+          "seq": 9,
+          "agent": "receiver-agent",
+          "outcome": "stop",
+          "reason": "unsupported-term"
+        }
+      ],
+      "trace": "no-training-terms--branch-1--baseline.json"
     },
     {
-      "scenario": "shopping-agent",
-      "useCase": "shopping-agent",
-      "path": "asked-to-look-not-to-buy",
+      "scenario": "onward-leak",
+      "useCase": "onward-leak",
+      "path": "main",
       "settlement": "rdf-order",
-      "what": "The person asked only for the cheapest price; the core proposes buying.",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 76,
+          "agent": "person-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 89,
+          "agent": "owner-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 98,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 104,
+          "agent": "forum",
+          "outcome": "admit",
+          "reason": "prohibited"
+        },
+        {
+          "seq": 110,
+          "agent": "person-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "onward-leak--baseline.json"
+    },
+    {
+      "scenario": "onward-leak",
+      "useCase": "onward-leak",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "The lender's own gate, if it is used, stops the transfer",
       "status": "runs",
       "actual": {
         "outcome": "stop",
-        "reason": "not-authorised",
-        "check": "P5"
+        "reason": "prohibited",
+        "check": "data-terms"
       },
       "expected": {
         "outcome": "stop",
-        "reason": "not-authorised"
+        "reason": "prohibited"
       },
       "consequences": [],
-      "trace": "shopping-agent--asked-to-look-not-to-buy--baseline.json"
+      "trace": "onward-leak--branch-1--baseline.json"
     },
     {
       "scenario": "pay-an-invoice",
@@ -1392,2115 +3427,10 @@
       "trace": "pay-an-invoice--branch-2--baseline.json"
     },
     {
-      "scenario": "age-check",
-      "useCase": "age-check",
-      "path": "main",
-      "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "age-check",
-      "useCase": "age-check",
-      "path": "branch-1",
-      "what": "The merchant asks for the identity document itself",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "excessive-scope",
-        "check": "disclosure"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "excessive-scope"
-      },
-      "consequences": [],
-      "trace": "age-check--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "agent-handoff",
-      "useCase": "agent-handoff",
-      "path": "main",
-      "status": "runs",
-      "consequences": [],
-      "trace": "agent-handoff--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "agent-handoff",
-      "useCase": "agent-handoff",
-      "path": "branch-1",
-      "what": "The partner's agent uses the address for marketing",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "prohibited",
-        "check": "data-terms"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "prohibited"
-      },
-      "consequences": [],
-      "trace": "agent-handoff--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "agent-handoff",
-      "useCase": "agent-handoff",
-      "path": "branch-2",
-      "what": "The handoff passes on more than the retailer holds",
-      "status": "runs",
-      "actual": {
-        "outcome": "refuse",
-        "reason": "representation-out-of-scope",
-        "check": "authority"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "representation-out-of-scope"
-      },
-      "consequences": [
-        {
-          "seq": 31,
-          "agent": "receiver-agent",
-          "outcome": "go"
-        }
-      ],
-      "trace": "agent-handoff--branch-2--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "benefit-claim",
-      "useCase": "benefit-claim",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "go",
-        "reason": "evidence-complete",
-        "check": "evidence"
-      },
-      "consequences": [],
-      "trace": "benefit-claim--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "benefit-claim",
-      "useCase": "benefit-claim",
-      "path": "branch-1",
-      "what": "Household composition is self-reported only",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-more",
-        "reason": "method-not-accepted",
-        "check": "fitness"
-      },
-      "expected": {
-        "outcome": "ask-more",
-        "reason": "method-not-accepted"
-      },
-      "consequences": [
-        {
-          "seq": 29,
-          "agent": "receiver-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 37,
-          "agent": "owner-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 41,
-          "agent": "owner-agent",
-          "outcome": "stop",
-          "reason": "method-not-accepted"
-        }
-      ],
-      "trace": "benefit-claim--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "cancel-subscription",
-      "useCase": "cancel-subscription",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "go",
-        "reason": "within-limits",
-        "check": "limits-approval"
-      },
-      "consequences": [],
-      "trace": "cancel-subscription--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "cancel-subscription",
-      "useCase": "cancel-subscription",
-      "path": "branch-1",
-      "what": "The service offers three months free to stay",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "not-authorised",
-        "check": "mandate"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "not-authorised"
-      },
-      "consequences": [],
-      "trace": "cancel-subscription--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "care-abroad",
-      "useCase": "care-abroad",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "fit-for-use",
-        "check": "fitness"
-      },
-      "consequences": [],
-      "trace": "care-abroad--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "care-abroad",
-      "useCase": "care-abroad",
-      "path": "branch-1",
-      "what": "No mapping exists for a medicine",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-more",
-        "reason": "unsupported-term",
-        "check": "fitness"
-      },
-      "expected": {
-        "outcome": "ask-more",
-        "reason": "unsupported-term"
-      },
-      "consequences": [],
-      "trace": "care-abroad--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "carer-acts-for-parent",
-      "useCase": "carer-acts-for-parent",
-      "path": "main",
-      "status": "runs",
-      "consequences": [],
-      "trace": "carer-acts-for-parent--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "carer-acts-for-parent",
-      "useCase": "carer-acts-for-parent",
-      "path": "branch-1",
-      "what": "The agent tries to change where the father lives, outside the power",
-      "status": "runs",
-      "actual": {
-        "outcome": "refuse",
-        "reason": "representation-out-of-scope",
-        "check": "authority"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "representation-out-of-scope"
-      },
-      "consequences": [
-        {
-          "seq": 22,
-          "agent": "receiver-agent",
-          "outcome": "go"
-        }
-      ],
-      "trace": "carer-acts-for-parent--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "carer-acts-for-parent",
-      "useCase": "carer-acts-for-parent",
-      "path": "branch-2",
-      "what": "The power is revoked",
-      "status": "runs",
-      "actual": {
-        "outcome": "refuse",
-        "reason": "mandate-withdrawn",
-        "check": "authority"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "mandate-withdrawn"
-      },
-      "consequences": [
-        {
-          "seq": 22,
-          "agent": "receiver-agent",
-          "outcome": "go"
-        }
-      ],
-      "trace": "carer-acts-for-parent--branch-2--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "change-of-address",
-      "useCase": "change-of-address",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "go",
-        "reason": "evidence-complete",
-        "check": "evidence"
-      },
-      "consequences": [],
-      "trace": "change-of-address--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "change-of-address",
-      "useCase": "change-of-address",
-      "path": "branch-1",
-      "what": "A recipient the person never dealt with is on the list",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "approval-required"
-      },
-      "consequences": [],
-      "trace": "change-of-address--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "cohort-count",
-      "useCase": "cohort-count",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "fit-for-use",
-        "check": "fitness"
-      },
-      "consequences": [],
-      "trace": "cohort-count--baseline.json",
-      "traceSha256": "4a4d210072521d91b6e6a2fdd9863f2a20ab43065369a3820a9e5f883e130711",
-      "recordedWith": {
-        "method": "sparq-aggregate/1",
-        "package": "sparq-verifiable-aggregate",
-        "commit": "61989f5",
-        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
-        "notice": "Research-grade and unaudited."
-      },
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "cohort-count",
-      "useCase": "cohort-count",
-      "path": "branch-1",
-      "what": "The result would cover fewer than the minimum number of patients",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "prohibited",
-        "check": "data-terms"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "prohibited"
-      },
-      "consequences": [
-        {
-          "seq": 932,
-          "agent": "computer-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 942,
-          "agent": "requester-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "cohort-count--branch-1--baseline.json",
-      "traceSha256": "77d962c909563622d7b88b830cdcf24e75cc82c8a21d32d003278d8f1aedbb8e",
-      "recordedWith": {
-        "method": "sparq-aggregate/1",
-        "package": "sparq-verifiable-aggregate",
-        "commit": "61989f5",
-        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
-        "notice": "Research-grade and unaudited."
-      },
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "cohort-count",
-      "useCase": "cohort-count",
-      "path": "branch-2",
-      "what": "One hospital does not attest its input",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "derivation-not-verified",
-        "check": "evidence"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "derivation-not-verified"
-      },
-      "consequences": [],
-      "trace": "cohort-count--branch-2--baseline.json",
-      "traceSha256": "d59223f2f2f793a511ef4591564a7688f1f21c08118d859cb726bb0c68fabf52",
-      "recordedWith": {
-        "method": "sparq-aggregate/1",
-        "package": "sparq-verifiable-aggregate",
-        "commit": "61989f5",
-        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
-        "notice": "Research-grade and unaudited."
-      },
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "consent-for-a-child",
-      "useCase": "consent-for-a-child",
-      "path": "main",
-      "status": "runs",
-      "consequences": [],
-      "trace": "consent-for-a-child--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "consent-for-a-child",
-      "useCase": "consent-for-a-child",
-      "path": "branch-1",
-      "what": "The second parent has objected",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "authority"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "approval-required"
-      },
-      "consequences": [],
-      "trace": "consent-for-a-child--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "content-licence",
-      "useCase": "content-licence",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "authority-valid"
-      },
-      "consequences": [],
-      "trace": "content-licence--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "content-licence",
-      "useCase": "content-licence",
-      "path": "branch-1",
-      "what": "The publisher's agent would pass the image to a sister company",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "prohibited",
-        "check": "data-terms"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "prohibited"
-      },
-      "consequences": [],
-      "trace": "content-licence--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "contract-wording",
-      "useCase": "contract-wording",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
-      },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 74,
-          "agent": "receiver-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        }
-      ],
-      "trace": "contract-wording--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "contract-wording",
-      "useCase": "contract-wording",
-      "path": "branch-1",
-      "what": "An agent accepts a clause its principal's policy does not cover",
-      "status": "disagrees",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "approval-required"
-      },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
-      "trace": "contract-wording--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "credit-file-dispute",
-      "useCase": "credit-file-dispute",
-      "path": "main",
-      "status": "runs",
-      "consequences": [],
-      "trace": "credit-file-dispute--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "credit-file-dispute",
-      "useCase": "credit-file-dispute",
-      "path": "branch-1",
-      "what": "The agency does not answer by its deadline",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "no-agreement",
-        "check": "evidence"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "no-agreement"
-      },
-      "consequences": [],
-      "trace": "credit-file-dispute--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "cross-department-request",
-      "useCase": "cross-department-request",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "go",
-        "reason": "evidence-complete",
-        "check": "evidence"
-      },
-      "consequences": [],
-      "trace": "cross-department-request--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "cross-department-request",
-      "useCase": "cross-department-request",
-      "path": "branch-1",
-      "what": "The request would reveal one named person's salary",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "excessive-scope",
-        "check": "disclosure"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "excessive-scope"
-      },
-      "consequences": [],
-      "trace": "cross-department-request--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "degree-recognition",
-      "useCase": "degree-recognition",
-      "path": "main",
-      "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "degree-recognition",
-      "useCase": "degree-recognition",
-      "path": "branch-1",
-      "what": "No chain links the two national registers",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-more",
-        "reason": "source-unknown",
-        "check": "source"
-      },
-      "expected": {
-        "outcome": "ask-more",
-        "reason": "source-unknown"
-      },
-      "consequences": [],
-      "trace": "degree-recognition--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "discharge-letter",
-      "useCase": "discharge-letter",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-more",
-        "reason": "structured-form-required",
-        "check": "fitness"
-      },
-      "consequences": [
-        {
-          "seq": 49,
-          "agent": "practice-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 57,
-          "agent": "hospital-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 64,
-          "agent": "hospital-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 72,
-          "agent": "practice-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 79,
-          "agent": "practice-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 84,
-          "agent": "practice-agent",
-          "outcome": "ask-more",
-          "reason": "structured-form-required"
-        }
-      ],
-      "trace": "discharge-letter--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "discharge-letter",
-      "useCase": "discharge-letter",
-      "path": "branch-1",
-      "what": "An agent turns \"cannot be ruled out\" into a coded diagnosis",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "method-not-accepted",
-        "check": "fitness"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "method-not-accepted"
-      },
-      "consequences": [],
-      "trace": "discharge-letter--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "disruption-rebooking",
-      "useCase": "disruption-rebooking",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "go",
-        "reason": "within-limits",
-        "check": "limits-approval"
-      },
-      "consequences": [],
-      "trace": "disruption-rebooking--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "disruption-rebooking",
-      "useCase": "disruption-rebooking",
-      "path": "branch-1",
-      "what": "The only alternative costs more than the pre-agreed margin",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "limit-exceeded",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "limit-exceeded"
-      },
-      "consequences": [],
-      "trace": "disruption-rebooking--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "emergency-access",
-      "useCase": "emergency-access",
-      "path": "main",
-      "status": "runs",
-      "consequences": [],
-      "trace": "emergency-access--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "emergency-access",
-      "useCase": "emergency-access",
-      "path": "branch-1",
-      "what": "The request comes from a registered clinician with an emergency flag",
-      "status": "disagrees",
-      "actual": {
-        "outcome": "go",
-        "reason": "source-accepted",
-        "check": "source"
-      },
-      "expected": {
-        "outcome": "go",
-        "reason": "source-accepted"
-      },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
-      "trace": "emergency-access--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "emergency-access",
-      "useCase": "emergency-access",
-      "path": "branch-2",
-      "what": "The same flag is used by someone not on the register",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "source-unknown",
-        "check": "mandate"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "source-unknown"
-      },
-      "consequences": [],
-      "trace": "emergency-access--branch-2--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "employment-reference",
-      "useCase": "employment-reference",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
-      },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 74,
-          "agent": "receiver-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        }
-      ],
-      "trace": "employment-reference--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "employment-reference",
-      "useCase": "employment-reference",
-      "path": "branch-1",
-      "what": "An agent scores the reference and rejects the candidate on the score",
-      "status": "disagrees",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "approval-required"
-      },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
-      "trace": "employment-reference--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "energy-switch",
-      "useCase": "energy-switch",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "authority-valid"
-      },
-      "consequences": [],
-      "trace": "energy-switch--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "energy-switch",
-      "useCase": "energy-switch",
-      "path": "branch-1",
-      "what": "A supplier asks for half-hourly data to quote",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "excessive-scope",
-        "check": "disclosure"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "excessive-scope"
-      },
-      "consequences": [],
-      "trace": "energy-switch--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "erasure-request",
-      "useCase": "erasure-request",
-      "path": "main",
-      "status": "runs",
-      "consequences": [],
-      "trace": "erasure-request--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "erasure-request",
-      "useCase": "erasure-request",
-      "path": "branch-1",
-      "what": "The company passed the data on with no duty to inform",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "no-agreement",
-        "check": "evidence"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "no-agreement"
-      },
-      "consequences": [
-        {
-          "seq": 201,
-          "agent": "subject-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "erasure-request--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "expenses",
-      "useCase": "expenses",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "go",
-        "reason": "evidence-complete",
-        "check": "evidence"
-      },
-      "consequences": [],
-      "trace": "expenses--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "expenses",
-      "useCase": "expenses",
-      "path": "branch-1",
-      "what": "A meal is above the policy limit",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "limit-exceeded",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "limit-exceeded"
-      },
-      "consequences": [],
-      "trace": "expenses--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "false-but-signed",
-      "useCase": "false-but-signed",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-more",
-        "reason": "completeness-not-established",
-        "check": "fitness"
-      },
-      "consequences": [
-        {
-          "seq": 14,
-          "agent": "lender-agent",
-          "outcome": "ask-more",
-          "reason": "completeness-not-established"
-        }
-      ],
-      "trace": "false-but-signed--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "false-but-signed",
-      "useCase": "false-but-signed",
-      "path": "branch-1",
-      "what": "Nothing fails",
-      "status": "disagrees",
-      "actual": {
-        "outcome": "go",
-        "reason": "source-accepted",
-        "check": "source"
-      },
-      "expected": {
-        "outcome": "go",
-        "reason": "source-accepted"
-      },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
-      "trace": "false-but-signed--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "fee-dispute",
-      "useCase": "fee-dispute",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 64,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 76,
-          "agent": "lender-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        },
-        {
-          "seq": 84,
-          "agent": "lender-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 90,
-          "agent": "forum",
-          "outcome": "admit",
-          "reason": "not-authorised"
-        },
-        {
-          "seq": 96,
-          "agent": "owner-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "fee-dispute--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "fee-dispute",
-      "useCase": "fee-dispute",
-      "path": "branch-1",
-      "what": "The lender's record has a gap",
-      "status": "runs",
-      "actual": {
-        "outcome": "refuse",
-        "reason": "record-unavailable",
-        "check": "fitness"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "record-unavailable"
-      },
-      "consequences": [
-        {
-          "seq": 96,
-          "agent": "owner-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "fee-dispute--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "find-a-time",
-      "useCase": "find-a-time",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "fit-for-use",
-        "check": "fitness"
-      },
-      "consequences": [],
-      "trace": "find-a-time--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "find-a-time",
-      "useCase": "find-a-time",
-      "path": "branch-1",
-      "what": "One agent asks why the other person is busy on Tuesday",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "excessive-scope",
-        "check": "disclosure"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "excessive-scope"
-      },
-      "consequences": [],
-      "trace": "find-a-time--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "fit-note-to-employer",
-      "useCase": "fit-note-to-employer",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "go",
-        "reason": "evidence-complete",
-        "check": "evidence"
-      },
-      "consequences": [],
-      "trace": "fit-note-to-employer--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "fit-note-to-employer",
-      "useCase": "fit-note-to-employer",
-      "path": "branch-1",
-      "what": "The employer's agent asks what the condition is",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "excessive-scope",
-        "check": "disclosure"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "excessive-scope"
-      },
-      "consequences": [],
-      "trace": "fit-note-to-employer--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "flat-share",
-      "useCase": "flat-share",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "source-unknown",
-        "check": "source"
-      },
-      "consequences": [
-        {
-          "seq": 22,
-          "agent": "blair-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 30,
-          "agent": "blair-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 38,
-          "agent": "alex-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "flat-share--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "flat-share",
-      "useCase": "flat-share",
-      "path": "branch-1",
-      "what": "One side's identity cannot be tied to any source the other accepts",
-      "status": "disagrees",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "source-unknown",
-        "check": "source"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "source-unknown"
-      },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
-      "trace": "flat-share--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "hardship-request",
-      "useCase": "hardship-request",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 46,
-          "agent": "owner-agent",
-          "outcome": "ask-principal",
-          "reason": "context-not-clear"
-        },
-        {
-          "seq": 64,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 72,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 82,
-          "agent": "receiver-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        }
-      ],
-      "trace": "hardship-request--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "hardship-request",
-      "useCase": "hardship-request",
-      "path": "branch-1",
-      "what": "The agent would send a diagnosis to explain the request",
-      "status": "disagrees",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "approval-required"
-      },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
-      "trace": "hardship-request--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "health-referral",
-      "useCase": "health-referral",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 31,
-          "agent": "practice-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 39,
-          "agent": "clinic-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 45,
-          "agent": "clinic-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "health-referral--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "health-referral",
-      "useCase": "health-referral",
-      "path": "branch-1",
-      "what": "The clinic asks for the full record",
-      "status": "disagrees",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "approval-required"
-      },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
-      "trace": "health-referral--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "health-referral",
-      "useCase": "health-referral",
-      "path": "branch-2",
-      "what": "The referrer is not on the professional register",
-      "status": "runs",
-      "actual": {
-        "outcome": "refuse",
-        "reason": "source-unknown",
-        "check": "source"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "source-unknown"
-      },
-      "consequences": [
-        {
-          "seq": 8,
-          "agent": "practice-agent",
-          "outcome": "stop",
-          "reason": "source-unknown"
-        }
-      ],
-      "trace": "health-referral--branch-2--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "home-purchase",
-      "useCase": "home-purchase",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "authority-valid",
-        "check": "authority"
-      },
-      "consequences": [],
-      "trace": "home-purchase--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "home-purchase",
-      "useCase": "home-purchase",
-      "path": "branch-1",
-      "what": "A message gives a new account for the deposit",
-      "status": "runs",
-      "actual": {
-        "outcome": "refuse",
-        "reason": "source-not-authoritative",
-        "check": "source"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "source-not-authoritative"
-      },
-      "consequences": [
-        {
-          "seq": 8,
-          "agent": "owner-agent",
-          "outcome": "stop",
-          "reason": "source-not-authoritative"
-        }
-      ],
-      "trace": "home-purchase--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "home-purchase",
-      "useCase": "home-purchase",
-      "path": "branch-2",
-      "what": "The seller is not the registered owner",
-      "status": "runs",
-      "actual": {
-        "outcome": "refuse",
-        "reason": "source-not-authoritative",
-        "check": "source"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "source-not-authoritative"
-      },
-      "consequences": [
-        {
-          "seq": 8,
-          "agent": "owner-agent",
-          "outcome": "stop",
-          "reason": "source-not-authoritative"
-        }
-      ],
-      "trace": "home-purchase--branch-2--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "incident-notice",
-      "useCase": "incident-notice",
-      "path": "main",
-      "status": "runs",
-      "consequences": [],
-      "trace": "incident-notice--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "incident-notice",
-      "useCase": "incident-notice",
-      "path": "branch-1",
-      "what": "A customer's agent does not acknowledge receipt",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-more",
-        "reason": "result-uncertain",
-        "check": "evidence"
-      },
-      "expected": {
-        "outcome": "ask-more",
-        "reason": "result-uncertain"
-      },
-      "consequences": [],
-      "trace": "incident-notice--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "insurance-claim-photos",
-      "useCase": "insurance-claim-photos",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
-      },
-      "consequences": [
-        {
-          "seq": 86,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 100,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 114,
-          "agent": "receiver-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        }
-      ],
-      "trace": "insurance-claim-photos--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "insurance-claim-photos",
-      "useCase": "insurance-claim-photos",
-      "path": "branch-1",
-      "what": "The insurer's model reads the photo as minor damage; the garage says otherwise",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-more",
-        "reason": "structured-form-required",
-        "check": "fitness"
-      },
-      "expected": {
-        "outcome": "ask-more",
-        "reason": "structured-form-required"
-      },
-      "consequences": [],
-      "trace": "insurance-claim-photos--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "insurance-claim-photos",
-      "useCase": "insurance-claim-photos",
-      "path": "branch-2",
-      "what": "The estimate is from a garage the insurer does not accept",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-more",
-        "reason": "source-not-authoritative",
-        "check": "source"
-      },
-      "expected": {
-        "outcome": "ask-more",
-        "reason": "source-not-authoritative"
-      },
-      "consequences": [
-        {
-          "seq": 105,
-          "agent": "receiver-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 110,
-          "agent": "receiver-agent",
-          "outcome": "stop",
-          "reason": "source-not-authoritative"
-        }
-      ],
-      "trace": "insurance-claim-photos--branch-2--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "insurance-quote",
-      "useCase": "insurance-quote",
-      "path": "main",
-      "status": "blocked",
-      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered.",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "insurance-quote",
-      "useCase": "insurance-quote",
-      "path": "branch-1",
-      "what": "An insurer's agent asks for date of birth and full address before quoting",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "excessive-scope",
-        "check": "disclosure"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "excessive-scope"
-      },
-      "consequences": [],
-      "trace": "insurance-quote--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "insurance-quote",
-      "useCase": "insurance-quote",
-      "path": "branch-2",
-      "what": "No register can state completeness",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-more",
-        "reason": "completeness-not-established",
-        "check": "fitness"
-      },
-      "expected": {
-        "outcome": "ask-more",
-        "reason": "completeness-not-established"
-      },
-      "consequences": [],
-      "trace": "insurance-quote--branch-2--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "introduction",
-      "useCase": "introduction",
-      "path": "main",
-      "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "introduction",
-      "useCase": "introduction",
-      "path": "branch-1",
-      "what": "One side can show only a self-made profile",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "method-not-accepted",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "method-not-accepted"
-      },
-      "consequences": [],
-      "trace": "introduction--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "invoice-finance",
-      "useCase": "invoice-finance",
-      "path": "main",
-      "status": "runs",
-      "consequences": [],
-      "trace": "invoice-finance--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "invoice-finance",
-      "useCase": "invoice-finance",
-      "path": "branch-1",
-      "what": "The same invoice is offered to a second financier",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "status-withdrawn",
-        "check": "evidence"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "status-withdrawn"
-      },
-      "consequences": [],
-      "trace": "invoice-finance--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "joint-mortgage",
-      "useCase": "joint-mortgage",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "authority-valid",
-        "check": "authority"
-      },
-      "consequences": [],
-      "trace": "joint-mortgage--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "joint-mortgage",
-      "useCase": "joint-mortgage",
-      "path": "branch-1",
-      "what": "One applicant withdraws their mandate mid-way",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "mandate-withdrawn",
-        "check": "mandate"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "mandate-withdrawn"
-      },
-      "consequences": [],
-      "trace": "joint-mortgage--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "joint-mortgage",
-      "useCase": "joint-mortgage",
-      "path": "branch-2",
-      "what": "One agent tries to send the other applicant's payslip",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "prohibited",
-        "check": "data-terms"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "prohibited"
-      },
-      "consequences": [],
-      "trace": "joint-mortgage--branch-2--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "master-data-change",
-      "useCase": "master-data-change",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 43,
-          "agent": "finance-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        },
-        {
-          "seq": 59,
-          "agent": "finance-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 66,
-          "agent": "erp-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 74,
-          "agent": "erp-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 82,
-          "agent": "erp-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 90,
-          "agent": "erp-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 98,
-          "agent": "finance-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "master-data-change--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "master-data-change",
-      "useCase": "master-data-change",
-      "path": "branch-1",
-      "what": "The same role requests and approves",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "not-authorised",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "not-authorised"
-      },
-      "consequences": [],
-      "trace": "master-data-change--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "master-data-change",
-      "useCase": "master-data-change",
-      "path": "branch-2",
-      "what": "The new details come from an email",
-      "status": "runs",
-      "actual": {
-        "outcome": "refuse",
-        "reason": "source-not-authoritative",
-        "check": "source"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "source-not-authoritative"
-      },
-      "consequences": [
-        {
-          "seq": 10,
-          "agent": "finance-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 17,
-          "agent": "finance-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 24,
-          "agent": "finance-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 29,
-          "agent": "finance-agent",
-          "outcome": "stop",
-          "reason": "source-not-authoritative"
-        }
-      ],
-      "trace": "master-data-change--branch-2--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "meeting-notes",
-      "useCase": "meeting-notes",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
-      },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 73,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 82,
-          "agent": "receiver-agent",
-          "outcome": "go"
-        }
-      ],
-      "trace": "meeting-notes--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "meeting-notes",
-      "useCase": "meeting-notes",
-      "path": "branch-1",
-      "what": "The assistant commits to a date because its notes say the team agreed it",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "approval-required"
-      },
-      "consequences": [],
-      "trace": "meeting-notes--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "mortgage-core",
-      "useCase": "mortgage-in-principle",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 97,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 111,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 119,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 129,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 138,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 146,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 155,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 163,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 172,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 180,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 188,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 196,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "mortgage-core--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "mortgage-injected-fee",
-      "useCase": "mortgage-in-principle",
-      "cataloguePath": {
-        "index": 2,
-        "what": "A message tells the agent to pay a valuer"
-      },
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 97,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 111,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 119,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 129,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 138,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 146,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 155,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 163,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 172,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 180,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 188,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 196,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 199,
-          "agent": "sams-agent",
-          "outcome": "stop",
-          "reason": "not-authorised"
-        }
-      ],
-      "trace": "mortgage-injected-fee--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "mortgage-out-of-limit",
-      "useCase": "mortgage-in-principle",
-      "cataloguePath": {
-        "index": 3,
-        "what": "The offer is outside Sam's limits"
-      },
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "limit-exceeded",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 90,
-          "agent": "sams-agent",
-          "outcome": "stop",
-          "reason": "approval-denied"
-        },
-        {
-          "seq": 97,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 105,
-          "agent": "lender",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "mortgage-out-of-limit--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "mortgage-over-ask",
-      "useCase": "mortgage-in-principle",
-      "cataloguePath": {
-        "index": 1,
-        "what": "The lender asks for full statements"
-      },
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "not-authorised",
-        "check": "mandate"
-      },
-      "consequences": [
-        {
-          "seq": 89,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 97,
-          "agent": "lender",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "mortgage-over-ask--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "no-agent-on-the-other-side",
-      "useCase": "no-agent-on-the-other-side",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 18,
-          "agent": "reader-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 22,
-          "agent": "reader-agent",
-          "outcome": "admit",
-          "reason": "fit-for-use"
-        }
-      ],
-      "trace": "no-agent-on-the-other-side--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "no-agent-on-the-other-side",
-      "useCase": "no-agent-on-the-other-side",
-      "path": "branch-1",
-      "what": "The reply asks for payment details by email",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "expected": {
-        "outcome": "ask-principal",
-        "reason": "approval-required"
-      },
-      "consequences": [],
-      "trace": "no-agent-on-the-other-side--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "no-training-terms",
-      "useCase": "no-training-terms",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
-      },
-      "consequences": [
-        {
-          "seq": 56,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 75,
-          "agent": "receiver-agent",
-          "outcome": "go"
-        }
-      ],
-      "trace": "no-training-terms--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "no-training-terms",
-      "useCase": "no-training-terms",
-      "path": "branch-1",
-      "what": "The fetching agent has no rule for \"training\"",
-      "status": "runs",
-      "actual": {
-        "outcome": "refuse",
-        "reason": "unsupported-term",
-        "check": "terms"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "unsupported-term"
-      },
-      "consequences": [
-        {
-          "seq": 9,
-          "agent": "receiver-agent",
-          "outcome": "stop",
-          "reason": "unsupported-term"
-        }
-      ],
-      "trace": "no-training-terms--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "onward-leak",
-      "useCase": "onward-leak",
-      "path": "main",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 76,
-          "agent": "person-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 89,
-          "agent": "owner-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        },
-        {
-          "seq": 98,
-          "agent": "owner-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 104,
-          "agent": "forum",
-          "outcome": "admit",
-          "reason": "prohibited"
-        },
-        {
-          "seq": 110,
-          "agent": "person-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "onward-leak--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
-      "scenario": "onward-leak",
-      "useCase": "onward-leak",
-      "path": "branch-1",
-      "what": "The lender's own gate, if it is used, stops the transfer",
-      "status": "runs",
-      "actual": {
-        "outcome": "stop",
-        "reason": "prohibited",
-        "check": "data-terms"
-      },
-      "expected": {
-        "outcome": "stop",
-        "reason": "prohibited"
-      },
-      "consequences": [],
-      "trace": "onward-leak--branch-1--baseline.json",
-      "settlement": "rdf-order"
-    },
-    {
       "scenario": "permit-application",
       "useCase": "permit-application",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "ask-principal",
@@ -3525,13 +3455,13 @@
           "reason": "approval-required"
         }
       ],
-      "trace": "permit-application--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "permit-application--baseline.json"
     },
     {
       "scenario": "permit-application",
       "useCase": "permit-application",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The agent declares the extension height from a model's reading of the drawing",
       "status": "runs",
       "actual": {
@@ -3544,13 +3474,13 @@
         "reason": "method-not-accepted"
       },
       "consequences": [],
-      "trace": "permit-application--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "permit-application--branch-1--baseline.json"
     },
     {
       "scenario": "platform-income",
       "useCase": "platform-income",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "admit",
@@ -3559,20 +3489,20 @@
       },
       "consequences": [],
       "trace": "platform-income--baseline.json",
-      "traceSha256": "8b99f064dc80d3f684bc900ec357e4e97b7937a3fdfc092e3456570381e6bad6",
+      "traceSha256": "c66695f8d208b0b28597e441451d5794b1f59bd7ec9ecfa98f275af2431c05c6",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
         "commit": "61989f5",
         "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
         "notice": "Research-grade and unaudited."
-      },
-      "settlement": "rdf-order"
+      }
     },
     {
       "scenario": "platform-income",
       "useCase": "platform-income",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The receiver requires a complete total",
       "status": "runs",
       "actual": {
@@ -3585,22 +3515,22 @@
         "reason": "completeness-not-established"
       },
       "consequences": [],
-      "trace": "platform-income--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "platform-income--branch-1--baseline.json"
     },
     {
       "scenario": "prescription-dispensing",
       "useCase": "prescription-dispensing",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "consequences": [],
-      "trace": "prescription-dispensing--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "prescription-dispensing--baseline.json"
     },
     {
       "scenario": "prescription-dispensing",
       "useCase": "prescription-dispensing",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The same prescription is presented at a second pharmacy",
       "status": "runs",
       "actual": {
@@ -3613,13 +3543,13 @@
         "reason": "status-withdrawn"
       },
       "consequences": [],
-      "trace": "prescription-dispensing--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "prescription-dispensing--branch-1--baseline.json"
     },
     {
       "scenario": "prescription-dispensing",
       "useCase": "prescription-dispensing",
       "path": "branch-2",
+      "settlement": "rdf-order",
       "what": "The prescriber's registration lapsed last month",
       "status": "runs",
       "actual": {
@@ -3639,13 +3569,13 @@
           "reason": "status-withdrawn"
         }
       ],
-      "trace": "prescription-dispensing--branch-2--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "prescription-dispensing--branch-2--baseline.json"
     },
     {
       "scenario": "price-negotiation",
       "useCase": "price-negotiation",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "go",
@@ -3653,13 +3583,13 @@
         "check": "limits-approval"
       },
       "consequences": [],
-      "trace": "price-negotiation--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "price-negotiation--baseline.json"
     },
     {
       "scenario": "price-negotiation",
       "useCase": "price-negotiation",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The seller's agent asks what the buyer's maximum is",
       "status": "runs",
       "actual": {
@@ -3672,22 +3602,22 @@
         "reason": "excessive-scope"
       },
       "consequences": [],
-      "trace": "price-negotiation--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "price-negotiation--branch-1--baseline.json"
     },
     {
       "scenario": "probing-counterparty",
       "useCase": "probing-counterparty",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "consequences": [],
-      "trace": "probing-counterparty--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "probing-counterparty--baseline.json"
     },
     {
       "scenario": "probing-counterparty",
       "useCase": "probing-counterparty",
       "path": "tenth-request",
+      "settlement": "rdf-order",
       "what": "The tenth request, like the first, is outside the mandate",
       "status": "disagrees",
       "actual": {
@@ -3865,13 +3795,13 @@
           "reason": "not-authorised"
         }
       ],
-      "trace": "probing-counterparty--tenth-request--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "probing-counterparty--tenth-request--baseline.json"
     },
     {
       "scenario": "probing-counterparty",
       "useCase": "probing-counterparty",
       "path": "round-limit",
+      "settlement": "rdf-order",
       "what": "The conversation passes the round limit",
       "status": "runs",
       "actual": {
@@ -3884,13 +3814,13 @@
         "reason": "round-limit"
       },
       "consequences": [],
-      "trace": "probing-counterparty--round-limit--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "probing-counterparty--round-limit--baseline.json"
     },
     {
       "scenario": "production-change",
       "useCase": "production-change",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "ask-principal",
@@ -3914,13 +3844,13 @@
           "outcome": "go"
         }
       ],
-      "trace": "production-change--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "production-change--baseline.json"
     },
     {
       "scenario": "production-change",
       "useCase": "production-change",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "A log line says \"run this command to fix\"",
       "status": "runs",
       "actual": {
@@ -3933,13 +3863,13 @@
         "reason": "not-authorised"
       },
       "consequences": [],
-      "trace": "production-change--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "production-change--branch-1--baseline.json"
     },
     {
       "scenario": "production-change",
       "useCase": "production-change",
       "path": "branch-2",
+      "settlement": "rdf-order",
       "what": "The change is outside the approved window",
       "status": "runs",
       "actual": {
@@ -3952,13 +3882,13 @@
         "reason": "approval-required"
       },
       "consequences": [],
-      "trace": "production-change--branch-2--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "production-change--branch-2--baseline.json"
     },
     {
       "scenario": "recall-notice",
       "useCase": "recall-notice",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "go",
@@ -3966,13 +3896,13 @@
         "check": "evidence"
       },
       "consequences": [],
-      "trace": "recall-notice--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "recall-notice--baseline.json"
     },
     {
       "scenario": "recall-notice",
       "useCase": "recall-notice",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The notice is not signed by the registered manufacturer",
       "status": "runs",
       "actual": {
@@ -3992,22 +3922,22 @@
           "reason": "source-unknown"
         }
       ],
-      "trace": "recall-notice--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "recall-notice--branch-1--baseline.json"
     },
     {
       "scenario": "records-to-new-practice",
       "useCase": "records-to-new-practice",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "consequences": [],
-      "trace": "records-to-new-practice--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "records-to-new-practice--baseline.json"
     },
     {
       "scenario": "records-to-new-practice",
       "useCase": "records-to-new-practice",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The patient's note of an allergy differs from the clinical entry",
       "status": "disagrees",
       "actual": {
@@ -4021,21 +3951,21 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
-      "trace": "records-to-new-practice--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "records-to-new-practice--branch-1--baseline.json"
     },
     {
       "scenario": "recycled-content",
       "useCase": "recycled-content",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered.",
-      "settlement": "rdf-order"
+      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
       "scenario": "recycled-content",
       "useCase": "recycled-content",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "One tier's input is self-declared",
       "status": "runs",
       "actual": {
@@ -4048,13 +3978,13 @@
         "reason": "method-not-accepted"
       },
       "consequences": [],
-      "trace": "recycled-content--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "recycled-content--branch-1--baseline.json"
     },
     {
       "scenario": "repair-request",
       "useCase": "repair-request",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "ask-principal",
@@ -4083,13 +4013,13 @@
           "outcome": "go"
         }
       ],
-      "trace": "repair-request--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "repair-request--baseline.json"
     },
     {
       "scenario": "repair-request",
       "useCase": "repair-request",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The contractor quotes above the landlord's limit",
       "status": "runs",
       "actual": {
@@ -4102,13 +4032,13 @@
         "reason": "limit-exceeded"
       },
       "consequences": [],
-      "trace": "repair-request--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "repair-request--branch-1--baseline.json"
     },
     {
       "scenario": "request-for-quotes",
       "useCase": "request-for-quotes",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "go",
@@ -4116,13 +4046,13 @@
         "check": "evidence"
       },
       "consequences": [],
-      "trace": "request-for-quotes--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "request-for-quotes--baseline.json"
     },
     {
       "scenario": "request-for-quotes",
       "useCase": "request-for-quotes",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The agent would quote a rival's price to get a discount",
       "status": "runs",
       "actual": {
@@ -4135,13 +4065,13 @@
         "reason": "prohibited"
       },
       "consequences": [],
-      "trace": "request-for-quotes--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "request-for-quotes--branch-1--baseline.json"
     },
     {
       "scenario": "request-for-quotes",
       "useCase": "request-for-quotes",
       "path": "branch-2",
+      "settlement": "rdf-order",
       "what": "The order is above the employee's signing limit",
       "status": "runs",
       "actual": {
@@ -4154,13 +4084,13 @@
         "reason": "limit-exceeded"
       },
       "consequences": [],
-      "trace": "request-for-quotes--branch-2--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "request-for-quotes--branch-2--baseline.json"
     },
     {
       "scenario": "research-data-access",
       "useCase": "research-data-access",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "admit",
@@ -4168,13 +4098,13 @@
         "check": "fitness"
       },
       "consequences": [],
-      "trace": "research-data-access--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "research-data-access--baseline.json"
     },
     {
       "scenario": "research-data-access",
       "useCase": "research-data-access",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "A query is outside the approved protocol",
       "status": "runs",
       "actual": {
@@ -4187,13 +4117,13 @@
         "reason": "purpose-not-permitted"
       },
       "consequences": [],
-      "trace": "research-data-access--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "research-data-access--branch-1--baseline.json"
     },
     {
       "scenario": "research-data-access",
       "useCase": "research-data-access",
       "path": "branch-2",
+      "settlement": "rdf-order",
       "what": "The number of related queries passes the cap",
       "status": "runs",
       "actual": {
@@ -4206,13 +4136,13 @@
         "reason": "limit-exceeded"
       },
       "consequences": [],
-      "trace": "research-data-access--branch-2--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "research-data-access--branch-2--baseline.json"
     },
     {
       "scenario": "return-and-refund",
       "useCase": "return-and-refund",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "ask-principal",
@@ -4236,13 +4166,13 @@
           "outcome": "go"
         }
       ],
-      "trace": "return-and-refund--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "return-and-refund--baseline.json"
     },
     {
       "scenario": "return-and-refund",
       "useCase": "return-and-refund",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The customer's agent asks for a refund outside the return window",
       "status": "runs",
       "actual": {
@@ -4255,22 +4185,22 @@
         "reason": "not-authorised"
       },
       "consequences": [],
-      "trace": "return-and-refund--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "return-and-refund--branch-1--baseline.json"
     },
     {
       "scenario": "right-to-work",
       "useCase": "right-to-work",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "consequences": [],
-      "trace": "right-to-work--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "right-to-work--baseline.json"
     },
     {
       "scenario": "right-to-work",
       "useCase": "right-to-work",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The employer asks for a passport scan",
       "status": "runs",
       "actual": {
@@ -4283,22 +4213,22 @@
         "reason": "excessive-scope"
       },
       "consequences": [],
-      "trace": "right-to-work--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "right-to-work--branch-1--baseline.json"
     },
     {
       "scenario": "right-to-work",
       "useCase": "right-to-work",
       "path": "hidden-validity-proof",
+      "settlement": "rdf-order",
       "what": "Show valid until at least a date while hiding the actual date",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed",
-      "settlement": "rdf-order"
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "salary-account-change",
       "useCase": "salary-account-change",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "go",
@@ -4306,13 +4236,13 @@
         "check": "limits-approval"
       },
       "consequences": [],
-      "trace": "salary-account-change--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "salary-account-change--baseline.json"
     },
     {
       "scenario": "salary-account-change",
       "useCase": "salary-account-change",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The message is unsigned email",
       "status": "runs",
       "actual": {
@@ -4332,13 +4262,13 @@
           "reason": "evidence-invalid"
         }
       ],
-      "trace": "salary-account-change--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "salary-account-change--branch-1--baseline.json"
     },
     {
       "scenario": "salary-account-change",
       "useCase": "salary-account-change",
       "path": "branch-2",
+      "settlement": "rdf-order",
       "what": "It is signed, but not under the employee's mandate",
       "status": "runs",
       "actual": {
@@ -4363,13 +4293,13 @@
           "reason": "evidence-invalid"
         }
       ],
-      "trace": "salary-account-change--branch-2--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "salary-account-change--branch-2--baseline.json"
     },
     {
       "scenario": "salary-benchmark",
       "useCase": "salary-benchmark",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "admit",
@@ -4378,20 +4308,20 @@
       },
       "consequences": [],
       "trace": "salary-benchmark--baseline.json",
-      "traceSha256": "678ac4dba3006dedacb791cfa1c1836f0e81584e655aed4c8b8fb57c673a2261",
+      "traceSha256": "01a68de4d27dbf749b20c300f5541eb89b17aebb381a95a0cfa93aac3f43a805",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
         "commit": "61989f5",
         "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
         "notice": "Research-grade and unaudited."
-      },
-      "settlement": "rdf-order"
+      }
     },
     {
       "scenario": "salary-benchmark",
       "useCase": "salary-benchmark",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "Only two employers contribute",
       "status": "disagrees",
       "actual": {
@@ -4406,29 +4336,29 @@
       "consequences": [],
       "note": "branch does not diverge from the main path",
       "trace": "salary-benchmark--branch-1--baseline.json",
-      "traceSha256": "ef97c7726f114641883dfa18f02ee67ee192d0b44e9dcda57e763bd6145a3b2e",
+      "traceSha256": "18f15def44a4b7aa1ed132c73daa34968f0a620d4359e8d6d01813ff45857223",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
         "commit": "61989f5",
         "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
         "notice": "Research-grade and unaudited."
-      },
-      "settlement": "rdf-order"
+      }
     },
     {
       "scenario": "sell-a-car",
       "useCase": "sell-a-car",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "consequences": [],
-      "trace": "sell-a-car--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "sell-a-car--baseline.json"
     },
     {
       "scenario": "sell-a-car",
       "useCase": "sell-a-car",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The seller is not the registered keeper",
       "status": "runs",
       "actual": {
@@ -4448,13 +4378,84 @@
           "reason": "source-not-authoritative"
         }
       ],
-      "trace": "sell-a-car--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "sell-a-car--branch-1--baseline.json"
+    },
+    {
+      "scenario": "shopping-agent",
+      "useCase": "shopping-agent",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "go",
+        "reason": "evidence-complete",
+        "check": "evidence"
+      },
+      "consequences": [],
+      "trace": "shopping-agent--baseline.json"
+    },
+    {
+      "scenario": "shopping-agent",
+      "useCase": "shopping-agent",
+      "path": "branch-1",
+      "settlement": "rdf-order",
+      "what": "Fees at checkout take the price above the budget",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "limit-exceeded",
+        "check": "P5"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "limit-exceeded"
+      },
+      "consequences": [],
+      "trace": "shopping-agent--branch-1--baseline.json"
+    },
+    {
+      "scenario": "shopping-agent",
+      "useCase": "shopping-agent",
+      "path": "branch-2",
+      "settlement": "rdf-order",
+      "what": "A merchant's message tells the agent to pay to a different account",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "P4"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "not-authorised"
+      },
+      "consequences": [],
+      "trace": "shopping-agent--branch-2--baseline.json"
+    },
+    {
+      "scenario": "shopping-agent",
+      "useCase": "shopping-agent",
+      "path": "asked-to-look-not-to-buy",
+      "settlement": "rdf-order",
+      "what": "The person asked only for the cheapest price; the core proposes buying.",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "P5"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "not-authorised"
+      },
+      "consequences": [],
+      "trace": "shopping-agent--asked-to-look-not-to-buy--baseline.json"
     },
     {
       "scenario": "small-business-loan",
       "useCase": "small-business-loan",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "ask-principal",
@@ -4483,13 +4484,13 @@
           "outcome": "admit"
         }
       ],
-      "trace": "small-business-loan--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "small-business-loan--baseline.json"
     },
     {
       "scenario": "small-business-loan",
       "useCase": "small-business-loan",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The director's role does not cover borrowing",
       "status": "runs",
       "actual": {
@@ -4508,13 +4509,13 @@
           "outcome": "go"
         }
       ],
-      "trace": "small-business-loan--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "small-business-loan--branch-1--baseline.json"
     },
     {
       "scenario": "small-business-loan",
       "useCase": "small-business-loan",
       "path": "branch-2",
+      "settlement": "rdf-order",
       "what": "Management accounts are self-reported, not filed",
       "status": "runs",
       "actual": {
@@ -4544,13 +4545,13 @@
           "reason": "method-not-accepted"
         }
       ],
-      "trace": "small-business-loan--branch-2--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "small-business-loan--branch-2--baseline.json"
     },
     {
       "scenario": "subject-access-request",
       "useCase": "subject-access-request",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "go",
@@ -4558,13 +4559,13 @@
         "check": "evidence"
       },
       "consequences": [],
-      "trace": "subject-access-request--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "subject-access-request--baseline.json"
     },
     {
       "scenario": "subject-access-request",
       "useCase": "subject-access-request",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The company demands a passport scan before answering",
       "status": "runs",
       "actual": {
@@ -4577,22 +4578,22 @@
         "reason": "excessive-scope"
       },
       "consequences": [],
-      "trace": "subject-access-request--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "subject-access-request--branch-1--baseline.json"
     },
     {
       "scenario": "supplier-onboarding",
       "useCase": "supplier-onboarding",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "consequences": [],
-      "trace": "supplier-onboarding--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "supplier-onboarding--baseline.json"
     },
     {
       "scenario": "supplier-onboarding",
       "useCase": "supplier-onboarding",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "A certificate was withdrawn last week",
       "status": "runs",
       "actual": {
@@ -4612,13 +4613,13 @@
           "reason": "status-withdrawn"
         }
       ],
-      "trace": "supplier-onboarding--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "supplier-onboarding--branch-1--baseline.json"
     },
     {
       "scenario": "supplier-onboarding",
       "useCase": "supplier-onboarding",
       "path": "branch-2",
+      "settlement": "rdf-order",
       "what": "The account belongs to a different legal entity",
       "status": "runs",
       "actual": {
@@ -4643,22 +4644,22 @@
           "reason": "source-not-authoritative"
         }
       ],
-      "trace": "supplier-onboarding--branch-2--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "supplier-onboarding--branch-2--baseline.json"
     },
     {
       "scenario": "tax-agent",
       "useCase": "tax-agent",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "consequences": [],
-      "trace": "tax-agent--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "tax-agent--baseline.json"
     },
     {
       "scenario": "tax-agent",
       "useCase": "tax-agent",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The agent reads another client's account by mistake",
       "status": "runs",
       "actual": {
@@ -4677,13 +4678,13 @@
           "outcome": "go"
         }
       ],
-      "trace": "tax-agent--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "tax-agent--branch-1--baseline.json"
     },
     {
       "scenario": "telecom-fault",
       "useCase": "telecom-fault",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "go",
@@ -4691,13 +4692,13 @@
         "check": "evidence"
       },
       "consequences": [],
-      "trace": "telecom-fault--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "telecom-fault--baseline.json"
     },
     {
       "scenario": "telecom-fault",
       "useCase": "telecom-fault",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The provider's agent asks the customer's agent to change account settings",
       "status": "runs",
       "actual": {
@@ -4710,21 +4711,21 @@
         "reason": "approval-required"
       },
       "consequences": [],
-      "trace": "telecom-fault--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "telecom-fault--branch-1--baseline.json"
     },
     {
       "scenario": "tenancy-application",
       "useCase": "tenancy-application",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed",
-      "settlement": "rdf-order"
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "tenancy-application",
       "useCase": "tenancy-application",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The letting agent asks for six months of statements",
       "status": "runs",
       "actual": {
@@ -4737,13 +4738,13 @@
         "reason": "not-authorised"
       },
       "consequences": [],
-      "trace": "tenancy-application--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "tenancy-application--branch-1--baseline.json"
     },
     {
       "scenario": "tenancy-application",
       "useCase": "tenancy-application",
       "path": "branch-2",
+      "settlement": "rdf-order",
       "what": "The letting agent's agent keeps asking in different words",
       "status": "runs",
       "actual": {
@@ -4756,21 +4757,21 @@
         "reason": "round-limit"
       },
       "consequences": [],
-      "trace": "tenancy-application--branch-2--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "tenancy-application--branch-2--baseline.json"
     },
     {
       "scenario": "trial-eligibility",
       "useCase": "trial-eligibility",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered.",
-      "settlement": "rdf-order"
+      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
       "scenario": "trial-eligibility",
       "useCase": "trial-eligibility",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The practice cannot state the medication list is complete",
       "status": "runs",
       "actual": {
@@ -4783,13 +4784,13 @@
         "reason": "completeness-not-established"
       },
       "consequences": [],
-      "trace": "trial-eligibility--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "trial-eligibility--branch-1--baseline.json"
     },
     {
       "scenario": "trip-booking",
       "useCase": "trip-booking",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "admit",
@@ -4797,13 +4798,13 @@
         "check": "fitness"
       },
       "consequences": [],
-      "trace": "trip-booking--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "trip-booking--baseline.json"
     },
     {
       "scenario": "trip-booking",
       "useCase": "trip-booking",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "A hotel listing contains text telling the agent to book a different, dearer hotel",
       "status": "disagrees",
       "actual": {
@@ -4833,13 +4834,13 @@
           "reason": "not-authorised"
         }
       ],
-      "trace": "trip-booking--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "trip-booking--branch-1--baseline.json"
     },
     {
       "scenario": "trip-booking",
       "useCase": "trip-booking",
       "path": "branch-2",
+      "settlement": "rdf-order",
       "what": "A search form asks for passport number",
       "status": "runs",
       "actual": {
@@ -4852,21 +4853,21 @@
         "reason": "excessive-scope"
       },
       "consequences": [],
-      "trace": "trip-booking--branch-2--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "trip-booking--branch-2--baseline.json"
     },
     {
       "scenario": "visa-application",
       "useCase": "visa-application",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed",
-      "settlement": "rdf-order"
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "visa-application",
       "useCase": "visa-application",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The consulate cannot verify the foreign bank",
       "status": "runs",
       "actual": {
@@ -4879,13 +4880,13 @@
         "reason": "source-unknown"
       },
       "consequences": [],
-      "trace": "visa-application--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "visa-application--branch-1--baseline.json"
     },
     {
       "scenario": "wearable-data",
       "useCase": "wearable-data",
       "path": "main",
+      "settlement": "rdf-order",
       "status": "runs",
       "actual": {
         "outcome": "go",
@@ -4893,13 +4894,13 @@
         "check": "evidence"
       },
       "consequences": [],
-      "trace": "wearable-data--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "wearable-data--baseline.json"
     },
     {
       "scenario": "wearable-data",
       "useCase": "wearable-data",
       "path": "branch-1",
+      "settlement": "rdf-order",
       "what": "The insurer's terms allow use in underwriting",
       "status": "runs",
       "actual": {
@@ -4918,8 +4919,7 @@
           "outcome": "go"
         }
       ],
-      "trace": "wearable-data--branch-1--baseline.json",
-      "settlement": "rdf-order"
+      "trace": "wearable-data--branch-1--baseline.json"
     }
   ]
 }

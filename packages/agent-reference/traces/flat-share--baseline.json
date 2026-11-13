@@ -46,7 +46,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "local-ledger"
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -64,7 +65,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "5933bfbb5dd133e9a82cc25ef4e5ad4feed6fb8f",
     "core": "scripted"
   },
   "standIns": [],
@@ -260,12 +261,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:c7f6e69103e…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Alex’s agent to Blair’s agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "summary": "From Alex’s agent to Blair’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
@@ -312,7 +313,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:flat-share, with terms (round 1).",
+            "summary": "An offer for flat-share, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:flat-share",
@@ -334,7 +335,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:flat-share.",
+            "summary": "Terms: purpose Flat share.",
             "raw": {
               "purpose": "urn:purpose:flat-share",
               "depositSplit": 0.5,
@@ -380,12 +381,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:c7f6e69103e…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Alex’s agent to Blair’s agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "summary": "From Alex’s agent to Blair’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
@@ -432,7 +433,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:flat-share, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:flat-share\"; \"urn:purpose:flat-share\"; \"sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc\"",
+            "summary": "An offer for flat-share, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:flat-share",
@@ -468,7 +469,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:flat-share.",
+            "summary": "Terms: purpose Flat share.",
             "raw": {
               "purpose": "urn:purpose:flat-share",
               "depositSplit": 0.5,
@@ -588,12 +589,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:c7f6e69103e…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Alex’s agent to Blair’s agent; propose; signed (JWS EdDSA, pinned key nGVoT8SrA9Tj…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "summary": "From Alex’s agent to Blair’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
@@ -640,7 +641,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:flat-share, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:flat-share\"; \"urn:purpose:flat-share\"; \"sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc\"",
+            "summary": "An offer for flat-share, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:flat-share",
@@ -676,7 +677,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:flat-share.",
+            "summary": "Terms: purpose Flat share.",
             "raw": {
               "purpose": "urn:purpose:flat-share",
               "depositSplit": 0.5,
@@ -1009,12 +1010,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:ff98e6d2260…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Blair’s agent to Alex’s agent; accept; signed (JWS EdDSA, pinned key kwkwJRMn97u8…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:blair-agent:0001.",
+            "summary": "From Blair’s agent to Alex’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
@@ -1084,7 +1085,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
               "inReplyTo": "urn:awp:engine-flat-share-main:alex-agent:0002"
@@ -1121,12 +1122,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:ff98e6d2260…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Blair’s agent to Alex’s agent; accept; signed (JWS EdDSA, pinned key kwkwJRMn97u8…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-flat-share-main:blair-agent:0001.",
+            "summary": "From Blair’s agent to Alex’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
@@ -1174,7 +1175,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-flat-share-main:alex-agent:0002\"; \"sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc\"; \"urn:awp:agreement:1848facdd7e69ff96519d67c4c429c77\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-flat-share-main:alex-agent:0002",
               "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc",
@@ -1210,7 +1211,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-flat-share-main:alex-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
               "inReplyTo": "urn:awp:engine-flat-share-main:alex-agent:0002"

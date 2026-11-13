@@ -76,7 +76,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "local-ledger"
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -106,7 +107,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "5933bfbb5dd133e9a82cc25ef4e5ad4feed6fb8f",
     "core": "scripted"
   },
   "standIns": [
@@ -303,12 +304,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:da8b414b4bb…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The customer’s agent; propose; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0002.",
+            "summary": "From The service provider’s agent to The customer’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -357,7 +358,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:incident-notice:agreement, with terms (round 1).",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:incident-notice:agreement",
@@ -387,7 +388,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:incident-notice.",
+            "summary": "Terms: purpose Incident notice.",
             "raw": {
               "purpose": "urn:purpose:incident-notice",
               "duties": [
@@ -441,12 +442,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:da8b414b4bb…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The customer’s agent; propose; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0002.",
+            "summary": "From The service provider’s agent to The customer’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -495,7 +496,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:incident-notice:agreement, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:incident-notice:agreement\"; \"urn:purpose:incident-notice\"; \"urn:fictional:incident-notice:customer\"; \"sha-256:7dc1b3366d18768641081c6d862676b0295e0b6f88dd682313dff5f721cdfa80\"",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:incident-notice:agreement",
@@ -543,7 +544,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:incident-notice.",
+            "summary": "Terms: purpose Incident notice.",
             "raw": {
               "purpose": "urn:purpose:incident-notice",
               "duties": [
@@ -876,12 +877,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:c6137f21e09…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The customer’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned key DUxbFibvlibC…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:customer-agent:0001.",
+            "summary": "From The customer’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -953,7 +954,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-incident-notice-branch-1:provider-agent:0001",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0002"
@@ -990,12 +991,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:c6137f21e09…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The customer’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned key DUxbFibvlibC…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:customer-agent:0001.",
+            "summary": "From The customer’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1045,7 +1046,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-incident-notice-branch-1:provider-agent:0002\"; \"sha-256:7dc1b3366d18768641081c6d862676b0295e0b6f88dd682313dff5f721cdfa80\"; \"urn:awp:agreement:585beea97f6b5ed4d953362908908c8f\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-incident-notice-branch-1:provider-agent:0002",
               "termsDigest": "sha-256:7dc1b3366d18768641081c6d862676b0295e0b6f88dd682313dff5f721cdfa80",
@@ -1081,7 +1082,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-incident-notice-branch-1:provider-agent:0001",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0002"
@@ -1415,12 +1416,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:912eb599d1e…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The second customer’s agent; propose; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0004.",
+            "summary": "From The service provider’s agent to The second customer’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1469,7 +1470,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:incident-notice:agreement, with terms (round 1).",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:incident-notice:agreement",
@@ -1499,7 +1500,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:incident-notice.",
+            "summary": "Terms: purpose Incident notice.",
             "raw": {
               "purpose": "urn:purpose:incident-notice",
               "duties": [
@@ -1553,12 +1554,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:912eb599d1e…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The second customer’s agent; propose; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0004.",
+            "summary": "From The service provider’s agent to The second customer’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1607,7 +1608,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:incident-notice:agreement, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:incident-notice:agreement\"; \"urn:purpose:incident-notice\"; \"urn:fictional:incident-notice:second\"; \"sha-256:3786cf017acf608b2e227edc288bbbf85ec946911104fc35dbeecd3211d8b993\"",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:incident-notice:agreement",
@@ -1655,7 +1656,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:incident-notice.",
+            "summary": "Terms: purpose Incident notice.",
             "raw": {
               "purpose": "urn:purpose:incident-notice",
               "duties": [
@@ -1988,12 +1989,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:7404d4cf53b…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The second customer’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned key Bzb5_UTLEfUn…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:second-agent:0001.",
+            "summary": "From The second customer’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2065,7 +2066,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0004.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-incident-notice-branch-1:provider-agent:0003",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0004"
@@ -2102,12 +2103,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:7404d4cf53b…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The second customer’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned key Bzb5_UTLEfUn…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:second-agent:0001.",
+            "summary": "From The second customer’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2157,7 +2158,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-incident-notice-branch-1:provider-agent:0004\"; \"sha-256:3786cf017acf608b2e227edc288bbbf85ec946911104fc35dbeecd3211d8b993\"; \"urn:awp:agreement:abeb2e4bfa18297571d5bfc90a1a4fc0\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-incident-notice-branch-1:provider-agent:0004",
               "termsDigest": "sha-256:3786cf017acf608b2e227edc288bbbf85ec946911104fc35dbeecd3211d8b993",
@@ -2193,7 +2194,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0004.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-incident-notice-branch-1:provider-agent:0003",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0004"
@@ -2527,12 +2528,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:385fc379d79…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The regulator’s agent; propose; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0006.",
+            "summary": "From The service provider’s agent to The regulator’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2581,7 +2582,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:incident-notice:agreement, with terms (round 1).",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:incident-notice:agreement",
@@ -2611,7 +2612,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:incident-notice.",
+            "summary": "Terms: purpose Incident notice.",
             "raw": {
               "purpose": "urn:purpose:incident-notice",
               "duties": [
@@ -2665,12 +2666,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:385fc379d79…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The regulator’s agent; propose; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0006.",
+            "summary": "From The service provider’s agent to The regulator’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2719,7 +2720,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:incident-notice:agreement, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:incident-notice:agreement\"; \"urn:purpose:incident-notice\"; \"urn:fictional:incident-notice:regulator\"; \"sha-256:cb734875895842b40f4b739cbd6558ee005390760261b98979b479729fda1229\"",
+            "summary": "An offer for Form the data-use agreement, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:incident-notice:agreement",
@@ -2767,7 +2768,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:incident-notice.",
+            "summary": "Terms: purpose Incident notice.",
             "raw": {
               "purpose": "urn:purpose:incident-notice",
               "duties": [
@@ -3100,12 +3101,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:0226d13097d…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The regulator’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned key 95uy1RV0ECUT…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:regulator-agent:0001.",
+            "summary": "From The regulator’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3177,7 +3178,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0006.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-incident-notice-branch-1:provider-agent:0005",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0006"
@@ -3214,12 +3215,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:0226d13097d…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The regulator’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned key 95uy1RV0ECUT…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:regulator-agent:0001.",
+            "summary": "From The regulator’s agent to The service provider’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3269,7 +3270,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-incident-notice-branch-1:provider-agent:0006\"; \"sha-256:cb734875895842b40f4b739cbd6558ee005390760261b98979b479729fda1229\"; \"urn:awp:agreement:fabfbb447bfe57ee57332566bfe4101f\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-incident-notice-branch-1:provider-agent:0006",
               "termsDigest": "sha-256:cb734875895842b40f4b739cbd6558ee005390760261b98979b479729fda1229",
@@ -3305,7 +3306,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0006.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-incident-notice-branch-1:provider-agent:0005",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0006"
@@ -3749,12 +3750,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:21b2b9c768a…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The customer’s agent; invoke; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0007.",
+            "summary": "From The service provider’s agent to The customer’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4044,12 +4045,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:c8d3c11cfda…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The second customer’s agent; invoke; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0008.",
+            "summary": "From The service provider’s agent to The second customer’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4339,12 +4340,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:41c6cf73740…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The regulator’s agent; invoke; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0009.",
+            "summary": "From The service provider’s agent to The regulator’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4460,12 +4461,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:c8d3c11cfda…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The second customer’s agent; invoke; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0008.",
+            "summary": "From The service provider’s agent to The second customer’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4514,7 +4515,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:general-notice\"; \"sha-256:0248d73475f2f5d7e3d6b6b73051a37aa33f65520b9190ba0d495193670d87a9\"; \"urn:purpose:duties\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:general-notice",
@@ -4866,12 +4867,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:928e1b94ee2…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The second customer’s agent to The service provider’s agent; deliver; signed (JWS EdDSA, pinned key Bzb5_UTLEfUn…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:second-agent:0002.",
+            "summary": "From The second customer’s agent to The service provider’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4935,7 +4936,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0008.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:general-duty:882fcf9eda462cf3f549e445148e3516",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0008"
@@ -4972,12 +4973,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:928e1b94ee2…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The second customer’s agent to The service provider’s agent; deliver; signed (JWS EdDSA, pinned key Bzb5_UTLEfUn…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:second-agent:0002.",
+            "summary": "From The second customer’s agent to The service provider’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5009,7 +5010,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-incident-notice-branch-1:provider-agent:0008\"; \"urn:awp:engine-incident-notice-branch-1:provider-agent:0008\"; \"urn:op:general-notice\"; \"sha-256:0248d73475f2f5d7e3d6b6b73051a37aa33f65520b9190ba0d495193670d87a9\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-incident-notice-branch-1:provider-agent:0008",
               "basis": {
@@ -5059,7 +5060,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0008.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:general-duty:882fcf9eda462cf3f549e445148e3516",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0008"
@@ -5215,12 +5216,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:41c6cf73740…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The service provider’s agent to The regulator’s agent; invoke; signed (JWS EdDSA, pinned key pa7ocR-X59Go…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:provider-agent:0009.",
+            "summary": "From The service provider’s agent to The regulator’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5269,7 +5270,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:general-notice\"; \"sha-256:9712ee1c97bfbc0d1144309110594b9978dae672878c4030fe6f34041701b3af\"; \"urn:purpose:duties\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:general-notice",
@@ -5621,12 +5622,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:7711f5ad4db…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The regulator’s agent to The service provider’s agent; deliver; signed (JWS EdDSA, pinned key 95uy1RV0ECUT…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:regulator-agent:0002.",
+            "summary": "From The regulator’s agent to The service provider’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5690,7 +5691,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0009.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:general-duty:c323ccbd1d4b556d81e25705761f69af",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0009"
@@ -5727,12 +5728,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:7711f5ad4db…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The regulator’s agent to The service provider’s agent; deliver; signed (JWS EdDSA, pinned key 95uy1RV0ECUT…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-incident-notice-branch-1:regulator-agent:0002.",
+            "summary": "From The regulator’s agent to The service provider’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5764,7 +5765,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-incident-notice-branch-1:provider-agent:0009\"; \"urn:awp:engine-incident-notice-branch-1:provider-agent:0009\"; \"urn:op:general-notice\"; \"sha-256:9712ee1c97bfbc0d1144309110594b9978dae672878c4030fe6f34041701b3af\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-incident-notice-branch-1:provider-agent:0009",
               "basis": {
@@ -5814,7 +5815,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-incident-notice-branch-1:provider-agent:0009.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:general-duty:c323ccbd1d4b556d81e25705761f69af",
               "inReplyTo": "urn:awp:engine-incident-notice-branch-1:provider-agent:0009"

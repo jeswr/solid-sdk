@@ -74,7 +74,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "agreement-credential",
-      "accountability": "local-ledger"
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -110,7 +111,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "5933bfbb5dd133e9a82cc25ef4e5ad4feed6fb8f",
     "core": "scripted"
   },
   "standIns": [
@@ -2828,12 +2829,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:3dc3cba4d92…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The traveller’s agent to The airline that tickets’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-trip-booking-main:receiver-agent:0004.",
+            "summary": "From The traveller’s agent to The airline that tickets’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
@@ -3034,12 +3035,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:3dc3cba4d92…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The traveller’s agent to The airline that tickets’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-trip-booking-main:receiver-agent:0004.",
+            "summary": "From The traveller’s agent to The airline that tickets’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
@@ -3091,7 +3092,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:trip-booking:ticket\"; \"urn:scenario:trip-booking:passport\"; \"urn:purpose:ticketing\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:trip-booking:ticket",

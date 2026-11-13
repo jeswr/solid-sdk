@@ -54,7 +54,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "local-ledger"
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -72,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "5933bfbb5dd133e9a82cc25ef4e5ad4feed6fb8f",
     "core": "scripted"
   },
   "standIns": [
@@ -462,12 +463,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:2c8e6e4faae…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The insurer’s agent to The person’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-wearable-data-branch-1:receiver-agent:0002.",
+            "summary": "From The insurer’s agent to The person’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -515,7 +516,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:terms:wearable-data:requested-use\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:wearable-data:request",
@@ -606,12 +607,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:2c8e6e4faae…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The insurer’s agent to The person’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-wearable-data-branch-1:receiver-agent:0002.",
+            "summary": "From The insurer’s agent to The person’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -659,7 +660,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:wearable-data:request\"; \"urn:purpose:underwriting\"; \"urn:terms:wearable-data:requested-use\"; \"urn:purpose:underwriting\"; \"urn:purpose:wearable-data\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:wearable-data:request",
@@ -1020,12 +1021,12 @@
         "kind": "refuse",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:4cc148d5714…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The insurer’s agent; refuse; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-wearable-data-branch-1:owner-agent:0001.",
+            "summary": "From The person’s agent to The insurer’s agent; refuse; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1074,7 +1075,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-wearable-data-branch-1:receiver-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-wearable-data-branch-1:receiver-agent:0001",
               "inReplyTo": "urn:awp:engine-wearable-data-branch-1:receiver-agent:0002"

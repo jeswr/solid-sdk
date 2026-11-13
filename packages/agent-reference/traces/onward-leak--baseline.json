@@ -73,7 +73,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "regulator-claim"
+      "accountability": "regulator-claim",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -103,7 +104,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "5933bfbb5dd133e9a82cc25ef4e5ad4feed6fb8f",
     "core": "scripted"
   },
   "standIns": [
@@ -479,12 +480,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:2b0618fb23f…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The lender’s agent; propose; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-onward-leak-main:person-agent:0002.",
+            "summary": "From The person’s agent to The lender’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -535,7 +536,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:onward-leak:agreement, with terms (round 1).",
+            "summary": "An offer for Agree the lender’s restrictions, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:onward-leak:agreement",
@@ -558,7 +559,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:lending.",
+            "summary": "Terms: purpose Lending.",
             "raw": {
               "purpose": "urn:purpose:lending",
               "duties": [],
@@ -605,12 +606,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:2b0618fb23f…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The lender’s agent; propose; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-onward-leak-main:person-agent:0002.",
+            "summary": "From The person’s agent to The lender’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -661,7 +662,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:onward-leak:agreement, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:onward-leak:agreement\"; \"urn:purpose:lending\"; \"sha-256:de11ba6e7bc1e426cad8c659e275ef1fc18361a5c3e53cd16725f911cfb4a479\"; \"urn:fictional:onward-leak:receiver\"; \"sha-256:9a1f8b9337034fd31b35fc60a67beac4606303fa79cceb60eb4fa20b36505b5c\"",
+            "summary": "An offer for Agree the lender’s restrictions, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:onward-leak:agreement",
@@ -706,7 +707,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose urn:purpose:lending.",
+            "summary": "Terms: purpose Lending.",
             "raw": {
               "purpose": "urn:purpose:lending",
               "duties": [],
@@ -1032,12 +1033,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:e279ad72c5c…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The lender’s agent to The person’s agent; accept; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-onward-leak-main:owner-agent:0001.",
+            "summary": "From The lender’s agent to The person’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -1111,7 +1112,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-onward-leak-main:person-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-onward-leak-main:person-agent:0001",
               "inReplyTo": "urn:awp:engine-onward-leak-main:person-agent:0002"
@@ -1148,12 +1149,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:e279ad72c5c…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The lender’s agent to The person’s agent; accept; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-onward-leak-main:owner-agent:0001.",
+            "summary": "From The lender’s agent to The person’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -1205,7 +1206,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-onward-leak-main:person-agent:0002\"; \"sha-256:9a1f8b9337034fd31b35fc60a67beac4606303fa79cceb60eb4fa20b36505b5c\"; \"urn:awp:agreement:7942087bd30f543a171c6536763e6161\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-onward-leak-main:person-agent:0002",
               "termsDigest": "sha-256:9a1f8b9337034fd31b35fc60a67beac4606303fa79cceb60eb4fa20b36505b5c",
@@ -1241,7 +1242,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-onward-leak-main:person-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-onward-leak-main:person-agent:0001",
               "inReplyTo": "urn:awp:engine-onward-leak-main:person-agent:0002"
@@ -1615,12 +1616,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:d23017c12ae…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The lender’s agent; invoke; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-onward-leak-main:person-agent:0003.",
+            "summary": "From The person’s agent to The lender’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -1776,7 +1777,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Sent under agreement urn:awp:agreement:7942087bd30f543a171c6536763e6161; its terms bind the data.",
+            "summary": "Sent under the recorded agreement; its terms bind the data.",
             "raw": {
               "kind": "agreement",
               "agreement": "urn:awp:agreement:7942087bd30f543a171c6536763e6161"
@@ -1829,12 +1830,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:d23017c12ae…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The person’s agent to The lender’s agent; invoke; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-onward-leak-main:person-agent:0003.",
+            "summary": "From The person’s agent to The lender’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
@@ -1885,7 +1886,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:onward-leak:agreement\"; \"urn:scenario:onward-leak:income\"; \"urn:purpose:lending\"; \"urn:awp:agreement:7942087bd30f543a171c6536763e6161\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:onward-leak:agreement",
@@ -2008,7 +2009,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Sent under agreement urn:awp:agreement:7942087bd30f543a171c6536763e6161; its terms bind the data.",
+            "summary": "Sent under the recorded agreement; its terms bind the data.",
             "raw": {
               "kind": "agreement",
               "agreement": "urn:awp:agreement:7942087bd30f543a171c6536763e6161"
@@ -2226,6 +2227,7 @@
       "seq": 61,
       "step": 9,
       "agent": "person-agent",
+      "segment": "payment",
       "part": "core",
       "kind": "propose",
       "caption": "The core proposes to share The person’s bank's income.total statement with The independent fictional ombudsman."
@@ -2625,6 +2627,7 @@
       "seq": 83,
       "step": 11,
       "agent": "owner-agent",
+      "segment": "payment",
       "part": "core",
       "kind": "propose",
       "caption": "The core proposes to share The person’s bank's income.total statement with The independent fictional ombudsman."

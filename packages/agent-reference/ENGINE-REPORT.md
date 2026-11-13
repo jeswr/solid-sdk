@@ -1683,3 +1683,119 @@ expense scripts and historical artifacts require an explicit scope change to mig
 their missing contract; the workspace dependency failure requires the pre-existing
 installation to be repaired outside this offline brief. Neither is concealed by the
 passing focused checks or the updated inventory totals.
+
+## Brief 24b
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Offline implementation under Node 24, without commits. Only the expenses scenario and
+its profile are migrated; the shared payment gates and every other scenario stay intact.
+A general trace-caption punctuation correction is described below.
+The employee files the claim as a signed `propose` for `urn:op:expenses-file`, carrying
+an actual ODRL Offer with a 40.00 GBP compensation duty to the employee and the original
+merchant-signed receipt as evidence. The employee and finance receipt admissions remain.
+Finance's acceptance intent explicitly names the admitted receipt as support, so a
+receipt refused by its source check cannot authorize acceptance. The current legacy
+proposal admission does not derive a receipt-use purpose from proposed terms before an
+agreement exists. Finance therefore runs an explicit inbound admission of that same
+merchant-signed receipt under the expenses purpose before receiving and accepting the
+proposal. The attached copy remains in the signed proposal, and its ordinary inbound
+checks still run; its pre-agreement terms result is indeterminate, not fabricated as a
+pass. Acceptance relies on the separately admitted, purpose-scoped receipt. The employee admits
+the signed acceptance and acknowledges it before issuing the reimbursement invoice.
+
+The added finance permission is `use` on the expense-claim operation only, constrained
+to the expenses purpose and this employee as recipient. The scenario's existing bounded
+commitment mechanism caps acceptance at 50 GBP. Payment authority remains 50 GBP per
+payment and 2,000 GBP per calendar month with the original approval exception. The
+employee's invoice-request permission and the bank's local-settlement permission are
+also restricted to their respective operation, purpose and recipient. No general service
+acceptance permission is added. The merchant receipt retains its original `invoice`
+claim/source rules; the employee's new `reimbursement-invoice` is a separate claim kind,
+accepted only from the employee for the employer. Payment receipts are accepted only
+from the reimbursement bank for the employer.
+
+The invoice, order, provider ledger effect, signed provider receipt, forwarding under the
+agreement, payee receipt admission and acknowledgement reuse Brief 24's `rdf-order`
+flow. The existing reimbursement bank's agent is the provider, with separately configured
+payer/payee ledger accounts. Its stand-in says exactly: “No money moves. The payment
+provider is a fictional party with its own keys that keeps a ledger.” The scenario
+selects `signed-offer-acceptance` and `rdf-order`, with no commitments `payment`
+reference. Outlines are recorded from the actual gates, not manually scripted verdicts.
+
+**Path outcomes.** “Committed” below means the historical artifacts retained by Brief 24;
+they were not successful executions under universal P1 at the start of this brief.
+
+| Expenses path | Committed outcome | Live before this change | After |
+|---|---|---|---|
+| `main` (40 GBP) | `go / evidence-complete`, `evidence` | Payment stopped at P1, `no-agreement`; the subsequent `bank-receives` step threw because nothing had been sent. | Actual offer/acceptance, invoice, all P1–P8 passes, one ledger transfer, two admitted settlement receipts and final acknowledgement; `go / evidence-complete`, `evidence`. |
+| `branch-1` (75 GBP meal) | `ask-principal / limit-exceeded`, `limits-approval` | Payment stopped at P1, `no-agreement`, before its intended limit check. | `ask-principal / limit-exceeded`, `limits-approval`, while authorizing acceptance of the claim; no acceptance, invoice or payment order leaves. |
+
+The branch retains its one catalogue expectation unchanged. Its limit is now enforced
+before forming the agreement: accepting a 75 GBP debt autonomously would exceed the new
+50 GBP acceptance authority. It therefore does not reach a payment P-number. The old
+payment-limit check itself is P5 under Brief 24, and the 40 GBP main path exercises it;
+the retained 75 GBP branch demonstrates the earlier commitment limit, still named
+`limits-approval`. The branch's merchant receipt, offer and proposed acceptance all say
+75 GBP, so an unrelated amount discrepancy is not used to force the expected outcome.
+
+**Validation checkpoint.** The new journey tests first reproduced the missing-agreement
+failure. The unchanged RDF pipeline guard reports exactly **15 hard failures and 213
+explicit allowances**. Final scenario, test, oracle and command accounting follows.
+
+**Presentation repair exposed by the completed run.** Once expenses stopped aborting
+`engine.test.ts`, its existing all-scenario assertion reached Brief 24's mortgage step
+“Look up a registered valuer”, which lacked terminal punctuation. The shared trace-header
+formatter in `src/engine/run.ts` now adds a full stop when a step caption has none.
+This changes presentation only; no scenario, gate, message or oracle decision is altered.
+The existing engine assertion is retained. Validation-only regeneration of unrelated
+trace presentation/metadata is restored to the committed artifacts; the index inventories
+the actual retained traces. The six real joint traces and their manifest hashes are
+refreshed, as expected for random shares.
+
+**Oracle and manifest.** The required snapshot command ran **once**, after the first
+successful full scenario recording. The later caption-only repair and rerun were audited
+against that same snapshot without regenerating it. Exactly **`expenses/main`** and
+**`expenses/branch-1`** differ from HEAD; the other **159 of 161 baseline paths** are
+identical, with no additions or deletions. Snapshot SHA-256:
+`b4c928de53dc96228087009792da1be646f760e705d6343b48a8441c841d6f25`.
+The final manifest remains **178 rows: 158 `runs`, 11 `disagrees`, 9 `blocked`**;
+**169 live paths** completed, including the eight existing transport-configuration
+rows. All rows select `rdf-order`. Both expense rows now represent current real runs,
+and their outcomes still agree with the catalogue. Each retained joint-trace hash was
+independently checked against its bytes.
+
+**Regression checks.** Seven additional journey cases cover the signed 40 GBP ODRL
+compensation offer and attached merchant receipt, the complete provider/receipt flow,
+the 75 GBP acceptance hold, missing acceptance permission, wrong purpose, wrong recipient
+and the unaccepted merchant receipt. The original P1–P8, receipt, protocol and durability
+tests are retained. Both expense traces have zero raw identifiers in captions, rule
+texts, chat sentences or packet summaries. No dependency, generated model, protected
+RDF guard file, evaluation source or other scenario is changed.
+The same full sweep exposed the maintained five-journey mortgage integration test's
+five-second default timeout (5.037 seconds while the all-scenario checks were also
+running). Its explicit timeout is now 15 seconds in `test/mortgage-data.test.ts`;
+all outline and gate assertions remain intact. The preceding full run had **627 passing
+functional tests and this one timeout**. Final complete-suite results follow below.
+
+**Last validation commands and results.** `/opt/node24/bin` was first on PATH.
+
+| Command | Final result |
+|---|---|
+| `pnpm --filter @jeswr/agent-reference exec tsc -p tsconfig.build.json` | PASS; compiled the current source for the data-scenario runner. |
+| `pnpm --filter @jeswr/agent-reference run scenarios` | PASS; **169 live paths**, manifest **158 runs / 11 disagree / 9 blocked**. |
+| `node packages/agent-reference/scripts/oracle-snapshot.mjs` | Run **once**; captured **161 baseline paths**. Only `expenses/main` and `expenses/branch-1` changed. |
+| `node /tmp/brief24b-audit.mjs` | PASS; current recordings equal the saved snapshot, 159 non-expense decisions unchanged, manifest outcomes/classifications unchanged. Unrelated regenerated metadata restored. |
+| `pnpm --filter @jeswr/agent-reference test` | PASS; **628 reference tests in 61 files + 17 package fixture tests in one file**. `engine.test.ts`, `oracle.test.ts` and `recorded-joint.test.ts` all pass. |
+| `pnpm --filter @jeswr/agent-reference run typecheck` | PASS. |
+| `pnpm --filter @jeswr/agent-reference run lint` | PASS; zero errors, seven existing warnings and 292 informational diagnostics. |
+| `node packages/agent-reference/scripts/check-rdf-pipeline.mjs` | Expected baseline **exit 1**: exactly **15 hard failures and 213 allowances**; both protected guard files unchanged. |
+| `node scripts/check-agent-layers.mjs` | PASS. |
+| Final artifact/scope audit and `git diff --check` | PASS; only the expenses scenario is edited, the original report is an unchanged prefix, the branch expectation is unchanged, all six joint hashes verify, and the trace index matches the retained files. |
+
+Logs and audit results are `/tmp/brief24b-{compile,scenarios,oracle-snapshot,oracle-audit,
+payment-tests,tests,typecheck,lint,rdf-pipeline,layers}.log` and
+`/tmp/brief24b-oracle-audit.json`. No network, dependency installation, personal-agent
+suite, coverage run, `eval:e0` command, full-workspace gate or commit was performed.
+All requested Brief 24b work is complete; the pipeline's explicitly required existing
+15 failures remain visible.

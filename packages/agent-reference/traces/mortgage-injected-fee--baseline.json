@@ -1,4 +1,5 @@
 {
+  "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
   "useCase": "mortgage-in-principle",
   "path": {
@@ -78,7 +79,7 @@
     }
   ],
   "generated": {
-    "commit": "b50a701a09fb98bd99098763ef404e5a4c66f72e",
+    "commit": "5933bfbb5dd133e9a82cc25ef4e5ad4feed6fb8f",
     "core": "scripted"
   },
   "standIns": [

@@ -44,6 +44,7 @@ it("registers exactly five settlement choices without claiming the four protocol
 describe("separately keyed signed payment journeys", () => {
   it.each([
     "pay-an-invoice",
+    "expenses",
     "shopping-agent",
     "mortgage-main",
   ])("%s reaches the provider ledger and both receipt checks", async (id) => {
@@ -83,6 +84,119 @@ describe("separately keyed signed payment journeys", () => {
           expect(view.summary).not.toMatch(/https?:\/\/|urn:/);
     }
   }, 120_000);
+  it("files the expense claim as a signed compensation offer with the merchant receipt", async () => {
+    const trace = traceOf(await run("expenses"));
+    const offer = required(
+      trace.events.find((e) => e.kind === "message-out" && e.packet?.kind === "propose"),
+    ).packet;
+    expect(offer?.layers.header.raw).toMatchObject({
+      from: {
+        actor: "urn:fictional:employee-agent:actor",
+        onBehalfOf: "urn:fictional:supplier",
+      },
+      proof: { alg: "EdDSA" },
+    });
+    expect(offer?.layers.content.raw).toMatchObject({
+      operation: { id: "urn:op:expenses-file" },
+      terms: {
+        receipt: "urn:scenario:expenses:invoice",
+        payment: {
+          type: "OdrlOffer",
+          duties: {
+            paymentAction: "http://www.w3.org/ns/odrl/2/compensate",
+            compensatedParty: "urn:fictional:supplier",
+            amountConstraint: { paymentAmount: "40.00", paymentUnit: "GBP" },
+          },
+        },
+      },
+    });
+    expect(offer?.layers.evidence.raw).toMatchObject([
+      {
+        id: "urn:scenario:expenses:invoice",
+        issuer: "urn:fictional:merchant",
+        value: 40,
+        currency: "GBP",
+      },
+    ]);
+    const acceptance = required(
+      trace.events.find((e) => e.kind === "message-out" && e.packet?.kind === "accept"),
+    );
+    expect(
+      trace.events
+        .slice(0, trace.events.indexOf(acceptance))
+        .some((e) => e.agent === "business-agent" && e.check === "terms" && e.verdict === "pass"),
+    ).toBe(true);
+  });
+  it("holds the over-limit expense claim before accepting or ordering payment", async () => {
+    const paths = await run("expenses");
+    expect(required(paths.find((p) => p.path === "branch-1")).actual).toEqual({
+      outcome: "ask-principal",
+      check: "limits-approval",
+      reason: "limit-exceeded",
+    });
+    const trace = traceOf(paths, "branch-1");
+    expect(trace.events.some((e) => e.packet?.kind === "propose")).toBe(true);
+    expect(trace.events.some((e) => e.kind === "message-out" && e.packet?.kind === "accept")).toBe(
+      false,
+    );
+    expect(trace.events.some((e) => e.check === "P1")).toBe(false);
+    expect(trace.events.some((e) => e.caption.includes("records the ledger transfer"))).toBe(false);
+  });
+  it.each([
+    "permission",
+    "purpose",
+    "recipient",
+  ])("cannot accept an expense claim outside its %s authority", async (change) => {
+    const { profile, scenario } = loadCase(root, "expenses");
+    scenario.branches = [];
+    scenario.script = scenario.script.slice(
+      0,
+      scenario.script.findIndex((s) => s.id === "finance-checks-receipt") + 1,
+    );
+    const mandate = required(scenario.mandates.find((m) => m.agent === "business-agent"));
+    const acceptance = required(
+      mandate.autonomous.find((r) => r.target === "urn:op:expenses-file"),
+    );
+    if (change === "permission")
+      mandate.autonomous = mandate.autonomous.filter((r) => r !== acceptance);
+    else
+      acceptance.constraints = [
+        { leftOperand: change, operator: "eq", rightOperand: `urn:unpermitted:${change}` },
+      ];
+    const trace = traceOf(await runScenario(profile, scenario, { compare: false }));
+    expect(
+      trace.events.some(
+        (e) =>
+          e.agent === "business-agent" && e.outcome === "stop" && e.reason === "not-authorised",
+      ),
+    ).toBe(true);
+    expect(trace.events.some((e) => e.kind === "message-out" && e.packet?.kind === "accept")).toBe(
+      false,
+    );
+  });
+  it("checks the merchant receipt before accepting the expense claim", async () => {
+    const { profile, scenario } = loadCase(root, "expenses");
+    scenario.branches = [];
+    scenario.script = scenario.script.slice(
+      0,
+      scenario.script.findIndex((s) => s.id === "finance-checks-receipt") + 1,
+    );
+    scenario.trust.sources["business-agent"] = required(
+      scenario.trust.sources["business-agent"],
+    ).filter((s) => s.source !== "urn:fictional:merchant");
+    const trace = traceOf(await runScenario(profile, scenario, { compare: false }));
+    expect(
+      trace.events.some(
+        (e) =>
+          e.agent === "business-agent" &&
+          e.check === "source" &&
+          e.reason === "source-not-authoritative",
+      ),
+    ).toBe(true);
+    expect(trace.events.some((e) => e.kind === "message-out" && e.packet?.kind === "accept")).toBe(
+      false,
+    );
+  });
   it.each([
     ["fee-amount-differs", "P2", "amount-differs"],
     ["fee-payee-differs", "P3", "payee-differs"],

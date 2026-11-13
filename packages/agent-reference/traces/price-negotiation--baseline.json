@@ -49,7 +49,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "local-ledger"
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -67,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "5933bfbb5dd133e9a82cc25ef4e5ad4feed6fb8f",
     "core": "scripted"
   },
   "standIns": [
@@ -439,12 +440,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:f3c6e7cb5ec…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The seller’s agent to The buyer’s agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-price-negotiation-main:receiver-agent:0002.",
+            "summary": "From The seller’s agent to The buyer’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -493,7 +494,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:price-negotiation, with terms (round 1).",
+            "summary": "An offer for Negotiating a price, with terms (round 1).",
             "raw": {
               "operation": {
                 "id": "urn:op:price-negotiation",
@@ -561,12 +562,12 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:f3c6e7cb5ec…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The seller’s agent to The buyer’s agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-price-negotiation-main:receiver-agent:0002.",
+            "summary": "From The seller’s agent to The buyer’s agent; propose; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -615,7 +616,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:op:price-negotiation, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:price-negotiation\"; \"sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0\"",
+            "summary": "An offer for Negotiating a price, with terms (round 1). It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:price-negotiation",
@@ -972,12 +973,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:51374638386…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer’s agent to The seller’s agent; accept; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-price-negotiation-main:owner-agent:0001.",
+            "summary": "From The buyer’s agent to The seller’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1049,7 +1050,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-price-negotiation-main:receiver-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001",
               "inReplyTo": "urn:awp:engine-price-negotiation-main:receiver-agent:0002"
@@ -1086,12 +1087,12 @@
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:51374638386…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer’s agent to The seller’s agent; accept; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-price-negotiation-main:owner-agent:0001.",
+            "summary": "From The buyer’s agent to The seller’s agent; accept; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1141,7 +1142,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-price-negotiation-main:receiver-agent:0002\"; \"sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0\"; \"urn:awp:agreement:bcbec632e5bc66e68089f57c1c0c7bae\"",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "proposal": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
               "termsDigest": "sha-256:3d85cec91d8d119247fffe76b32ea5feb78a4da0e8a3347eab1ef2344e9522c0",
@@ -1177,7 +1178,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-price-negotiation-main:receiver-agent:0002.",
+            "summary": "Answers the recorded earlier message.",
             "raw": {
               "conversation": "urn:awp:engine-price-negotiation-main:receiver-agent:0001",
               "inReplyTo": "urn:awp:engine-price-negotiation-main:receiver-agent:0002"

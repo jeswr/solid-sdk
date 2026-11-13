@@ -98,7 +98,8 @@
       "reliance": "precedence-rules",
       "usage-control": "odrl-rules",
       "commitments": "signed-offer-acceptance",
-      "accountability": "local-ledger"
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
     }
   },
   "agents": [
@@ -140,7 +141,7 @@
     }
   ],
   "generated": {
-    "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+    "commit": "5933bfbb5dd133e9a82cc25ef4e5ad4feed6fb8f",
     "core": "scripted"
   },
   "standIns": [
@@ -508,12 +509,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:837ca8f366a…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 1’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002.",
+            "summary": "From The buyer company’s agent to Fictional supplier 1’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -628,12 +629,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:837ca8f366a…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 1’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002.",
+            "summary": "From The buyer company’s agent to Fictional supplier 1’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -682,7 +683,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:request-for-quotes:request\"; \"urn:purpose:request-for-quotes\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:request-for-quotes:request",
@@ -1073,12 +1074,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:548040bd21b…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 1’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key 5JhPTFaPs58j…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-1-agent:0001.",
+            "summary": "From Fictional supplier 1’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1243,7 +1244,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 1’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 1’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0001",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002",
@@ -1288,12 +1289,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:548040bd21b…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 1’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key 5JhPTFaPs58j…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-1-agent:0001.",
+            "summary": "From Fictional supplier 1’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1325,7 +1326,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002\"; \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002\"; \"urn:op:request-for-quotes:request\"; \"urn:scenario:request-for-quotes:quote-1\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002",
               "basis": {
@@ -1476,7 +1477,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 1’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 1’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0001",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002",
@@ -2036,12 +2037,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:92086ee9ddc…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 2’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004.",
+            "summary": "From The buyer company’s agent to Fictional supplier 2’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2156,12 +2157,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:92086ee9ddc…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 2’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004.",
+            "summary": "From The buyer company’s agent to Fictional supplier 2’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2210,7 +2211,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:request-for-quotes:request\"; \"urn:purpose:request-for-quotes\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:request-for-quotes:request",
@@ -2601,12 +2602,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:32cf2993f48…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 2’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key XoPSlRLhOBr8…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-2-agent:0001.",
+            "summary": "From Fictional supplier 2’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2771,7 +2772,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 2’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 2’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0003",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004",
@@ -2816,12 +2817,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:32cf2993f48…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 2’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key XoPSlRLhOBr8…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-2-agent:0001.",
+            "summary": "From Fictional supplier 2’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -2853,7 +2854,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004\"; \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004\"; \"urn:op:request-for-quotes:request\"; \"urn:scenario:request-for-quotes:quote-2\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004",
               "basis": {
@@ -3004,7 +3005,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 2’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 2’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0003",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004",
@@ -3564,12 +3565,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:12814c7525d…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 3’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006.",
+            "summary": "From The buyer company’s agent to Fictional supplier 3’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3684,12 +3685,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:12814c7525d…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 3’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006.",
+            "summary": "From The buyer company’s agent to Fictional supplier 3’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -3738,7 +3739,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:request-for-quotes:request\"; \"urn:purpose:request-for-quotes\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:request-for-quotes:request",
@@ -4129,12 +4130,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:792289be480…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 3’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key V-3ZB56UGhJD…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-3-agent:0001.",
+            "summary": "From Fictional supplier 3’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4299,7 +4300,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 3’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 3’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0005",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006",
@@ -4344,12 +4345,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:792289be480…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 3’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key V-3ZB56UGhJD…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-3-agent:0001.",
+            "summary": "From Fictional supplier 3’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -4381,7 +4382,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006\"; \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006\"; \"urn:op:request-for-quotes:request\"; \"urn:scenario:request-for-quotes:quote-3\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006",
               "basis": {
@@ -4532,7 +4533,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 3’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 3’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0005",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006",
@@ -5092,12 +5093,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:007f2985e56…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 4’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008.",
+            "summary": "From The buyer company’s agent to Fictional supplier 4’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5212,12 +5213,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:007f2985e56…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 4’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008.",
+            "summary": "From The buyer company’s agent to Fictional supplier 4’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5266,7 +5267,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:request-for-quotes:request\"; \"urn:purpose:request-for-quotes\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:request-for-quotes:request",
@@ -5657,12 +5658,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:ccc737b4586…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 4’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key o4g47fPVrq6c…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-4-agent:0001.",
+            "summary": "From Fictional supplier 4’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5827,7 +5828,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 4’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 4’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0007",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008",
@@ -5872,12 +5873,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:ccc737b4586…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 4’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key o4g47fPVrq6c…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-4-agent:0001.",
+            "summary": "From Fictional supplier 4’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -5909,7 +5910,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008\"; \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008\"; \"urn:op:request-for-quotes:request\"; \"urn:scenario:request-for-quotes:quote-4\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008",
               "basis": {
@@ -6060,7 +6061,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 4’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 4’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0007",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008",
@@ -6620,12 +6621,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:936a378f6a8…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 5’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010.",
+            "summary": "From The buyer company’s agent to Fictional supplier 5’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6740,12 +6741,12 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:936a378f6a8…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From The buyer company’s agent to Fictional supplier 5’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010.",
+            "summary": "From The buyer company’s agent to Fictional supplier 5’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -6794,7 +6795,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:request-for-quotes:request\"; \"urn:purpose:request-for-quotes\"",
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "operation": {
                 "id": "urn:op:request-for-quotes:request",
@@ -7185,12 +7186,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:89ea64877d8…; never trusted."
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 5’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key 4Lm9whyEbzdd…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-5-agent:0001.",
+            "summary": "From Fictional supplier 5’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -7355,7 +7356,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 5’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 5’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0009",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010",
@@ -7400,12 +7401,12 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:89ea64877d8…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
         },
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Fictional supplier 5’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned key 4Lm9whyEbzdd…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-request-for-quotes-branch-1:supplier-5-agent:0001.",
+            "summary": "From Fictional supplier 5’s agent to The buyer company’s agent; deliver; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -7437,7 +7438,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010\"; \"urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010\"; \"urn:op:request-for-quotes:request\"; \"urn:scenario:request-for-quotes:quote-5\"",
+            "summary": "Delivers the result under the agreement. It also carries untrusted free text; the original is available separately as content.",
             "raw": {
               "ref": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010",
               "basis": {
@@ -7588,7 +7589,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 5’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers the recorded earlier message. The statements were issued by their sources and are relayed, not authored, by Fictional supplier 5’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0009",
               "inReplyTo": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010",

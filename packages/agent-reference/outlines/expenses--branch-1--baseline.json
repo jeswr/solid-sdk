@@ -133,6 +133,52 @@
     },
     {
       "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "business-agent",
       "part": "transport",
       "kind": "message-in"
     },
@@ -165,8 +211,8 @@
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
-      "verdict": "pass",
-      "reason": "terms-acceptable"
+      "verdict": "indeterminate",
+      "reason": "indeterminate-policy"
     },
     {
       "agent": "business-agent",
@@ -178,98 +224,6 @@
     },
     {
       "agent": "business-agent",
-      "part": "inbound-gate",
-      "kind": "decision",
-      "verdict": "pass"
-    },
-    {
-      "agent": "business-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "integrity",
-      "verdict": "pass",
-      "reason": "intact"
-    },
-    {
-      "agent": "business-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "source",
-      "verdict": "pass",
-      "reason": "source-accepted"
-    },
-    {
-      "agent": "business-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "authority",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "business-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "terms",
-      "verdict": "pass",
-      "reason": "terms-acceptable"
-    },
-    {
-      "agent": "business-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "fitness",
-      "verdict": "pass",
-      "reason": "fit-for-use"
-    },
-    {
-      "agent": "business-agent",
-      "part": "inbound-gate",
-      "kind": "decision",
-      "verdict": "pass"
-    },
-    {
-      "agent": "bank-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "integrity",
-      "verdict": "pass",
-      "reason": "intact"
-    },
-    {
-      "agent": "bank-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "source",
-      "verdict": "pass",
-      "reason": "source-accepted"
-    },
-    {
-      "agent": "bank-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "authority",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "bank-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "terms",
-      "verdict": "pass",
-      "reason": "terms-acceptable"
-    },
-    {
-      "agent": "bank-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "fitness",
-      "verdict": "pass",
-      "reason": "fit-for-use"
-    },
-    {
-      "agent": "bank-agent",
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass"
