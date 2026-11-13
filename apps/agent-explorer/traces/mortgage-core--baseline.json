@@ -46,7 +46,7 @@
     }
   ],
   "generated": {
-    "commit": "67b498bf15e338ec01f91e4c7b685c59af452409",
+    "commit": "f70e61dabe101f82df60be95df78945406e001e6",
     "core": "scripted"
   },
   "events": [
@@ -55,12 +55,12 @@
       "step": 2,
       "agent": "sams-agent",
       "part": "principal",
-      "kind": "principal-reply",
+      "kind": "principal-instruction",
       "chat": {
         "who": "principal",
         "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
       },
-      "caption": "Sam asks the agent in chat."
+      "caption": "Sam asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does."
     },
     {
       "seq": 2,
@@ -105,6 +105,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -147,8 +148,8 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no action, so nothing is disclosed by choice."
+      "reason": "no-personal-data",
+      "caption": "The gate finds none of Sam's data in this message: no statement about Sam and no stored fact."
     },
     {
       "seq": 5,
@@ -165,8 +166,8 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no disclosure."
+      "reason": "no-personal-data",
+      "caption": "None of Sam's data goes, so no terms apply."
     },
     {
       "seq": 6,
@@ -206,6 +207,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -416,6 +418,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -557,6 +560,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "caption": "Sam's agent is reached through the key pinned when the two were introduced."
     },
     {
@@ -574,8 +578,8 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no action, so nothing is disclosed by choice."
+      "reason": "no-personal-data",
+      "caption": "The gate finds none of North Bank's data in this message: no statement about North Bank and no stored fact."
     },
     {
       "seq": 20,
@@ -592,8 +596,8 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no disclosure."
+      "reason": "no-personal-data",
+      "caption": "None of North Bank's data goes, so no terms apply."
     },
     {
       "seq": 21,
@@ -633,6 +637,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -1087,6 +1092,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -1213,6 +1219,7 @@
           "clause": "CORE-OUT-2"
         }
       ],
+      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
         "text": "Sam's mandate lets the agent use mortgage prequalification for mortgage application with North Bank or https://valleybank.example/#org, on its own."
@@ -1239,6 +1246,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -1317,6 +1325,7 @@
           "clause": "CORE-OUT-7"
         }
       ],
+      "reason": "within-limits",
       "caption": "Inside what the agent may do on its own, and within Sam's limits."
     },
     {
@@ -1339,6 +1348,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -1633,6 +1643,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -1677,6 +1688,7 @@
           "clause": "CORE-IN-7"
         }
       ],
+      "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
         "text": "A representation statement signed with Sam's pinned key must name this agent, this operation and a current validity period."
@@ -1762,6 +1774,7 @@
           "clause": "CORE-OUT-2"
         }
       ],
+      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
         "text": "North Bank's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
@@ -1788,6 +1801,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is Sam a party I can send a mortgage application to?",
         "path": [
@@ -1861,6 +1875,7 @@
           "clause": "CORE-OUT-7"
         }
       ],
+      "reason": "within-limits",
       "caption": "Inside what the agent may do on its own, and within North Bank's limits."
     },
     {
@@ -1883,6 +1898,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -2129,6 +2145,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "caption": "Paywell's record of your pay for the last 12 months is intact and signed with Paywell's pinned key."
     },
     {
@@ -2207,6 +2224,7 @@
           "clause": "CORE-IN-10"
         }
       ],
+      "reason": "terms-acceptable",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
         "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
@@ -2228,6 +2246,7 @@
           "clause": "CORE-IN-13"
         }
       ],
+      "reason": "fit-for-use",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#income",
         "text": "Income must be recorded by a payroll provider or tax authority and be at most three months old."
@@ -2339,6 +2358,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "caption": "Harbour Bank's balance at October 31, 2026 is intact and signed with Harbour Bank's pinned key."
     },
     {
@@ -2417,6 +2437,7 @@
           "clause": "CORE-IN-10"
         }
       ],
+      "reason": "terms-acceptable",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
         "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
@@ -2438,6 +2459,7 @@
           "clause": "CORE-IN-13"
         }
       ],
+      "reason": "fit-for-use",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#balance",
         "text": "A balance must be recorded by the bank that holds the account and be at most one month old."
@@ -2711,6 +2733,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -2755,6 +2778,7 @@
           "clause": "CORE-IN-7"
         }
       ],
+      "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
         "text": "A representation statement signed with North Bank's pinned key must name this agent, this operation and a current validity period."
@@ -2840,6 +2864,7 @@
           "clause": "CORE-OUT-2"
         }
       ],
+      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
         "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves."
@@ -2866,6 +2891,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -2930,6 +2956,7 @@
           "clause": "CORE-OUT-5"
         }
       ],
+      "reason": "terms-allow",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
         "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
@@ -2951,6 +2978,7 @@
           "clause": "CORE-OUT-5"
         }
       ],
+      "reason": "terms-allow",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
         "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
@@ -3034,6 +3062,7 @@
           "clause": "CORE-OUT-2"
         }
       ],
+      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
         "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves."
@@ -3060,6 +3089,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -3124,6 +3154,7 @@
           "clause": "CORE-OUT-5"
         }
       ],
+      "reason": "terms-allow",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
         "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
@@ -3145,6 +3176,7 @@
           "clause": "CORE-OUT-5"
         }
       ],
+      "reason": "terms-allow",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
         "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
@@ -3166,6 +3198,7 @@
           "clause": "CORE-OUT-7"
         }
       ],
+      "reason": "approval-given",
       "rule": {
         "id": "urn:awp:ref:sam-approval:0001",
         "text": "Sam's signed approval, bound to digest sha-256:a010b7a2…."
@@ -3192,6 +3225,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -3343,6 +3377,7 @@
           "clause": "CORE-OUT-2"
         }
       ],
+      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
         "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves."
@@ -3369,6 +3404,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -3433,6 +3469,7 @@
           "clause": "CORE-OUT-5"
         }
       ],
+      "reason": "terms-allow",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
         "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
@@ -3454,6 +3491,7 @@
           "clause": "CORE-OUT-5"
         }
       ],
+      "reason": "terms-allow",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
         "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
@@ -3475,6 +3513,7 @@
           "clause": "CORE-OUT-7"
         }
       ],
+      "reason": "approval-given",
       "rule": {
         "id": "urn:awp:ref:sam-approval:0001",
         "text": "Sam's signed approval, bound to digest sha-256:a010b7a2…."
@@ -3501,6 +3540,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -3530,7 +3570,7 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:4c7a54c932b…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:c966fd4ae45…; never trusted."
         },
         "layers": {
           "header": {
@@ -3559,7 +3599,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:e92b66a8adf90915d6d9a52f12630924ec77ed598ffbcaecee0431c44efb4e4d"
+            "digest": "sha-256:83a8c855baf8dd5efc622f7b979870295b192f5b769c3d875c477671d35fde6e"
           },
           "authority": {
             "present": false,
@@ -3694,6 +3734,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/paywell-income#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:paywell-income-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/paywell-income#no-marketing",
@@ -3712,7 +3766,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -3776,6 +3829,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#no-marketing",
@@ -3794,7 +3861,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -3802,7 +3868,7 @@
                 }
               }
             ],
-            "digest": "sha-256:f8a120c5f0aef6f9d49df713bd859fb11528551ccdda8f52e466069289993029"
+            "digest": "sha-256:346610017f4e4b1ca3bcee68d2cc65720518e9a1e284fc9371e0d5456fdb7921"
           },
           "terms": {
             "present": true,
@@ -3987,6 +4053,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -4031,6 +4098,7 @@
           "clause": "CORE-IN-7"
         }
       ],
+      "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
         "text": "A representation statement signed with Sam's pinned key must name this agent, this operation and a current validity period."
@@ -4101,7 +4169,7 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:4c7a54c932b…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:c966fd4ae45…; never trusted."
         },
         "layers": {
           "header": {
@@ -4130,7 +4198,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:e92b66a8adf90915d6d9a52f12630924ec77ed598ffbcaecee0431c44efb4e4d"
+            "digest": "sha-256:83a8c855baf8dd5efc622f7b979870295b192f5b769c3d875c477671d35fde6e"
           },
           "authority": {
             "present": false,
@@ -4265,6 +4333,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/paywell-income#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:paywell-income-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/paywell-income#no-marketing",
@@ -4283,7 +4365,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -4347,6 +4428,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#no-marketing",
@@ -4365,7 +4460,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -4373,7 +4467,7 @@
                 }
               }
             ],
-            "digest": "sha-256:f8a120c5f0aef6f9d49df713bd859fb11528551ccdda8f52e466069289993029"
+            "digest": "sha-256:346610017f4e4b1ca3bcee68d2cc65720518e9a1e284fc9371e0d5456fdb7921"
           },
           "terms": {
             "present": true,
@@ -4443,6 +4537,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -4540,6 +4635,7 @@
           "clause": "CORE-IN-7"
         }
       ],
+      "reason": "established-earlier",
       "rule": {
         "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
         "text": "The representation accepted earlier in this conversation, still valid."
@@ -4566,6 +4662,7 @@
           "clause": "CORE-IN-10"
         }
       ],
+      "reason": "terms-acceptable",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
         "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
@@ -4592,6 +4689,7 @@
           "clause": "CORE-IN-10"
         }
       ],
+      "reason": "terms-acceptable",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
         "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
@@ -4613,6 +4711,7 @@
           "clause": "CORE-IN-13"
         }
       ],
+      "reason": "fit-for-use",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#income",
         "text": "Income must be recorded by a payroll provider or tax authority and be at most three months old."
@@ -4634,6 +4733,7 @@
           "clause": "CORE-IN-13"
         }
       ],
+      "reason": "fit-for-use",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#balance",
         "text": "A balance must be recorded by the bank that holds the account and be at most one month old."
@@ -4795,6 +4895,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is Sam a party I can send a mortgage application to?",
         "path": [
@@ -4832,8 +4933,8 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no action, so nothing is disclosed by choice."
+      "reason": "no-personal-data",
+      "caption": "The gate finds none of North Bank's data in this message: no statement about North Bank and no stored fact."
     },
     {
       "seq": 128,
@@ -4850,8 +4951,8 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no disclosure."
+      "reason": "no-personal-data",
+      "caption": "None of North Bank's data goes, so no terms apply."
     },
     {
       "seq": 129,
@@ -4891,6 +4992,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -4920,7 +5022,7 @@
         "kind": "receipt",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:34c0ab55cff…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:94a5f84fd09…; never trusted."
         },
         "layers": {
           "header": {
@@ -4950,7 +5052,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:bd015a06ae40a870a0fd339e4a5c797d8e71af4282418c1ef6673ffa205086fb"
+            "digest": "sha-256:a2ff9e2ee9d26a6031a3c8b28c7e3defffc8d670f28a0bacf61cbec18fa062c7"
           },
           "authority": {
             "present": false,
@@ -4969,7 +5071,7 @@
                 "checked": [
                   {
                     "integrity": "valid",
-                    "protectedObject": "sha-256:06cac76b58ab2514a2621079b9df34745ec6119c515ae4214e9d09d6108e043e",
+                    "protectedObject": "sha-256:e21fa2c0a78a8cc4b62a3696d4abd487d5c2a8a1825e08a73e8c5b0ef759f45f",
                     "id": "urn:awp:evidence:paywell-income-2026-10",
                     "claimType": "income.gross.monthly-series",
                     "issuer": "https://paywell.example/#org",
@@ -4978,7 +5080,7 @@
                   },
                   {
                     "integrity": "valid",
-                    "protectedObject": "sha-256:04ce405cac47047c2a6e7e9ae2c7c4ae8f6d9f6cd5e491af249765aefb95fb73",
+                    "protectedObject": "sha-256:1ed489c9dff1654a1f07f0634da79d8cb22e7cee03f15a50bbb458baa05bea1e",
                     "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
                     "claimType": "deposit.balance",
                     "issuer": "https://harbourbank.example/#org",
@@ -5002,7 +5104,7 @@
               },
               "final": false
             },
-            "digest": "sha-256:8866b93a0b46093c4872f17504cc8172c3397fa9bfd0e5ee1c81a8add85af98d"
+            "digest": "sha-256:b1a40a78f28c4598d1968f794e5b9bfde7c780cb392e201c47b870ec655e9283"
           },
           "evidence": {
             "present": false,
@@ -5051,7 +5153,7 @@
         "kind": "receipt",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:34c0ab55cff…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:94a5f84fd09…; never trusted."
         },
         "layers": {
           "header": {
@@ -5081,7 +5183,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:bd015a06ae40a870a0fd339e4a5c797d8e71af4282418c1ef6673ffa205086fb"
+            "digest": "sha-256:a2ff9e2ee9d26a6031a3c8b28c7e3defffc8d670f28a0bacf61cbec18fa062c7"
           },
           "authority": {
             "present": false,
@@ -5100,7 +5202,7 @@
                 "checked": [
                   {
                     "integrity": "valid",
-                    "protectedObject": "sha-256:06cac76b58ab2514a2621079b9df34745ec6119c515ae4214e9d09d6108e043e",
+                    "protectedObject": "sha-256:e21fa2c0a78a8cc4b62a3696d4abd487d5c2a8a1825e08a73e8c5b0ef759f45f",
                     "id": "urn:awp:evidence:paywell-income-2026-10",
                     "claimType": "income.gross.monthly-series",
                     "issuer": "https://paywell.example/#org",
@@ -5109,7 +5211,7 @@
                   },
                   {
                     "integrity": "valid",
-                    "protectedObject": "sha-256:04ce405cac47047c2a6e7e9ae2c7c4ae8f6d9f6cd5e491af249765aefb95fb73",
+                    "protectedObject": "sha-256:1ed489c9dff1654a1f07f0634da79d8cb22e7cee03f15a50bbb458baa05bea1e",
                     "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
                     "claimType": "deposit.balance",
                     "issuer": "https://harbourbank.example/#org",
@@ -5133,7 +5235,7 @@
               },
               "final": false
             },
-            "digest": "sha-256:8866b93a0b46093c4872f17504cc8172c3397fa9bfd0e5ee1c81a8add85af98d"
+            "digest": "sha-256:b1a40a78f28c4598d1968f794e5b9bfde7c780cb392e201c47b870ec655e9283"
           },
           "evidence": {
             "present": false,
@@ -5189,6 +5291,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -5233,6 +5336,7 @@
           "clause": "CORE-IN-7"
         }
       ],
+      "reason": "established-earlier",
       "rule": {
         "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
         "text": "The representation accepted earlier in this conversation, still valid."
@@ -5259,6 +5363,7 @@
           "clause": "CORE-IN-10"
         }
       ],
+      "reason": "terms-acceptable",
       "rule": {
         "id": "urn:awp:agreement:fa3a9ce2153caf33adf6ebe2803f6a12",
         "text": "Signed offer and acceptance of the exact terms (by digest)."
@@ -5336,6 +5441,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is Sam a party I can send a mortgage application to?",
         "path": [
@@ -5373,8 +5479,8 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no action, so nothing is disclosed by choice."
+      "reason": "no-personal-data",
+      "caption": "The gate finds none of North Bank's data in this message: no statement about North Bank and no stored fact."
     },
     {
       "seq": 143,
@@ -5391,8 +5497,8 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no disclosure."
+      "reason": "no-personal-data",
+      "caption": "None of North Bank's data goes, so no terms apply."
     },
     {
       "seq": 144,
@@ -5432,6 +5538,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -5736,6 +5843,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -5768,7 +5876,7 @@
         "text": "North Bank is accepted for mortgage.decision-in-principle claims."
       },
       "resolution": {
-        "question": "Is North Bank an authority for mortgage.decision-in-principle claims about North Bank?",
+        "question": "Is North Bank an authority for mortgage.decision-in-principle claims about Sam?",
         "path": [
           {
             "at": "Sam's own list",
@@ -5805,6 +5913,7 @@
           "clause": "CORE-IN-7"
         }
       ],
+      "reason": "established-earlier",
       "rule": {
         "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
         "text": "The representation accepted earlier in this conversation, still valid."
@@ -5831,6 +5940,7 @@
           "clause": "CORE-IN-10"
         }
       ],
+      "reason": "terms-acceptable",
       "rule": {
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
@@ -5852,6 +5962,7 @@
           "clause": "CORE-IN-13"
         }
       ],
+      "reason": "fit-for-use",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#decision",
         "text": "A decision in principle must come from the lender itself and still be valid."

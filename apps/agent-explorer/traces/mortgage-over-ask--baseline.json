@@ -44,7 +44,7 @@
     }
   ],
   "generated": {
-    "commit": "67b498bf15e338ec01f91e4c7b685c59af452409",
+    "commit": "f70e61dabe101f82df60be95df78945406e001e6",
     "core": "scripted"
   },
   "events": [
@@ -53,12 +53,12 @@
       "step": 2,
       "agent": "sams-agent",
       "part": "principal",
-      "kind": "principal-reply",
+      "kind": "principal-instruction",
       "chat": {
         "who": "principal",
         "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
       },
-      "caption": "Sam asks the agent in chat."
+      "caption": "Sam asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does."
     },
     {
       "seq": 2,
@@ -103,6 +103,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -145,8 +146,8 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no action, so nothing is disclosed by choice."
+      "reason": "no-personal-data",
+      "caption": "The gate finds none of Sam's data in this message: no statement about Sam and no stored fact."
     },
     {
       "seq": 5,
@@ -163,8 +164,8 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no disclosure."
+      "reason": "no-personal-data",
+      "caption": "None of Sam's data goes, so no terms apply."
     },
     {
       "seq": 6,
@@ -204,6 +205,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -414,6 +416,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -555,6 +558,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "caption": "Sam's agent is reached through the key pinned when the two were introduced."
     },
     {
@@ -572,8 +576,8 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no action, so nothing is disclosed by choice."
+      "reason": "no-personal-data",
+      "caption": "The gate finds none of North Bank's data in this message: no statement about North Bank and no stored fact."
     },
     {
       "seq": 20,
@@ -590,8 +594,8 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no disclosure."
+      "reason": "no-personal-data",
+      "caption": "None of North Bank's data goes, so no terms apply."
     },
     {
       "seq": 21,
@@ -631,6 +635,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -1085,6 +1090,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -1211,6 +1217,7 @@
           "clause": "CORE-OUT-2"
         }
       ],
+      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
         "text": "Sam's mandate lets the agent use mortgage prequalification for mortgage application with North Bank or https://valleybank.example/#org, on its own."
@@ -1237,6 +1244,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -1315,6 +1323,7 @@
           "clause": "CORE-OUT-7"
         }
       ],
+      "reason": "within-limits",
       "caption": "Inside what the agent may do on its own, and within Sam's limits."
     },
     {
@@ -1337,6 +1346,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -1631,6 +1641,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -1675,6 +1686,7 @@
           "clause": "CORE-IN-7"
         }
       ],
+      "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
         "text": "A representation statement signed with Sam's pinned key must name this agent, this operation and a current validity period."
@@ -1760,6 +1772,7 @@
           "clause": "CORE-OUT-2"
         }
       ],
+      "reason": "within-mandate",
       "rule": {
         "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
         "text": "North Bank's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
@@ -1786,6 +1799,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is Sam a party I can send a mortgage application to?",
         "path": [
@@ -1859,6 +1873,7 @@
           "clause": "CORE-OUT-7"
         }
       ],
+      "reason": "within-limits",
       "caption": "Inside what the agent may do on its own, and within North Bank's limits."
     },
     {
@@ -1881,6 +1896,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -2127,6 +2143,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "caption": "Paywell's record of your pay for the last 12 months is intact and signed with Paywell's pinned key."
     },
     {
@@ -2205,6 +2222,7 @@
           "clause": "CORE-IN-10"
         }
       ],
+      "reason": "terms-acceptable",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
         "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
@@ -2226,6 +2244,7 @@
           "clause": "CORE-IN-13"
         }
       ],
+      "reason": "fit-for-use",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#income",
         "text": "Income must be recorded by a payroll provider or tax authority and be at most three months old."
@@ -2337,6 +2356,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "caption": "Harbour Bank's balance at October 31, 2026 is intact and signed with Harbour Bank's pinned key."
     },
     {
@@ -2415,6 +2435,7 @@
           "clause": "CORE-IN-10"
         }
       ],
+      "reason": "terms-acceptable",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
         "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
@@ -2436,6 +2457,7 @@
           "clause": "CORE-IN-13"
         }
       ],
+      "reason": "fit-for-use",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#reliance/mortgage-application#balance",
         "text": "A balance must be recorded by the bank that holds the account and be at most one month old."
@@ -2709,6 +2731,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -2753,6 +2776,7 @@
           "clause": "CORE-IN-7"
         }
       ],
+      "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:78ea078ab067afc452a2e31e455dfbf8:1794560400000",
         "text": "A representation statement signed with North Bank's pinned key must name this agent, this operation and a current validity period."
@@ -2899,6 +2923,7 @@
           "clause": "CORE-OUT-3"
         }
       ],
+      "reason": "recipient-established",
       "resolution": {
         "question": "Is North Bank a party I can send a mortgage application to?",
         "path": [
@@ -2941,8 +2966,8 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no action, so nothing is disclosed by choice."
+      "reason": "no-personal-data",
+      "caption": "The gate finds none of Sam's data in this message: no statement about Sam and no stored fact."
     },
     {
       "seq": 84,
@@ -2959,8 +2984,8 @@
           "clause": "CORE-OUT-5"
         }
       ],
-      "reason": "no-action",
-      "caption": "This message proposes no disclosure."
+      "reason": "no-personal-data",
+      "caption": "None of Sam's data goes, so no terms apply."
     },
     {
       "seq": 85,
@@ -3000,6 +3025,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
+      "reason": "evidence-complete",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
@@ -3222,6 +3248,7 @@
           "clause": "CORE-IN-1"
         }
       ],
+      "reason": "intact",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
@@ -3266,6 +3293,7 @@
           "clause": "CORE-IN-7"
         }
       ],
+      "reason": "established-earlier",
       "rule": {
         "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000",
         "text": "The representation accepted earlier in this conversation, still valid."

@@ -109,6 +109,7 @@
     propose: 'Proposal',
     'ask-principal': 'Ask the principal',
     'principal-reply': 'Principal',
+    'principal-instruction': 'Principal',
     record: 'Record',
   };
   AX.partName = function (id) {

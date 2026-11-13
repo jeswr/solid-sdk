@@ -11,10 +11,10 @@
     },
     {
       "view": "explore",
-      "state": "scenario=mortgage-main&config=baseline&step=2&level=checks&focus=sams-agent.principal-reply",
+      "state": "scenario=mortgage-main&config=baseline&step=2&level=checks&focus=sams-agent.principal-instruction",
       "target": "chat",
       "title": "Sam's request",
-      "text": "Sam asks an agent for a mortgage in principle for a flat at 300,000. Sam's side of the conversation stays here, in the chat column. Everything else happens between agents."
+      "text": "Sam asks an agent for a mortgage in principle on a flat. Sam's side of the conversation stays here, in the chat column. Everything else happens between agents."
     },
     {
       "view": "explore",
@@ -60,10 +60,10 @@
     },
     {
       "view": "explore",
-      "state": "scenario=mortgage-main&config=baseline&step=13&level=checks&focus=sams-agent.ask-principal",
+      "state": "scenario=mortgage-main&config=baseline&step=11&level=checks&focus=sams-agent.ask-principal",
       "target": "chat",
       "title": "An approval",
-      "text": "Accepting an offer is a commitment, so the outbound gate asks Sam first. The approval is bound to the exact terms of the offer by its digest."
+      "text": "Sharing Sam's statements with the lender needs Sam's say-so, so the outbound gate asks first. The request says who wants them, what for and for how long, and the approval is bound to exactly that."
     },
     {
       "view": "explore",
