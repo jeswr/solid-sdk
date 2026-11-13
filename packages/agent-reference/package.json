@@ -1,0 +1,49 @@
+{
+  "name": "@jeswr/agent-reference",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The reference agent runtime of the accountable agent architecture: the pilot's transport-neutral core, mechanisms, stores and the synthetic mortgage scenario, lifted out of @jeswr/personal-agent/pilot. Experimental; synthetic test use only.",
+  "type": "module",
+  "license": "MIT",
+  "x-authored-by": "Claude Opus 5.5",
+  "securityCritical": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check src test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/solid-odrl": "workspace:*",
+    "canonicalize": "^1.0.8",
+    "jose": "^6.2.3",
+    "n3": "^2.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
