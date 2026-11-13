@@ -1,164 +1,130 @@
-// AUTHORED-BY Codex GPT-6
-import { AgentCookieAccessRequired, AgentSignIn, AgentSiteAccessRequired } from './agent-sign-in';
+// AUTHORED-BY Codex GPT-6.1-Sol
+import {
+  type CaptureIntent,
+  type CaptureView,
+  terminalCapturePhase,
+} from '../shared/agent-capture';
+import { CAPTURE_PERMISSION_PORT, capturePermissions } from '../shared/agent-capture-permissions';
 
-/** The only capture UI. No page messages, credential rendering, storage or automatic capture. */
+/** A port-backed view. The only local capability is the gesture-bound cookie request. */
 export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
   const element = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!;
   const status = element('agent-sign-in-status');
   const warning = element('agent-permission-warning');
   const warningMessage = element('agent-permission-warning-message');
-  const removeAccess = element<HTMLButtonElement>('agent-remove-cookie-access');
+  const remove = element<HTMLButtonElement>('agent-remove-cookie-access');
   const profile = element<HTMLSelectElement>('agent-profile');
   const persona = element<HTMLSelectElement>('agent-persona');
   const review = element<HTMLButtonElement>('agent-review');
   const confirm = element<HTMLButtonElement>('agent-confirm');
   const cancel = element<HTMLButtonElement>('agent-cancel');
   const preview = element('agent-preview');
-  const controller = new AgentSignIn(browser, async (request) => {
-    const response: unknown = await browser.runtime.sendMessage({ type: 'AGENT_VAULT', request });
-    if (
-      !response ||
-      typeof response !== 'object' ||
-      !('ok' in response) ||
-      response.ok !== true ||
-      !('result' in response)
-    )
-      throw 0;
-    return response.result;
-  });
-  let busy = false;
-  let loaded = false;
-  let personas: Awaited<ReturnType<AgentSignIn['load']>>['choices']['personas'] = [];
-  const warningText = warningMessage.textContent;
-  const removalFailed = () => {
-    warningMessage.textContent =
-      "Cookie access could not be removed or its absence verified. Remove it from Chrome's extension settings before sharing.";
+  const port = browser.runtime.connect({ name: CAPTURE_PERMISSION_PORT });
+  let view: CaptureView = {
+    phase: 'loading',
+    message: 'Loading sign-in sharing…',
+    warning: false,
+    cleanupFailed: false,
   };
-  const isAccessError = (error: unknown): error is Error =>
-    error instanceof AgentSiteAccessRequired || error instanceof AgentCookieAccessRequired;
-  const showWarning = () => {
-    warning.hidden = !controller.permissionWarning;
+  let closed = false;
+  const send = (intent: CaptureIntent) => {
+    if (!closed) port.postMessage(intent);
   };
-  const discard = () => {
-    controller.cancel();
-    preview.hidden = true;
-    confirm.disabled = true;
-    review.disabled = busy || controller.permissionWarning || !loaded || !persona.value;
-  };
-  const setBusy = (value: boolean) => {
-    busy = value;
-    showWarning();
-    const blocked = value || controller.permissionWarning || !loaded;
-    review.disabled = blocked || !persona.value;
-    profile.disabled = blocked;
-    persona.disabled = blocked;
-    confirm.disabled = blocked || preview.hidden;
-    removeAccess.disabled = value;
-  };
+  let choices: CaptureView['choices'];
   const option = (value: string, label: string) => {
     const node = document.createElement('option');
     node.value = value;
     node.textContent = label;
     return node;
   };
-  const fillPersonas = () => {
+  const fillPersonas = () =>
     persona.replaceChildren(
       option('', 'Choose a persona'),
-      ...personas.filter((p) => p.profile === profile.value).map((p) => option(p.id, p.label)),
+      ...(choices?.personas
+        .filter((p) => p.profile === profile.value)
+        .map((p) => option(p.id, p.label)) ?? []),
     );
+  const render = (next: CaptureView) => {
+    // Cancellation is visible immediately, even while the worker awaits removal/native I/O.
+    // Delayed progress or a native response cannot resurrect a terminal view for this lease.
+    if (view.lease !== undefined && view.lease === next.lease && terminalCapturePhase(view.phase)) {
+      next = { ...view, warning: next.warning, cleanupFailed: next.cleanupFailed };
+    }
+    view = next;
+    status.textContent = view.message;
+    warning.hidden = !view.warning;
+    warningMessage.textContent = view.cleanupFailed
+      ? "Cookie access could not be removed or its absence verified. Sharing is blocked. Remove it from Chrome's extension settings before sharing."
+      : 'Cookie access is present or could not be checked. Sharing is blocked. Remove cookie access before sharing a sign-in.';
+    if (view.site) element('agent-site').textContent = view.site;
+    if (view.choices !== choices) {
+      choices = view.choices;
+      profile.replaceChildren(...(choices?.profiles.map((p) => option(p.id, p.label)) ?? []));
+      fillPersonas();
+    }
+    const ready = view.phase === 'ready' && !view.warning;
+    profile.disabled = !ready;
+    persona.disabled = !ready;
+    review.textContent =
+      view.phase === 'permission' ? 'Allow cookies and review' : 'Review sign-in sharing';
+    review.disabled = !(ready && persona.value) && view.phase !== 'permission';
+    confirm.disabled = view.phase !== 'confirming' || view.warning;
+    preview.hidden = view.phase !== 'confirming';
+    if (view.preview && !preview.hidden) {
+      const { count, persona: person, profile: vault } = view.preview;
+      preview.textContent = `Share ${count} ${count === 1 ? 'cookie' : 'cookies'} for ${view.site} with ${person} (${vault})? This gives your agent this site’s sign-in.`;
+    }
+    remove.disabled =
+      !view.warning || !['ready', 'failed', 'cancelled', 'shared'].includes(view.phase);
+    cancel.disabled = view.lease === undefined || terminalCapturePhase(view.phase);
   };
-  profile.addEventListener('change', () => {
-    discard();
-    fillPersonas();
-    setBusy(busy);
+  port.onMessage.addListener((next: CaptureView) => render(next));
+  port.onDisconnect.addListener(() => {
+    void browser.runtime.lastError;
+    closed = true;
+    if (!terminalCapturePhase(view.phase))
+      render({
+        ...view,
+        phase: 'failed',
+        message: 'Sharing disconnected. Reopen the popup to check cookie access.',
+      });
   });
-  persona.addEventListener('change', discard);
+  profile.addEventListener('change', () => {
+    fillPersonas();
+    render(view);
+  });
+  persona.addEventListener('change', () => render(view));
   cancel.addEventListener('click', () => {
-    discard();
-    status.textContent = 'Sharing cancelled.';
+    if (view.lease === undefined || terminalCapturePhase(view.phase)) return;
+    send({ type: 'cancel', lease: view.lease });
+    render({ ...view, phase: 'cancelled', message: 'Sharing cancelled.', preview: undefined });
   });
   review.addEventListener('click', () => {
-    if (busy) return;
-    discard();
-    // Keep the cookies request in this click's call chain, after the host-access check.
-    const pending = controller.review(profile.value, persona.value);
-    setBusy(true);
-    status.textContent = 'Preparing sign-in review…';
-    void pending
-      .then(
-        (result) => {
-          preview.textContent = `Share ${result.count} ${result.count === 1 ? 'cookie' : 'cookies'} for ${result.site} with ${result.persona} (${result.profile})? This gives your agent this site’s sign-in.`;
-          preview.hidden = false;
-          status.textContent = 'Review, then confirm to send to your local vault.';
-        },
-        (error: unknown) => {
-          discard();
-          status.textContent = isAccessError(error)
-            ? error.message
-            : 'Could not prepare sharing. Check the native host, selected site and cookie permission.';
-        },
-      )
-      .finally(() => {
-        showWarning();
-        setBusy(false);
-        if (!preview.hidden) confirm.focus();
-      });
+    if (view.phase === 'ready' && !view.warning && persona.value) {
+      send({ type: 'start', profile: profile.value, persona: persona.value });
+    } else if (view.phase === 'permission' && view.lease !== undefined) {
+      const lease = view.lease;
+      send({ type: 'requesting', lease });
+      render({ ...view, phase: 'prompt', message: 'Waiting for cookie permission…' });
+      // No await/message round trip before this API: it executes INSIDE this click gesture,
+      // and only after the worker has exclusively acquired and validated the lease.
+      try {
+        void browser.permissions.request(capturePermissions()).then(
+          (granted) => send({ type: 'permission', lease, granted }),
+          () => send({ type: 'permission', lease, granted: false }),
+        );
+      } catch {
+        send({ type: 'permission', lease, granted: false });
+      }
+    }
   });
   confirm.addEventListener('click', () => {
-    if (busy || preview.hidden) return;
-    setBusy(true);
-    void controller
-      .share()
-      .then(
-        () => {
-          status.textContent =
-            'Sign-in shared. When the vault reports it stale, sign in here and share again.';
-        },
-        (error: unknown) => {
-          status.textContent = isAccessError(error)
-            ? error.message
-            : 'Sharing was not confirmed. Review again to retry.';
-        },
-      )
-      .finally(() => {
-        showWarning();
-        discard();
-        setBusy(false);
-      });
+    if (view.phase === 'confirming' && view.lease !== undefined && !view.warning)
+      send({ type: 'confirm', lease: view.lease });
   });
-  const load = async () => {
-    loaded = false;
-    setBusy(true);
-    try {
-      const { site, choices } = await controller.load();
-      element('agent-site').textContent = site;
-      profile.replaceChildren(...choices.profiles.map((p) => option(p.id, p.label)));
-      personas = choices.personas;
-      fillPersonas();
-      loaded = true;
-      status.textContent = choices.personas.length
-        ? 'Sign in on this site, then choose your vault profile and persona.'
-        : 'Add an account for this exact site in the vault, then reopen this popup.';
-    } catch (error: unknown) {
-      status.textContent = isAccessError(error)
-        ? error.message
-        : 'Open a signed-in HTTPS site and install the agent vault native host to share its sign-in.';
-    } finally {
-      setBusy(false);
-    }
-  };
-  removeAccess.addEventListener('click', () => {
-    if (busy) return;
-    discard();
-    setBusy(true);
-    warningMessage.textContent = warningText;
-    void controller
-      .removeCookieAccess()
-      .then(async (removed) => {
-        if (removed) await load();
-        else removalFailed();
-      }, removalFailed)
-      .finally(() => setBusy(false));
+  remove.addEventListener('click', () => {
+    if (!remove.disabled) send({ type: 'removeCookieAccess' });
   });
-  void load();
+  render(view);
+  send({ type: 'load' });
 }
