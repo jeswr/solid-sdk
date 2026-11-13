@@ -115,6 +115,16 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
         new PodOutput(pod ?? createFetchPodPort(config)).write(target, body, contentType, cond),
       );
     },
+    async delete(url, cond) {
+      if (!writesEnabled(config)) throw new Error("write disabled: server is read-only");
+      // Only the owner-run redaction migration deletes, and always conditionally.
+      if (typeof cond?.ifMatch !== "string" || cond.ifMatch === "")
+        throw new Error("Chat deletes require If-Match");
+      const target = requirePodScopedWriteUrl(config, url);
+      return portOperation(() =>
+        new PodOutput(pod ?? createFetchPodPort(config)).delete(target, { ifMatch: cond.ifMatch }),
+      );
+    },
   };
 }
 

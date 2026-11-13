@@ -212,6 +212,50 @@ header rules run first with their existing markers. Redaction is pure, emits no
 diagnostics containing input, and produces a fixpoint, so derived message IDs stay
 stable when capture and storage both redact. Value scanning takes linear time.
 
+### Repairing chats stored before redaction
+
+Older MCP `chat_save` calls stored titles and message text verbatim, and the redaction rules
+have grown since. `migrateRedaction()` is an owner-run repair (bead sst-5ax.39):
+
+```ts
+const report = await chats.migrateRedaction({ dryRun: true }); // counts only, no writes
+await chats.migrateRedaction();
+// { conversations, titles, messagesRewritten, messagesReplaced, conflicts, failed }
+```
+
+It walks every provider's conversations and checks each title, account label and message
+against the current redaction rules. Every change is conditional on the strong ETag it read,
+so the port's `read` must return one; a resource that changed meanwhile (412) is counted in
+`conflicts` and left for the next run.
+
+- Titles and account labels are rewritten in place with `If-Match`, keeping the rest of the
+  metadata (provenance). Stored IDs and paths never change, even when a label redacts.
+- A message named by a hash of its unredacted text moves to the ID a redacted save derives.
+  The redacted message is created owner-only first (ACL before content, as in `save`), then
+  the original is deleted with `If-Match`. When a redacted copy with the same role, text
+  and time already exists, which is what a replay after the redaction change wrote, it is
+  kept and the original is deleted. A copy that does not match is never trusted: the
+  original stays and counts as `failed`.
+- Writers before 4 November 2026 hashed the raw text but stored it without control
+  characters, so such a name no longer matches its text. Outside capture, any 64-hex message
+  name whose text changes is treated as one of these and moved. Capture always passes
+  hash-shaped source IDs and redacts first, so in conversations with channel `hook` or
+  `export`, or legacy ones with no channel and a 64-hex conversation ID, messages are
+  rewritten in place and keep their IDs.
+- Every other message is rewritten in place under its ID with `If-Match`; its ACL is not
+  touched. A message saved both with a source ID and without one stays as two messages, as
+  before.
+- A conversation whose metadata is missing still has its messages repaired.
+
+One unreadable or malformed conversation or message, a missing ETag, or a failed request
+counts in `failed` (no URLs or content are reported) and the run carries on. Afterwards
+every title, label and message that the run could check matches the current rules, each
+message appears once, and replaying the original conversation writes nothing. Re-running is
+safe. The real run needs the optional `ChatPodPort.delete(url, { ifMatch })`; a dry run does
+not. Delete must reject an ETag mismatch with status 412, and the server must delete the
+resource's ACL with it, as Solid servers do. `solid-capture redact-archive [--dry-run]` in
+`@jeswr/agent-session-capture` runs it with the owner's MCP configuration.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-chat-interop)

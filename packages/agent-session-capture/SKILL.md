@@ -24,6 +24,9 @@ pass `export`. Accept `account` via library options or the shared MCP config /
 before queueing. Bind queued entries, scans and checkpoints to an opaque account
 scope as well as pod root/WebID. Never relabel old snapshots on account changes;
 legacy unlabelled snapshots remain unlabelled hook captures.
+Use `runRedactionMigration` for the owner-run `redact-archive [--dry-run]` repair
+(sst-5ax.39); it prints only counts and returns 0/1 like imports. A real run needs
+writable config and the chat port's conditional delete.
 Bound input bytes, conversation/message/part counts and ZIP decompression
 independently; never extract archive paths to disk. Refuse
 unsafe paths, links, encryption, ZIP64 and duplicate root conversations.json.

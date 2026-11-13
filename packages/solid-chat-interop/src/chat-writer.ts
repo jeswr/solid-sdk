@@ -38,6 +38,9 @@ export interface ChatPodPort {
     contentType: string,
     cond: { ifMatch?: string; ifNoneMatch?: "*" },
   ): Promise<{ etag?: string }>;
+  /** Delete only while the resource still has this ETag; reject a mismatch with status 412.
+   * Needed only by {@link ChatWriter.migrateRedaction}. */
+  delete?(url: string, cond: { ifMatch: string }): Promise<void>;
 }
 
 export const CHAT_PROVIDERS = ["claude", "chatgpt", "codex"] as const;
@@ -81,6 +84,28 @@ export interface ChatListOptions {
   /** Exclusive conversation URL from the previous page. */
   cursor?: string;
   limit?: number;
+}
+export interface ChatRedactionOptions {
+  /** Count what would change without writing or deleting anything. */
+  dryRun?: boolean;
+}
+/** Counts from {@link ChatWriter.migrateRedaction}; with `dryRun`, what would change. */
+export interface ChatRedactionReport {
+  dryRun: boolean;
+  /** Conversations with metadata that were checked. */
+  conversations: number;
+  /** Conversation metadata rewritten in place for its title or account label. */
+  titles: number;
+  /** Messages with a source ID, rewritten in place under the same ID. */
+  messagesRewritten: number;
+  /** Messages whose ID came from their unredacted text. Each was replaced by the redacted
+   * message under its new ID (or by the copy a replay already wrote), then deleted. */
+  messagesReplaced: number;
+  /** Resources that changed after they were read and were left alone. Run again. */
+  conflicts: number;
+  /** Conversations or messages that could not be checked or fixed (unreadable, malformed,
+   * no ETag, or a failed request). The run carries on past them; fix and run again. */
+  failed: number;
 }
 
 /** Metadata layered onto canonical AS2 notes using existing Dublin Core terms. */
@@ -204,6 +229,22 @@ export class ChatWriter {
       throw new Error("Chat ACL association changed after resource creation");
     return created;
   }
+  private async messageDocument(url: string, message: ChatMessage & { id: string }) {
+    const resource = `${url}m-${message.id}.ttl`;
+    const subject = `${resource}#it`;
+    const store = buildAs2Message(subject, {
+      id: subject,
+      content: message.text,
+      mediaType: "text/plain",
+      published: message.createdAt,
+      room: url,
+      ...(message.role === "user" ? { author: this.owner } : {}),
+    });
+    const doc = new ChatDoc(subject, store, DataFactory);
+    doc.identifier = message.id;
+    doc.role = message.role;
+    return { resource, turtle: await storeToTurtle(store) };
+  }
   async save(
     conversation: ChatConversation,
   ): Promise<{ url: string; saved: number; skipped: number }> {
@@ -224,20 +265,7 @@ export class ChatWriter {
           createdAt: timestamp(message.createdAt),
         };
         const id = await messageId(normalized);
-        const resource = `${url}m-${id}.ttl`;
-        const subject = `${resource}#it`;
-        const store = buildAs2Message(subject, {
-          id: subject,
-          content: normalized.text,
-          mediaType: "text/plain",
-          published: normalized.createdAt,
-          room: url,
-          ...(message.role === "user" ? { author: this.owner } : {}),
-        });
-        const doc = new ChatDoc(subject, store, DataFactory);
-        doc.identifier = id;
-        doc.role = message.role;
-        return { resource, turtle: await storeToTurtle(store) };
+        return this.messageDocument(url, { ...normalized, id });
       }),
     );
     const metadata = new Store();
@@ -278,6 +306,9 @@ export class ChatWriter {
     return { url, saved, skipped: messages.length - saved };
   }
   private async dataset(url: string) {
+    return (await this.document(url)).dataset;
+  }
+  private async document(url: string) {
     const result = await this.pod.read(url);
     // Our persisted format is Turtle. Reject JSON-LD before the shared parser
     // can follow an untrusted remote context outside the injected pod port.
@@ -288,7 +319,10 @@ export class ChatWriter {
     ) {
       throw new Error("Unsupported chat RDF content type");
     }
-    return parseRdf(decoder.decode(result.body), result.contentType, { baseIRI: url });
+    return {
+      dataset: await parseRdf(decoder.decode(result.body), result.contentType, { baseIRI: url }),
+      etag: result.etag,
+    };
   }
   private async children(container: string) {
     try {
@@ -309,13 +343,7 @@ export class ChatWriter {
   }
   private async readConversation(provider: ChatProvider, conversationId: string, room: ChatDoc) {
     const url = this.conversationUrl(provider, conversationId);
-    if (
-      !room.types.has(AS_COLLECTION) ||
-      room.identifier !== conversationId ||
-      room.title === undefined
-    ) {
-      throw new Error("Invalid conversation metadata");
-    }
+    const title = roomTitle(room, conversationId);
     const provenance = new ConversationProvenanceDoc(
       `${url}_conversation.ttl#it`,
       room.dataset,
@@ -355,33 +383,25 @@ export class ChatWriter {
     const messages: (ChatMessage & { id: string })[] = [];
     const resources = await this.children(url);
     for (const child of resources) {
-      // Only immediate, generated message names; poisoned listings cannot steer reads.
-      if (
-        child.isContainer ||
-        !child.url.startsWith(url) ||
-        !/^m-[a-zA-Z0-9_-]{1,200}\.ttl$/.test(child.url.slice(url.length))
-      )
-        continue;
-      const dataset = await this.dataset(child.url);
-      const subject = `${child.url}#it`;
-      const canonical = parseAs2Message(subject, dataset);
-      const doc = new ChatDoc(subject, dataset, DataFactory);
-      const id = doc.identifier;
-      const role = doc.role as ChatRole;
-      if (
-        !canonical ||
-        !id ||
-        child.url !== `${url}m-${identifier(id)}.ttl` ||
-        !CHAT_ROLES.includes(role) ||
-        !canonical.published ||
-        canonical.room !== url
-      ) {
-        throw new Error("Invalid stored chat message");
-      }
-      messages.push({ id, role, text: canonical.content, createdAt: canonical.published });
+      if (!isMessageChild(url, child)) continue;
+      messages.push(storedMessage(url, child.url, await this.dataset(child.url)));
     }
     messages.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-    return { url, provider, conversationId, title: room.title, messages, ...details };
+    return { url, provider, conversationId, title, messages, ...details };
+  }
+  private async conversationCandidates(providers: readonly ChatProvider[], cursor?: string) {
+    const candidates: { provider: ChatProvider; id: string; url: string }[] = [];
+    for (const provider of providers) {
+      const parent = `${this.base}${provider}/`;
+      for (const child of await this.children(parent)) {
+        if (!child.isContainer || !child.url.startsWith(parent)) continue;
+        const segment = child.url.slice(parent.length);
+        if (!/^[a-zA-Z0-9_-]{1,200}\/$/.test(segment)) continue;
+        if (cursor !== undefined && child.url <= cursor) continue;
+        candidates.push({ provider, id: segment.slice(0, -1), url: child.url });
+      }
+    }
+    return candidates.sort((a, b) => (a.url < b.url ? -1 : a.url > b.url ? 1 : 0));
   }
   async list(
     options: ChatListOptions = {},
@@ -394,18 +414,7 @@ export class ChatWriter {
     const account = label === undefined ? undefined : redactChatAccount(label);
     const providers =
       options.provider === undefined ? CHAT_PROVIDERS : [providerId(options.provider)];
-    const candidates: { provider: ChatProvider; id: string; url: string }[] = [];
-    for (const provider of providers) {
-      const parent = `${this.base}${provider}/`;
-      for (const child of await this.children(parent)) {
-        if (!child.isContainer || !child.url.startsWith(parent)) continue;
-        const segment = child.url.slice(parent.length);
-        if (!/^[a-zA-Z0-9_-]{1,200}\/$/.test(segment)) continue;
-        if (options.cursor !== undefined && child.url <= options.cursor) continue;
-        candidates.push({ provider, id: segment.slice(0, -1), url: child.url });
-      }
-    }
-    candidates.sort((a, b) => (a.url < b.url ? -1 : a.url > b.url ? 1 : 0));
+    const candidates = await this.conversationCandidates(providers, options.cursor);
     const conversations: ChatSummary[] = [];
     for (const candidate of candidates) {
       const metadataUrl = `${candidate.url}_conversation.ttl`;
@@ -446,6 +455,272 @@ export class ChatWriter {
     }
     return { conversations };
   }
+
+  /**
+   * Owner-run repair for chats stored before every save path redacted (sst-5ax.39).
+   * Rewrites titles, account labels and messages whose stored text changes under
+   * `redactSecrets`, using `If-Match` on every write and delete. A message named by a hash of
+   * its unredacted text moves to the ID a redacted save derives: the redacted copy is created
+   * owner-only (or a replay's matching copy is kept), then the legacy message is deleted.
+   * Other messages are rewritten in place under their ID. One failing conversation or
+   * message is counted in `failed` and the run carries on. Re-running is safe.
+   */
+  async migrateRedaction(options: ChatRedactionOptions = {}): Promise<ChatRedactionReport> {
+    const dryRun = options.dryRun === true;
+    if (!dryRun && typeof this.pod.delete !== "function")
+      throw new TypeError("Chat redaction migration needs a pod port that can delete");
+    const report: ChatRedactionReport = {
+      dryRun,
+      conversations: 0,
+      titles: 0,
+      messagesRewritten: 0,
+      messagesReplaced: 0,
+      conflicts: 0,
+      failed: 0,
+    };
+    const count = (fixed: boolean, key: "titles" | "messagesRewritten" | "messagesReplaced") => {
+      if (fixed) report[key]++;
+      else report.conflicts++;
+    };
+    for (const candidate of await this.conversationCandidates(CHAT_PROVIDERS)) {
+      report.conversations++;
+      let captureWritten: boolean;
+      try {
+        captureWritten = await this.migrateMetadata(candidate, dryRun, count, () => {
+          report.failed++;
+        });
+      } catch {
+        // Content-free: the report never carries URLs, IDs or remote errors.
+        report.failed++;
+        continue;
+      }
+      let children: { url: string; isContainer: boolean }[];
+      try {
+        children = (await this.children(candidate.url)).filter((child) =>
+          isMessageChild(candidate.url, child),
+        );
+      } catch {
+        report.failed++;
+        continue;
+      }
+      const listed = new Set(children.map((child) => child.url));
+      for (const child of children) {
+        try {
+          await this.migrateMessage(
+            candidate.url,
+            child.url,
+            listed,
+            captureWritten,
+            dryRun,
+            count,
+          );
+        } catch {
+          report.failed++;
+        }
+      }
+    }
+    return report;
+  }
+  /** Re-redact a conversation's title and account label. True when capture wrote it. */
+  private async migrateMetadata(
+    candidate: { id: string; url: string },
+    dryRun: boolean,
+    count: (fixed: boolean, key: "titles") => void,
+    failed: () => void,
+  ): Promise<boolean> {
+    const metadataUrl = `${candidate.url}_conversation.ttl`;
+    let metadata: Awaited<ReturnType<ChatWriter["document"]>>;
+    try {
+      metadata = await this.document(metadataUrl);
+    } catch (error) {
+      // An interrupted save leaves messages without metadata; still repair the messages.
+      if (chatPortStatus(error) === 404) return isHashName(candidate.id);
+      throw error;
+    }
+    const room = new ChatDoc(`${metadataUrl}#it`, metadata.dataset, DataFactory);
+    const title = roomTitle(room, candidate.id);
+    const provenance = new ConversationProvenanceDoc(
+      `${metadataUrl}#it`,
+      metadata.dataset,
+      DataFactory,
+    );
+    const capture =
+      provenance.generatedBy === `${metadataUrl}#capture`
+        ? new ConversationProvenanceDoc(provenance.generatedBy, metadata.dataset, DataFactory)
+        : undefined;
+    const channel = capture?.channel;
+    let changed = false;
+    const redactedTitle = redactSecrets(sanitizeText(title));
+    if (redactedTitle !== title) {
+      room.title = redactedTitle;
+      changed = true;
+    }
+    if (provenance.attributedTo === `${metadataUrl}#account`) {
+      const agent = new ConversationProvenanceDoc(
+        provenance.attributedTo,
+        metadata.dataset,
+        DataFactory,
+      );
+      const label = agent.accountName;
+      const normalized = label === undefined ? undefined : normalizeChatAccount(label);
+      if (normalized !== undefined && redactChatAccount(normalized) !== label) {
+        agent.accountName = redactChatAccount(normalized);
+        changed = true;
+      }
+    }
+    if (changed) {
+      try {
+        count(
+          dryRun ||
+            (await this.replace(metadataUrl, await storeToTurtle(metadata.dataset), metadata.etag)),
+          "titles",
+        );
+      } catch {
+        // A failed metadata write must not stop the conversation's messages being repaired.
+        failed();
+      }
+    }
+    // Capture always passes source IDs (hash-shaped digests) and redacted before saving;
+    // legacy capture metadata has no channel but a hash-shaped conversation ID.
+    return (
+      channel === "hook" ||
+      channel === "export" ||
+      (channel === undefined && isHashName(candidate.id))
+    );
+  }
+  private async migrateMessage(
+    url: string,
+    resource: string,
+    listed: Set<string>,
+    captureWritten: boolean,
+    dryRun: boolean,
+    count: (fixed: boolean, key: "messagesRewritten" | "messagesReplaced") => void,
+  ): Promise<void> {
+    let stored: Awaited<ReturnType<ChatWriter["document"]>>;
+    try {
+      stored = await this.document(resource);
+    } catch (error) {
+      // Deleted since listing, for example by a concurrent migration.
+      if (chatPortStatus(error) === 404) return;
+      throw error;
+    }
+    const message = storedMessage(url, resource, stored.dataset);
+    const text = redactSecrets(sanitizeText(message.text));
+    if (text === message.text) return;
+    if (stored.etag === undefined) throw missingEtag();
+    const redacted = { role: message.role, text, createdAt: message.createdAt };
+    const derived =
+      (await messageId({
+        role: message.role,
+        text: message.text,
+        createdAt: message.createdAt,
+      })) === message.id;
+    // Before control characters were stripped first, an ID-less message's name hashed its raw
+    // text, which the serializer then cleaned, so the name no longer matches the stored text.
+    // Any hash-shaped name outside capture is treated as such a legacy name.
+    if (!derived && (captureWritten || !isHashName(message.id))) {
+      if (!dryRun) {
+        const next = await this.messageDocument(url, { ...redacted, id: message.id });
+        count(await this.replace(resource, next.turtle, stored.etag), "messagesRewritten");
+      } else count(true, "messagesRewritten");
+      return;
+    }
+    const replayId = await messageId(redacted);
+    const replay = `${url}m-${replayId}.ttl`;
+    if (listed.has(replay)) {
+      // A replay already wrote the redacted copy; check it before deleting the original.
+      await this.requireCopy(url, replay, redacted);
+    } else if (!dryRun) {
+      const next = await this.messageDocument(url, { ...redacted, id: replayId });
+      // false means a concurrent writer created it first; check that copy too.
+      if (!(await this.createProtected(next.resource, next.turtle)))
+        await this.requireCopy(url, replay, redacted);
+    }
+    count(dryRun || (await this.remove(resource, stored.etag)), "messagesReplaced");
+  }
+  private async requireCopy(url: string, resource: string, expected: Omit<ChatMessage, "id">) {
+    const copy = storedMessage(url, resource, await this.dataset(resource));
+    if (
+      copy.role !== expected.role ||
+      copy.text !== expected.text ||
+      copy.createdAt !== expected.createdAt
+    )
+      throw new Error("Invalid stored chat message");
+  }
+  /** Conditional in-place rewrite; existing ACLs are untouched. False on a 412. */
+  private async replace(url: string, turtle: string, etag: string | undefined): Promise<boolean> {
+    if (etag === undefined) throw missingEtag();
+    try {
+      await this.pod.write(url, encoder.encode(turtle), "text/turtle", { ifMatch: etag });
+      return true;
+    } catch (error) {
+      if (chatPortStatus(error) === 412) return false;
+      throw error;
+    }
+  }
+  /** Conditional delete; true when the resource is gone, false on a 412. */
+  private async remove(url: string, etag: string | undefined): Promise<boolean> {
+    if (etag === undefined) throw missingEtag();
+    const remove = this.pod.delete;
+    if (remove === undefined)
+      throw new TypeError("Chat redaction migration needs a pod port that can delete");
+    try {
+      await remove.call(this.pod, url, { ifMatch: etag });
+      return true;
+    } catch (error) {
+      const status = chatPortStatus(error);
+      if (status === 404) return true;
+      if (status === 412) return false;
+      throw error;
+    }
+  }
+}
+
+function isHashName(value: string): boolean {
+  return /^[a-f0-9]{64}$/.test(value);
+}
+
+function missingEtag(): Error {
+  return new Error("Chat redaction migration needs an ETag for each conditional write");
+}
+
+function roomTitle(room: ChatDoc, conversationId: string): string {
+  const title = room.title;
+  if (!room.types.has(AS_COLLECTION) || room.identifier !== conversationId || title === undefined)
+    throw new Error("Invalid conversation metadata");
+  return title;
+}
+
+/** Only immediate, generated message names; poisoned listings cannot steer reads. */
+function isMessageChild(url: string, child: { url: string; isContainer: boolean }): boolean {
+  return (
+    !child.isContainer &&
+    child.url.startsWith(url) &&
+    /^m-[a-zA-Z0-9_-]{1,200}\.ttl$/.test(child.url.slice(url.length))
+  );
+}
+
+function storedMessage(
+  url: string,
+  resource: string,
+  dataset: DatasetCore,
+): ChatMessage & { id: string } {
+  const subject = `${resource}#it`;
+  const canonical = parseAs2Message(subject, dataset);
+  const doc = new ChatDoc(subject, dataset, DataFactory);
+  const id = doc.identifier;
+  const role = doc.role as ChatRole;
+  if (
+    !canonical ||
+    !id ||
+    resource !== `${url}m-${identifier(id)}.ttl` ||
+    !CHAT_ROLES.includes(role) ||
+    !canonical.published ||
+    canonical.room !== url
+  ) {
+    throw new Error("Invalid stored chat message");
+  }
+  return { id, role, text: canonical.content, createdAt: canonical.published };
 }
 
 /** Validate that an ACL can be replaced for this resource without changing another's grants. */

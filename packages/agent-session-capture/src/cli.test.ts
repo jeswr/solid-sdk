@@ -33,6 +33,19 @@ describe("export process contract", () => {
     );
     expect(result).toHaveProperty("code", 1);
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it("reports redact-archive failure with a fixed message (sst-5ax.39)", async () => {
+    const result = await promisify(execFile)(
+      process.execPath,
+      [fileURLToPath(new URL("../dist/cli.js", import.meta.url)), "redact-archive", "--secret"],
+      { env: { PATH: process.env.PATH ?? "", HOME: "/nonexistent-capture-home" } },
+    ).catch((error: { code: number; stdout: string; stderr: string }) => error);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(
+      "Redaction failed. Check the owner MCP configuration and run it again.\n",
+    );
+    expect(result).toHaveProperty("code", 1);
+  });
   it.each([0, 1])("propagates import status %i without the hook watchdog", async (status) => {
     vi.useFakeTimers();
     const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
