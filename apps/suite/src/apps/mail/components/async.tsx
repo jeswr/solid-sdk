@@ -3,6 +3,7 @@
 import { ErrorState, LoadingSkeleton, renderAsync } from "@jeswr/suite-ui";
 import { Mail } from "lucide-react";
 import type { ReactNode } from "react";
+import { AppHeading } from "@/shell/app-frame";
 import { mailErrorMessage } from "../lib/client";
 import { MailError } from "../lib/model";
 import { SearchQueryError } from "../lib/search";
@@ -51,7 +52,7 @@ export function MailAsync<T>({
 export function MissingFolder() {
   return (
     <div className="mail-page">
-      <h1>This folder doesn't exist</h1>
+      <AppHeading>This folder doesn't exist</AppHeading>
       <ErrorState error="not-found" actions={{ goToParent: "/mail/inbox" }}>
         <a href="/mail/inbox">Go to Inbox</a>
       </ErrorState>
@@ -76,7 +77,7 @@ export function MailEmptyState({
       <span className="suite-async-tile" aria-hidden="true">
         <Mail size={24} strokeWidth={1.5} />
       </span>
-      <h2>{title}</h2>
+      <AppHeading level={2}>{title}</AppHeading>
       <p>{body}</p>
       {(primaryAction || secondaryAction) && (
         <div className="suite-async-actions">

@@ -61,8 +61,20 @@ export function isEditableTarget(target: EventTarget | null): boolean {
     return isEditableTarget((target as Node).parentElement);
   }
   return !!element.closest(
-    'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [data-shortcuts="off"]',
+    'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [data-shortcuts="off"]',
   );
+}
+
+/** Single-key app shortcuts yield to editors and layers, except an opted-in dialog. */
+export function isShortcutLayerTarget(
+  target: EventTarget | null,
+  allowedDialogContent?: string,
+): boolean {
+  if (isEditableTarget(target)) return true;
+  if (!(target instanceof Element)) return false;
+  if (target.closest('[role="alertdialog"], [role="menu"], [role="listbox"]')) return true;
+  const dialog = target.closest('dialog, [role="dialog"]');
+  return !!dialog && !(allowedDialogContent && dialog.querySelector(allowedDialogContent));
 }
 
 const scopeRank = { global: 0, app: 1, editor: 2 };

@@ -219,7 +219,7 @@ test("recent recording covers app routes, honours opt-out and only links saved p
   await signInDemo(page);
   await workerInControl(page);
   for (const [path, title] of [
-    ["/drive/my", "Drive · Drive · Solid Suite"],
+    ["/drive/my", "Drive · Solid Suite"],
     ["/docs", null],
     ["/tasks/today", null],
   ] as const) {

@@ -10,17 +10,15 @@ import {
   IconButton,
   LoadingSkeleton,
   renderAsync,
-  Toaster,
 } from "@jeswr/suite-ui";
 import { MessageSquare, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
-import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
-import { characterShortcutsEnabled } from "@/shell/lib/shortcut-settings";
+import { AppFrame, AppHeading, useAppShell } from "@/shell/app-frame";
+import { AppSession } from "@/shell/app-session";
 import { classifyChatError, type Room } from "../lib/client";
 import {
   ChatProvider,
@@ -31,6 +29,7 @@ import {
   useUnread,
 } from "../state/chat-context";
 import { ChatSearchField } from "./search-field";
+import { ChatShortcuts } from "./shortcuts";
 
 export function ChatFailure({ error, retry }: { error: unknown; retry: () => void }) {
   return (
@@ -95,9 +94,10 @@ function SidebarRow({ room, count }: { room: Room; count: number }) {
   );
 }
 export function ChatEmpty() {
+  const inShell = useAppShell();
   return (
     <div className="chat-state">
-      <h1>Chat</h1>
+      {!inShell && <AppHeading>Chat</AppHeading>}
       <h2 className="sr-only">Conversations</h2>
       <EmptyState
         title="No conversations yet"
@@ -174,15 +174,18 @@ function Sidebar() {
 }
 function Details({ url }: { url: string }) {
   const { client, setDetails } = useChat();
+  const inShell = useAppShell();
   const room = useAsync(useCallback(() => client.room(url), [client, url]));
   const files = useAsync(useCallback(() => client.files(url), [client, url]));
   return (
     <div className="chat-details">
       <div className="chat-details-heading">
-        <h2>Conversation details</h2>
-        <IconButton label="Close details" variant="ghost" onClick={() => setDetails(false)}>
-          <X size={18} aria-hidden="true" />
-        </IconButton>
+        {!inShell && <h2>Conversation details</h2>}
+        {!inShell && (
+          <IconButton label="Close details" variant="ghost" onClick={() => setDetails(false)}>
+            <X size={18} aria-hidden="true" />
+          </IconButton>
+        )}
       </div>
       <h3>Members</h3>
       {room.status === "error" ? (
@@ -224,114 +227,35 @@ function Details({ url }: { url: string }) {
 }
 function Chrome({ children }: { children: ReactNode }) {
   const { details, setDetails, currentRoom } = useChat();
-  const router = useRouter();
-  useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented ||
-        event.isComposing ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        (event.target instanceof Element &&
-          event.target.closest(
-            'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]',
-          )) ||
-        !characterShortcutsEnabled()
-      )
-        return;
-      if (event.key === "/") {
-        if (
-          event.target instanceof Element &&
-          event.target.closest(
-            '[role="alertdialog"],[role="menu"],[role="listbox"],[role="dialog"]:not(.ish-drawer)',
-          )
-        )
-          return;
-        const field =
-          document.querySelector<HTMLInputElement>(
-            '[role="dialog"].ish-drawer [data-chat-search]',
-          ) ?? document.querySelector<HTMLInputElement>('[data-chat-search="page"]');
-        if (field) {
-          field.focus();
-          event.preventDefault();
-        } else if (window.matchMedia("(max-width: 1023px)").matches) {
-          router.push("/chat/search");
-          event.preventDefault();
-        } else {
-          const sidebar = document.querySelector<HTMLInputElement>(
-            ".ish-sidebar [data-chat-search]",
-          );
-          if (sidebar) {
-            sidebar.focus();
-            event.preventDefault();
-          }
-        }
-      }
-      if (event.key === "]") {
-        event.preventDefault();
-        setDetails(!details);
-      }
-    };
-    addEventListener("keydown", shortcut);
-    return () => removeEventListener("keydown", shortcut);
-  }, [details, setDetails, router]);
+  const inShell = useAppShell();
   return (
-    <SuiteFrame
+    <AppFrame
       app="chat"
-      context={<span className="chat-app-title">Chat</span>}
+      context={!inShell && <span className="chat-app-title">Chat</span>}
       sidebar={<Sidebar />}
-      details={details && currentRoom ? <Details url={currentRoom} /> : undefined}
+      details={currentRoom && details ? <Details url={currentRoom} /> : undefined}
+      detailsTitle="Conversation details"
+      {...(currentRoom ? { detailsOpen: details } : {})}
+      onDetailsOpenChange={setDetails}
       onDetailsClose={() => setDetails(false)}
     >
+      <ChatShortcuts />
       {children}
-    </SuiteFrame>
-  );
-}
-function SessionGate({ children }: { children: ReactNode }) {
-  const state = usePodSessionState();
-  if (state.status === "loading")
-    return (
-      <div className="chat-state" role="status">
-        Opening your Chat…
-      </div>
-    );
-  // Native builds start signed out until native sign-in lands.
-  if (state.status === "signed-out")
-    return (
-      <div className="chat-state" role="status">
-        Sign in to open your Chat
-      </div>
-    );
-  if (state.status === "error")
-    return (
-      <div className="chat-state" role="alert">
-        <h1>Can't open your Chat</h1>
-        <p>
-          {state.mode === "extension"
-            ? "This browser couldn't open your pod through the Solid extension."
-            : "This browser couldn't open the demo pod's storage."}
-        </p>
-        <Button onClick={() => location.reload()}>Retry</Button>
-      </div>
-    );
-  return (
-    <ChatProvider
-      key={JSON.stringify([state.session.mode, state.session.webId, state.session.storageUrl])}
-      session={state.session}
-    >
-      <Chrome>{children}</Chrome>
-    </ChatProvider>
+    </AppFrame>
   );
 }
 export function ChatApp({ children }: { children: ReactNode }) {
   return (
-    <PodSessionProvider>
-      <SessionGate>{children}</SessionGate>
-      <Toaster position="bottom-center" />
-    </PodSessionProvider>
+    <AppSession name="Chat" className="chat-state" retry>
+      {(session) => (
+        <ChatProvider session={session}>
+          <Chrome>{children}</Chrome>
+        </ChatProvider>
+      )}
+    </AppSession>
   );
 }
+
 export function ChatLanding() {
   const rooms = useRooms();
   const preferences = useReadPreferences();

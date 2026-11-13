@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
 import type { ChatSession } from "../src/apps/chat/state/chat-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { ShortcutsProvider } from "../src/shell/shortcuts/provider";
 import { act, click, h, key, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
@@ -60,6 +61,14 @@ function setup(live = true) {
   };
   return new ChatClient(pod.fetch, ROOT, ME);
 }
+// jsdom has no layout; model visible search fields while retaining hidden ancestors.
+beforeEach(() => {
+  vi.spyOn(HTMLInputElement.prototype, "getClientRects").mockImplementation(function (
+    this: HTMLInputElement,
+  ) {
+    return (this.closest("[hidden]") ? [] : [new DOMRect(0, 0, 200, 32)]) as unknown as DOMRectList;
+  });
+});
 afterEach(() => {
   vi.restoreAllMocks();
   mocks.push.mockClear();
@@ -171,7 +180,7 @@ it("opens the search page on narrow screens when the sidebar field is hidden", a
   await key(main, "/");
   expect(mocks.push).toHaveBeenCalledWith("/chat/search");
 });
-it("leaves slash in dialogs, alerts, menus and listboxes and only cancels an acting shortcut", async () => {
+it("leaves slash in layers and navigates to search when no field is visible", async () => {
   setup();
   const view = await mount(h(ChatApp, { children: h(ChatLanding) }));
   const main = view.host.querySelector("main") as HTMLElement;
@@ -195,5 +204,35 @@ it("leaves slash in dialogs, alerts, menus and listboxes and only cancels an act
   view.host.querySelector('[data-chat-search="sidebar"]')?.remove();
   const idle = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
   await act(() => main.dispatchEvent(idle));
-  expect(idle.defaultPrevented).toBe(false);
+  expect(idle.defaultPrevented).toBe(true);
+  expect(mocks.push).toHaveBeenLastCalledWith("/chat/search");
+});
+
+it("keeps standalone details shortcuts with a bare ShortcutsProvider and registers slash once", async () => {
+  const client = setup();
+  const room = await client.createRoom({ name: "Provider room", members: [] });
+  const view = await mount(
+    h(ShortcutsProvider, null, h(ChatApp, { children: h(RoomView, { url: room.url }) })),
+  );
+  const main = view.host.querySelector("main") as HTMLElement;
+  await act(() => main.focus());
+  await key(main, "]");
+  expect(view.host.querySelector(".chat-details")).not.toBeNull();
+  await key(main, "]");
+  expect(view.host.querySelector(".chat-details")).toBeNull();
+  await key(main, "/");
+  expect(document.activeElement).toBe(view.host.querySelector('[data-chat-search="sidebar"]'));
+});
+
+it("keeps the standalone window details shortcut and close control", async () => {
+  const client = setup();
+  const room = await client.createRoom({ name: "Preview room", members: [] });
+  const view = await mount(h(ChatApp, { children: h(RoomView, { url: room.url }) }));
+  const main = view.host.querySelector("main") as HTMLElement;
+  await key(main, "]");
+  expect(view.host.querySelector(".chat-details")).not.toBeNull();
+  await click(view.host.querySelector('[aria-label="Close details"]') as Element);
+  expect(view.host.querySelector(".chat-details")).toBeNull();
+  await key(main, "]");
+  expect(view.host.querySelector(".chat-details")).not.toBeNull();
 });
