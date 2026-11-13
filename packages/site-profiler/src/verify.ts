@@ -120,7 +120,15 @@ export async function verifyOperations(
     for (const tuple of replayValues) {
       url = expandTemplate(op.request.urlTemplate, tuple);
       const replayOptions = {
-        headers: op.request.headers,
+        headers: {
+          ...op.request.headers,
+          accept:
+            op.extraction?.format === "json"
+              ? "application/json"
+              : op.extraction?.format === "html"
+                ? "text/html"
+                : "*/*",
+        },
         request: op.request,
         csrf: op.csrf,
         values: tuple,

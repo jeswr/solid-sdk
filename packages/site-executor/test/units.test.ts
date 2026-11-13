@@ -157,7 +157,7 @@ describe("compileOperation", () => {
         request: {
           method: "GET",
           urlTemplate: `${O}/cat/{id}/search{?q}`,
-          headers: { "X-App": "1", Cookie: "no", Authorization: "no", "Sec-Fetch-Site": "no" },
+          headers: { "X-App": "1" },
         },
       }),
       { q: "red shoes", id: "a/b" },

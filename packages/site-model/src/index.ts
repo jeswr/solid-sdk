@@ -19,7 +19,13 @@ export type { ParseOptions as ReadSiteModelOptions } from "./rdf.js";
 export { SKOLEM_PREFIX } from "./rdf.js";
 export { readSiteModel } from "./read.js";
 export * from "./types.js";
-export { type SiteModelProblem, templateVariables, validateSiteModel } from "./validate.js";
+export {
+  isExecutorOwnedHeader,
+  modelHeaderNames,
+  type SiteModelProblem,
+  templateVariables,
+  validateSiteModel,
+} from "./validate.js";
 export {
   EFFECT_IRI,
   EFFECT_ORDER,
