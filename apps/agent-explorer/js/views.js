@@ -264,6 +264,9 @@
   };
   function suiteStatus(layerId, suiteId) {
     var users = AX.traces.filter(function (t) { return t.layersFull[layerId] === suiteId; });
+    // A way of settling counts only where a payment is actually made.
+    var paid = AX.settlement && layerId === AX.settlement.id;
+    if (paid) users = users.filter(function (t) { return AX.segmentRange(t, 'payment'); });
     var real = users.filter(function (t) { return !t.isFixture; });
     var list = real.length ? real : users;
     // Prefer a trace that differs from the baseline only here.
@@ -281,11 +284,18 @@
     h += '<p class="status-legend"><span><span class="suite runs" style="display:inline;padding:0 6px">Runs</span> a real trace uses it</span><span><span class="suite fixture" style="display:inline;padding:0 6px">Fixture only</span> only a development fixture uses it</span><span><span class="suite planned" style="display:inline;padding:0 6px">Planned</span> no trace yet</span></p>';
     if (M.maturityNote) h += '<p class="small muted prose">' + esc(M.maturityNote) + '</p>';
     h += '<div class="table-wrap"><table class="data"><thead><tr><th>Layer</th><th>Question</th><th>Suites</th></tr></thead><tbody>';
+    var rows = [];
     AX.orderedLayers.forEach(function (l) {
+      rows.push(l);
+      if (AX.settlement && AX.settlement.partOf === l.id) rows.push(AX.settlement);
+    });
+    rows.forEach(function (l) {
       var rowSel = sel === l.id || sel.indexOf(l.id + '/') === 0;
       var doc = AX.specDocFor(l.id);
       h += '<tr id="layer-' + l.id + '" class="' + (sel === l.id ? 'sel' : '') + '">';
-      h += '<td><span class="layer-name"><span class="layer-n">' + esc(AX.layerLabel(l)) + '</span>' + esc(l.name) + '</span>' + (doc ? '<div class="small"><a href="' + AX.buildHash('specs', { doc: doc }) + '">Read the spec</a></div>' : '') + '</td>';
+      var parent = l.partOf && AX.layerById[l.partOf];
+      if (parent) doc = AX.specDocFor(parent.id);
+      h += '<td><span class="layer-name">' + (parent ? '' : '<span class="layer-n">' + esc(AX.layerLabel(l)) + '</span>') + esc(l.name) + '</span>' + (parent ? '<div class="small muted">Part of ' + esc(parent.name.toLowerCase()) + ', chosen at the point of payment</div>' : '') + (doc ? '<div class="small"><a href="' + AX.buildHash('specs', { doc: doc }) + '">Read the spec</a></div>' : '') + '</td>';
       h += '<td style="min-width:200px;max-width:300px">' + esc(l.question) + (l.note ? '<div class="small muted" style="margin-top:6px">' + esc(l.note) + '</div>' : '') + '</td><td><div class="suites">';
       l.suites.forEach(function (s) {
         var st = suiteStatus(l.id, s.id);
@@ -295,7 +305,10 @@
           (s.maturity ? '<span class="small" style="margin-top:3px"><span class="tag">' + esc(s.maturity) + '</span></span>' : '') +
           (s.basis ? '<span class="small muted" style="font-size:11.5px">' + esc(s.basis) + '</span>' : '');
         var cls = 'suite ' + st.status + (isSel ? ' sel' : '');
-        if (st.trace) h += '<a class="' + cls + '" ' + (isSel ? 'data-sel-target ' : '') + 'href="' + AX.buildHash('explore', { scenario: st.trace.scenario.id, config: st.trace.configuration.id }) + '" title="Open in Explore">' + inner + '</a>';
+        var at = { scenario: st.trace && st.trace.scenario.id, config: st.trace && st.trace.configuration.id };
+        var seg = parent && st.trace && AX.segmentRange(st.trace, 'payment');
+        if (seg) at.seq = st.trace.events[seg[0]].seq;
+        if (st.trace) h += '<a class="' + cls + '" ' + (isSel ? 'data-sel-target ' : '') + 'href="' + AX.buildHash('explore', at) + '" title="Open in Explore">' + inner + '</a>';
         else h += '<div class="' + cls + '"' + (isSel ? ' data-sel-target' : '') + '>' + inner + '</div>';
       });
       h += '</div></td></tr>';
