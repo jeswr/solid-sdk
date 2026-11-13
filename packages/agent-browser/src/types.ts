@@ -7,6 +7,7 @@ import type {
   Executor,
 } from "@jeswr/site-executor";
 import type { SiteModel } from "@jeswr/site-model";
+import type { Fallback } from "./fallback/index.js";
 
 export type TaskStatus = ExecutionStatus | "repeat-blocked";
 
@@ -53,6 +54,7 @@ export interface RunTaskOptions {
   model: SiteModel;
   planner: Planner;
   approver: Approver;
+  fallback?: Fallback;
   maxSteps?: number;
   /** Maximum host approval prompts per action, including price revalidation. Default 25. */
   maxApprovals?: number;
@@ -67,6 +69,8 @@ export interface RunTaskOptions {
 
 export interface TraceStep {
   index: number;
+  via?: "fallback";
+  learned?: string[];
   kind: PlannerOutput["kind"] | "error";
   promptTokensEstimate: number;
   request?: string;
@@ -89,6 +93,8 @@ export interface TraceStep {
 export interface TaskTrace {
   format: "agent-browser-trace/0.1";
   goal: string;
+  /** Host storage value, present only when fallback ran; never sent to the planner. */
+  model?: SiteModel;
   outcome: "answer" | "ask" | "maxSteps";
   text?: string;
   steps: TraceStep[];

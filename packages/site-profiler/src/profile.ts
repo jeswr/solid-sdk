@@ -289,7 +289,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     const loginOps: Array<{ op: Operation; candidate: EndpointCandidate }> = [];
     const sessionCookies = login?.sessionCookies ?? [];
     // A JSON list with an observed search input supports both browsing and searching.
-    // The view variant drops search; its unused optional URL variable disappears under RFC 6570.
+    // The view variant drops both the search input and its optional URL slot.
     const readableCandidates = candidates.flatMap((c) =>
       c.method === "GET" &&
       c.responseKind === "json" &&
@@ -299,6 +299,17 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
             c,
             {
               ...c,
+              urlTemplate: c.urlTemplate.replace(
+                /\{([?&])([^}]+)\}/g,
+                (_match, operator: string, variables: string) => {
+                  const retained = variables
+                    .split(",")
+                    .filter(
+                      (name) => !/^(q|query|search|keyword|keywords|term|s|text)$/i.test(name),
+                    );
+                  return retained.length ? `{${operator}${retained.join(",")}}` : "";
+                },
+              ),
               params: c.params.filter(
                 (p) => !/^(q|query|search|keyword|keywords|term|s|text)$/i.test(p.name),
               ),

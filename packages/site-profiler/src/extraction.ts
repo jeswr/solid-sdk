@@ -330,11 +330,26 @@ function listExtraction(list: ListCandidate): Extraction {
   const priceEl = priceElIn(sample);
   if (priceEl) fields.push(...priceFields(priceEl, relativeSelector(sample, priceEl)));
   fields.push(...idAttrFields(sample, ":scope"));
+  const order = attr(sample, "data-order-id") !== undefined;
+  if (order) {
+    for (const field of fields) {
+      if (field.property === s("identifier")) field.property = s("orderNumber");
+      if (field.property === s("price")) field.property = s("totalPrice");
+    }
+    const date = descendants(sample).find((el) => el.name === "time" && attr(el, "datetime"));
+    if (date)
+      fields.push({
+        property: s("dateCreated"),
+        path: relativeSelector(sample, date),
+        attribute: "datetime",
+        datatype: xsd("dateTime"),
+      });
+  }
   const parentSel = simpleSelector(list.parent);
   return withId({
     format: "html",
     itemPath: `${parentSel} > ${list.signature}`,
-    itemType: itemTypeFor(fields),
+    itemType: order ? s("Order") : itemTypeFor(fields),
     fields,
   });
 }

@@ -38,7 +38,6 @@ export function layout(title: string, body: string, ctx: PageContext): string {
     <a href="/" class="brand">shop.test</a>
     <a href="/search">Search</a>
     <a href="/cart">Basket (<span id="cart-count">${ctx.cartCount}</span>)</a>
-    <a href="/orders">Orders</a>
     <a href="/help/delivery">Delivery</a>
     ${account}
   </nav>
@@ -156,7 +155,7 @@ export function accountPage(name: string, email: string, ctx: PageContext): stri
     "Your account",
     `<h1>Your account</h1>
 <dl class="account"><dt>Name</dt><dd class="name">${esc(name)}</dd><dt>Email</dt><dd class="email">${esc(email)}</dd></dl>
-<p><a href="/orders">Your orders</a></p>`,
+<nav aria-label="Account menu"><a href="/orders">Order history</a> <a href="/account/address">Delivery address</a></nav>`,
     ctx,
   );
 }
@@ -222,7 +221,7 @@ export function ordersPage(orders: OrderView[], ctx: PageContext): string {
   return layout(
     "Your orders",
     `<h1>Your orders</h1>
-${orders.length ? `<ul class="orders">${orders.map((o) => `<li class="order" data-order-id="${o.id}"><a href="/orders/${o.id}">Order ${o.id}</a> <span class="price">£${esc(o.total)}</span></li>`).join("")}</ul>` : "<p>No orders yet.</p>"}`,
+${orders.length ? `<ul class="orders">${orders.map((o) => `<li class="order" data-order-id="${o.id}"><a href="/orders/${o.id}">Order ${o.id}</a> <time datetime="${esc(o.createdAt)}">${esc(o.createdAt.slice(0, 10))}</time> <span class="price" data-price="${esc(o.total)}" data-currency="GBP">£${esc(o.total)}</span></li>`).join("")}</ul>` : "<p>No orders yet.</p>"}`,
     ctx,
   );
 }
@@ -251,4 +250,19 @@ export function deliveryHelpPage(ctx: PageContext): string {
 
 export function notFoundPage(ctx: PageContext): string {
   return layout("Not found", "<h1>Not found</h1><p>That page does not exist.</p>", ctx);
+}
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+export function addressPage(address: string, ctx: PageContext): string {
+  return layout(
+    "Delivery address",
+    `<h1>Delivery address</h1>
+<form method="post" action="/account/address" aria-label="Delivery address">
+  <input type="hidden" name="csrf_token" value="${esc(ctx.csrf ?? "")}">
+  <label for="streetAddress">Street address</label>
+  <input id="streetAddress" name="streetAddress" value="${esc(address)}" required>
+  <button type="submit">Save delivery address</button>
+</form>`,
+    ctx,
+  );
 }

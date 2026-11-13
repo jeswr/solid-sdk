@@ -2796,6 +2796,9 @@ importers:
       n3:
         specifier: ^2.1.1
         version: 2.1.1
+      playwright:
+        specifier: 1.61.1
+        version: 1.61.1
     devDependencies:
       '@types/n3':
         specifier: ^1.26.1
