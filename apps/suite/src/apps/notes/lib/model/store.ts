@@ -51,6 +51,8 @@ export interface StoredNote extends Note {
   localGeneration?: number;
 }
 export interface NoteChanges {
+  /** Restore saves retain the replaced title/body as a named revision atomically. */
+  preserveCurrent?: boolean | undefined;
   title?: string;
   body?: string;
   labels?: readonly string[];
@@ -287,6 +289,7 @@ export class NotesStore {
     const dataset = buildNote(note.url, {
       ...this.input(note),
       ...input,
+      beforeRestore: input.preserveCurrent ? { title: note.title, body: note.body } : undefined,
     });
     try {
       const written = await writeRdf(note.url, dataset, {

@@ -11,6 +11,7 @@ import {
 import { type Editor, EditorContent, type JSONContent, useEditor } from "@tiptap/react";
 import { ySyncPluginKey, yUndoPluginKey, yXmlFragmentToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { DocumentVersionPanel } from "../../../components/document-version-panel";
 import { baseExtensions } from "../editor/extensions";
 import type { DocumentPersistence } from "../editor/persistence";
 import { podScopedFetch } from "../editor/private-image";
@@ -275,54 +276,42 @@ export function VersionHistory({
           ))}
       </PageCanvas>
       {open && (
-        <aside className="docs-version-history" aria-labelledby={headingId}>
-          <h2 id={headingId} ref={heading} tabIndex={-1}>
-            Version history
-          </h2>
-          <Button variant="ghost" onClick={close}>
-            Back to editing
-          </Button>
-          {error && <p role="alert">{error}</p>}
-          {loading && <p role="status">Loading versions…</p>}
-          <ul aria-label="Document versions">
-            <li>
-              <button
-                type="button"
-                aria-current={!selected ? "true" : undefined}
-                onClick={() => {
-                  request.current++;
-                  setSelected(undefined);
-                  setPreview(undefined);
-                  setLoading(false);
-                  setError(undefined);
-                }}
-              >
-                Current version
-              </button>
-            </li>
-            {versions.map((version) => (
-              <li key={version.url}>
-                <button
-                  type="button"
-                  aria-current={selected?.url === version.url ? "true" : undefined}
-                  onClick={() => void choose(version)}
-                >
-                  <span>{version.name || new Date(version.created).toLocaleString()}</span>
-                  <small>
-                    {version.creator === runtime.session.webId
-                      ? runtime.session.displayName
-                      : version.creator || "Unknown author"}
-                  </small>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {selected && (
+        <DocumentVersionPanel
+          className="docs-version-history"
+          headingId={headingId}
+          headingRef={heading}
+          close={close}
+          closeLabel="Back to editing"
+          listLabel="Document versions"
+          error={error}
+          loading={loading}
+          selectedId={selected?.url}
+          entries={versions.map((version) => ({
+            id: version.url,
+            created: version.created,
+            label: version.name,
+            author:
+              version.creator === runtime.session.webId
+                ? runtime.session.displayName
+                : version.creator,
+          }))}
+          choose={(id) => {
+            const version = versions.find((version) => version.url === id);
+            if (version) void choose(version);
+            else {
+              request.current++;
+              setSelected(undefined);
+              setPreview(undefined);
+              setLoading(false);
+              setError(undefined);
+            }
+          }}
+          restoreAction={
             <VersionAction reason={reason} busy={busy || !preview} run={() => setConfirm(true)}>
               Restore this version
             </VersionAction>
-          )}
-        </aside>
+          }
+        />
       )}
       <Dialog
         open={naming}

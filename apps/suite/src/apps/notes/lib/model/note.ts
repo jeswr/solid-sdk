@@ -21,6 +21,7 @@ import {
   documentSubject,
   type PodDocument,
   parseDocument,
+  type Revision,
 } from "../../../docs/lib/model/document";
 import { DEFAULT_FORMAT, NS } from "../../../docs/lib/model/vocab";
 import { assertLabels } from "../validation";
@@ -29,11 +30,13 @@ import { assertLabels } from "../validation";
 export const SCHED = "https://w3id.org/jeswr/sectors/scheduling#";
 
 export type NoteLocation = "active" | "archived" | "trashed";
+export interface NoteRevision extends Revision {
+  /** Older revisions have no recorded title; restoring those keeps the current title. */
+  title?: string | undefined;
+}
 export interface Note
-  extends Pick<
-    PodDocument,
-    "title" | "body" | "format" | "created" | "modified" | "creator" | "revisions"
-  > {
+  extends Pick<PodDocument, "title" | "body" | "format" | "created" | "modified" | "creator"> {
+  revisions: NoteRevision[];
   url: string;
   labels: string[];
   reminder?: string | undefined;
@@ -128,7 +131,10 @@ export class NoteDoc extends DocumentDoc {
   }
 }
 
-export interface BuildNoteInput extends Omit<BuildDocumentInput, "format"> {
+export interface BuildNoteInput extends Omit<BuildDocumentInput, "format" | "priorRevisions"> {
+  priorRevisions?: readonly NoteRevision[] | undefined;
+  /** Capture the replaced content even inside the automatic revision interval. */
+  beforeRestore?: Pick<Note, "title" | "body"> | undefined;
   labels?: readonly string[] | undefined;
   reminder?: Date | string | null | undefined;
   reminderId?: string | undefined;
@@ -141,13 +147,27 @@ export function buildNote(url: string, input: BuildNoteInput): Store {
   const labels = input.labels ?? [];
   assertLabels(labels);
   const now = input.now ?? new Date();
-  const revisions = applyRevisionPolicy(url, input.priorRevisions ?? [], {
+  let prior: readonly NoteRevision[] = input.priorRevisions ?? [];
+  if (input.beforeRestore) {
+    const snapshots: NoteRevision[] = applyRevisionPolicy(url, prior, {
+      body: input.beforeRestore.body,
+      format: DEFAULT_FORMAT,
+      now,
+      attributedTo: input.editor ?? input.creator,
+      label: "Before restore",
+    });
+    (snapshots[0] as NoteRevision).title = input.beforeRestore.title;
+    prior = snapshots;
+  }
+  const revisions: NoteRevision[] = applyRevisionPolicy(url, prior, {
     body: input.body ?? "",
     format: DEFAULT_FORMAT,
     now,
     attributedTo: input.editor ?? input.creator,
     label: input.revisionLabel,
   }).slice(0, 20);
+  const priorIds = new Set(prior.map((revision) => revision.id));
+  for (const revision of revisions) if (!priorIds.has(revision.id)) revision.title = input.title;
   for (const [index, revision] of revisions.entries())
     revision.wasRevisionOf = revisions[index + 1]?.id;
   // The policy has already run; omitting revisionLabel avoids adding a second named entry.
@@ -159,6 +179,9 @@ export function buildNote(url: string, input: BuildNoteInput): Store {
     revisionLabel: undefined,
   });
   const doc = new NoteDoc(documentSubject(url), dataset, DataFactory).mark();
+  // Reuse the shared document title accessor on each existing revision entity.
+  for (const revision of revisions)
+    new DocumentDoc(revision.id, dataset, DataFactory).title = revision.title;
   for (const label of labels) doc.labels.add(label);
   doc.trashedAt = input.trashedAt === undefined ? undefined : new Date(input.trashedAt);
   doc.previousContainer = input.previousContainer;
@@ -179,6 +202,10 @@ export function parseNote(
   const previous = doc.previousContainer;
   return {
     ...document,
+    revisions: document.revisions.map((revision) => ({
+      ...revision,
+      title: new DocumentDoc(revision.id, dataset, DataFactory).title,
+    })),
     url,
     labels: [...doc.labels],
     reminder: doc.reminder?.toISOString(),
