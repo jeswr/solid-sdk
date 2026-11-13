@@ -465,7 +465,7 @@ describe("gate helpers", () => {
     ).toEqual({});
   });
 
-  it("writes plain-English summaries and strips control/bidi characters", () => {
+  it("quotes summary values, escapes control/bidi characters and marks truncation", () => {
     const req = actionRequest(
       `[] a schema:BuyAction ; schema:object [ schema:name "Trail Runner sneakers" ] .`,
     );
@@ -474,17 +474,20 @@ describe("gate helpers", () => {
         amount: "20",
         currency: "GBP",
       }),
-    ).toBe("Buy Trail Runner sneakers for GBP 20.00 on shop.test");
+    ).toBe('Buy "Trail Runner sneakers" for GBP 20.00 on shop.test');
     expect(
       summarise(actionRequest(`[] a schema:AddToCartAction .`), target, "https://shop.test", {}),
-    ).toBe("Add to cart on shop.test");
+    ).toBe('"Add to cart" on shop.test');
     const evil = actionRequest(
       `[] a schema:BuyAction ; schema:object [ schema:name "Socks\\u202E\\n\\u0007 ${"x".repeat(100)}" ] .`,
     );
     const s = summarise(evil, { ...target, actionType: `${S}TipAction` }, "https://shop.test", {
       amount: "1e999",
     });
-    expect(s).toMatch(/^Tip Socks x+… for 1e999 on shop\.test$/);
+    expect(s).toContain('Tip "Socks');
+    expect(s).toContain("(truncated)");
+    expect(s).toContain("\\\\u202e\\\\u000a\\\\u0007");
+    expect(s).toContain('" for 1e999 on shop.test');
     expect([...s].some((ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x202e)).toBe(false);
   });
 

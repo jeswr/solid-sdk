@@ -29,7 +29,10 @@ function requireValue<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Missing live acceptance value");
   return value;
 }
-async function action(op: Operation, values: Record<string, string>) {
+async function action(
+  op: Pick<Operation, "id" | "actionType" | "inputs">,
+  values: Record<string, string>,
+) {
   const root = blankNode();
   const writer = new Writer();
   writer.addQuad(
@@ -78,7 +81,7 @@ function operation(model: SiteModel, type: string, route: RegExp) {
   return requireValue(op);
 }
 it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
-  "learns demonstrated product writes and approves, denies, repeats and observes them on the sandbox",
+  "learns product writes, names approval targets and refuses a two-product search before deleting one by SKU",
   async () => {
     const startUrl = requireValue(process.env.SAB_LIVE_SITE_URL);
     const origin = new URL(startUrl).origin;
@@ -107,6 +110,9 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
     const create = operation(model, "CreateAction", /\/save\/type\//);
     const update = operation(model, "UpdateAction", /\/save\/id\//);
     const remove = operation(model, "DeleteAction", /massDelete/);
+    const removeSelection = requireValue(
+      model.flows.find((flow) => flow.steps.length === 2 && flow.steps[1]?.operation === remove.id),
+    );
     const search = operation(model, "SearchAction", /namespace=product_listing/);
     for (const op of [create, update, remove]) {
       expect(op.effect).toBe("irreversible-write");
@@ -127,13 +133,23 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
     calls.length = 0;
     const executor = createTaskExecutor({ model, sessions, fetch: transport });
     const item = productFixture();
+    const similar = { ...productFixture(), name: `${item.name} Similar` };
     let id: string | undefined;
+    let similarId: string | undefined;
     const approvals: Array<{ summary: string; decision: string; calls: number; posts: number }> =
       [];
     const posts = () => calls.filter((c) => c.method === "POST");
     const createTurtle = await action(create, values(item));
     const readTurtle = await action(search, { search: item.sku });
-    const decisionQueue = ["deny", "approve", "deny", "approve", "deny", "approve"] as const;
+    const decisionQueue = [
+      "deny",
+      "approve",
+      "approve",
+      "deny",
+      "approve",
+      "deny",
+      "approve",
+    ] as const;
     const last = (history: Array<{ status: string; observations: string }>) => history.at(-1);
     const inspectPrice = (text: string, expected: string) => {
       const facts = new Parser().parse(text);
@@ -152,9 +168,10 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
         goal: `Create, edit and delete ${item.name}`,
         model,
         executor,
-        maxSteps: 14,
+        maxSteps: 20,
         approver: async (approval) => {
           expect(approval.summary).toContain("127.0.0.1:7780");
+          expect(approval.summary).toContain(item.name);
           const decision = requireValue(decisionQueue[approvals.length]);
           approvals.push({
             summary: approval.summary,
@@ -179,9 +196,17 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
             expect(id).toMatch(/^\d+$/);
             return { kind: "act", turtle: createTurtle };
           },
-          (input) => {
+          async (input) => {
             expect(last(input.history)?.status).toBe("repeat-blocked");
             expect(posts()).toHaveLength(1);
+            return { kind: "act", turtle: await action(create, values(similar)) };
+          },
+          (input) => {
+            expect(last(input.history)?.status).toBe("done");
+            expect(posts()).toHaveLength(2);
+            const facts = new Parser().parse(requireValue(last(input.history)).observations);
+            similarId = facts.find((q) => q.predicate.value === `${s}identifier`)?.object.value;
+            expect(similarId).toMatch(/^\d+$/);
             return { kind: "act", turtle: readTurtle };
           },
           async (input) => {
@@ -195,24 +220,34 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
           },
           (input) => {
             expect(last(input.history)?.status).toBe("done");
-            expect(posts()).toHaveLength(2);
+            expect(posts()).toHaveLength(3);
             return { kind: "act", turtle: readTurtle };
           },
           async (input) => {
             inspectPrice(requireValue(last(input.history)).observations, "23.45");
-            return { kind: "act", turtle: await action(remove, values(item, "23.45", id)) };
+            return { kind: "act", turtle: await action(removeSelection, { search: item.name }) };
+          },
+          async (input) => {
+            expect(last(input.history)?.status).toBe("refused");
+            expect(last(input.history)).toMatchObject({
+              error: expect.stringContaining("more than one item"),
+            });
+            expect(posts()).toHaveLength(3);
+            expect(approvals).toHaveLength(5);
+            return { kind: "act", turtle: await action(removeSelection, { search: item.sku }) };
           },
           async (input) => {
             expect(last(input.history)?.status).toBe("denied");
             expect(calls).toHaveLength(requireValue(approvals.at(-1)).calls);
-            return { kind: "act", turtle: await action(remove, values(item, "23.45", id)) };
+            expect(requireValue(approvals.at(-1)).summary).toContain(`Delete "${item.name}`);
+            return { kind: "act", turtle: await action(removeSelection, { search: item.sku }) };
           },
           (input) => {
             expect(last(input.history)?.status).toBe("done");
-            expect(posts()).toHaveLength(3);
+            expect(posts()).toHaveLength(4);
             return { kind: "act", turtle: readTurtle };
           },
-          (input) => {
+          async (input) => {
             expect(last(input.history)?.status).toBe("done");
             const facts = new Parser().parse(requireValue(last(input.history)).observations);
             expect(
@@ -221,7 +256,26 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
             expect(facts.find((q) => q.predicate.value === `${s}numberOfItems`)?.object.value).toBe(
               "0",
             );
-            return { kind: "answer", text: "Created, updated and deleted the disposable product." };
+            return { kind: "act", turtle: await action(search, { search: similar.sku }) };
+          },
+          (input) => {
+            expect(last(input.history)?.status).toBe("done");
+            const facts = new Parser().parse(requireValue(last(input.history)).observations);
+            expect(
+              facts.some((q) => q.predicate.value === `${s}sku` && q.object.value === similar.sku),
+            ).toBe(true);
+            expect(
+              facts.some(
+                (q) => q.predicate.value === `${s}name` && q.object.value === similar.name,
+              ),
+            ).toBe(true);
+            expect(facts.find((q) => q.predicate.value === `${s}numberOfItems`)?.object.value).toBe(
+              "1",
+            );
+            return {
+              kind: "answer",
+              text: "Deleted the intended product by SKU; its similarly named neighbour remains.",
+            };
           },
         ]),
       });
@@ -236,8 +290,9 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
         trace.steps.map((step) => ({ status: step.status, error: step.error })),
       );
       expect(trace.outcome).toBe("answer");
-      expect(approvals).toHaveLength(6);
+      expect(approvals).toHaveLength(7);
       expect(posts().map((c) => c.path)).toEqual([
+        expect.stringContaining("/save/type/"),
         expect.stringContaining("/save/type/"),
         expect.stringContaining(`/save/id/${id}/`),
         expect.stringContaining("/massDelete"),
@@ -285,6 +340,12 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
           origin,
           item,
           id ? `${origin}/admin/catalog/product/edit/id/${id}/` : undefined,
+        );
+        await deleteOwnProduct(
+          await context.newPage(),
+          origin,
+          similar,
+          similarId ? `${origin}/admin/catalog/product/edit/id/${similarId}/` : undefined,
         );
       } finally {
         await browser.close();

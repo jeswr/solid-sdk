@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Demonstrated text forms: meaningful inputs, witnessed fixed fields, fresh CSRF sources.
+import { isSelectionFilter } from "@jeswr/site-model";
 import { isCsrfFieldName } from "./forms.js";
 import { attr, attrValue, descendants, parseHtml } from "./html.js";
 import { requestValues } from "./templates.js";
@@ -129,10 +130,10 @@ export function learnDemonstratedForm(
     const identityField = /^(?:selected|ids?|identifiers?)(?:\[\d*\])?$/i.test(wireName);
     const role = identityField
       ? "id"
-      : /^(q|query|search|keyword|keywords|term)$/i.test(wireName)
-        ? wireName
+      : isSelectionFilter(wireName)
+        ? wireName.replace(/\[([^\]]+)\]/g, ".$1")
         : roles[leaf(wireName)];
-    if (role && value !== "") {
+    if (role && (value !== "" || isSelectionFilter(wireName))) {
       const seen = used.get(role);
       if (seen && seen !== value) return c; // ambiguous repeated semantic fields: retain the original evidence
       if (!seen) {

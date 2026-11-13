@@ -115,7 +115,7 @@ describe("host login and real executor composition (in-process transport)", () =
     ]);
     expect(fixture.orders()).toBe(decision === "approve" ? 1 : 0);
     expect(approver).toHaveBeenCalledTimes(1);
-    expect(approver.mock.calls[0]?.[0]?.summary).toContain("Trail Runner sneakers for GBP 20.00");
+    expect(approver.mock.calls[0]?.[0]?.summary).toContain('"Trail Runner sneakers" for GBP 20.00');
     const text = JSON.stringify([inputs, trace]);
     for (const value of ["<html", "Set-Cookie", fixture.password, fixture.sid, fixture.csrf])
       expect(text).not.toContain(value);

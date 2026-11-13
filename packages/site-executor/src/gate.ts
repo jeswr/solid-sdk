@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // The approval gate seam. The executor asks the host's Gate before it sends any
 // request; the gate allows, asks the user (an ApprovalRequest) or denies. An
 // approval is bound to a digest of exactly what will run (site, target, effect,
@@ -7,7 +8,7 @@
 // never honours an approval issued for different inputs.
 
 import { createHash, randomUUID } from "node:crypto";
-import type { ActionRequest, EffectClass } from "@jeswr/site-model";
+import type { ActionRequest, EffectClass, Operation } from "@jeswr/site-model";
 import { SCHEMA } from "@jeswr/site-model";
 import type { Target } from "./match.js";
 import { BindingError } from "./values.js";
@@ -168,14 +169,17 @@ function verbFor(actionType: string): string {
   return VERBS[local] ?? local.replace(/Action$/, "").replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
-/** Strip control characters and cap the length of text going into a summary. */
+/** Escape controls and bidi characters, after redaction, before capping display text. */
 function clean(text: string, max = 80): string {
   const t = text
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control and bidi characters is the point
-    .replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, " ")
+    .replace(
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: escape controls in approval text
+      /[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069]/g,
+      (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    )
     .replace(/\s+/g, " ")
     .trim();
-  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+  return t.length > max ? `${t.slice(0, max)} (truncated)` : t;
 }
 
 function formatAmount(amount: string): string {
@@ -191,12 +195,43 @@ export function summarise(
   site: string,
   money: { amount?: string; currency?: string },
   redact: (value: string) => string = (value) => value,
+  context: {
+    names?: string[];
+    inputs?: Record<string, string>;
+    operation?: Operation;
+    selection?: boolean;
+  } = {},
 ): string {
   const host = new URL(site).host;
   const objectName = request.values([`${SCHEMA}object`, `${SCHEMA}name`])[0];
-  const subject = clean(redact(objectName ?? target.label));
+  const quote = (value: string) => JSON.stringify(clean(redact(value)));
   const verb = clean(verbFor(redact(target.actionType)));
-  const what = objectName ? `${verb} ${subject}` : subject;
+  const names = context.names ?? [];
+  const resolved =
+    names.slice(0, 5).map(quote).join(", ") +
+    (names.length > 5 ? ` and ${names.length - 5} more` : "");
+  const identifying = Object.entries(context.inputs ?? {}).filter(([name]) => {
+    const p = context.operation?.inputs.find((p) => p.name === name);
+    return (
+      /(?:^|[_[])(?:id|ids|sku|identifier|productID|orderNumber)(?:\]|$)/i.test(name) ||
+      p?.path.some((iri) => /(?:object|identifier|sku|productID|orderNumber)$/.test(iri))
+    );
+  });
+  const fallback = identifying.length ? identifying : Object.entries(context.inputs ?? {});
+  let what = objectName
+    ? `${verb} ${quote(objectName)}`
+    : resolved
+      ? `${verb} ${resolved}`
+      : `${quote(target.label)}${
+          fallback.length
+            ? ` (${fallback
+                .slice(0, 5)
+                .map(([name, value]) => `${quote(name)}=${quote(value)}`)
+                .join(", ")})`
+            : ""
+        }`;
+  if (context.selection && objectName && names.some((name) => name !== objectName))
+    what += ` (resolved: ${resolved})`;
   const price =
     money.amount !== undefined
       ? ` for ${money.currency ? `${clean(redact(money.currency))} ` : ""}${clean(formatAmount(redact(money.amount)), 120)}`
