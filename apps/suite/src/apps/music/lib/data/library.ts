@@ -47,6 +47,13 @@ export interface Library {
   models: ReturnType<typeof readLibrary>;
   documents: Map<string, MusicDocument>;
 }
+/** Interactive readers can retain readable documents while reporting failed members. */
+export type MusicReadFailure = {
+  url: string;
+  error: unknown;
+  area: "library" | "history" | "preferences";
+};
+export type ReportMusicFailure = (failure: MusicReadFailure) => void;
 export const musicRoot = (storage: string): string =>
   new URL("music/", normalizePodBase(storage)).href;
 
@@ -80,12 +87,13 @@ export async function provision(fetch: typeof globalThis.fetch, storage: string)
 export async function loadLibrary(
   fetch: typeof globalThis.fetch,
   storage: string,
+  report?: ReportMusicFailure,
 ): Promise<Library> {
   const root = normalizePodBase(storage);
   const scoped = createPodScopedFetch(root, { fetch });
   const dataset = new Store();
   const documents = new Map<string, MusicDocument>();
-  async function walk(url: string): Promise<void> {
+  async function walk(url: string, optional = false): Promise<void> {
     let doc: MusicDocument;
     try {
       const response = await scoped(url, {
@@ -101,7 +109,7 @@ export async function loadLibrary(
       // Reuse the response; the model still owns parsing and blank-node scoping.
       doc = await loadMusic(async () => response, url);
     } catch (error) {
-      if (error instanceof RdfFetchError && error.status === 404) return;
+      if (error instanceof RdfFetchError && error.status === 404 && (optional || !report)) return;
       throw error;
     }
     dataset.addQuads([...doc.dataset]);
@@ -113,11 +121,24 @@ export async function loadLibrary(
       if (member.termType !== "NamedNode") continue;
       const child = podScopedUrl(url, member.value, { allowRoot: false });
       if (!child || child.startsWith(new URL("history/", musicRoot(root)).href)) continue;
-      if (child !== new URL("preferences.json", musicRoot(root)).href) await walk(child);
+      if (child !== new URL("preferences.json", musicRoot(root)).href) {
+        try {
+          await walk(child);
+        } catch (error) {
+          if (!report) throw error;
+          report({ url: child, error, area: "library" });
+        }
+      }
     }
   }
-  await walk(musicRoot(root));
-  await walk(new URL("integrations/spotify/music/", root).href);
+  await walk(musicRoot(root), true);
+  const integration = new URL("integrations/spotify/music/", root).href;
+  try {
+    await walk(integration, true);
+  } catch (error) {
+    if (!report) throw error;
+    report({ url: integration, error, area: "library" });
+  }
   const models = readLibrary(dataset);
   const { tracks, albums, artists } = normalizeLibrary(models, musicRoot(root));
   return { tracks, models, documents, albums, artists };
