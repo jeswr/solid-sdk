@@ -4,6 +4,7 @@
 import {
   approvalDigest,
   type CommittedWrite,
+  cookieHeader,
   createApprovalGate,
   domainMatches,
   guardUrl,
@@ -14,6 +15,8 @@ import {
 } from "@jeswr/site-executor";
 import { SCHEMA } from "@jeswr/site-model";
 import {
+  BODY_LIMIT,
+  discoverCredentialSources,
   discoverSessionTokens,
   type EndpointCandidate,
   type FormInfo,
@@ -21,6 +24,7 @@ import {
   parseForms,
   type RecordedRequest,
   Recorder,
+  redactBody,
   redactTrace,
   sanitiseHeaders,
 } from "@jeswr/site-profiler";
@@ -31,6 +35,7 @@ import type { Approver, TraceStep } from "../types.js";
 import { browserWriteFingerprint } from "./fingerprint.js";
 import { candidatesFromTrace } from "./learn.js";
 import type { BrowserAction, BrowserSnapshot } from "./planner.js";
+import { fallbackRedactor, redactSnapshot } from "./redact.js";
 
 const sensitive =
   /pass(word|wd)?|pwd|secret|token|csrf|xsrf|authenticity|antiforgery|nonce|requestverification|authorization|session|api.?key|cvv|card.?number|form.?key/i;
@@ -87,7 +92,8 @@ export class BrowserDriver {
   private readonly secrets = new Set<string>();
   private readonly approved = new Set<number>();
   private readonly entries = new WeakMap<Request, RecordedRequest>();
-  private readonly sent = new WeakMap<Request, CommittedWrite>();
+  private readonly inFlight = new Set<Request>();
+  private readonly activity = new Set<() => void>();
   private readonly refs = new Map<string, { backend: number; epoch: number }>();
   private readonly clock: DriverClock;
   private session: SessionBundle | undefined;
@@ -99,6 +105,9 @@ export class BrowserDriver {
   private sequence = 0;
   private activeStep: number | undefined;
   private usedStep: number | undefined;
+  private pendingRequest: Request | undefined;
+  private submitter: { formIndex?: number; formLabel: string; label: string } | undefined;
+  private cleanWrites = new Set<CommittedWrite>();
   private lastAction: number | undefined;
   private failure: BrowserDriverError | undefined;
   private closed = false;
@@ -111,6 +120,7 @@ export class BrowserDriver {
   private constructor(private readonly options: BrowserDriverOptions) {
     this.origin = siteOrigin(options.site);
     this.recorder = new Recorder(this.origin);
+    this.recorder.phase = "demonstration";
     this.clock = options.clock ?? { now: () => performance.now(), sleep: delay };
     for (const n of [
       options.minActionDelayMs ?? 200,
@@ -169,26 +179,22 @@ export class BrowserDriver {
         })),
     );
     this.initialCookies = JSON.stringify(await this.context.cookies());
-    await this.recorder.attach(this.context);
     this.context.on("request", (req) => {
-      const entry = this.recorder.trace.at(-1);
-      if (entry?.url === req.url() && entry.method === req.method()) this.entries.set(req, entry);
+      this.inFlight.add(req);
+      for (const changed of this.activity) changed();
+      if (this.pendingRequest && req !== this.pendingRequest && req.isNavigationRequest())
+        this.epoch++;
+      if (new URL(req.url()).origin !== this.origin) return;
+      const entry = this.recorder.recordReplay({
+        method: req.method(),
+        url: req.url(),
+        resourceType: req.resourceType(),
+        ...sanitiseHeaders(req.headers()),
+        postData: redactBody(req.postData() ?? undefined, req.headers()["content-type"]),
+      });
+      this.entries.set(req, entry);
     });
-    this.context.on("response", (res) => {
-      for (const line of (res.headers()["set-cookie"] ?? "").split("\n")) {
-        const cookie = parseSetCookie(line, new URL(res.url()), new Date());
-        if (cookie) this.secrets.add(cookie.value);
-      }
-      const write = this.sent.get(res.request());
-      if (write && res.status() >= 400 && res.status() < 500) {
-        const i = this.committed.indexOf(write);
-        if (i >= 0) this.committed.splice(i, 1);
-        const entry = this.entries.get(res.request());
-        if (entry) this.approved.delete(entry.seq);
-      }
-      if (res.status() >= 400) this.fail("browser", "The site rejected a browser request.");
-    });
-    // The last route runs first. GETs fall through to Recorder's own guard.
+    // Every request, including every redirect hop, is sent by the driver.
     await this.context.route("**/*", async (route) => {
       try {
         await this.route(route);
@@ -197,6 +203,9 @@ export class BrowserDriver {
         if (entry) entry.blocked = true;
         this.fail("browser", "Browser request failed safely.");
         await route.abort("blockedbyclient").catch(() => undefined);
+      } finally {
+        this.inFlight.delete(route.request());
+        for (const changed of this.activity) changed();
       }
     });
     await this.context.routeWebSocket("**/*", (socket) => socket.close());
@@ -214,9 +223,15 @@ export class BrowserDriver {
       this.fail("guard", "Downloads are blocked.");
       void download.cancel().catch(() => undefined);
     });
+    this.page.on("frameattached", () => {
+      this.epoch++;
+    });
+    this.page.on("framedetached", () => {
+      this.epoch++;
+    });
     this.page.on("framenavigated", (frame) => {
+      this.epoch++;
       if (frame === this.page.mainFrame()) {
-        this.epoch++;
         if (frame.url() !== "about:blank") {
           try {
             guardUrl(frame.url(), this.origin);
@@ -229,6 +244,10 @@ export class BrowserDriver {
     });
     this.cdp = await this.context.newCDPSession(this.page);
     await this.cdp.send("Accessibility.enable");
+    await this.cdp.send("DOM.enable");
+    this.cdp.on("DOM.documentUpdated", () => {
+      this.epoch++;
+    });
   }
 
   private fail(kind: BrowserDriverError["kind"], message: string): void {
@@ -236,244 +255,348 @@ export class BrowserDriver {
   }
 
   redact(text: string): string {
-    let out = text;
-    for (const secret of [...this.secrets].filter(Boolean).sort((a, b) => b.length - a.length))
-      for (const value of new Set([
-        secret,
-        encodeURIComponent(secret),
-        JSON.stringify(secret).slice(1, -1),
-      ]))
-        out = out.split(value).join("[redacted]");
-    return out;
+    return fallbackRedactor(this.secrets)(text);
+  }
+
+  get writesCompleted(): boolean {
+    return this.committed.length > 0 && this.committed.every((w) => this.cleanWrites.has(w));
   }
 
   /** Redacted traffic only. Aborts are explicitly retained as blocked evidence. */
   get trace(): RecordedRequest[] {
     this.rememberPageSecrets();
-    return redactTrace(this.recorder.trace, this.secrets);
+    const walk = (value: unknown): unknown => {
+      if (typeof value === "string") return this.redact(value);
+      if (Array.isArray(value)) return value.map(walk);
+      if (value && typeof value === "object")
+        return Object.fromEntries(Object.entries(value).map(([k, v]) => [this.redact(k), walk(v)]));
+      return value;
+    };
+    return walk(redactTrace(this.recorder.trace, this.secrets)) as RecordedRequest[];
+  }
+
+  private quote(value: string, max = 120): string {
+    const clean = this.redact(value);
+    return JSON.stringify(clean.slice(0, max) + (clean.length > max ? " (truncated)" : "")).replace(
+      /[\u007f-\u009f\u2028\u2029]/g,
+      (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    );
   }
 
   private async route(route: Route): Promise<void> {
     const req = route.request();
-    const entry = this.entries.get(req);
-    const abort = async (kind: BrowserDriverError["kind"], message: string) => {
+    let entry = this.entries.get(req);
+    const stop = async (kind: BrowserDriverError["kind"], message: string) => {
       if (entry) entry.blocked = true;
       this.fail(kind, message);
-      await route.abort("blockedbyclient");
+      // No redirect Location or session-bearing headers reach Chromium on a refused hop.
+      await route.fulfill({
+        status: 502,
+        contentType: "text/html",
+        body: "<!doctype html><title>Navigation error</title><p>Fallback navigation stopped.</p>",
+      });
     };
     try {
       guardUrl(req.url(), this.origin);
     } catch {
-      await abort("origin", "Off-origin navigation or resource blocked.");
+      await stop("origin", "Off-origin navigation or resource blocked.");
       return;
     }
     try {
       if (req.frame().page() !== this.page || req.frame() !== this.page.mainFrame()) {
-        await abort("guard", "New windows and frames are blocked.");
+        await stop("guard", "New windows and frames are blocked.");
         return;
       }
     } catch {
-      await abort("guard", "New windows and frames are blocked.");
+      await stop("guard", "New windows and frames are blocked.");
       return;
     }
     if (this.failure) {
-      await route.abort("blockedbyclient");
-      if (entry) entry.blocked = true;
+      await stop(this.failure.kind, this.failure.message);
       return;
     }
-    const requestedUrl = new URL(req.url());
-    const getForm =
-      req.method() === "GET" && req.isNavigationRequest()
-        ? this.forms.find((f) => {
-            const action = new URL(f.action);
-            return (
-              f.method === "GET" &&
-              action.origin === requestedUrl.origin &&
-              action.pathname === requestedUrl.pathname &&
-              (!f.fields.length ||
-                f.fields.some((field) => requestedUrl.searchParams.has(field.name)))
-            );
-          })
-        : undefined;
-    const readForm =
-      getForm &&
-      !getForm.hasPassword &&
-      getForm.fields.some(
-        (f) => !f.hidden && /^(q|query|search|keyword|term|filter(?:\[.*\])?)$/i.test(f.name),
-      ) &&
-      getForm.fields.every(
-        (f) =>
-          f.hidden ||
-          /^(q|query|search|keyword|term|filter(?:\[.*\])?|sort|order|page|limit)$/i.test(f.name),
-      ) &&
-      !/save|update|delete|remove|buy|pay|change|send/i.test(getForm.submitLabels.join(" "));
-    if (req.method() === "GET" && (!getForm || readForm)) {
-      this.requests++;
-      await route.fallback({ headers: { ...req.headers(), ...this.session?.headers } });
-      return;
-    }
-    if (
-      this.activeStep === undefined ||
-      this.usedStep === this.activeStep ||
-      !this.options.approver
-    ) {
-      await abort("guard", "Non-GET request has no single-use write grant.");
-      return;
-    }
-    // Reserve the step before awaiting consent: concurrent requests cannot share it.
-    this.usedStep = this.activeStep;
-    if (this.approvals.length >= (this.options.maxApprovals ?? 25)) {
-      await abort("limit", "Fallback approval limit reached.");
-      return;
-    }
-    const forms = this.forms;
-    const form = getForm || forms.find((f) => f.method === req.method() && f.action === req.url());
-    for (const f of forms)
-      for (const field of f.fields)
-        if (sensitive.test(field.name) || field.type === "password")
-          if (field.value) this.secrets.add(field.value);
-    const privateFields = new Set(
-      forms.flatMap((f) =>
-        f.fields
-          .filter((field) => field.type === "password" || sensitive.test(field.name))
-          .map((field) => field.name),
-      ),
-    );
-    const privateField = (name: string) => sensitive.test(name) || privateFields.has(name);
-    const headers = req.headers();
-    const raw = req.postData() ?? "";
-    const url = new URL(req.url());
-    for (const name of [...url.searchParams.keys()])
-      if (privateField(name)) {
-        this.secrets.add(url.searchParams.get(name) ?? "");
-        url.searchParams.delete(name);
-      }
-    let names: string[];
-    if (/application\/json/i.test(headers["content-type"] ?? "")) {
-      const value = JSON.parse(raw) as Record<string, unknown>;
-      if (!value || Array.isArray(value) || typeof value !== "object") {
-        await abort("guard", "Unsupported browser write body.");
-        return;
-      }
-      if (Object.values(value).some((v) => v === null || typeof v === "object")) {
-        await abort("guard", "Unsupported browser write body.");
-        return;
-      }
-      names = Object.keys(value);
-      for (const [key, v] of Object.entries(value))
-        if (privateField(key)) this.secrets.add(String(v));
-    } else if (/application\/x-www-form-urlencoded/i.test(headers["content-type"] ?? "")) {
-      const fields = [...new URLSearchParams(raw)];
-      names = fields.map(([k]) => k);
-      if (new Set(names).size !== names.length) {
-        await abort("guard", "Repeated form fields are unsupported.");
-        return;
-      }
-      for (const [key, v] of fields) if (privateField(key)) this.secrets.add(v);
-    } else if (raw) {
-      await abort("guard", "Unsupported browser write body.");
-      return;
-    } else names = [...requestedUrl.searchParams.keys()];
-    const label = this.redact(
-      form?.submitLabels.join(" / ") || "Submit form or page request",
-    ).slice(0, 120);
-    const target = {
-      kind: "operation" as const,
-      id: `urn:sab:fallback:step:${this.activeStep}`,
-      label,
-      actionType: `${SCHEMA}UpdateAction`,
-    };
-    const wireHeaders = sanitiseHeaders(await req.allHeaders());
-    const tokens = discoverSessionTokens(
-      this.recorder.trace
-        .filter((r) => r.bodySample && /html/i.test(r.contentType ?? ""))
-        .map((r) => ({ url: r.url, html: r.bodySample as string })),
-      await this.context.cookies(),
-      this.recorder.trace,
-    );
-    const fingerprint = browserWriteFingerprint(
-      {
-        seq: -1,
-        phase: "demonstration",
-        method: req.method(),
-        url: req.url(),
+    let url = req.url();
+    let method = req.method();
+    let raw = req.postData() ?? "";
+    let baseHeaders = { ...(await req.allHeaders()) };
+    const step = this.activeStep;
+    const original = JSON.stringify([req.method(), req.url(), req.postData(), req.headers()]);
+    let redirected = false;
+    for (let hop = 0; hop <= 5; hop++) {
+      guardUrl(url, this.origin);
+      const generation = this.epoch;
+      const headers: Record<string, string> = Object.fromEntries(
+        Object.entries(baseHeaders).filter(
+          ([name]) =>
+            !["cookie", "authorization", "proxy-authorization", "host", "content-length"].includes(
+              name.toLowerCase(),
+            ) &&
+            !Object.keys(this.session?.headers ?? {}).some(
+              (key) => key.toLowerCase() === name.toLowerCase(),
+            ),
+        ),
+      );
+      // An explicit Cookie header prevents the API context from forwarding its jar itself.
+      headers.cookie = cookieHeader(await this.context.cookies(url));
+      for (const [key, value] of Object.entries(this.session?.headers ?? {}))
+        headers[key.toLowerCase()] = value;
+      for (const c of await this.context.cookies()) this.secrets.add(c.value);
+      this.rememberPageSecrets();
+      const wire: Omit<RecordedRequest, "seq" | "phase"> = {
+        method,
+        url,
         resourceType: req.resourceType(),
-        ...wireHeaders,
-        postData: raw || undefined,
+        ...sanitiseHeaders(headers),
+        postData: redactBody(raw || undefined, headers["content-type"]),
         status: 200,
-      },
-      this.origin,
-      forms,
-      tokens,
-    );
-
-    if (this.options.excludeFingerprints?.includes(fingerprint)) {
-      await abort("repeat", "This write already committed in this task.");
+      };
+      if (redirected) {
+        entry = this.recorder.recordReplay({ ...wire, status: undefined });
+      } else if (entry) Object.assign(entry, { ...wire, status: undefined });
+      const requestedUrl = new URL(url);
+      const form =
+        this.submitter?.formIndex === undefined ? undefined : this.forms[this.submitter.formIndex];
+      const getForm = method === "GET" && !redirected && form?.method === "GET" ? form : undefined;
+      const readForm =
+        getForm &&
+        !getForm.hasPassword &&
+        getForm.fields.some(
+          (f) => !f.hidden && /^(q|query|search|keyword|term|filter(?:\[.*\])?)$/i.test(f.name),
+        ) &&
+        getForm.fields.every(
+          (f) =>
+            f.hidden ||
+            /^(q|query|search|keyword|term|filter(?:\[.*\])?|sort|order|page|limit)$/i.test(f.name),
+        ) &&
+        !/save|update|delete|remove|buy|pay|change|send/i.test(this.submitter?.label ?? "");
+      const needsGrant = method !== "GET" || Boolean(getForm && !readForm);
+      let write: CommittedWrite | undefined;
+      if (needsGrant) {
+        if (
+          step === undefined ||
+          this.activeStep !== step ||
+          (!redirected && this.usedStep === step) ||
+          !this.options.approver
+        ) {
+          await stop("guard", "Non-GET request has no single-use write grant.");
+          return;
+        }
+        this.usedStep = step;
+        if (this.approvals.length >= (this.options.maxApprovals ?? 25)) {
+          await stop("limit", "Fallback approval limit reached.");
+          return;
+        }
+        const privateNames = new Set(
+          this.forms.flatMap((f) =>
+            f.fields
+              .filter((field) => sensitive.test(field.name) || field.type === "password")
+              .map((f) => f.name),
+          ),
+        );
+        const privateField = (name: string) => sensitive.test(name) || privateNames.has(name);
+        const names = [...requestedUrl.searchParams.keys()];
+        for (const [name, value] of requestedUrl.searchParams)
+          if (privateField(name)) this.secrets.add(value);
+        if (/application\/json/i.test(headers["content-type"] ?? "")) {
+          const value = JSON.parse(raw) as Record<string, unknown>;
+          if (
+            !value ||
+            Array.isArray(value) ||
+            typeof value !== "object" ||
+            Object.values(value).some((v) => v === null || typeof v === "object")
+          ) {
+            await stop("guard", "Unsupported browser write body.");
+            return;
+          }
+          names.push(...Object.keys(value));
+          for (const [key, value_] of Object.entries(value))
+            if (privateField(key)) this.secrets.add(String(value_));
+        } else if (/application\/x-www-form-urlencoded/i.test(headers["content-type"] ?? "")) {
+          const fields = [...new URLSearchParams(raw)];
+          if (new Set(fields.map(([k]) => k)).size !== fields.length) {
+            await stop("guard", "Repeated form fields are unsupported.");
+            return;
+          }
+          names.push(...fields.map(([k]) => k));
+          for (const [key, value] of fields) if (privateField(key)) this.secrets.add(value);
+        } else if (raw) {
+          await stop("guard", "Unsupported browser write body.");
+          return;
+        }
+        const pages = this.recorder.trace
+          .filter((r) => r.bodySample && /html/i.test(r.contentType ?? ""))
+          .map((r) => ({ url: r.url, html: r.bodySample as string }));
+        const cookies = await this.context.cookies();
+        const credentials = discoverCredentialSources(pages, cookies);
+        const tokens = new Map([
+          ...discoverSessionTokens(pages, cookies, this.recorder.trace),
+          ...credentials.tokens,
+        ]);
+        const fingerprint = browserWriteFingerprint(
+          { ...wire, seq: -1, phase: "demonstration", postData: raw || undefined },
+          this.origin,
+          this.forms,
+          tokens,
+        );
+        if (
+          this.options.excludeFingerprints?.includes(fingerprint) ||
+          this.committed.some((w) => w.fingerprint === fingerprint)
+        ) {
+          await stop("repeat", "This write already committed in this task.");
+          return;
+        }
+        const label = this.redact(this.submitter?.label || "Submit form or page request");
+        const target = {
+          kind: "operation" as const,
+          id: `urn:sab:fallback:step:${step}:hop:${hop}`,
+          label,
+          actionType: `${SCHEMA}UpdateAction`,
+        };
+        const bound = JSON.stringify([method, url, raw, headers]);
+        const digest = approvalDigest({
+          site: this.origin,
+          modelVersion: "fallback",
+          target,
+          effect: "irreversible-write",
+          inputs: {},
+          persona: this.options.persona,
+          binding: {
+            step,
+            generation,
+            request: createHash("sha256").update(bound).digest("hex"),
+            revision: this.session?.revision,
+          },
+        });
+        const gate = createApprovalGate();
+        const fieldNames =
+          [...new Set(names)]
+            .slice(0, 30)
+            .map((name) => this.quote(name, 80))
+            .join(", ") || '"none"';
+        const gateRequest = {
+          site: this.origin,
+          target,
+          effect: "irreversible-write" as const,
+          inputs: {},
+          digest,
+          summary: `Site ${this.quote(new URL(this.origin).host)}; ${this.quote(method, 16)} ${this.quote(requestedUrl.pathname, 200)}; form ${this.quote(this.submitter?.formLabel || "Page request")}; submitter ${this.quote(label)}; fields: ${fieldNames}${new Set(names).size > 30 ? " (truncated)" : ""}.`,
+        };
+        const asked = await gate.authorize(gateRequest);
+        if (asked.kind !== "ask") {
+          await stop("guard", "Write grant unavailable.");
+          return;
+        }
+        this.pendingRequest = req;
+        let decision: Awaited<ReturnType<Approver>>;
+        try {
+          decision = await this.options.approver(structuredClone(asked.approval));
+        } catch {
+          decision = "deny";
+        }
+        this.pendingRequest = undefined;
+        const allowed = decision === "approve";
+        this.approvals.push({
+          summary: asked.approval.summary,
+          decision: typeof decision === "string" ? decision : "deny",
+          outcome: allowed ? "approved" : "denied",
+        });
+        if (!allowed) {
+          gate.reject(asked.approval.id);
+          await stop("denied", "The user denied this action.");
+          return;
+        }
+        gate.approve(asked.approval.id);
+        const grant = await gate.authorize({ ...gateRequest, approvalId: asked.approval.id });
+        if (
+          grant.kind !== "allow" ||
+          this.failure ||
+          this.epoch !== generation ||
+          this.activeStep !== step ||
+          JSON.stringify([method, url, raw, headers]) !== bound ||
+          JSON.stringify([req.method(), req.url(), req.postData(), req.headers()]) !== original
+        ) {
+          await stop("guard", "The page or pending request changed during approval.");
+          return;
+        }
+        write = { target, fingerprint };
+        this.committed.push(write);
+        if (entry) this.approved.add(entry.seq);
+      }
+      // No await between the final grant check, commitment registration and dispatch.
+      this.requests++;
+      const response = await route.fetch({
+        url,
+        method,
+        postData: raw,
+        headers,
+        maxRedirects: 0,
+        timeout: this.options.timeoutMs ?? 10000,
+      });
+      const status = response.status();
+      const responseHeaders = response.headers();
+      if (entry) {
+        entry.status = status;
+        entry.contentType = responseHeaders["content-type"];
+      }
+      for (const line of response
+        .headersArray()
+        .filter((h) => h.name.toLowerCase() === "set-cookie")) {
+        const cookie = parseSetCookie(line.value, new URL(url), new Date());
+        if (cookie) this.secrets.add(cookie.value);
+      }
+      if (write && status >= 400 && status < 500) {
+        this.committed.splice(this.committed.indexOf(write), 1);
+        if (entry) this.approved.delete(entry.seq);
+      } else if (write && status >= 200 && status < 400) this.cleanWrites.add(write);
+      if (status >= 400) this.fail("browser", "The site rejected a browser request.");
+      if (status >= 300 && status < 400 && responseHeaders.location) {
+        let next: string;
+        try {
+          next = guardUrl(new URL(responseHeaders.location, url).href, this.origin).href;
+        } catch {
+          await response.dispose();
+          await stop("origin", "Off-origin redirect blocked.");
+          return;
+        }
+        if (entry) entry.redirectedTo = next;
+        if (hop === 5) {
+          await response.dispose();
+          await stop("limit", "Fallback redirect limit reached.");
+          return;
+        }
+        if ([301, 302, 303].includes(status)) {
+          method = "GET";
+          raw = "";
+          baseHeaders = Object.fromEntries(
+            Object.entries(baseHeaders).filter(([k]) => !/^content-/i.test(k)),
+          );
+        } else if (![307, 308].includes(status)) {
+          await response.dispose();
+          await stop("guard", "Unsupported redirect blocked.");
+          return;
+        }
+        await response.dispose();
+        url = next;
+        redirected = true;
+        continue;
+      }
+      const body = await response.body();
+      if (entry && /text\/|json|javascript|xml/i.test(entry.contentType ?? "")) {
+        entry.bodySample = body.toString("utf8", 0, BODY_LIMIT);
+        if (body.length > BODY_LIMIT) entry.bodyTruncated = true;
+      }
+      // A final response only: Chromium never follows redirects or forwards session headers.
+      await route.fulfill({ response });
+      await response.dispose();
       return;
     }
-    const digest = approvalDigest({
-      site: this.origin,
-      modelVersion: "fallback",
-      target,
-      effect: "irreversible-write",
-      inputs: {},
-      persona: this.options.persona,
-      binding: {
-        step: this.activeStep,
-        request: createHash("sha256")
-          .update(JSON.stringify([req.method(), req.url(), raw, headers]))
-          .digest("hex"),
-        revision: this.session?.revision,
-      },
-    });
-    const gate = createApprovalGate();
-    const gateRequest = {
-      site: this.origin,
-      target,
-      effect: "irreversible-write" as const,
-      inputs: {},
-      digest,
-      summary: this.redact(
-        `${new URL(this.origin).host}: ${label}; fields: ${[...new Set([...names, ...url.searchParams.keys()])].join(", ") || "none"}.`,
-      ).slice(0, 1000),
-    };
-    const asked = await gate.authorize(gateRequest);
-    if (asked.kind !== "ask") {
-      await abort("guard", "Write grant unavailable.");
-      return;
-    }
-    let decision: Awaited<ReturnType<Approver>>;
-    try {
-      decision = await this.options.approver(structuredClone(asked.approval));
-    } catch {
-      decision = "deny";
-    }
-    const allowed = decision === "approve";
-    this.approvals.push({
-      summary: asked.approval.summary,
-      decision: typeof decision === "string" ? decision : "deny",
-      outcome: allowed ? "approved" : "denied",
-    });
-    if (!allowed) {
-      gate.reject(asked.approval.id);
-      await abort("denied", "The user denied this action.");
-      return;
-    }
-    gate.approve(asked.approval.id);
-    const grant = await gate.authorize({ ...gateRequest, approvalId: asked.approval.id });
-    if (grant.kind !== "allow" || this.failure) {
-      await abort("guard", "Write grant unavailable.");
-      return;
-    }
-    const write = { target, fingerprint };
-    this.committed.push(write);
-    this.sent.set(req, write);
-    if (entry) this.approved.add(entry.seq);
-    this.requests++;
-    await route.continue({ headers: { ...req.headers(), ...this.session?.headers } });
   }
 
   private rememberPageSecrets(): void {
+    const pages = this.recorder.trace
+      .filter((r) => r.bodySample && /html/i.test(r.contentType ?? ""))
+      .map((r) => ({ url: r.url, html: r.bodySample as string }));
+    for (const value of discoverCredentialSources(pages, []).secrets) this.secrets.add(value);
     for (const entry of this.recorder.trace) {
       for (const [name, value] of new URL(entry.url).searchParams)
         if (sensitive.test(name)) this.secrets.add(value);
@@ -512,6 +635,12 @@ export class BrowserDriver {
 
   async snapshot(): Promise<BrowserSnapshot> {
     await this.recorder.flush();
+    for (const cookie of await this.context.cookies()) this.secrets.add(cookie.value);
+    const live = discoverCredentialSources(
+      [{ url: this.page.url(), html: await this.page.content() }],
+      [],
+    );
+    for (const value of live.secrets) this.secrets.add(value);
     this.rememberPageSecrets();
     if (this.failure) throw this.failure;
     // Chromium's actual accessibility tree, rather than page text or DOM/HTML.
@@ -527,7 +656,9 @@ export class BrowserDriver {
         continue;
       const isInteractive = interactive.has(role) && node.backendDOMNodeId !== undefined;
       let value =
-        node.value?.value === undefined ? undefined : this.redact(String(node.value.value));
+        node.value?.value === undefined
+          ? undefined
+          : redactSnapshot(String(node.value.value), (v) => this.redact(v));
       if (role === "textbox" || role === "searchbox") {
         const { node: dom } = await this.cdp.send("DOM.describeNode", {
           backendNodeId: node.backendDOMNodeId,
@@ -536,7 +667,10 @@ export class BrowserDriver {
         if (attrs.some((a) => sensitive.test(a)) || attrs.includes("password"))
           value = "[redacted]";
       }
-      const name = this.redact(String(node.name?.value ?? "")).slice(0, 300);
+      const name = redactSnapshot(String(node.name?.value ?? ""), (v) => this.redact(v)).slice(
+        0,
+        300,
+      );
       const ref = isInteractive ? `r${this.epoch}-${node.backendDOMNodeId}` : undefined;
       const item = {
         role,
@@ -557,6 +691,54 @@ export class BrowserDriver {
     return { untrusted: true, text, nodes, truncated };
   }
 
+  private async captureSubmitter(ref?: string): Promise<void> {
+    const result = await this.cdp.send("Runtime.evaluate", {
+      expression: `(() => {
+        const el = ${ref ? `document.querySelector('[data-sab-fallback-ref="${ref}"]')` : "document.activeElement"};
+        if (!el) return undefined;
+        const visible = b => !b.matches(':disabled') && !b.hidden && b.getClientRects().length && getComputedStyle(b).visibility !== 'hidden';
+        const form = el.form || el.closest('form');
+        const submit = el.matches('button, input[type=submit], input[type=image]') && visible(el) ? el :
+          form && [...form.elements].find(b => b.matches('button[type=submit],button:not([type]),input[type=submit]') && visible(b));
+        const label = b => b && (b.getAttribute('aria-label') || b.innerText || b.value || b.getAttribute('title')) || '';
+        return { formIndex: form ? [...document.forms].indexOf(form) : undefined,
+          formLabel: form && (form.getAttribute('aria-label') || form.getAttribute('name') || form.id || 'Form ' + ([...document.forms].indexOf(form) + 1)) || '',
+          label: label(submit || el) };
+      })()`,
+      returnByValue: true,
+    });
+    this.submitter = result.result.value;
+  }
+
+  /** A fresh quiet interval per action: Chromium may still report the preceding
+   * document's network-idle state when an Enter/XHR dispatch has only been queued. */
+  private async settle(): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      let idle: ReturnType<typeof setTimeout> | undefined;
+      const cleanup = () => {
+        clearTimeout(idle);
+        clearTimeout(deadline);
+        this.activity.delete(changed);
+      };
+      const changed = () => {
+        clearTimeout(idle);
+        if (!this.inFlight.size)
+          idle = setTimeout(() => {
+            cleanup();
+            resolve();
+          }, 500);
+      };
+      const deadline = setTimeout(() => {
+        cleanup();
+        reject(
+          new BrowserDriverError("limit", "Browser requests did not settle within the timeout."),
+        );
+      }, this.options.timeoutMs ?? 10000);
+      this.activity.add(changed);
+      changed();
+    });
+  }
+
   async act(action: BrowserAction): Promise<void> {
     if (this.failure) throw this.failure;
     if (this.activeStep !== undefined)
@@ -569,6 +751,8 @@ export class BrowserDriver {
     this.lastAction = this.clock.now();
     try {
       this.forms = parseForms(await this.page.content(), this.page.url());
+      this.rememberPageSecrets();
+      this.submitter = undefined;
       if (action.kind === "goto") {
         let url: URL;
         try {
@@ -578,12 +762,15 @@ export class BrowserDriver {
         }
         await this.page.goto(url.href);
       } else if (action.kind === "back") await this.page.goBack();
-      else if (action.kind === "press") await this.page.keyboard.press(action.key);
-      else {
+      else if (action.kind === "press") {
+        await this.captureSubmitter();
+        await this.page.keyboard.press(action.key);
+      } else {
         const objectId = await this.resolve(action.ref);
         try {
           const element = this.page.locator(`[data-sab-fallback-ref="${action.ref}"]`);
           if (action.kind === "click") {
+            await this.captureSubmitter(action.ref);
             const href = await element.getAttribute("href");
             if (href) {
               try {
@@ -607,7 +794,7 @@ export class BrowserDriver {
           await this.cdp.send("Runtime.releaseObject", { objectId }).catch(() => undefined);
         }
       }
-      await this.page.waitForLoadState("networkidle", { timeout: this.options.timeoutMs ?? 10000 });
+      await this.settle();
       await this.recorder.flush();
       if (this.failure) throw this.failure;
     } catch (error) {

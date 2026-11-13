@@ -68,6 +68,8 @@ export {
   type Target,
 } from "./match.js";
 export { describeUrl, guardUrl, isLoopbackHost, OriginError, siteOrigin } from "./origin.js";
+// AUTHORED-BY Codex GPT-6.1-Sol — shared read-only redaction API.
+export { secretRedactor } from "./secrets.js";
 export {
   expandTemplate,
   parseTemplate,

@@ -107,3 +107,23 @@ Browser fallback:
 - Keep real loopback/Chromium tests enabled. Assert the next task uses the executor with zero
   browser launches for both reads and approved writes. Test guards, rejection, bounds, secrets,
   session revision failure, single-use grants, uncertain writes and canonical repeat blocking.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Fallback review invariants:
+- Use `route.fetch({ maxRedirects: 0 })` for every hop; inspect Location before fulfillment.
+  Never give Chromium an unchecked redirect. Off-origin redirects render a navigation error.
+  301/302/303 writes continue as GET; 307/308 body resends need a new exact grant/fingerprint.
+  Decorate each hop with matching cookies and site-only session headers in the driver.
+- Build fingerprints and learned inputs from the wire inventory. Form evidence can type a sent
+  field or locate its CSRF source, but cannot add unsent controls, examples or defaults.
+- Remember sent writes before processing learning results. Retain the previous executor/model
+  on any admission/construction/processing failure. Clean writes that cannot be learned stay
+  completed; uncertain writes stay Uncertain. Dry-construct candidates and reject reserved
+  parameter names (`constructor`, `__proto__`, `prototype`) with a reason.
+- Explicit credential sources qualify on first use. Meta/hidden/cookie values become verified
+  slots or cause rejection; unsupported script sources are secrets, never constants. Reuse the
+  exported executor redactor, normalize mixed display encodings, and scrub snapshot URL queries
+  with sensitive keys and userinfo in both names and values.
+- Bind grants to document/frame generation and the exact pending request; recheck immediately
+  before dispatch. Approval text quotes page strings, escapes controls/newlines, marks truncation,
+  shows method/path and uses the actual visible enabled submitter and its form.

@@ -1,13 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ExecuteOptions, ExecutionResult } from "@jeswr/site-executor";
-import { type ActionRequest, SAB, type SiteModel } from "@jeswr/site-model";
-import { DataFactory } from "n3";
-import { writeQuads } from "../rdf.js";
+import type { ActionRequest, SiteModel } from "@jeswr/site-model";
 import { createTaskExecutor } from "../session.js";
 import type { Approver, TaskExecutor, TraceStep } from "../types.js";
 import { BrowserDriver, BrowserDriverError, type BrowserDriverOptions } from "./driver.js";
 import { type LearnFallbackOptions, type LearningResult, learnFallback } from "./learn.js";
 import type { FallbackHistory, FallbackPlanner } from "./planner.js";
+import { fallbackReceipt } from "./receipt.js";
 
 export {
   BrowserDriver,
@@ -31,6 +30,8 @@ export interface FallbackInput {
   goal: string;
   request: ActionRequest;
   model: SiteModel;
+  /** Retained if learning or construction fails after a sent write. */
+  executor?: TaskExecutor;
   approver: Approver;
   persona?: string;
   maxApprovals: number;
@@ -38,7 +39,7 @@ export interface FallbackInput {
 }
 export interface FallbackResult extends LearningResult {
   result: ExecutionResult;
-  executor: TaskExecutor;
+  executor?: TaskExecutor;
   approvals: NonNullable<TraceStep["approvals"]>;
   refreshError?: string;
 }
@@ -51,34 +52,6 @@ export interface FallbackOptions
   maxSteps?: number;
   transport?: LearnFallbackOptions["transport"];
   labeller?: LearnFallbackOptions["labeller"];
-}
-
-function receipt(result: ExecutionResult): void {
-  if (!result.committed.length) return;
-  const { namedNode, blankNode, literal, quad } = DataFactory;
-  const node = blankNode();
-  const status = result.status === "done" ? "completed" : "uncertain";
-  const label = result.committed.at(-1)?.target.label ?? "Fallback write";
-  result.outcome = { status, target: label, effect: "irreversible-write" };
-  result.observations.unshift({
-    operation: "urn:sab:fallback:receipt",
-    status: 200,
-    itemCount: 0,
-    turtle: writeQuads([
-      quad(
-        node,
-        namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-        namedNode(`${SAB}ActionOutcome`),
-      ),
-      quad(
-        node,
-        namedNode(`${SAB}status`),
-        namedNode(`${SAB}${status === "completed" ? "Completed" : "Uncertain"}`),
-      ),
-      quad(node, namedNode(`${SAB}target`), literal(label)),
-      quad(node, namedNode(`${SAB}effect`), namedNode(`${SAB}IrreversibleWrite`)),
-    ]),
-  });
 }
 
 /** Opt-in, prompt-free fallback. The host supplies both planners and storage policy. */
@@ -109,8 +82,10 @@ export function createFallback(options: FallbackOptions): Fallback {
         requests: 0,
       };
       const history: FallbackHistory[] = [];
-      const planner = typeof options.planner === "function" ? options.planner() : options.planner;
+      let executor = input.executor;
+      let browserDone = false;
       try {
+        const planner = typeof options.planner === "function" ? options.planner() : options.planner;
         await driver.goto("/");
         let done = false;
         for (let count = 0; count <= maxSteps; count++) {
@@ -122,6 +97,7 @@ export function createFallback(options: FallbackOptions): Fallback {
           });
           if (next.kind === "done") {
             done = true;
+            browserDone = true;
             break;
           }
           if (next.kind === "give-up")
@@ -153,34 +129,63 @@ export function createFallback(options: FallbackOptions): Fallback {
             driver,
             persona: input.persona ?? options.persona,
           });
+          // Construct before publishing the new model. Failure retains the prior pair.
+          if (learning.proposed.length) {
+            executor = createTaskExecutor({
+              model: learning.model,
+              sessions: options.sessions,
+              persona: input.persona ?? options.persona,
+              fetch: options.transport,
+            });
+          } else learning.model = input.model;
           result = {
             ...result,
             status: driver.committed.length || learning.proposed.length ? "done" : "no-path",
             observations: learning.observations,
+            ...(driver.committed.length && !learning.proposed.length
+              ? {
+                  error: "Write completed but was not learned; previous model retained.",
+                }
+              : {}),
           };
         }
       } catch (error) {
+        learning = {
+          model: input.model,
+          proposed: [],
+          observations: [],
+          rejected: [
+            { candidate: "Fallback learning", reason: "Fallback model was not admitted." },
+          ],
+        };
+        executor = input.executor;
+        const completed = browserDone && driver.writesCompleted;
         result = {
           ...result,
-          status:
-            error instanceof BrowserDriverError && error.kind === "denied" ? "denied" : "error",
-          error: error instanceof BrowserDriverError ? error.message : "Fallback failed safely.",
+          status: completed
+            ? "done"
+            : error instanceof BrowserDriverError && error.kind === "denied"
+              ? "denied"
+              : "error",
+          error: completed
+            ? "Write completed but was not learned; previous model retained."
+            : error instanceof BrowserDriverError
+              ? error.message
+              : "Fallback failed safely.",
           ...(error instanceof BrowserDriverError && error.kind === "repeat"
             ? { errorKind: "repeat" as const }
             : {}),
         };
       } finally {
-        await driver.close();
+        try {
+          await driver.close();
+        } catch {
+          result.error = "Fallback cleanup failed safely.";
+        }
       }
       result.committed = [...driver.committed];
       result.requests = driver.requests;
-      receipt(result);
-      const executor = createTaskExecutor({
-        model: learning.model,
-        sessions: options.sessions,
-        persona: input.persona ?? options.persona,
-        fetch: options.transport,
-      });
+      fallbackReceipt(result);
       return {
         ...learning,
         result,

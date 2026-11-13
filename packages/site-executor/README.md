@@ -363,3 +363,7 @@ headers through all three routes, static/direct-buy/header-parameter Accept and 
 derived extraction Accept, actual serialized form inventories, multipart newline mismatches,
 and path tokens on payment, total, both, and direct buys with collision refusals. Shared validation
 also tests the one unbound whole-segment CSRF slot and every other undeclared-variable refusal.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`secretRedactor(secrets)` is also exported as a read-only utility for browser snapshot consumers.
+This exposes the existing mixed/nested percent-encoding redactor; executor behavior is unchanged.

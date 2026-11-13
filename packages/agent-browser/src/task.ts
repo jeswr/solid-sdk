@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import type { ExecutionResult } from "@jeswr/site-executor";
 import { parseActionRequest, renderCatalogue } from "@jeswr/site-model";
+import { fallbackReceipt } from "./fallback/receipt.js";
 import { budgetHistory, plainText, promptFor } from "./planner.js";
 import { orderObservations, readQuads, writeQuads } from "./rdf.js";
 import type {
@@ -104,6 +105,9 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
     };
     trace.steps.push(step);
     trace.promptTokensEstimate += step.promptTokensEstimate;
+    let retained: TaskExecutionResult | undefined;
+    const previousModel = model;
+    const previousExecutor = executor;
     try {
       const output = await planner.next(input);
       step.kind = output.kind;
@@ -175,6 +179,8 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
       } catch {
         result = failure("Executor failed to execute the action.");
       }
+      retained = result;
+      remember(result);
       if (
         options.fallback &&
         result.status === "no-path" &&
@@ -187,14 +193,18 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
           goal: options.goal,
           request,
           model,
+          executor,
           approver,
           persona: options.persona,
           maxApprovals,
           exclusions: exclusions(),
         });
         result = fallback.result;
+        retained = result;
+        // Retain commitments before reading/adopting any auxiliary learning output.
+        remember(result);
         model = fallback.model;
-        executor = fallback.executor;
+        executor = fallback.executor ?? executor;
         trace.model = model;
         step.learned = fallback.proposed.map((operation) => operation.id);
         if (fallback.approvals.length) {
@@ -261,6 +271,7 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
             };
           }
         }
+        retained = result;
         remember(result);
         if (result.refreshError) step.refreshError = result.refreshError;
         step.statuses.push(result.status);
@@ -280,9 +291,35 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
         ...(step.error ? { error: step.error } : {}),
       });
     } catch {
-      step.error = "Planner failed to return a valid action, answer or question.";
-      step.statuses.push("error");
-      history.push({ request: "", status: "error", observations: "", error: step.error });
+      model = previousModel;
+      executor = previousExecutor;
+      if (step.via === "fallback") {
+        trace.model = model;
+        step.learned = [];
+      }
+      if (retained?.committed.length) {
+        remember(retained);
+        const safe: TaskExecutionResult = {
+          ...retained,
+          observations: [],
+          status: retained.status === "done" ? "done" : "error",
+        };
+        fallbackReceipt(safe);
+        step.status = safe.status;
+        step.observations = orderObservations(safe.observations.map((o) => redact(o.turtle)));
+        step.error =
+          "Write result retained; later processing failed and the previous model was kept.";
+      } else {
+        step.status = "error";
+        step.error = "Planner or execution failed safely.";
+      }
+      step.statuses.push(step.status);
+      history.push({
+        request: step.request ?? "",
+        status: step.status,
+        observations: step.observations,
+        error: step.error,
+      });
     } finally {
       step.elapsedMs = Math.round(performance.now() - began);
     }
