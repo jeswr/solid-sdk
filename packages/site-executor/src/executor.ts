@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // The executor: match an ActionRequest to a flow or operation, ask the gate, then
 // run the site's own HTTP calls with the user's session and lift the responses
 // back into RDF observations.
@@ -74,7 +75,7 @@ import { outcomeTurtle } from "./outcome.js";
 import { secretRedactor } from "./secrets.js";
 import { UriTemplateError } from "./uri-template.js";
 import { BindingError, expandIri, idFromIri, isClassRange } from "./values.js";
-import { csrfFieldName, effectiveWireFields } from "./wire.js";
+import { csrfFieldName, effectiveWireFields, transmittedCsrfSecrets } from "./wire.js";
 
 export type ExecutionStatus =
   | "done"
@@ -346,7 +347,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     for (const c of ctx.jar) if (c.value.length > 0) ctx.secrets.add(c.value);
     for (const v of Object.values(ctx.headers)) {
       if (v.length > 0) ctx.secrets.add(v);
-      const token = v.split(/\s+/).at(-1);
+      const token = v.trim().split(/\s+/).at(-1);
       if (token) ctx.secrets.add(token);
     }
   }
@@ -449,6 +450,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
       h.set("accept", accept ?? "*/*");
       const cookies = cookiesFor(ctx.jar, url, now());
       if (cookies.length > 0) h.set("cookie", cookieHeader(cookies));
+      // Fetch's Headers object is authoritative for trimming and header names.
+      // Capture session values after the final header decoration on every hop.
+      for (const name of [...Object.keys(ctx.headers), "cookie"]) {
+        const value = h.get(name);
+        if (value) ctx.secrets.add(value);
+      }
       let res: Response;
       try {
         res = await budget(
@@ -584,6 +591,10 @@ export function createExecutor(options: ExecutorOptions): Executor {
         throw new BindingError("CSRF target would overwrite an approved input");
       }
       applyCsrfToken(compiled, rule, await csrfToken(ctx, compiled, rule, values));
+      // The compiled inventory already reflects multipart CRLF/USVString,
+      // form/query Unicode conversion, JSON values and Fetch header trimming.
+      // Register each decoration immediately, even if a later token fails.
+      for (const value of transmittedCsrfSecrets(compiled)) ctx.secrets.add(value);
     }
   }
 

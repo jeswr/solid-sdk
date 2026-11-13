@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { Flow, Operation, Parameter, SiteModel } from "@jeswr/site-model";
 import { describe, expect, it, vi } from "vitest";
 import { InMemorySessions, type SessionBundle } from "../src/cookies.js";
@@ -624,7 +625,8 @@ describe("review r2 execution regressions", () => {
     );
     expect(summary).not.toContain("SECRET");
     expect(summary).not.toContain("20.00");
-    expect(summary).not.toContain("GBP");
+    // Currency codes remain readable under the eight-character minimum.
+    expect(summary).toContain("GBP");
     expect(summary).toContain("[redacted]");
   });
 

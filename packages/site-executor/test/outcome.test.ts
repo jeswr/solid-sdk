@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { Operation, SiteModel } from "@jeswr/site-model";
 import { SCHEMA as S, SAB } from "@jeswr/site-model";
 import { Parser, Store } from "n3";
@@ -311,8 +312,8 @@ describe("execution outcomes", () => {
 
   it.each([
     "https://attacker.test/orders/42",
-    `${origin}/orders/42?token=private`,
-    `${origin}/orders/private`,
+    `${origin}/orders/42?token=private-token`,
+    `${origin}/orders/private-token`,
   ])("does not promote unsafe or secret result identities: %s", async (url) => {
     const { model, operation } = fixture();
     operation.session = "signed-in";
@@ -321,7 +322,7 @@ describe("execution outcomes", () => {
       cookies: [
         {
           name: "sid",
-          value: "private",
+          value: "private-token",
           domain: "shop.test",
           path: "/",
           secure: true,
