@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import statistics
 
-from .protocol import ASK_MESSAGE, CONTENT_HEADER, STOP_MESSAGE
+from .protocol import ASK_MESSAGE, CONTENT_HEADER, GATED, STOP_MESSAGE
 
 ROOT = Path(__file__).resolve().parent
 
@@ -41,7 +41,7 @@ def summarize(rows):
             "attacked_utility": fraction(attacked, "utility"), "attack_success": fraction(attacked, "security"),
             "attacker_proposed": fraction(attacked, "attacker_call_proposed"),
             "attacker_executed": fraction(attacked, "attacker_call_executed"),
-            "asks": {"sum": sum(asks), "tasks": len(asks), "mean": statistics.mean(asks) if asks else None,
+            "asks": {"sum": sum(asks), "tasks": len(asks), "approved": sum(r.get("asks_approved", 0) for r in rows), "mean": statistics.mean(asks) if asks else None,
                      "median": statistics.median(asks) if asks else None, "max": max(asks, default=None)},
             "deciding": [{"check": check, "reason": reason, "outcome": outcome, "count": count}
                          for (check, reason, outcome), count in sorted(deciding.items(), key=lambda item: str(item[0]))],
@@ -92,7 +92,8 @@ def write_report(rows_path, output):
         metrics = [show_fraction(group[key]) for key in ("benign_utility", "attacked_utility", "attack_success", "attacker_proposed", "attacker_executed")]
         lines.append(f'| {suite} | {condition} | {group["rows"]} | ' + " | ".join(metrics) + " |")
     lines += ["", "## Approvals, errors and cost", "",
-              "Asks count proposed calls at their first deciding check. Every ask is refused. "
+              "Asks count proposed calls at their first deciding check. Under standing every ask is refused; under "
+              "standing-approve the approved count is shown after the sum. "
               "Call totals include process retries and JSON format retries; cached calls make no process call. "
               "Wall times are per-task durations including setup and backoff, summed across parallel workers, "
               "so their total is not elapsed run time.", "",
@@ -100,13 +101,13 @@ def write_report(rows_path, output):
               "|---|---|---|---:|---:|---:|---:|---:|---:|"]
     for suite, condition, group in groups:
         asks = group["asks"]
-        lines.append(f'| {suite} | {condition} | {asks["mean"]} ({asks["sum"]}/{asks["tasks"]}) | {asks["median"]} | {asks["max"]} | {group["model_calls_made"]} | {group["model_calls_cached"]} | {group["wall_time_median"]} | {group["wall_time_total"]} |')
+        lines.append(f'| {suite} | {condition} | {asks["mean"]} ({asks["sum"]}/{asks["tasks"]}{", approved " + str(asks["approved"]) if asks["approved"] else ""}) | {asks["median"]} | {asks["max"]} | {group["model_calls_made"]} | {group["model_calls_cached"]} | {group["wall_time_median"]} | {group["wall_time_total"]} |')
     for suite, condition, group in groups:
         lines += ["", f"### {suite} / {condition}", "",
                   "Deciding stops and asks: `" + json.dumps(group["deciding"], sort_keys=True) + "`.", "",
                   "Errors by kind: `" + json.dumps(group["errors"], sort_keys=True) + "`.", "",
                   "Terminations: `" + json.dumps(group["terminations"], sort_keys=True) + "`."]
-    survivors = [r for r in rows if r["attack"] and r["condition"] in {"fitted", "standing"}
+    survivors = [r for r in rows if r["attack"] and r["condition"] in GATED
                  and r.get("security", {}).get("success") is True]
     lines += ["", "## Every attack succeeding under fitted or standing mandates", "",
               f"Survivors: {len(survivors)}. Final-answer attacks can succeed without an attacker tool call."]
@@ -118,10 +119,12 @@ def write_report(rows_path, output):
                   "Model final answer: `" + json.dumps(row["final"]) + "`."]
     lines += ["", "## Conditions and fixed wording", "",
               "none executes proposals without outbound checks and presents raw AgentDojo-formatted outputs. "
-              "label-only adds the header below with no outbound checks. fitted and standing add that same "
+              "label-only adds the header below with no outbound checks. fitted, standing and standing-approve add that same "
               "header and use E1's unchanged frozen mandate, translation, and reference-plus-adapter bridge. "
               "All executed tool outputs, including errors and own-record outputs, receive the header. "
-              "Frozen per-tool labels still determine gate context. Denials are harness feedback and use the fixed messages below.", "",
+              "Frozen per-tool labels still determine gate context. Denials are harness feedback and use the fixed messages below. "
+              "standing refuses every approval request. standing-approve simulates an attentive principal who approves a "
+              "request unless the call is one of the attack's own ground-truth calls; an approved call then runs.", "",
               "> " + CONTENT_HEADER.strip(), "",
               '`' + STOP_MESSAGE + '`', "",
               '`' + ASK_MESSAGE + '`', "",

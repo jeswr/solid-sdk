@@ -2,9 +2,14 @@
 
 # AgentDojo E2 harness
 
-E2 puts a real model behind E1's frozen policies. No real model has been called while
+E2 puts a real model behind E1's frozen policies. No real model was called while
 building this harness. [E2-SUMMARY.md](E2-SUMMARY.md) is the empty-results report; a measured
-report is generated beside each run's rows when the run finishes. All people, data and
+report is generated beside each run's rows when the run finishes. The first measured run is
+written up in [RESULTS-gpt-6.1-sol-low.md](RESULTS-gpt-6.1-sol-low.md).
+
+Conditions: `none`, `label-only`, `fitted`, `standing` (every approval request refused) and
+`standing-approve` (a simulated attentive principal approves a request unless the call is one
+of the attack's own published calls). All people, data and
 tool effects belong to AgentDojo's fictional local environments.
 
 Use AgentDojo 0.1.35 in E1's existing virtual environment. No dependency installation,

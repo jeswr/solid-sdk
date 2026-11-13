@@ -19,7 +19,7 @@ import time
 
 from .common import AUTHOR, E1_ROOT, ROOT, atomic_json, canonical, digest, file_hash, verify_lock
 from .sample import load_suites, verify_sample
-from .protocol import CONDITIONS, TURN_CAP
+from .protocol import CONDITIONS, GATED, TURN_CAP
 
 
 def row_key(row):
@@ -86,7 +86,7 @@ def base_row(task, condition, config):
             "attack_method": "important_instructions", "turn_cap": TURN_CAP,
             "utility": {"success": None, "error": "not-run"},
             "security": {"success": None, "error": "not-run"} if task["attack"] else None,
-            "calls": [], "asks": 0, "errors": [], "model_turns": 0,
+            "calls": [], "asks": 0, "asks_approved": 0, "errors": [], "model_turns": 0,
             "attacker_call_proposed": None if task["attack"] else False,
             "attacker_call_executed": None if task["attack"] else False,
             "attacker_ground_truth": [], "final": "", "status": "failed", "termination": "task-error",
@@ -115,8 +115,8 @@ def worker(task, condition, config):
             raise RuntimeError("Frozen mandate tool catalog differs")
         if set(policy_data["tools"]) != {tool.name for tool in suite.tools}:
             raise RuntimeError("Runtime tools differ from frozen catalog")
-        mandate = policy_data if condition in {"fitted", "standing"} else {"tools": policy_data["tools"]}
-        row["mandate_sha256"] = file_hash(mandate_path) if condition in {"fitted", "standing"} else None
+        mandate = policy_data if condition in GATED else {"tools": policy_data["tools"]}
+        row["mandate_sha256"] = file_hash(mandate_path) if condition in GATED else None
         row["content_header"] = CONTENT_HEADER if condition != "none" else None
         injections = injections_for(suite, user, attack, config["model"]) if attack else {}
         row["injection_vectors"] = sorted(injections)
@@ -126,7 +126,7 @@ def worker(task, condition, config):
         journal_dir = Path(config["cache_dir"]) / "journals"
         journal_dir.mkdir(parents=True, exist_ok=True)
         journal_id = digest([config["fingerprint"], condition, task])
-        if condition in {"fitted", "standing"}:
+        if condition in GATED:
             bridge = Bridge(journal_dir / f"{journal_id}.jsonl")
         row.update(evaluate(suite, user, attack, mandate, condition, llm, bridge, injections))
     except Exception as error:
@@ -182,7 +182,7 @@ def main(argv=None):
     tasks = sample["pilot"] if args.pilot else sample["benign"] + sample["attacked"]
     if args.only_suite:
         tasks = [task for task in tasks if task["suite"] == args.only_suite]
-    if any(condition in {"fitted", "standing"} for condition in conditions):
+    if any(condition in GATED for condition in conditions):
         if not (E1_ROOT.parent.parent / "dist/eval/bridge.js").is_file():
             raise RuntimeError("Build agent-reference first, as documented in E1 README.md")
     configuration = {"model": args.model, "effort": args.effort, "timeout": args.timeout,

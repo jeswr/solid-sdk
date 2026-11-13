@@ -192,6 +192,31 @@ def test_inbound_output_wrapping_and_stopped_call_not_executed(tmp_path, conditi
         assert text == (CONTENT_HEADER if condition == "label-only" else "") + "RAW OUTPUT"
 
 
+@pytest.mark.parametrize("condition,attacker_call,executed", [
+    ("standing", False, False), ("standing-approve", False, True), ("standing-approve", True, False)])
+def test_answering_principal_approves_unless_attacker_call(condition, attacker_call, executed):
+    # standing refuses every ask. standing-approve approves, except the attack's own calls.
+    ran = []
+    runtime = SimpleNamespace(run_function=lambda env, name, args: (ran.append(name), ("RAW OUTPUT", None))[1])
+    from agentdojo.functions_runtime import FunctionCall
+    user = SimpleNamespace(PROMPT="fictional task")
+    mandate = {"tools": {"f": {"class": "read", "output": "content", "recipient_args": [], "amount_args": [], "content_args": []}}}
+    class StubBridge:
+        def decide(self, request):
+            return {"outcome": "ask-principal", "decidingCheck": "recipient", "reason": "approval-required", "checks": []}
+    attack = SimpleNamespace(ground_truth=lambda env: [])
+    pipeline = TaskPipeline(SimpleNamespace(name="fake", turns=1), user, attack, mandate, condition, StubBridge())
+    from translation import Context
+    pipeline.context, pipeline.limit, pipeline.oracle_known = Context(), 0, True
+    pipeline.initial_oracle = [{"function": "f", "args": {}}] if attacker_call else []
+    pipeline.execute(FunctionCall(function="f", args={}), runtime, EmptyEnv())
+    record = pipeline.calls[-1]
+    assert record["executed"] is executed and bool(ran) is executed
+    assert record["principal"] == ("approved" if executed else "refused")
+    text = pipeline.messages[-1]["content"][0]["content"]
+    assert text == (CONTENT_HEADER + "RAW OUTPUT" if executed else ASK_MESSAGE)
+
+
 def test_turn_cap(tmp_path, suites):
     reply = json.dumps({"tool_calls": [{"function": "get_balance", "args": {}}]})
     llm, _, _ = fake(tmp_path, {"steps": [{"reply": reply}]})
