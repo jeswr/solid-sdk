@@ -63,7 +63,7 @@
     }
   ],
   "generated": {
-    "commit": "f70e61dabe101f82df60be95df78945406e001e6",
+    "commit": "e8adc2540a070c5569907360f660a392720bad6a",
     "core": "scripted"
   },
   "events": [
@@ -9687,7 +9687,7 @@
       "agent": "lender",
       "part": "record",
       "kind": "record",
-      "caption": "25 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "21 entries in this agent's hash-chained record; the chain verifies."
     },
     {
       "seq": 260,

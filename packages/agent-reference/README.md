@@ -47,3 +47,30 @@ trust lookups, `fact` on memory events, and gate codes (`not-in-configuration`,
 `no-register-for-party`, `no-personal-data`) as the reason of `not-applicable` verdicts.
 
 Experimental. Synthetic parties and data only; both sides of every exchange run this code.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Executable use cases live in `profiles/<id>.json` and `scenarios/<id>.json`. The validators
+and published JSON Schemas are `engine/schema` and `schemas/`. `runScenarioPaths(profile,
+scenario)` runs the main path and each named branch through the real runtime, gates, trust
+resolver and suite registry, and rejects any outline mismatch. `generateTraces` writes all
+paths. Expected outlines are assertions, never instructions to the gates.
+
+A profile declares claim sources, accepted methods and freshness, purpose needs, derived
+rules and accepted assurances, person decisions, and permitted reading steps. The scenario
+supplies fictional parties, public pinned keys and register lists, signed-mandate payloads,
+source-statement payloads, and scripted core proposals. `runs: "issuer-only"` never starts
+an agent. Public deterministic test-key labels are re-derived and statements are signed on
+each run. No credential store, provider, model, network service or real payment is used.
+
+`core` supplies an ordered list of responses for each protocol hook; `script` calls the
+runtime and routes returned wires using `{"$ref":"call-id.outbound.0.wire"}`. Signed source
+content uses `{"$statement":"statement-id"}`; hook replies may refer to their actual inputs
+with `{"$context":"0.conversation.id"}`. Scripts cannot invoke arbitrary runtime methods.
+Branch `changes` are JSON-pointer replacements in the world or script, and `expect` is the
+full expected outline for that path. `inject` patches a received wire at a specified step
+without re-signing it, so altered messages are checked by the integrity gate.
+
+The mortgage scripts preserve the existing committed outlines. The personal-agent pilot
+keeps its original domain handlers locally for compatibility; the reference engine has no
+domain-specific handlers. A scripted answer is a core proposal, not evidence of a live
+proof, joint computation, or a real institutional decision.

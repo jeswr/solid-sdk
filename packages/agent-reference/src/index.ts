@@ -29,6 +29,22 @@ export {
   extractLinks,
   REGISTRY,
 } from "./domains/conventional/registry.js";
+// AUTHORED-BY Codex GPT-6.1-Sol
+export {
+  loadProfile,
+  loadScenario,
+  runDataScenario,
+  runScenario,
+  runScenarioPaths,
+  scenarioIds,
+} from "./engine/run.js";
+export {
+  type DomainProfile,
+  profileSchema,
+  type Scenario,
+  scenarioSchema,
+  validateScenario,
+} from "./engine/schema.js";
 export { mandateWithUnsupportedTerm, personalMandate, schedulingMandate } from "./mandates.js";
 export {
   generateSigningKey,

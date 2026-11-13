@@ -20,42 +20,6 @@
     "events": 157
   },
   {
-    "file": "mortgage-over-ask--baseline.json",
-    "scenario": {
-      "id": "mortgage-over-ask",
-      "title": "The lender asks for more than Sam's mandate allows",
-      "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "14": "Each side checks its own record"
-      }
-    },
-    "configuration": "baseline",
-    "events": 97
-  },
-  {
-    "file": "mortgage-out-of-limit--baseline.json",
-    "scenario": {
-      "id": "mortgage-out-of-limit",
-      "title": "The lender's terms are outside Sam's limits",
-      "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "14": "Each side checks its own record"
-      }
-    },
-    "configuration": "baseline",
-    "events": 105
-  },
-  {
     "file": "mortgage-injected-fee--baseline.json",
     "scenario": {
       "id": "mortgage-injected-fee",
@@ -99,5 +63,41 @@
     },
     "configuration": "baseline",
     "events": 260
+  },
+  {
+    "file": "mortgage-out-of-limit--baseline.json",
+    "scenario": {
+      "id": "mortgage-out-of-limit",
+      "title": "The lender's terms are outside Sam's limits",
+      "steps": {
+        "2": "Sam asks for a mortgage in principle",
+        "3": "Sam's agent looks North Bank up before contacting it",
+        "4": "The agents describe themselves and Sam's agent applies",
+        "5": "North Bank says what evidence it needs",
+        "10": "Sam's agent checks the statements it holds",
+        "11": "Sam is asked, and the agent shares the evidence",
+        "14": "Each side checks its own record"
+      }
+    },
+    "configuration": "baseline",
+    "events": 105
+  },
+  {
+    "file": "mortgage-over-ask--baseline.json",
+    "scenario": {
+      "id": "mortgage-over-ask",
+      "title": "The lender asks for more than Sam's mandate allows",
+      "steps": {
+        "2": "Sam asks for a mortgage in principle",
+        "3": "Sam's agent looks North Bank up before contacting it",
+        "4": "The agents describe themselves and Sam's agent applies",
+        "5": "North Bank says what evidence it needs",
+        "10": "Sam's agent checks the statements it holds",
+        "11": "Sam is asked, and the agent shares the evidence",
+        "14": "Each side checks its own record"
+      }
+    },
+    "configuration": "baseline",
+    "events": 97
   }
 ]
