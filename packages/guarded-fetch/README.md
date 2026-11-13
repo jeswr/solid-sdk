@@ -178,3 +178,18 @@ compatibility. Unparseable values use a constant placeholder.
 ## License
 
 MIT © Jesse Wright
+
+## Bounded UTF-8 response reads
+
+`readBoundedText(response, maxBytes, signal?)` is browser-safe and reads strict UTF-8.
+It accepts only a non-negative safe integer byte cap, rejects an oversized advertised
+Content-Length before reading, and counts actual streamed bytes even when the header is
+absent or false. Empty/null bodies return an empty string. Malformed or truncated UTF-8
+rejects with `TypeError`; exceeding the cap rejects with `ResponseBodyLimitError`, a
+`RangeError` subclass, so callers can preserve their size-error text without masking a
+transport or abort reason that happens to be a different `RangeError`.
+An aborted signal rejects with its reason, including during a pending read on a transport
+that ignores the signal. Completion and failure both cancel and unlock the stream and
+remove the abort listener. Failed or stalled cancellation cannot replace or delay the result.
+The helper consumes the body; callers retain responsibility for status, redirect, format,
+scope and timeout checks.

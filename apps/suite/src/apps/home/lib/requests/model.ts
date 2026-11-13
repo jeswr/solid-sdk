@@ -13,9 +13,9 @@ import {
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
 import { isRoleError } from "@jeswr/pod-access/roles";
+import { dpvPurposeLabel } from "@/shell/lib/dpv-labels";
 import { classificationForClass } from "../model/domains";
 import { httpUrl } from "../model/rdf";
-import { dpvPurposeLabel } from "../permissions/dpvLabels";
 
 export type ReadableRequest = Exclude<AccessRequestEntry, { status: "unreadable" }>;
 export type UnreadableRequest = Extract<AccessRequestEntry, { status: "unreadable" }>;
