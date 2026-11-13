@@ -76,6 +76,13 @@ prose says. So the check works on what the prose *could* say.
 - **UNS-8. Track what the core has seen.** For each task, the agent MUST keep the set of
   items that entered the core's context: statements, memory entries, messages and readings,
   each with its subject and its terms.
+- **UNS-8a. What counts as structured when sending.** A value in an outgoing message is
+  structured only when the profile's vocabulary types its position and the value fits the
+  type: a number, a date, a code from a closed list, a defined term, or an identifier the
+  gate already knows. An identifier is known when it comes from the profile, from the
+  conversation so far, from an item in the task's context, or was minted by the runtime.
+  Everything else is free text, whatever its field is called. An identifier the core
+  invents is free text: words can be written into one.
 - **UNS-9. The context rule.** Free text MAY leave without the principal's approval only when
   every item in that set would itself pass the disclosure and data terms checks for this
   recipient and this purpose. Otherwise the disclosure check gives `ask-principal` with
