@@ -30,7 +30,7 @@
       "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
+      "verdict": "ask-more",
       "reason": "source-unknown"
     }
   ]

@@ -626,6 +626,10 @@ export class LenderPrequalHandler implements OperationHandler {
       checked.push({ ...entry, accepted: true });
       accepted.push({ s, digest: v.verification.protectedObject });
     }
+    // Evidence the inbound gate refused never reaches this handler. The receipt still lists
+    // it, from the gate's own summary: labels and the reason, never the claim's value.
+    for (const refused of (await ctx.refusedEvidence?.()) ?? [])
+      checked.push({ ...refused, accepted: false });
     const grant = grantFromTerms(
       { id: agreement } as Agreement,
       terms,

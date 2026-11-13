@@ -356,12 +356,19 @@
         "traceSteps": {
           "1": "The product owner’s agent checks the signed statements.",
           "2": "The product owner’s agent proposes the local action."
+        },
+        "trust": {
+          "root": {
+            "id": "urn:fictional:recall-notice:root",
+            "name": "The product safety root",
+            "delegates": []
+          }
         }
       },
       "expect": {
         "outcome": "stop",
         "check": "fitness",
-        "reason": "source-not-authoritative"
+        "reason": "source-unknown"
       },
       "outline": [
         {
@@ -378,7 +385,7 @@
           "kind": "check",
           "check": "source",
           "verdict": "fail",
-          "reason": "source-not-authoritative"
+          "reason": "source-unknown"
         },
         {
           "agent": "receiver-agent",
@@ -393,7 +400,7 @@
           "part": "inbound-gate",
           "kind": "decision",
           "verdict": "fail",
-          "reason": "source-not-authoritative"
+          "reason": "source-unknown"
         },
         {
           "agent": "receiver-agent",
@@ -409,14 +416,14 @@
           "kind": "check",
           "check": "fitness",
           "verdict": "fail",
-          "reason": "source-not-authoritative"
+          "reason": "source-unknown"
         },
         {
           "agent": "receiver-agent",
           "part": "outbound-gate",
           "kind": "decision",
           "verdict": "fail",
-          "reason": "source-not-authoritative"
+          "reason": "source-unknown"
         }
       ],
       "catalogueExpected": {
@@ -850,6 +857,10 @@
     {
       "what": "Manufacturer registration and recall delivery",
       "replacedBy": "A reviewed manufacturer-specific source rule accepts only its recall notices; the attacker’s real signature establishes authorship but not recall authority. No link is opened."
+    },
+    {
+      "what": "Unregistered notice author",
+      "replacedBy": "An intact signature identifies the notice key, but the receiver’s product-safety root has no delegated register for it; key attribution does not supply an authority chain"
     }
   ],
   "result": {

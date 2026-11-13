@@ -181,3 +181,22 @@ release checks the real consumer agreement, exact onward fields and current stor
 revisions; transmission rechecks its protected outbox condition. Assessments record an
 output receipt and input digests without retaining an extra assessment copy of the inputs.
 The shared source store continues to enforce its separate agreed retention/grants.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Brief 14 makes `actionClaims` apply to inbound operations as well as outbound actions:
+use an operation IRI in `action` for an inbound requirement, or an action name such as
+`read` for an outbound requirement. Fetched-statement `admit` steps may name their
+`operation`. A required claim rejected for a curable source or fitness failure produces
+`ask-more` with a gate-built replacement-evidence challenge. The statement stays out of
+facts and core context; later dependent actions retain its rejection reason. Unknown
+terms, including unmatched prohibitions and duties, never count as permission.
+Actor-keyed profile `termsAcceptance` entries list the purposes a principal accepts in
+an incoming request's offered `input.terms`.
+
+A profile can name self-statement kinds in `personMayRelyOn` for a person's exact-action
+reliance decision. The gate holds the unadmitted statement separately, shows its author
+and the absence of anyone vouching for it, and asks at limits-and-approval with
+`method-not-accepted`. A yes binds both the action and statement digests and is consumed
+once. Payment and unrestricted disclosure dependencies fail at load. Catalogue
+comparison uses the first non-pass/admit/go decision, equates inbound `refuse` with
+catalogue `stop`, and keeps later decisions in manifest `consequences`.

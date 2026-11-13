@@ -325,7 +325,8 @@
         "rent",
         "household"
       ],
-      "purpose": "urn:purpose:benefit-claim"
+      "purpose": "urn:purpose:benefit-claim",
+      "operation": "urn:op:benefit-claim"
     },
     {
       "id": "request",
@@ -553,7 +554,8 @@
               "rent",
               "household"
             ],
-            "purpose": "urn:purpose:benefit-claim"
+            "purpose": "urn:purpose:benefit-claim",
+            "operation": "urn:op:benefit-claim"
           },
           {
             "id": "request",
@@ -621,7 +623,7 @@
       "expect": {
         "outcome": "ask-more",
         "check": "fitness",
-        "reason": "structured-form-required"
+        "reason": "method-not-accepted"
       },
       "outline": [
         {
@@ -760,7 +762,8 @@
           "agent": "owner-agent",
           "part": "inbound-gate",
           "kind": "decision",
-          "verdict": "fail"
+          "verdict": "ask-more",
+          "reason": "method-not-accepted"
         },
         {
           "agent": "receiver-agent",
@@ -893,15 +896,15 @@
           "part": "outbound-gate",
           "kind": "check",
           "check": "fitness",
-          "verdict": "ask-more",
-          "reason": "structured-form-required"
+          "verdict": "fail",
+          "reason": "method-not-accepted"
         },
         {
           "agent": "owner-agent",
           "part": "outbound-gate",
           "kind": "decision",
-          "verdict": "ask-more",
-          "reason": "structured-form-required"
+          "verdict": "fail",
+          "reason": "method-not-accepted"
         }
       ],
       "catalogueExpected": {

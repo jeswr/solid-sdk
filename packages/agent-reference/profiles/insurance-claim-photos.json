@@ -124,5 +124,19 @@
         "serious"
       ]
     }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:insurance-claim-photos",
+      "claims": [
+        "repair.estimate"
+      ]
+    },
+    {
+      "action": "transfer",
+      "claims": [
+        "repair.estimate"
+      ]
+    }
   ]
 }

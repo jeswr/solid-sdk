@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
     "core": "scripted"
   },
   "standIns": [
@@ -1251,7 +1251,7 @@
         }
       ],
       "reason": "structured-form-required",
-      "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3."
+      "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3. Required claim: clinical.diagnosis. Accepted sources: urn:fictional:hospital. Accepted methods: recorded-by-authority."
     },
     {
       "seq": 42,
@@ -3003,7 +3003,7 @@
         }
       ],
       "reason": "structured-form-required",
-      "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3."
+      "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3. Required claim: clinical.diagnosis. Accepted sources: urn:fictional:hospital. Accepted methods: recorded-by-authority."
     },
     {
       "seq": 84,

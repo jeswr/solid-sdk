@@ -290,14 +290,12 @@ export interface ChallengeBody {
   readonly ref: Iri;
   readonly reason: ReasonCode;
   readonly detail?: string;
-  /** The approval level asked for, and how a person would say it. */
+  /** A stronger approval or replacement claim requested by the gate, with a bound retry. */
   readonly needs: {
-    readonly approval: Iri;
-    readonly label: string;
     readonly id: Iri;
     readonly nonce: Iri;
     readonly expiresAt: string;
-  };
+  } & ({ readonly approval: Iri; readonly label: string } | { readonly claim: string });
 }
 
 export interface RefuseBody {

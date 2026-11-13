@@ -119,6 +119,17 @@ export interface VerifiedEvidence {
   readonly verification?: VerificationResult;
 }
 
+/** What a handler may know about evidence the inbound gate refused (CORE-IN-20). */
+export interface RefusedEvidence {
+  readonly integrity: "valid" | "invalid";
+  readonly protectedObject: string;
+  readonly reason: string;
+  readonly id?: Iri;
+  readonly claimType?: string;
+  readonly issuer?: Iri;
+  readonly sourceAuthority?: "not-accepted";
+}
+
 export interface HandlerContext {
   readonly self: { readonly actor: Iri; readonly party?: Iri; readonly operator?: Iri };
   readonly peer: { readonly actor?: Iri; readonly party?: Iri };
@@ -132,6 +143,12 @@ export interface HandlerContext {
   /** Runtime-minted identifiers are registered before any outgoing classification. */
   mintIdentifier(): Iri;
   admittedStatement(id: Iri, digest: string): boolean;
+  /**
+   * Gate-written summaries of evidence in this message that the inbound gate did not admit.
+   * Labels and the reason only: the refused claim's value never reaches a handler
+   * (CORE-IN-20). Labels are given only where the signature verified.
+   */
+  refusedEvidence?(): Promise<readonly RefusedEvidence[]>;
   evaluateRule?(rule: Iri, subject: Iri, purpose: Iri): import("../derive/rules.js").DerivedResult;
   /** A fixed-namespace, digest-derived identifier; the input cannot supply IRI words. */
   identifierFor(value: Json): Iri;

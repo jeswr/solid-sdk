@@ -67,6 +67,12 @@ export interface PathResult {
   readonly blocked?: string;
   readonly actual?: { outcome: string; reason: string; check?: string };
   readonly expected?: { outcome: string; reason: string };
+  readonly consequences?: readonly {
+    seq: number;
+    agent: string;
+    outcome: string;
+    reason?: string;
+  }[];
   readonly disagrees?: boolean;
   readonly matches?: boolean;
   readonly difference?: { index: number; expected?: OutlineEntry; actual?: OutlineEntry };
@@ -194,6 +200,7 @@ export async function runScenario(
     const pathProfile = domainProfileSchema.parse(
       patch(profile, "profileChange" in path && path.profileChange ? path.profileChange : {}),
     );
+    validateReferences(pathProfile, world);
     const blocker = path.blocked ?? unsupported(pathProfile, world, path.id);
     if (blocker) {
       results.push({ path: path.id, blocked: blocker });
@@ -224,7 +231,15 @@ export async function runScenario(
             .slice(decision?.seq ?? trace.events.length)
             .some(
               (e) =>
-                e.agent === decision?.agent && (e.kind === "message-out" || e.kind === "store"),
+                e.agent === decision?.agent &&
+                (e.kind === "store" ||
+                  (e.kind === "message-out" &&
+                    !(
+                      path.expect?.outcome === "refuse" &&
+                      ["refuse", "challenge", "unsupported", "indeterminate"].includes(
+                        e.packet?.kind ?? "",
+                      )
+                    ))),
             )
         )
           throw new Error(`${scenario.id}/${path.id}: an effect followed a stop`);
@@ -235,12 +250,32 @@ export async function runScenario(
       throw new Error(
         `${scenario.id}/${path.id}: outline differs at ${diff.index}: ${JSON.stringify(diff)}`,
       );
-    const lastDecision = trace.events.findLast((e) => e.kind === "decision");
-    const actual = path.expect
-      ? { outcome: path.expect.outcome, reason: path.expect.reason, check: path.expect.check }
-      : lastDecision?.outcome && lastDecision.reason
-        ? { outcome: lastDecision.outcome, reason: lastDecision.reason }
-        : undefined;
+    const decisions = trace.events.filter((e) => e.kind === "decision" && e.outcome);
+    const firstFailure = decisions.find((e) => !["pass", "admit", "go"].includes(e.outcome ?? ""));
+    const judged = firstFailure ?? decisions.at(-1);
+    const check =
+      judged &&
+      trace.events
+        .slice(0, judged.seq - 1)
+        .findLast(
+          (e) => e.agent === judged.agent && e.kind === "check" && e.reason === judged.reason,
+        )?.check;
+    const actual =
+      !firstFailure && path.expect
+        ? { outcome: path.expect.outcome, reason: path.expect.reason, check: path.expect.check }
+        : judged?.outcome && judged.reason
+          ? { outcome: judged.outcome, reason: judged.reason, ...(check ? { check } : {}) }
+          : undefined;
+    const consequences = firstFailure
+      ? decisions
+          .filter((e) => e.seq > firstFailure.seq)
+          .map((e) => ({
+            seq: e.seq,
+            agent: e.agent,
+            outcome: e.outcome as string,
+            ...(e.reason ? { reason: e.reason } : {}),
+          }))
+      : [];
     const expected =
       path.catalogueExpected ??
       (path.id !== "main" && path.expect
@@ -251,8 +286,12 @@ export async function runScenario(
       trace,
       actual,
       expected,
+      consequences,
       disagrees:
-        !!expected && (actual?.outcome !== expected.outcome || actual?.reason !== expected.reason),
+        !!expected &&
+        ((actual?.outcome === "refuse" ? "stop" : actual?.outcome) !==
+          (expected.outcome === "refuse" ? "stop" : expected.outcome) ||
+          actual?.reason !== expected.reason),
       matches: !diff,
       ...(diff ? { difference: diff } : {}),
     });
@@ -673,6 +712,8 @@ async function runPath(
       personDecisions: profile.personDecisions,
       readings: profile.readings,
       actionClaims: profile.actionClaims,
+      termsAcceptance: profile.termsAcceptance[agent.actor ?? ""],
+      personMayRelyOn: profile.personMayRelyOn,
       requester: scenario.requester[agent.id],
       referenceAction: profile.referenceAction,
       notificationRecipients: profile.notificationRecipients,
@@ -827,7 +868,13 @@ async function runPath(
       case "admit":
         result = await runtime.admitStatements(
           step.statements.map((id) => required(signed[id])),
-          { subject: step.subject, purpose: step.purpose, task: task, taskId: task },
+          {
+            subject: step.subject,
+            purpose: step.purpose,
+            task: task,
+            taskId: task,
+            operation: step.operation,
+          },
         );
         break;
       case "start": {

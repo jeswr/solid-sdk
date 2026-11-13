@@ -69,7 +69,7 @@
     }
   ],
   "generated": {
-    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
     "core": "scripted"
   },
   "standIns": [
@@ -370,7 +370,7 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
-      "verdict": "not-applicable",
+      "verdict": "pass",
       "refs": [
         {
           "layer": "data-access",
@@ -378,11 +378,29 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "reason": "minimal-disclosure",
+      "caption": "No restricted item entered this task's context."
     },
     {
       "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The context rule permits this text."
+    },
+    {
+      "seq": 16,
       "step": 2,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -409,7 +427,7 @@
       "caption": "Signed (JWS EdDSA) with The insurer’s agent's pinned key, and written to the record."
     },
     {
-      "seq": 16,
+      "seq": 17,
       "step": 2,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -419,7 +437,7 @@
       "caption": "The invoke message goes to The person’s agent."
     },
     {
-      "seq": 17,
+      "seq": 18,
       "step": 2,
       "agent": "receiver-agent",
       "part": "transport",
@@ -431,7 +449,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:7200a3ff638…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:393ad0e69cb…; never trusted."
         },
         "layers": {
           "header": {
@@ -459,7 +477,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:b3be08520ed3471430579a6228b5219412ad9576c480993a25c38c40ea083299"
+            "digest": "sha-256:09a42012a8c8d313dce2f7e87b532bbdc315855dea26c90f7d54acd6e773a58c"
           },
           "authority": {
             "present": true,
@@ -484,7 +502,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:terms:wearable-data:requested-use\"",
             "raw": {
               "operation": {
                 "id": "urn:op:wearable-data:request",
@@ -492,14 +510,38 @@
               },
               "input": {
                 "request": "activity.weekly-total",
-                "requestedPurpose": "urn:purpose:wearable-data"
+                "requestedPurpose": "urn:purpose:wearable-data",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:wearable-data:requested-use",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:wearable-data"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
               },
               "basis": {
                 "kind": "represented"
               },
               "purpose": "urn:purpose:wearable-data"
             },
-            "digest": "sha-256:564aaea6c4f29dc5002bb8de229d79d42347f228547a2bd1f6b7c054f401a41b"
+            "digest": "sha-256:cf039d1dcbe4c066a4262a3b06f6716ad75cb9ccb8e2747a2b91af6ce02aef4f",
+            "untrusted": [
+              {
+                "path": "input.terms.policy.id",
+                "text": "urn:terms:wearable-data:requested-use"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -539,7 +581,7 @@
       "caption": "The insurer’s agent sends an invoke message to The person’s agent."
     },
     {
-      "seq": 18,
+      "seq": 19,
       "step": 3,
       "agent": "owner-agent",
       "part": "transport",
@@ -551,7 +593,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:7200a3ff638…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:393ad0e69cb…; never trusted."
         },
         "layers": {
           "header": {
@@ -579,7 +621,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:b3be08520ed3471430579a6228b5219412ad9576c480993a25c38c40ea083299"
+            "digest": "sha-256:09a42012a8c8d313dce2f7e87b532bbdc315855dea26c90f7d54acd6e773a58c"
           },
           "authority": {
             "present": true,
@@ -604,7 +646,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:wearable-data:request\"; \"urn:purpose:wearable-data\"; \"urn:purpose:wearable-data\"",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:wearable-data:request\"; \"urn:purpose:wearable-data\"; \"urn:terms:wearable-data:requested-use\"; \"urn:purpose:wearable-data\"; \"urn:purpose:wearable-data\"",
             "raw": {
               "operation": {
                 "id": "urn:op:wearable-data:request",
@@ -612,14 +654,32 @@
               },
               "input": {
                 "request": "activity.weekly-total",
-                "requestedPurpose": "urn:purpose:wearable-data"
+                "requestedPurpose": "urn:purpose:wearable-data",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:wearable-data:requested-use",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:wearable-data"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
               },
               "basis": {
                 "kind": "represented"
               },
               "purpose": "urn:purpose:wearable-data"
             },
-            "digest": "sha-256:564aaea6c4f29dc5002bb8de229d79d42347f228547a2bd1f6b7c054f401a41b",
+            "digest": "sha-256:cf039d1dcbe4c066a4262a3b06f6716ad75cb9ccb8e2747a2b91af6ce02aef4f",
             "untrusted": [
               {
                 "path": "operation.id",
@@ -627,6 +687,14 @@
               },
               {
                 "path": "input.requestedPurpose",
+                "text": "urn:purpose:wearable-data"
+              },
+              {
+                "path": "input.terms.policy.id",
+                "text": "urn:terms:wearable-data:requested-use"
+              },
+              {
+                "path": "input.terms.policy.permissions.0.constraints.0.rightOperand",
                 "text": "urn:purpose:wearable-data"
               },
               {
@@ -673,7 +741,7 @@
       "caption": "An invoke message from The insurer’s agent reaches the inbound gate."
     },
     {
-      "seq": 19,
+      "seq": 20,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -700,7 +768,7 @@
       "caption": "The message is intact, signed with The insurer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
-      "seq": 20,
+      "seq": 21,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -723,7 +791,7 @@
       "caption": "The message carries no statements from third parties."
     },
     {
-      "seq": 21,
+      "seq": 22,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -745,13 +813,13 @@
       "caption": "The insurer signed a statement that The insurer’s agent acts for them in this operation."
     },
     {
-      "seq": 22,
+      "seq": 23,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
-      "verdict": "not-applicable",
+      "verdict": "pass",
       "refs": [
         {
           "layer": "usage-control",
@@ -764,11 +832,11 @@
           "clause": "CORE-IN-10"
         }
       ],
-      "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "reason": "terms-acceptable",
+      "caption": "The principal accepts the uses in the request's terms."
     },
     {
-      "seq": 23,
+      "seq": 24,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -786,7 +854,7 @@
       "caption": "The message carries no claims whose quality matters."
     },
     {
-      "seq": 24,
+      "seq": 25,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -796,7 +864,7 @@
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 25,
+      "seq": 26,
       "step": 4,
       "agent": "owner-agent",
       "part": "core",
@@ -804,7 +872,7 @@
       "caption": "The core proposes to share urn:op:wearable data with The insurer."
     },
     {
-      "seq": 26,
+      "seq": 27,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -827,7 +895,7 @@
       "caption": "The person's mandate covers this action."
     },
     {
-      "seq": 27,
+      "seq": 28,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -861,7 +929,7 @@
       "caption": "The insurer: Accepted, for Sharing activity data for a discount only."
     },
     {
-      "seq": 28,
+      "seq": 29,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -879,7 +947,7 @@
       "caption": "This action passes on no personal data."
     },
     {
-      "seq": 29,
+      "seq": 30,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -897,7 +965,7 @@
       "caption": "This action passes on no personal data."
     },
     {
-      "seq": 30,
+      "seq": 31,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -915,7 +983,7 @@
       "caption": "Inside what the agent may do on its own, and within The person's limits."
     },
     {
-      "seq": 31,
+      "seq": 32,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -933,7 +1001,7 @@
       "caption": "The gate checks the actual credential against the declared purpose."
     },
     {
-      "seq": 32,
+      "seq": 33,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -955,7 +1023,7 @@
       "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
     },
     {
-      "seq": 33,
+      "seq": 34,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -973,7 +1041,7 @@
       "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
     },
     {
-      "seq": 34,
+      "seq": 35,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -1000,7 +1068,7 @@
       "caption": "Signed (JWS EdDSA) with The person’s agent's pinned key, and written to the record."
     },
     {
-      "seq": 35,
+      "seq": 36,
       "step": 4,
       "agent": "owner-agent",
       "part": "outbound-gate",
@@ -1010,7 +1078,7 @@
       "caption": "The invoke message goes to The insurer’s agent."
     },
     {
-      "seq": 36,
+      "seq": 37,
       "step": 4,
       "agent": "owner-agent",
       "part": "transport",
@@ -1186,7 +1254,7 @@
       "caption": "The person’s agent sends an invoke message to The insurer’s agent."
     },
     {
-      "seq": 37,
+      "seq": 38,
       "step": 5,
       "agent": "receiver-agent",
       "part": "transport",
@@ -1376,7 +1444,7 @@
       "caption": "An invoke message from The person’s agent reaches the inbound gate."
     },
     {
-      "seq": 38,
+      "seq": 39,
       "step": 5,
       "agent": "receiver-agent",
       "part": "inbound-gate",
@@ -1403,7 +1471,7 @@
       "caption": "The message is intact, signed with The person’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
-      "seq": 39,
+      "seq": 40,
       "step": 5,
       "agent": "receiver-agent",
       "part": "inbound-gate",
@@ -1441,7 +1509,7 @@
       "caption": "The device maker's activity.weekly-total statement: The device maker is an accepted source for this kind of claim."
     },
     {
-      "seq": 40,
+      "seq": 41,
       "step": 5,
       "agent": "receiver-agent",
       "part": "inbound-gate",
@@ -1463,7 +1531,7 @@
       "caption": "The person signed a statement that The person’s agent acts for them in this operation."
     },
     {
-      "seq": 41,
+      "seq": 42,
       "step": 5,
       "agent": "receiver-agent",
       "part": "inbound-gate",
@@ -1490,7 +1558,7 @@
       "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
     },
     {
-      "seq": 42,
+      "seq": 43,
       "step": 5,
       "agent": "receiver-agent",
       "part": "inbound-gate",
@@ -1512,7 +1580,7 @@
       "caption": "The device maker's activity.weekly-total statement is fit for Sharing activity data for a discount: recorded-by-authority, 0 days old."
     },
     {
-      "seq": 43,
+      "seq": 44,
       "step": 5,
       "agent": "receiver-agent",
       "part": "inbound-gate",
@@ -1522,7 +1590,7 @@
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 44,
+      "seq": 45,
       "step": 5,
       "agent": "receiver-agent",
       "part": "memory",
@@ -1549,7 +1617,7 @@
       "caption": "The device maker's activity.weekly-total statement is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 45,
+      "seq": 46,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -1572,7 +1640,7 @@
       "caption": "This protocol message proposes no additional action."
     },
     {
-      "seq": 46,
+      "seq": 47,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -1606,7 +1674,7 @@
       "caption": "The person: Accepted, for Sharing activity data for a discount only."
     },
     {
-      "seq": 47,
+      "seq": 48,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -1624,7 +1692,7 @@
       "caption": "The gate finds no personal data in this protocol message."
     },
     {
-      "seq": 48,
+      "seq": 49,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -1642,7 +1710,7 @@
       "caption": "The gate finds no data terms to apply."
     },
     {
-      "seq": 49,
+      "seq": 50,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -1660,7 +1728,7 @@
       "caption": "The message release check is complete."
     },
     {
-      "seq": 50,
+      "seq": 51,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -1687,7 +1755,7 @@
       "caption": "Signed (JWS EdDSA) with The insurer’s agent's pinned key, and written to the record."
     },
     {
-      "seq": 51,
+      "seq": 52,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -1697,7 +1765,7 @@
       "caption": "The deliver message goes to The person’s agent."
     },
     {
-      "seq": 52,
+      "seq": 53,
       "step": 5,
       "agent": "receiver-agent",
       "part": "transport",
@@ -1803,7 +1871,7 @@
       "caption": "The insurer’s agent sends a deliver message to The person’s agent."
     },
     {
-      "seq": 53,
+      "seq": 54,
       "step": 6,
       "agent": "owner-agent",
       "part": "transport",
@@ -1923,7 +1991,7 @@
       "caption": "A deliver message from The insurer’s agent reaches the inbound gate."
     },
     {
-      "seq": 54,
+      "seq": 55,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -1950,7 +2018,7 @@
       "caption": "The message is intact, signed with The insurer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
-      "seq": 55,
+      "seq": 56,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -1973,7 +2041,7 @@
       "caption": "The message carries no statements from third parties."
     },
     {
-      "seq": 56,
+      "seq": 57,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -1991,7 +2059,7 @@
       "caption": "This message asks for nothing, so there is no authority to check."
     },
     {
-      "seq": 57,
+      "seq": 58,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -2014,7 +2082,7 @@
       "caption": "The message carries no data that needs terms."
     },
     {
-      "seq": 58,
+      "seq": 59,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -2032,7 +2100,7 @@
       "caption": "The message carries no claims whose quality matters."
     },
     {
-      "seq": 59,
+      "seq": 60,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -2042,7 +2110,7 @@
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 60,
+      "seq": 61,
       "step": 7,
       "agent": "receiver-agent",
       "part": "record",

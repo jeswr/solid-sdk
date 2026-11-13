@@ -109,11 +109,44 @@ export interface AdmittedFact {
   readonly statement?: import("../core/types.js").JsonObject;
 }
 
+/** A request for replacement evidence, built only from the receiver's profile. */
+export function claimRequest(
+  ctx: GateContext,
+  claimType: string,
+  sources = ctx.claimSources?.[claimType],
+): string {
+  const rule = ctx.reliance?.rules.find((r) =>
+    r.claimType.endsWith(".*")
+      ? claimType.startsWith(r.claimType.slice(0, -1))
+      : r.claimType === claimType,
+  );
+  return `Required claim: ${claimType}. Accepted sources: ${(sources ?? []).join(", ") || "a source accepted by the trust profile"}. Accepted methods: ${rule?.methods.join(", ") || "a method accepted by the reliance profile"}.`;
+}
+
+export const CURABLE_CLAIM_FAILURES = new Set([
+  "source-unknown",
+  "source-not-authoritative",
+  "method-not-accepted",
+  "stale-data",
+  "confidence-too-low",
+  "completeness-not-established",
+  "superseded-by-better-source",
+  "representation-out-of-scope",
+]);
+
 /** Every item actually shown to the core, with labels retained across restarts. */
 export interface ContextItem extends AdmittedFact {
   readonly kind: "statement" | "memory" | "message" | "reading" | "content";
   readonly accepted?: boolean;
   readonly digest: string;
+}
+
+/** Gate-held evidence for a person to inspect; never a fact or a core context item. */
+export interface RelianceHold {
+  readonly task: string;
+  readonly statement: import("../core/types.js").JsonObject;
+  readonly digest: string;
+  readonly reason: string;
 }
 
 export class GateMemory {
@@ -122,6 +155,8 @@ export class GateMemory {
     readonly contexts: Record<string, ContextItem[]> = {},
     readonly identifiers: Record<string, string[]> = {},
     readonly refusals: Record<string, string> = {},
+    readonly relianceHolds: Record<string, RelianceHold> = {},
+    readonly relianceBindings: Record<string, string> = {},
   ) {}
   rememberIdentifiers(scope: string, value: unknown): void {
     this.identifiers[scope] = [
@@ -195,6 +230,9 @@ export interface GateContext {
     readonly type: "code" | "number" | "date" | "term";
     readonly values?: readonly (string | number | boolean)[];
   }[];
+  readonly personMayRelyOn?: readonly string[];
+  readonly termsAcceptance?: { readonly purposes: readonly string[] };
+  /** Action names declare outbound requirements; operation IRIs declare inbound requirements. */
   readonly actionClaims?: readonly {
     readonly action: string;
     readonly claims: readonly string[];

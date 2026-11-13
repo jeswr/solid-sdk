@@ -138,7 +138,8 @@
       "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail"
+      "verdict": "ask-more",
+      "reason": "method-not-accepted"
     },
     {
       "agent": "receiver-agent",
@@ -271,15 +272,15 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "fitness",
-      "verdict": "ask-more",
-      "reason": "structured-form-required"
+      "verdict": "fail",
+      "reason": "method-not-accepted"
     },
     {
       "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "decision",
-      "verdict": "ask-more",
-      "reason": "structured-form-required"
+      "verdict": "fail",
+      "reason": "method-not-accepted"
     }
   ]
 }

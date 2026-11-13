@@ -109,6 +109,14 @@
         "benefit.rent",
         "benefit.household"
       ]
+    },
+    {
+      "action": "urn:op:benefit-claim",
+      "claims": [
+        "benefit.income",
+        "benefit.rent",
+        "benefit.household"
+      ]
     }
   ]
 }

@@ -17,8 +17,11 @@ it("rejects unsigned payroll mail and signed requests without employee represent
         (e) => e.agent === "receiver-agent" && e.outcome === "refuse" && e.reason === reason,
       ),
     ).toBe(true);
-    expect(path?.actual).toMatchObject({ outcome: "stop", reason: "evidence-invalid" });
-    expect(path?.disagrees).toBe(true);
+    expect(path?.actual).toMatchObject({ outcome: "refuse", reason });
+    expect(path?.disagrees).toBe(false);
+    expect(path?.consequences).toContainEqual(
+      expect.objectContaining({ outcome: "stop", reason: "evidence-invalid" }),
+    );
   }
 });
 
@@ -81,9 +84,9 @@ it("runs independent joint-mortgage refusals without claiming a joint agreement"
   const { profile, scenario } = loadCase(root, "joint-mortgage");
   const paths = await runScenario(profile, scenario);
   expect(paths[0]?.trace).toBeUndefined();
-  expect(paths[1]?.actual).toMatchObject({ outcome: "stop", reason: "mandate-invalid" });
+  expect(paths[1]?.actual).toMatchObject({ outcome: "stop", reason: "mandate-withdrawn" });
   expect(paths[1]?.expected).toMatchObject({ outcome: "stop", reason: "mandate-withdrawn" });
-  expect(paths[1]?.disagrees).toBe(true);
+  expect(paths[1]?.disagrees).toBe(false);
   expect(paths[2]?.actual).toMatchObject({ outcome: "stop", reason: "prohibited" });
   for (const path of paths.slice(1)) {
     const events = path.trace?.events ?? [];
@@ -98,8 +101,8 @@ it("keeps catalogue expectations separate from observed refusals", async () => {
     const { profile, scenario } = loadCase(root, id);
     const paths = await runScenario(profile, scenario);
     expect(paths[0]?.disagrees).toBe(false);
-    expect(paths[1]?.disagrees).toBe(true);
-    expect(paths[1]?.actual?.outcome).toBe("stop");
+    expect(paths[1]?.disagrees).toBe(false);
+    expect(paths[1]?.actual?.outcome).toBe(id === "wearable-data" ? "refuse" : "stop");
     expect(paths[1]?.expected).toEqual(scenario.branches[0]?.catalogueExpected);
     expect(paths[1]?.trace?.events.some((e) => e.reason === paths[1]?.actual?.reason)).toBe(true);
   }
@@ -165,4 +168,59 @@ it("requires currently accepted completeness for the exact list, subject and per
     outcome: "ask-more",
     reason: "completeness-not-established",
   });
+});
+
+it("models an unregistered notice key, insufficient borrowing credentials, and a photograph-only damage reading", async () => {
+  const recall = loadCase(root, "recall-notice");
+  const recalls = await runScenario(recall.profile, recall.scenario);
+  expect(recalls[1]?.actual).toMatchObject({ outcome: "refuse", reason: "source-unknown" });
+  expect(recalls[1]?.disagrees).toBe(false);
+  expect(
+    recalls[1]?.trace?.events.some(
+      (e) => e.resolution?.answer === "No register answers for this source.",
+    ),
+  ).toBe(true);
+  const loan = loadCase(root, "small-business-loan");
+  const loans = await runScenario(loan.profile, loan.scenario);
+  const loanEvents = loans[1]?.trace?.events ?? [];
+  expect(
+    loanEvents.some(
+      (e) =>
+        e.agent === "receiver-agent" &&
+        e.check === "authority" &&
+        e.reason === "representation-out-of-scope" &&
+        e.verdict === "ask-more",
+    ),
+  ).toBe(true);
+  expect(
+    loanEvents.some(
+      (e) =>
+        e.agent === "receiver-agent" &&
+        e.outcome === "ask-more" &&
+        e.reason === "representation-out-of-scope",
+    ),
+  ).toBe(true);
+  expect(loanEvents.some((e) => e.agent === "receiver-agent" && e.outcome === "admit")).toBe(false);
+  const photo = loadCase(root, "insurance-claim-photos");
+  const photos = await runScenario(photo.profile, photo.scenario);
+  const events = photos[1]?.trace?.events ?? [];
+  expect(
+    events.some(
+      (e) =>
+        e.agent === "receiver-agent" &&
+        e.outcome === "ask-more" &&
+        e.reason === "structured-form-required",
+    ),
+  ).toBe(true);
+  const request = events.find(
+    (e) =>
+      e.agent === "receiver-agent" &&
+      e.check === "fitness" &&
+      e.reason === "structured-form-required",
+  );
+  expect(request?.caption).toContain("request source urn:fictional:insurance-claim-photos:garage");
+  expect(request?.caption).toContain("repair.estimate");
+  expect(
+    events.some((e) => e.agent === "receiver-agent" && e.fact?.claimType === "repair.estimate"),
+  ).toBe(false);
 });

@@ -37,7 +37,7 @@ const outlineEntry = z.strictObject({
   reason: reason.optional(),
 });
 export const outlineSchema = z.array(outlineEntry);
-export const domainProfileSchema = z.strictObject({
+const baseDomainProfileSchema = z.strictObject({
   "x-authored-by": z.string(),
   schema: z.literal("agent-profile/0.1"),
   id: slug,
@@ -129,6 +129,8 @@ export const domainProfileSchema = z.strictObject({
       }),
     )
     .default([]),
+  personMayRelyOn: strings.default([]),
+  termsAcceptance: z.record(iri, z.strictObject({ purposes: z.array(iri) })).default({}),
   actionClaims: z.array(z.strictObject({ action: z.string(), claims: strings })).default([]),
   vocabulary: z.record(z.string(), contentType),
   identifiers: z.array(iri).default([]),
@@ -147,6 +149,19 @@ export const domainProfileSchema = z.strictObject({
         .optional(),
     }),
   ),
+});
+export const domainProfileSchema = baseDomainProfileSchema.superRefine((profile, ctx) => {
+  for (const rule of profile.actionClaims) {
+    if (
+      rule.claims.some((claim) => profile.personMayRelyOn.includes(claim)) &&
+      ["pay", "distribute"].includes(rule.action)
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["personMayRelyOn"],
+        message: "personMayRelyOn cannot support payment or unrestricted personal-data disclosure",
+      });
+  }
 });
 const expectation = z.strictObject({
   outcome: z.enum(["go", "stop", "ask-more", "ask-principal", "admit", "refuse"]),
@@ -212,6 +227,7 @@ const step = z.discriminatedUnion("type", [
   z.strictObject({
     ...base,
     type: z.literal("admit"),
+    operation: iri.optional(),
     statements: strings,
     purpose: iri,
     subject: iri.optional(),

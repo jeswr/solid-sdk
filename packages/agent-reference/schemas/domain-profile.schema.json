@@ -860,6 +860,37 @@
         "additionalProperties": false
       }
     },
+    "personMayRelyOn": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "termsAcceptance": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "purposes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+            }
+          }
+        },
+        "required": [
+          "purposes"
+        ],
+        "additionalProperties": false
+      }
+    },
     "actionClaims": {
       "default": [],
       "type": "array",
@@ -1056,6 +1087,8 @@
     "modelReadings",
     "notificationRecipients",
     "readings",
+    "personMayRelyOn",
+    "termsAcceptance",
     "actionClaims",
     "vocabulary",
     "identifiers",

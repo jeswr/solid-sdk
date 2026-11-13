@@ -46,6 +46,7 @@ for (const file of readdirSync(join(root, "scenarios"))
             status: path.disagrees ? "disagrees" : "runs",
             actual: path.actual,
             expected: path.expected,
+            consequences: path.consequences,
             trace: `${stem}--baseline.json`,
           }),
     });

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The bounded OWNER MANDATE and the pilot ODRL adapter (framework A4/A5, profile C1 rules).
  *
@@ -255,6 +256,7 @@ export function actionDigest(intent: ActionIntent): string {
 export interface EvaluateInput {
   readonly loaded: LoadedMandate | undefined;
   readonly loadFailure?: string;
+  readonly withdrawn?: boolean;
   readonly intent: ActionIntent;
   readonly decider: Iri;
   readonly at: string;
@@ -293,6 +295,7 @@ export function evaluateIntent(input: EvaluateInput): AuthorisationDecision {
       reason: `mandate-invalid: ${input.loadFailure ?? "absent"}`,
     };
   }
+  if (input.withdrawn) return { ...base, outcome: "deny", reason: "mandate-withdrawn" };
   const m = input.loaded.mandate;
   const now = Date.parse(input.at);
   if (now < Date.parse(m.validFrom)) {

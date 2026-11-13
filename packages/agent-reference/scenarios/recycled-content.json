@@ -189,7 +189,8 @@
             "statements": [
               "self-declared-tier"
             ],
-            "purpose": "urn:purpose:recycled-content"
+            "purpose": "urn:purpose:recycled-content",
+            "operation": "urn:op:recycled-content"
           }
         ],
         "traceSteps": {
@@ -197,7 +198,7 @@
         }
       },
       "expect": {
-        "outcome": "refuse",
+        "outcome": "ask-more",
         "check": "fitness",
         "reason": "method-not-accepted"
       },
@@ -246,7 +247,8 @@
           "agent": "receiver-agent",
           "part": "inbound-gate",
           "kind": "decision",
-          "verdict": "fail"
+          "verdict": "ask-more",
+          "reason": "method-not-accepted"
         }
       ],
       "catalogueExpected": {

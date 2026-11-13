@@ -625,7 +625,7 @@
       ],
       "catalogueExpected": {
         "outcome": "stop",
-        "reason": "purpose-not-permitted"
+        "reason": "excessive-scope"
       }
     }
   ],

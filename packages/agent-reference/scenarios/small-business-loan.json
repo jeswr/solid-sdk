@@ -356,7 +356,8 @@
         "tax-filing",
         "director-role"
       ],
-      "purpose": "urn:purpose:small-business-loan"
+      "purpose": "urn:purpose:small-business-loan",
+      "operation": "urn:op:small-business-loan"
     },
     {
       "id": "apply",
@@ -515,7 +516,7 @@
             "kind": "organization.role",
             "value": {
               "subjectKeyOf": "director",
-              "role": "non-borrowing-director",
+              "role": "borrowing-director",
               "organization": "urn:fictional:small-business-loan:owner",
               "status": "active",
               "validFrom": "2026-11-01T00:00:00.000Z",
@@ -566,7 +567,8 @@
               "tax-filing",
               "director-role"
             ],
-            "purpose": "urn:purpose:small-business-loan"
+            "purpose": "urn:purpose:small-business-loan",
+            "operation": "urn:op:small-business-loan"
           },
           {
             "id": "apply",
@@ -605,18 +607,67 @@
             "agent": "owner-agent",
             "type": "organisation-approve",
             "signer": "director"
+          },
+          {
+            "id": "lender-receives",
+            "agent": "receiver-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "status": "received"
+              }
+            }
           }
         ],
         "traceSteps": {
-          "1": "The company’s agent checks the signed statements.",
-          "2": "The company’s agent sends the signed request.",
-          "3": "The company’s agent completes the organisation approve step."
-        }
+          "1": "The company’s agent checks the filed accounts and the director’s genuine approval role.",
+          "2": "The company proposes its loan application.",
+          "3": "The director approves submission of this exact application.",
+          "4": "The lender checks the separate mandate credential and asks for a representative whose role covers borrowing."
+        },
+        "organizationCredentials": [
+          {
+            "agent": "owner-agent",
+            "issuer": "owner",
+            "entity": "urn:fictional:small-business-loan:owner",
+            "roles": [
+              "non-borrowing-director"
+            ],
+            "actions": [
+              "loan-application"
+            ],
+            "validFrom": "2026-11-01T00:00:00.000Z",
+            "validUntil": "2026-12-01T00:00:00.000Z",
+            "status": {
+              "ref": "urn:fictional:small-business-loan:owner:status",
+              "id": "signatory"
+            }
+          },
+          {
+            "agent": "receiver-agent",
+            "issuer": "receiver",
+            "entity": "urn:fictional:small-business-loan:receiver",
+            "roles": [
+              "business-signatory"
+            ],
+            "actions": [
+              "loan-application"
+            ],
+            "validFrom": "2026-11-01T00:00:00.000Z",
+            "validUntil": "2026-12-01T00:00:00.000Z",
+            "status": {
+              "ref": "urn:fictional:small-business-loan:receiver:status",
+              "id": "signatory"
+            }
+          }
+        ]
       },
       "expect": {
-        "outcome": "stop",
-        "check": "limits-approval",
-        "reason": "not-authorised"
+        "outcome": "ask-more",
+        "check": "authority",
+        "reason": "representation-out-of-scope"
       },
       "outline": [
         {
@@ -847,15 +898,210 @@
           "part": "outbound-gate",
           "kind": "check",
           "check": "limits-approval",
-          "verdict": "fail",
-          "reason": "not-authorised"
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
         },
         {
           "agent": "owner-agent",
           "part": "outbound-gate",
           "kind": "decision",
-          "verdict": "fail",
-          "reason": "not-authorised"
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "ask-more",
+          "reason": "representation-out-of-scope"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "ask-more",
+          "reason": "representation-out-of-scope"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
         }
       ],
       "catalogueExpected": {
@@ -1012,7 +1258,8 @@
               "tax-filing",
               "director-role"
             ],
-            "purpose": "urn:purpose:small-business-loan"
+            "purpose": "urn:purpose:small-business-loan",
+            "operation": "urn:op:small-business-loan"
           },
           {
             "id": "apply",
@@ -1055,7 +1302,7 @@
       "expect": {
         "outcome": "ask-more",
         "check": "fitness",
-        "reason": "structured-form-required"
+        "reason": "method-not-accepted"
       },
       "outline": [
         {
@@ -1102,7 +1349,8 @@
           "agent": "owner-agent",
           "part": "inbound-gate",
           "kind": "decision",
-          "verdict": "fail"
+          "verdict": "ask-more",
+          "reason": "method-not-accepted"
         },
         {
           "agent": "owner-agent",
@@ -1209,15 +1457,15 @@
           "part": "outbound-gate",
           "kind": "check",
           "check": "fitness",
-          "verdict": "ask-more",
-          "reason": "structured-form-required"
+          "verdict": "fail",
+          "reason": "method-not-accepted"
         },
         {
           "agent": "owner-agent",
           "part": "outbound-gate",
           "kind": "decision",
-          "verdict": "ask-more",
-          "reason": "structured-form-required"
+          "verdict": "fail",
+          "reason": "method-not-accepted"
         }
       ],
       "catalogueExpected": {

@@ -1204,6 +1204,10 @@
                 "type": "string",
                 "const": "admit"
               },
+              "operation": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
               "statements": {
                 "type": "array",
                 "items": {

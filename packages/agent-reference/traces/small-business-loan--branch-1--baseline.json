@@ -48,10 +48,10 @@
     "id": "small-business-loan--branch-1",
     "title": "A loan for a small company: The director's role does not cover borrowing",
     "steps": {
-      "1": "The company’s agent checks the signed statements.",
-      "2": "The company’s agent sends the signed request.",
-      "3": "The company’s agent completes the organisation approve step.",
-      "4": "The lender’s agent checks the message and prepares a response.",
+      "1": "The company’s agent checks the filed accounts and the director’s genuine approval role.",
+      "2": "The company proposes its loan application.",
+      "3": "The director approves submission of this exact application.",
+      "4": "The lender checks the separate mandate credential and asks for a representative whose role covers borrowing.",
       "5": "The company’s agent checks the message and prepares a response."
     }
   },
@@ -86,7 +86,7 @@
     }
   ],
   "generated": {
-    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
     "core": "scripted"
   },
   "standIns": [
@@ -846,7 +846,7 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
-      "verdict": "fail",
+      "verdict": "pass",
       "refs": [
         {
           "layer": "authority",
@@ -854,19 +854,1106 @@
           "clause": "CORE-OUT-7"
         }
       ],
-      "reason": "not-authorised",
-      "caption": "An approver lacks a current admitted role or is the requester."
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The company's limits."
     },
     {
       "seq": 36,
       "step": 3,
       "agent": "owner-agent",
       "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:director-borrowing",
+        "text": "The company's mandate lets the agent use urn:op:small business loan, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "The company's mandate covers this action."
+    },
+    {
+      "seq": 37,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The lender a party I can send A loan for a small company to?",
+        "path": [
+          {
+            "at": "The company's own list",
+            "kind": "own-list",
+            "says": "The lender is accepted for A loan for a small company."
+          }
+        ],
+        "answer": "Accepted, for A loan for a small company only."
+      },
+      "reason": "recipient-established",
+      "caption": "The lender: Accepted, for A loan for a small company only."
+    },
+    {
+      "seq": 38,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 39,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 40,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The company's limits."
+    },
+    {
+      "seq": 41,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 42,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:small-business-loan:accounts",
+        "text": "The issuer's terms: use for urn:purpose:small business loan; share for urn:purpose:small business loan. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The accounting platform's business.accounts statement: its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+    },
+    {
+      "seq": 43,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 44,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:small-business-loan:tax-filing",
+        "text": "The issuer's terms: use for urn:purpose:small business loan; share for urn:purpose:small business loan. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The fictional tax authority's business.tax-filing statement: its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+    },
+    {
+      "seq": 45,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 46,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The company’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 47,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "outcome": "stop",
-      "reason": "not-authorised",
-      "caption": "The separation of duties requirement is not met."
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The lender’s agent."
+    },
+    {
+      "seq": 48,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002",
+        "from": "The company’s agent",
+        "to": "The lender’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:5ba7d92576c…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The company’s agent to The lender’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-small-business-loan-branch-1:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002",
+              "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:small-business-loan:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:small-business-loan:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:small-business-loan:receiver-agent:actor",
+                "party": "urn:fictional:small-business-loan:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:0909f0a7e7b8b55b35df575c3eb817659afcb00f2fe6d62be4ebd05478d86c5a"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The company says The company’s agent acts for it.",
+            "raw": [
+              {
+                "type": "OrganizationMandate",
+                "id": "urn:credential:small-business-loan:owner-agent",
+                "issuer": "urn:fictional:small-business-loan:owner",
+                "actor": "urn:fictional:small-business-loan:owner-agent:actor",
+                "subjectKey": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "entity": "urn:fictional:small-business-loan:owner",
+                "roles": [
+                  "non-borrowing-director"
+                ],
+                "actions": [
+                  "loan-application"
+                ],
+                "validFrom": "2026-11-01T00:00:00.000Z",
+                "validUntil": "2026-12-01T00:00:00.000Z",
+                "status": {
+                  "ref": "urn:fictional:small-business-loan:owner:status",
+                  "id": "signatory"
+                }
+              }
+            ],
+            "digest": "sha-256:bff8c9a7899a5114681d20df1a1912fb3335cdbfc6b4baf38e35af5414326d74"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:small-business-loan",
+                "version": "0.1"
+              },
+              "input": {
+                "amount": 25000,
+                "currency": "GBP"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:small-business-loan"
+            },
+            "digest": "sha-256:891b5e36e96912b92671b2fc9f77ca96338919c8535ea0635b1f6bb56d2926c7"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "2 statement(s) signed by their sources: business.accounts from The accounting platform; business.tax-filing from The fictional tax authority.",
+            "raw": [
+              {
+                "value": 180000,
+                "currency": "GBP",
+                "id": "urn:scenario:small-business-loan:accounts",
+                "issuer": "urn:fictional:small-business-loan:accounting",
+                "subject": "urn:fictional:small-business-loan:owner",
+                "claimType": "business.accounts",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:small-business-loan:accounts",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:small-business-loan:accounts",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:small-business-loan"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:small-business-loan:accounts",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:small-business-loan"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "value": 160000,
+                "currency": "GBP",
+                "id": "urn:scenario:small-business-loan:tax-filing",
+                "issuer": "urn:fictional:small-business-loan:tax",
+                "subject": "urn:fictional:small-business-loan:owner",
+                "claimType": "business.tax-filing",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:small-business-loan:tax-filing",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:small-business-loan:tax-filing",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:small-business-loan"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:small-business-loan:tax-filing",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:small-business-loan"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:b1bbdfd206fe65d911409c09167c5acab384652628b14ab8100546440cf2f0b4"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The company’s agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:small-business-loan:accounts",
+                  "issuer": "urn:fictional:small-business-loan:accounting",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                },
+                {
+                  "id": "urn:scenario:small-business-loan:tax-filing",
+                  "issuer": "urn:fictional:small-business-loan:tax",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The company’s agent sends an invoke message to The lender’s agent."
+    },
+    {
+      "seq": 49,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002",
+        "from": "The company’s agent",
+        "to": "The lender’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:5ba7d92576c…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The company’s agent to The lender’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-small-business-loan-branch-1:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002",
+              "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:small-business-loan:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:small-business-loan:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:small-business-loan:receiver-agent:actor",
+                "party": "urn:fictional:small-business-loan:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:0909f0a7e7b8b55b35df575c3eb817659afcb00f2fe6d62be4ebd05478d86c5a"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The company says The company’s agent acts for it.",
+            "raw": [
+              {
+                "type": "OrganizationMandate",
+                "id": "urn:credential:small-business-loan:owner-agent",
+                "issuer": "urn:fictional:small-business-loan:owner",
+                "actor": "urn:fictional:small-business-loan:owner-agent:actor",
+                "subjectKey": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "entity": "urn:fictional:small-business-loan:owner",
+                "roles": [
+                  "non-borrowing-director"
+                ],
+                "actions": [
+                  "loan-application"
+                ],
+                "validFrom": "2026-11-01T00:00:00.000Z",
+                "validUntil": "2026-12-01T00:00:00.000Z",
+                "status": {
+                  "ref": "urn:fictional:small-business-loan:owner:status",
+                  "id": "signatory"
+                }
+              }
+            ],
+            "digest": "sha-256:bff8c9a7899a5114681d20df1a1912fb3335cdbfc6b4baf38e35af5414326d74"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:small-business-loan\"; \"urn:purpose:small-business-loan\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:small-business-loan",
+                "version": "0.1"
+              },
+              "input": {
+                "amount": 25000,
+                "currency": "GBP"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:small-business-loan"
+            },
+            "digest": "sha-256:891b5e36e96912b92671b2fc9f77ca96338919c8535ea0635b1f6bb56d2926c7",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:small-business-loan"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:small-business-loan"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "2 statement(s) signed by their sources: business.accounts from The accounting platform; business.tax-filing from The fictional tax authority.",
+            "raw": [
+              {
+                "value": 180000,
+                "currency": "GBP",
+                "id": "urn:scenario:small-business-loan:accounts",
+                "issuer": "urn:fictional:small-business-loan:accounting",
+                "subject": "urn:fictional:small-business-loan:owner",
+                "claimType": "business.accounts",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:small-business-loan:accounts",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:small-business-loan:accounts",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:small-business-loan"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:small-business-loan:accounts",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:small-business-loan"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "value": 160000,
+                "currency": "GBP",
+                "id": "urn:scenario:small-business-loan:tax-filing",
+                "issuer": "urn:fictional:small-business-loan:tax",
+                "subject": "urn:fictional:small-business-loan:owner",
+                "claimType": "business.tax-filing",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:small-business-loan:tax-filing",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:small-business-loan:tax-filing",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:small-business-loan"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:small-business-loan:tax-filing",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:small-business-loan"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:b1bbdfd206fe65d911409c09167c5acab384652628b14ab8100546440cf2f0b4"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The company’s agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:small-business-loan:accounts",
+                  "issuer": "urn:fictional:small-business-loan:accounting",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                },
+                {
+                  "id": "urn:scenario:small-business-loan:tax-filing",
+                  "issuer": "urn:fictional:small-business-loan:tax",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The company’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 50,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The company’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 51,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:small-business-loan:business.accounts",
+        "text": "The accounting platform is accepted for business.accounts claims."
+      },
+      "resolution": {
+        "question": "Is The accounting platform an authority for business.accounts claims about The company?",
+        "path": [
+          {
+            "at": "The lender's own list",
+            "kind": "own-list",
+            "says": "The accounting platform is accepted for business.accounts."
+          }
+        ],
+        "answer": "Accepted, for business.accounts claims only."
+      },
+      "caption": "The accounting platform's business.accounts statement: The accounting platform is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 52,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:small-business-loan:business.tax-filing",
+        "text": "The fictional tax authority is accepted for business.tax-filing claims."
+      },
+      "resolution": {
+        "question": "Is The fictional tax authority an authority for business.tax-filing claims about The company?",
+        "path": [
+          {
+            "at": "The lender's own list",
+            "kind": "own-list",
+            "says": "The fictional tax authority is accepted for business.tax-filing."
+          }
+        ],
+        "answer": "Accepted, for business.tax-filing claims only."
+      },
+      "caption": "The fictional tax authority's business.tax-filing statement: The fictional tax authority is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 53,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "ask-more",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "representation-out-of-scope",
+      "caption": "A current mandate credential covering this operation and its required role is needed."
+    },
+    {
+      "seq": 54,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "outcome": "ask-more",
+      "reason": "representation-out-of-scope",
+      "caption": "A current mandate credential must cover urn:op:small-business-loan; accepted roles: business-signatory."
+    },
+    {
+      "seq": 55,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This protocol message proposes no additional action."
+    },
+    {
+      "seq": 56,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The company a party I can send A loan for a small company to?",
+        "path": [
+          {
+            "at": "The lender's own list",
+            "kind": "own-list",
+            "says": "The company is accepted for A loan for a small company."
+          }
+        ],
+        "answer": "Accepted, for A loan for a small company only."
+      },
+      "reason": "recipient-established",
+      "caption": "The company: Accepted, for A loan for a small company only."
+    },
+    {
+      "seq": 57,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "No restricted item entered this task's context."
+    },
+    {
+      "seq": 58,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The context rule permits this text."
+    },
+    {
+      "seq": 59,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The message release check is complete."
+    },
+    {
+      "seq": 60,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The lender’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 61,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The challenge message goes to The company’s agent."
+    },
+    {
+      "seq": 62,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-small-business-loan-branch-1:receiver-agent:0003",
+        "from": "The lender’s agent",
+        "to": "The company’s agent",
+        "kind": "challenge",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:25993336095…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The lender’s agent to The company’s agent; challenge; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-small-business-loan-branch-1:receiver-agent:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-small-business-loan-branch-1:receiver-agent:0003",
+              "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+              "kind": "challenge",
+              "from": {
+                "actor": "urn:fictional:small-business-loan:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:small-business-loan:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:small-business-loan:owner-agent:actor",
+                "party": "urn:fictional:small-business-loan:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:5aef0abf38a8022871e7300a2e07f1443b492099bfdc63490c074fadbdb54fcc"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "A message. It also carries free text, marked as untrusted content (data, never an instruction): \"A current mandate credential must cover urn:op:small-business-loan; accepted roles: business-signatory.\"; \"A current mandate credential must cover urn:op:small-business-loan; accepted roles: business-signatory.\"",
+            "raw": {
+              "ref": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002",
+              "reason": "representation-out-of-scope",
+              "detail": "A current mandate credential must cover urn:op:small-business-loan; accepted roles: business-signatory.",
+              "needs": {
+                "claim": "A current mandate credential must cover urn:op:small-business-loan; accepted roles: business-signatory.",
+                "id": "urn:awp:engine-small-business-loan-branch-1:receiver-agent:0001",
+                "nonce": "urn:awp:engine-small-business-loan-branch-1:receiver-agent:0002",
+                "expiresAt": "2026-11-13T09:05:00.000Z"
+              }
+            },
+            "digest": "sha-256:c3e74f2cf971559b9e689b5f5cb3d2ecaf97eb4306fc8b6e26c45b609fa6402b",
+            "untrusted": [
+              {
+                "path": "detail",
+                "text": "A current mandate credential must cover urn:op:small-business-loan; accepted roles: business-signatory."
+              },
+              {
+                "path": "needs.claim",
+                "text": "A current mandate credential must cover urn:op:small-business-loan; accepted roles: business-signatory."
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-small-business-loan-branch-1:owner-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+              "inReplyTo": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The lender’s agent sends a challenge message to The company’s agent."
     }
   ]
 }

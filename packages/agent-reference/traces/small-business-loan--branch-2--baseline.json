@@ -86,7 +86,7 @@
     }
   ],
   "generated": {
-    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
     "core": "scripted"
   },
   "standIns": [
@@ -234,9 +234,10 @@
       "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "outcome": "refuse",
-      "caption": "The accounting platform's business.accounts statement is refused and kept out of memory."
+      "verdict": "ask-more",
+      "outcome": "ask-more",
+      "reason": "method-not-accepted",
+      "caption": "Required claim: business.accounts. Accepted sources: urn:fictional:small-business-loan:accounting. Accepted methods: recorded-by-authority."
     },
     {
       "seq": 7,
@@ -602,7 +603,7 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "fitness",
-      "verdict": "ask-more",
+      "verdict": "fail",
       "refs": [
         {
           "layer": "reliance",
@@ -610,8 +611,8 @@
           "clause": "CORE-IN-13"
         }
       ],
-      "reason": "structured-form-required",
-      "caption": "Structured form required: business.accounts; request source unknown; original undefined."
+      "reason": "method-not-accepted",
+      "caption": "Required business.accounts was refused: method-not-accepted."
     },
     {
       "seq": 24,
@@ -619,10 +620,10 @@
       "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "decision",
-      "verdict": "ask-more",
-      "outcome": "ask-more",
-      "reason": "structured-form-required",
-      "caption": "Ask source unknown for business.accounts."
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "method-not-accepted",
+      "caption": "A refused source cannot authorize the action."
     }
   ]
 }

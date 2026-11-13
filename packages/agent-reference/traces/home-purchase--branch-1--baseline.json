@@ -79,7 +79,7 @@
     }
   ],
   "generated": {
-    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
     "core": "scripted"
   },
   "standIns": [
@@ -137,6 +137,17 @@
         }
       ],
       "reason": "source-not-authoritative",
+      "resolution": {
+        "question": "Is The unverified account sender an authority for deposit.account claims about The buyer?",
+        "path": [
+          {
+            "at": "The buyer's own list",
+            "kind": "own-list",
+            "says": "no rule recognises this source"
+          }
+        ],
+        "answer": "Not accepted for deposit.account."
+      },
       "caption": "The unverified account sender's deposit.account statement: The unverified account sender is not accepted as a source for this kind of claim."
     },
     {

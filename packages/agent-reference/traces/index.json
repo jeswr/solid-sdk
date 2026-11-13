@@ -879,7 +879,7 @@
       }
     },
     "configuration": "insurance-claim-photos-local",
-    "events": 111
+    "events": 92
   },
   {
     "file": "insurance-claim-photos--branch-2--baseline.json",
@@ -899,7 +899,7 @@
       }
     },
     "configuration": "insurance-claim-photos-local",
-    "events": 106
+    "events": 110
   },
   {
     "file": "insurance-quote--branch-1--baseline.json",
@@ -934,11 +934,13 @@
       "id": "introduction--branch-1",
       "title": "Being introduced to a stranger safely: One side can show only a self-made profile",
       "steps": {
-        "1": "The second person’s agent checks the signed statements."
+        "1": "The first person sends their self-made profile under their own signature.",
+        "2": "The receiving gate holds the unaccepted statement outside memory and core context.",
+        "3": "The second person’s agent proposes to consider the introduction, and the gate asks its principal about this exact reliance."
       }
     },
     "configuration": "baseline",
-    "events": 4
+    "events": 23
   },
   {
     "file": "joint-mortgage--branch-1--baseline.json",
@@ -1208,8 +1210,8 @@
       "id": "no-training-terms--branch-1",
       "title": "Content that must not be used for training: The fetching agent has no rule for \"training\"",
       "steps": {
-        "1": "The publisher’s agent checks the signed statements.",
-        "2": "The model developer’s agent sends the signed request.",
+        "1": "The fetching agent checks the publisher-signed article and every attached term.",
+        "2": "The fetching agent proposes to use the article for reading.",
         "3": "The publisher’s agent checks the message and prepares a response.",
         "4": "The publisher’s agent sends the signed request.",
         "5": "The publisher’s agent completes the approve step.",
@@ -1219,7 +1221,7 @@
       }
     },
     "configuration": "no-training-terms-local",
-    "events": 75
+    "events": 9
   },
   {
     "file": "onward-leak--branch-1--baseline.json",
@@ -1939,15 +1941,15 @@
       "id": "small-business-loan--branch-1",
       "title": "A loan for a small company: The director's role does not cover borrowing",
       "steps": {
-        "1": "The company’s agent checks the signed statements.",
-        "2": "The company’s agent sends the signed request.",
-        "3": "The company’s agent completes the organisation approve step.",
-        "4": "The lender’s agent checks the message and prepares a response.",
+        "1": "The company’s agent checks the filed accounts and the director’s genuine approval role.",
+        "2": "The company proposes its loan application.",
+        "3": "The director approves submission of this exact application.",
+        "4": "The lender checks the separate mandate credential and asks for a representative whose role covers borrowing.",
         "5": "The company’s agent checks the message and prepares a response."
       }
     },
     "configuration": "small-business-loan-local",
-    "events": 36
+    "events": 62
   },
   {
     "file": "small-business-loan--branch-2--baseline.json",
@@ -2190,7 +2192,7 @@
       }
     },
     "configuration": "baseline",
-    "events": 60
+    "events": 61
   },
   {
     "file": "wearable-data--branch-1--baseline.json",
@@ -2198,9 +2200,9 @@
       "id": "wearable-data--branch-1",
       "title": "Sharing activity data for a discount: The insurer's terms allow use in underwriting",
       "steps": {
-        "1": "The person’s agent checks the signed statements.",
-        "2": "The insurer’s agent sends the signed request.",
-        "3": "The person’s agent checks the message and prepares a response.",
+        "1": "The person’s agent checks the device maker’s weekly total.",
+        "2": "The insurer sends its signed request with terms allowing underwriting.",
+        "3": "The person’s inbound gate compares the offered terms with their policy.",
         "4": "The person’s agent sends the signed request.",
         "5": "The insurer’s agent checks the message and prepares a response.",
         "6": "The person’s agent checks the message and prepares a response.",
@@ -2208,6 +2210,6 @@
       }
     },
     "configuration": "baseline",
-    "events": 27
+    "events": 32
   }
 ]

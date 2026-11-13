@@ -197,7 +197,7 @@ describe("review item 1 — authorisation and expiry are re-decided at transmiss
     await alice.runtime.revokeMandate();
     const r = await adapter(alice, mb.transport).sendReviewed(i);
     expect(r.status).toBe("refused");
-    expect((r as { reason: string }).reason).toMatch(/^not-authorised: .*revoked/);
+    expect((r as { reason: string }).reason).toMatch(/^not-authorised: .*mandate-withdrawn/);
     // Two days later: still refused (now also expired) — and nothing ever reached the provider.
     clock.advance(2 * 86_400_000);
     const later = await adapter(alice, mb.transport).sendReviewed(i);

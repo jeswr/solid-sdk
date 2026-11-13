@@ -75,5 +75,13 @@
       ],
       "requiresRepresentation": true
     }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:visa-application",
+      "claims": [
+        "funds.balance"
+      ]
+    }
   ]
 }

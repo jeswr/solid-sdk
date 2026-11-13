@@ -16,7 +16,7 @@
       "kind": "check",
       "check": "source",
       "verdict": "fail",
-      "reason": "source-not-authoritative"
+      "reason": "source-unknown"
     },
     {
       "agent": "receiver-agent",
@@ -31,7 +31,7 @@
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "fail",
-      "reason": "source-not-authoritative"
+      "reason": "source-unknown"
     },
     {
       "agent": "receiver-agent",
@@ -47,14 +47,14 @@
       "kind": "check",
       "check": "fitness",
       "verdict": "fail",
-      "reason": "source-not-authoritative"
+      "reason": "source-unknown"
     },
     {
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
-      "reason": "source-not-authoritative"
+      "reason": "source-unknown"
     }
   ]
 }

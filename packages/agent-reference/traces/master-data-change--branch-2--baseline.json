@@ -97,7 +97,7 @@
     }
   ],
   "generated": {
-    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
     "core": "scripted"
   },
   "standIns": [
@@ -159,6 +159,17 @@
         }
       ],
       "reason": "source-not-authoritative",
+      "resolution": {
+        "question": "Is An unverified email sender an authority for bank.account-owner claims about urn:fictional:supplier?",
+        "path": [
+          {
+            "at": "The business's own list",
+            "kind": "own-list",
+            "says": "no rule recognises this source"
+          }
+        ],
+        "answer": "Not accepted for bank.account-owner."
+      },
       "caption": "An unverified email sender's bank.account-owner statement: An unverified email sender is not accepted as a source for this kind of claim."
     },
     {
@@ -716,7 +727,7 @@
           "clause": "CORE-OUT-9"
         }
       ],
-      "reason": "evidence-invalid",
+      "reason": "source-not-authoritative",
       "caption": "The proposed action relies on a statement that was not admitted."
     },
     {
@@ -727,7 +738,7 @@
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
-      "reason": "evidence-invalid",
+      "reason": "source-not-authoritative",
       "caption": "Unaccepted support cannot authorize an action."
     }
   ]

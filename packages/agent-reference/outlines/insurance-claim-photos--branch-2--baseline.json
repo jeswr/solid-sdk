@@ -707,7 +707,67 @@
       "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "decision",
+      "verdict": "ask-more",
+      "reason": "source-not-authoritative"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
       "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
     },
     {
       "agent": "receiver-agent",
@@ -721,16 +781,16 @@
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
-      "check": "evidence",
+      "check": "fitness",
       "verdict": "fail",
-      "reason": "evidence-invalid"
+      "reason": "source-not-authoritative"
     },
     {
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
-      "reason": "evidence-invalid"
+      "reason": "source-not-authoritative"
     }
   ]
 }

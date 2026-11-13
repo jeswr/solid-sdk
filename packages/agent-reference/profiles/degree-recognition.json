@@ -75,5 +75,13 @@
       ],
       "requiresRepresentation": true
     }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:degree-recognition",
+      "claims": [
+        "education.degree"
+      ]
+    }
   ]
 }

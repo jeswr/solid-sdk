@@ -74,5 +74,16 @@
       ],
       "requiresRepresentation": true
     }
+  ],
+  "personMayRelyOn": [
+    "identity.verified"
+  ],
+  "actionClaims": [
+    {
+      "action": "read",
+      "claims": [
+        "identity.verified"
+      ]
+    }
   ]
 }

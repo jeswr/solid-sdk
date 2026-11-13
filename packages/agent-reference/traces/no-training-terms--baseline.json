@@ -66,7 +66,7 @@
     }
   ],
   "generated": {
-    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "commit": "715021520c07c25190f9d745d3a00ed46181e233",
     "core": "scripted"
   },
   "standIns": [
@@ -77,6 +77,10 @@
     {
       "what": "Publisher content and fetching service",
       "replacedBy": "Original fictional article bytes with source-signed terms and a local reading adapter; no training or hidden downstream compliance is asserted"
+    },
+    {
+      "what": "Publisher content fetch in the unknown-term branch",
+      "replacedBy": "The publisher signs the literal article, its digest and its reading permission and training prohibition together; the fetching agent admits that protected source response directly, without a simulated network fetch"
     }
   ],
   "events": [

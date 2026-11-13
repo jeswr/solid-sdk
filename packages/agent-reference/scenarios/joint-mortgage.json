@@ -267,7 +267,7 @@
       "expect": {
         "outcome": "stop",
         "check": "mandate",
-        "reason": "mandate-invalid"
+        "reason": "mandate-withdrawn"
       },
       "outline": [
         {
@@ -440,14 +440,14 @@
           "kind": "check",
           "check": "mandate",
           "verdict": "fail",
-          "reason": "mandate-invalid"
+          "reason": "mandate-withdrawn"
         },
         {
           "agent": "owner-agent",
           "part": "outbound-gate",
           "kind": "decision",
           "verdict": "fail",
-          "reason": "mandate-invalid"
+          "reason": "mandate-withdrawn"
         }
       ],
       "catalogueExpected": {

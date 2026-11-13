@@ -167,7 +167,13 @@
           "target": "urn:op:introduction:request"
         }
       ],
-      "withApproval": []
+      "withApproval": [
+        {
+          "type": "permission",
+          "action": "read",
+          "target": "urn:op:introduction"
+        }
+      ]
     }
   ],
   "script": [],
@@ -184,25 +190,136 @@
         },
         "script": [
           {
-            "id": "check-self-profile",
-            "agent": "receiver-agent",
-            "type": "admit",
-            "statements": [
+            "id": "show-self-profile",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "receiver-agent",
+            "kind": "invoke",
+            "operation": "urn:op:introduction",
+            "contents": {},
+            "intent": {
+              "action": "distribute",
+              "operation": "urn:op:introduction",
+              "target": "urn:op:introduction",
+              "recipient": "urn:fictional:introduction:receiver",
+              "purpose": "urn:purpose:introduction",
+              "parameters": {}
+            },
+            "evidence": [
               "self-profile"
             ],
             "purpose": "urn:purpose:introduction"
+          },
+          {
+            "id": "check-self-profile",
+            "agent": "receiver-agent",
+            "type": "receive",
+            "from": "owner-agent"
+          },
+          {
+            "id": "consider-introduction",
+            "agent": "receiver-agent",
+            "type": "effect",
+            "intent": {
+              "action": "read",
+              "operation": "urn:op:introduction",
+              "target": "urn:op:introduction",
+              "purpose": "urn:purpose:introduction",
+              "conversation": "urn:scenario:introduction:task",
+              "parameters": {
+                "support": [
+                  "urn:scenario:introduction:self-profile"
+                ]
+              }
+            },
+            "params": {},
+            "activityType": "urn:activity:consider-introduction"
           }
         ],
         "traceSteps": {
-          "1": "The second person’s agent checks the signed statements."
+          "1": "The first person sends their self-made profile under their own signature.",
+          "2": "The receiving gate holds the unaccepted statement outside memory and core context.",
+          "3": "The second person’s agent proposes to consider the introduction, and the gate asks its principal about this exact reliance."
         }
       },
       "expect": {
-        "outcome": "refuse",
-        "check": "source",
-        "reason": "source-not-authoritative"
+        "outcome": "ask-principal",
+        "check": "limits-approval",
+        "reason": "method-not-accepted"
       },
       "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
         {
           "agent": "receiver-agent",
           "part": "inbound-gate",
@@ -224,15 +341,67 @@
           "part": "inbound-gate",
           "kind": "check",
           "check": "authority",
-          "verdict": "not-applicable",
-          "reason": "no-action"
+          "verdict": "pass",
+          "reason": "authority-valid"
         },
         {
           "agent": "receiver-agent",
           "part": "inbound-gate",
           "kind": "decision",
-          "verdict": "fail",
-          "reason": "source-not-authoritative"
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "not-applicable",
+          "reason": "no-principal"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "ask-principal",
+          "reason": "method-not-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "method-not-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "principal",
+          "kind": "ask-principal",
+          "reason": "method-not-accepted"
         }
       ],
       "catalogueExpected": {

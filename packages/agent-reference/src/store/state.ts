@@ -193,6 +193,9 @@ export interface RuntimeState {
   >;
   trustRefusals: Record<string, true>;
   statementRefusals: Record<string, string>;
+  /** Gate records only, excluded from facts, domain memory and core context. */
+  relianceHolds: Record<string, import("../gates/common.js").RelianceHold>;
+  relianceBindings: Record<string, string>;
   paymentTotals: Record<string, number>;
   paymentReleases: Record<string, true>;
   paymentReservations: Record<string, { digest: string; period: string; amountMinor: number }>;
@@ -235,6 +238,8 @@ export function emptyState(): RuntimeState {
     organisationApprovals: {},
     paymentTotals: {},
     statementRefusals: {},
+    relianceHolds: {},
+    relianceBindings: {},
     trustPins: [],
     trustHolds: {},
     trustRefusals: {},

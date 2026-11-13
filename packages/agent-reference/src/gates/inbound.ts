@@ -6,10 +6,9 @@ import { isClaimEvidence, verifySelectivePresentation } from "../mechanisms/sele
  * authority, terms, fitness, in that order. Each check returns its own verdict record and
  * emits its own trace event; the gate then admits, asks for more, or refuses.
  *
- * The runtime calls the gate at the points where the pilot already made these decisions,
- * so its behavior is unchanged: the integrity and authority code below is the pilot's own,
- * moved here; the source pre-check is new and observational (the pilot's domain handlers
- * still decide what to do with a claim the gate did not accept).
+ * The runtime calls the gate before a handler sees the message. A rejected statement stays
+ * outside facts and core context; a required curable claim produces a gate-built request
+ * for replacement evidence, while an optional rejected claim is removed from the message.
  */
 
 import { z } from "zod";
@@ -45,7 +44,9 @@ import type { InboundCheck, InboundOutcome, TraceEventInput, Verdict } from "../
 import type { Resolution } from "../trust/resolver.js";
 import {
   type AdmittedFact,
+  CURABLE_CLAIM_FAILURES,
   checkRefs,
+  claimRequest,
   defaultName,
   type GateContext,
   type GateMemory,
@@ -55,7 +56,7 @@ import {
   refsFor,
   resolutionView,
 } from "./common.js";
-import { evaluateItemTerms, fitnessOf, termsSummary } from "./quality.js";
+import { acceptsOfferedTerms, evaluateItemTerms, fitnessOf, termsSummary } from "./quality.js";
 
 export interface InboundDeps {
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
@@ -617,13 +618,6 @@ export class InboundGate {
       (s.derivation as JsonObject).assurance === "recomputed"
     )
       return { verdict: "pass", reason: "source-accepted", claim: s };
-    const permittedSources = this.deps.gate.claimSources?.[s.claimType];
-    if (permittedSources && !permittedSources.includes(s.issuer))
-      return {
-        verdict: "fail",
-        reason: "source-not-authoritative",
-        claim: s,
-      };
     const about = s.subject ?? subject;
     const input = {
       evaluator: this.deps.identity.actor,
@@ -634,6 +628,14 @@ export class InboundGate {
     };
     const resolution = this.deps.gate.resolver?.resolveSource(input);
     const outcome = resolution?.outcome ?? this.deps.trust.assessSource(input).outcome;
+    const permittedSources = this.deps.gate.claimSources?.[s.claimType];
+    if (outcome !== "no-route" && permittedSources && !permittedSources.includes(s.issuer))
+      return {
+        verdict: "fail",
+        reason: "source-not-authoritative",
+        claim: s,
+        ...(resolution ? { resolution } : {}),
+      };
     const verdict: Verdict =
       outcome === "accepted" ? "pass" : outcome === "unresolved" ? "indeterminate" : "fail";
     const reason =
@@ -690,11 +692,46 @@ export class InboundGate {
     });
   }
 
+  /** Refusals are gate records, never core context or admitted facts. */
+  private failedClaim(c: Claim, reason: string, task: string): void {
+    this.deps.memory.refusals[
+      `${this.deps.gate.taskId ?? task}|${c.claimType}|${c.subject ?? ""}`
+    ] = reason;
+    this.deps.memory.refusals[`statement:${c.id ?? digestOf(c)}`] = reason;
+    const holdKey = `${this.deps.gate.taskId ?? task}|${c.id ?? digestOf(c)}`;
+    delete this.deps.memory.relianceHolds[holdKey];
+    if (
+      this.deps.gate.personMayRelyOn?.includes(c.claimType) &&
+      ["source-not-authoritative", "source-unknown", "method-not-accepted"].includes(reason) &&
+      ["self-reported", "reported-by-subject"].includes(c.method ?? "") &&
+      c.issuer === c.subject
+    ) {
+      const taskId = this.deps.gate.taskId ?? task;
+      this.deps.memory.relianceHolds[`${taskId}|${c.id ?? digestOf(c)}`] = {
+        task: taskId,
+        statement: structuredClone(c) as JsonObject,
+        digest: digestOf(c),
+        reason,
+      };
+    }
+  }
+
+  requiredFailure(c: Claim, reason: string, operation?: string): string | undefined {
+    if (!operation || !CURABLE_CLAIM_FAILURES.has(reason)) return undefined;
+    if (
+      !this.deps.gate.actionClaims?.some(
+        (r) => r.action === operation && r.claims.includes(c.claimType),
+      )
+    )
+      return undefined;
+    return claimRequest(this.deps.gate, c.claimType);
+  }
+
   /** Source, terms and fitness of one claim: one event each. Returns whether all passed. */
   async claimChecks(
     item: EvidenceItem,
     subject: Iri | undefined,
-    need: { purpose?: Iri; retentionDays?: number; task: string },
+    need: { purpose?: Iri; retentionDays?: number; task: string; taskId?: string },
     phase: "source" | "terms" | "fitness",
     cache: Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>,
     termsOk: Map<string, boolean> = new Map(),
@@ -719,6 +756,7 @@ export class InboundGate {
       });
       if (!derived.ok) {
         cache.set(item.value, { ...r, verdict: "fail", reason: derived.reason });
+        this.failedClaim(c, derived.reason, need.taskId ?? need.task);
         this.verdictEvent(
           "source",
           "fail",
@@ -760,6 +798,7 @@ export class InboundGate {
           (permitted && !permitted.includes(String(input.issuer)))
         ) {
           cache.set(item.value, { ...r, verdict: "fail", reason: "source-not-authoritative" });
+          this.failedClaim(c, "source-not-authoritative", need.taskId ?? need.task);
           this.verdictEvent(
             "source",
             "fail",
@@ -785,6 +824,8 @@ export class InboundGate {
           ...(r.resolution ? { resolution: resolutionView(r.resolution) } : {}),
         },
       );
+      if (c && r.verdict !== "pass")
+        this.failedClaim(c, r.reason ?? "source-not-authoritative", need.taskId ?? need.task);
       return r.verdict === "pass";
     }
     if (!c || r.verdict !== "pass") return false;
@@ -808,6 +849,8 @@ export class InboundGate {
           rule: { id: terms?.policy?.id ?? "default-terms", text: t.text },
         },
       );
+      if (t.verdict !== "pass")
+        this.failedClaim(c, t.reason ?? "terms-not-acceptable", need.taskId ?? need.task);
       termsOk.set(item.value, t.verdict === "pass");
       return t.verdict === "pass";
     }
@@ -834,6 +877,7 @@ export class InboundGate {
             "Assurance cannot raise the quality of the original input's method or time.",
             { reason: basis.reason },
           );
+          this.failedClaim(c, basis.reason ?? "method-not-accepted", need.taskId ?? need.task);
           return false;
         }
       }
@@ -851,7 +895,11 @@ export class InboundGate {
             : `No reliance rule covers ${label}.`,
       { ...(f.reason ? { reason: f.reason } : {}), ...(f.rule ? { rule: f.rule } : {}) },
     );
-    if (termsOk.get(item.value) !== true || f.verdict !== "pass") return false;
+    if (termsOk.get(item.value) !== true || f.verdict !== "pass") {
+      if (f.verdict !== "pass")
+        this.failedClaim(c, f.reason ?? "missing-context", need.taskId ?? need.task);
+      return false;
+    }
     const completeness = this.deps.gate.reliance?.rules.find(
       (r) => r.claimType === c.claimType,
     )?.completeness;
@@ -873,6 +921,7 @@ export class InboundGate {
         `An accepted completeness statement for ${c.claimType}, its subject and period is required.`,
         { reason: "completeness-not-established" },
       );
+      this.failedClaim(c, "completeness-not-established", need.taskId ?? need.task);
       this.claimFailure = { outcome: "ask-more", reason: "completeness-not-established" };
       return false;
     }
@@ -909,6 +958,7 @@ export class InboundGate {
           `Need ${corroboration.sources} accepted independent sources for ${c.claimType}.`,
           { reason: "completeness-not-established" },
         );
+        this.failedClaim(c, "completeness-not-established", need.taskId ?? need.task);
         this.claimFailure = { outcome: "ask-more", reason: "completeness-not-established" };
         return false;
       }
@@ -929,6 +979,9 @@ export class InboundGate {
       ...(terms ? { terms } : {}),
     };
     this.deps.memory.facts.set(fact.id, fact);
+    delete this.deps.memory.relianceHolds[
+      `${this.deps.gate.taskId ?? need.taskId ?? need.task}|${fact.id}`
+    ];
     return true;
   }
 
@@ -983,6 +1036,7 @@ export class InboundGate {
       readonly task: string;
       readonly purpose?: Iri;
       readonly taskId?: Iri;
+      readonly operation?: Iri;
     },
   ): Promise<{ admitted: number; refused: number }> {
     let admitted = 0;
@@ -1050,10 +1104,17 @@ export class InboundGate {
         (await this.claimChecks(ev, opts.subject, opts, "fitness", cache, termsOk));
       if (!ok) {
         refused++;
+        const reason =
+          this.getClaimFailure()?.reason ??
+          (r.claim
+            ? this.deps.memory.refusals[`statement:${r.claim.id ?? digestOf(r.claim)}`]
+            : r.reason);
+        const request =
+          r.claim && reason ? this.requiredFailure(r.claim, reason, opts.operation) : undefined;
         this.decisionEvent(
-          this.getClaimFailure()?.outcome ?? "refuse",
-          `${label} is refused and kept out of memory.`,
-          this.getClaimFailure()?.reason ?? (sourceOk ? undefined : r.reason),
+          request ? "ask-more" : (this.getClaimFailure()?.outcome ?? "refuse"),
+          request ?? `${label} is refused and kept out of memory.`,
+          reason,
         );
         continue;
       }
@@ -1153,6 +1214,7 @@ export class Admission {
           ? msg.body.purpose
           : asked;
     return {
+      taskId: conv.id,
       ...(purpose ? { purpose } : {}),
       ...(typeof t?.retentionDays === "number" ? { retentionDays: t.retentionDays } : {}),
       task:
@@ -1179,7 +1241,7 @@ export class Admission {
       const ok = await this.gate.claimChecks(
         item,
         msg.from.onBehalfOf,
-        { task: "" },
+        { task: "", taskId: msg.conversation },
         "source",
         this.claimCache,
       );
@@ -1245,6 +1307,15 @@ export class Admission {
       return rep;
     }
     const ok = rep.outcome === "accepted";
+    if (!ok && rep.reason === "representation-out-of-scope") {
+      this.gate.verdictEvent(
+        "authority",
+        "ask-more",
+        "A current mandate credential covering this operation and its required role is needed.",
+        { reason: rep.reason },
+      );
+      return rep;
+    }
     const need = handler.requiredApproval;
     if (ok && need) {
       // CORE-IN-8: the mandate is verified, but this operation needs a stronger approval,
@@ -1335,7 +1406,7 @@ export class Admission {
   async complete(
     conv: ConversationState,
     msg: AnyMessage,
-  ): Promise<{ ok: true } | { ok: false; reason: ReasonCode; detail: string }> {
+  ): Promise<{ ok: true } | { ok: false; reason: ReasonCode; detail: string; askMore?: boolean }> {
     if (this.decided) return { ok: true };
     await this.source(msg);
     if (!this.done.has("authority")) {
@@ -1400,6 +1471,14 @@ export class Admission {
           this.claimCache,
           termsOk,
         );
+      for (const item of passed) {
+        const c = this.claimCache.get(item.value)?.claim;
+        const reason = c && this.deps.memory.refusals[`statement:${c.id ?? digestOf(c)}`];
+        if (termsOk.get(item.value) !== true && reason === "unsupported-term") {
+          this.refuse(reason, "An attached term has no supported rule.");
+          return { ok: false, reason, detail: "An attached term has no supported rule." };
+        }
+      }
       this.gate.setCorroborationPool(
         passed
           .filter((item) => termsOk.get(item.value) === true)
@@ -1420,6 +1499,16 @@ export class Admission {
         else if (r?.claim) admitted.push(r.claim);
       }
       this.admittedClaims = admitted;
+    }
+    for (const r of this.claimCache.values()) {
+      if (!r.claim || this.admittedClaims.includes(r.claim)) continue;
+      const reason = this.deps.memory.refusals[`statement:${r.claim.id ?? digestOf(r.claim)}`];
+      const detail = reason && this.gate.requiredFailure(r.claim, reason, conv.operation?.id);
+      if (detail) {
+        this.outcome = "ask-more";
+        this.gate.decisionEvent("ask-more", detail, reason);
+        return { ok: false, reason: reason as ReasonCode, detail, askMore: true };
+      }
     }
     this.outcome = "admit";
     this.gate.decisionEvent(
@@ -1449,6 +1538,45 @@ export class Admission {
         reason: "no-agreement",
       });
       return { verdict: "fail", reason: "no-agreement" };
+    }
+    const offered = msg.kind === "invoke" ? msg.body.input.terms : undefined;
+    if (offered !== undefined) {
+      const evaluated = evaluateItemTerms(offered as unknown as ItemTerms, {
+        agent: this.deps.identity.actor,
+        action: "use",
+        target: "",
+        purpose: msg.kind === "invoke" ? msg.body.purpose : undefined,
+        at: this.deps.now(),
+      });
+      const unsupported =
+        evaluated.reason === "unsupported-term" || evaluated.reason === "indeterminate-policy";
+      const acceptable =
+        !unsupported &&
+        (!this.deps.gate.termsAcceptance ||
+          acceptsOfferedTerms(
+            offered as unknown as ItemTerms,
+            this.deps.gate.termsAcceptance.purposes,
+          ));
+      this.gate.verdictEvent(
+        "terms",
+        acceptable ? "pass" : unsupported ? "indeterminate" : "fail",
+        acceptable
+          ? "The principal accepts the uses in the request's terms."
+          : "The request's terms allow uses the principal does not accept.",
+        {
+          reason: acceptable
+            ? "terms-acceptable"
+            : unsupported
+              ? "unsupported-term"
+              : "terms-not-acceptable",
+        },
+      );
+      if (!acceptable)
+        return {
+          verdict: "fail",
+          reason: unsupported ? "unsupported-term" : "terms-not-acceptable",
+        };
+      if (!hasClaims) return { verdict: "pass" };
     }
     if (hasClaims) return { verdict: "pass" }; // per-claim terms events follow
     if (

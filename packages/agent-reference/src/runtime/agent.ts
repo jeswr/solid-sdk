@@ -64,7 +64,11 @@ import {
   referencesIn,
   verifyResourceGrant,
 } from "../mechanisms/references.js";
-import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
+import {
+  isClaimEvidence,
+  unverifiedEvidenceClaim,
+  verifySelectivePresentation,
+} from "../mechanisms/selective.js";
 import { TYP, verifyStatement } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import { CONFIGURATIONS, configurationById, POLICY_PROFILE } from "../profile/configurations.js";
@@ -116,6 +120,7 @@ import {
   type OperationHandler,
   type OutboundPlan,
   operationKey,
+  type RefusedEvidence,
 } from "./operations.js";
 import {
   type CompactionReport,
@@ -409,10 +414,22 @@ export class AgentRuntime {
       ...(options.gates ?? {}),
       carriage: () => this.carriage,
     };
+    if (
+      gate.actionClaims?.some(
+        (rule) =>
+          ["pay", "distribute"].includes(rule.action) &&
+          rule.claims.some((kind) => gate.personMayRelyOn?.includes(kind)),
+      )
+    )
+      throw new Error(
+        "personMayRelyOn cannot support payment or unrestricted personal-data disclosure",
+      );
     const memory = new GateMemory(
       this.state.contextItems,
       this.state.knownIdentifiers,
       this.state.statementRefusals,
+      this.state.relianceHolds,
+      this.state.relianceBindings,
     );
     this.gateMemory = memory;
     memory.rememberIdentifiers("*", {
@@ -520,6 +537,7 @@ export class AgentRuntime {
         if (
           intent.action !== "pay" &&
           !gate.personDecisions?.some((p) => p.action === intent.action) &&
+          !this.state.relianceBindings[actionDigest(intent)] &&
           !this.state.organisationApprovals[actionDigest(intent)]?.length
         )
           return;
@@ -599,7 +617,13 @@ export class AgentRuntime {
       demandedApproval: (intent) => {
         if (!intent.recipient) return undefined;
         const needs = this.getDomain(`_challenge:${intent.conversation}`);
-        if (!needs || typeof needs !== "object" || Array.isArray(needs)) return undefined;
+        if (
+          !needs ||
+          typeof needs !== "object" ||
+          Array.isArray(needs) ||
+          typeof needs.approval !== "string"
+        )
+          return undefined;
         const given = this.state.approvals[actionDigest(intent)];
         const approved =
           given?.decision === "approve" && Date.parse(given.validUntil) > Date.parse(this.now());
@@ -1057,6 +1081,7 @@ export class AgentRuntime {
       readonly task: string;
       readonly purpose?: Iri;
       readonly taskId?: Iri;
+      readonly operation?: Iri;
     },
   ) {
     return this.exclusive(async () => {
@@ -2613,6 +2638,11 @@ export class AgentRuntime {
       const askMore = this.admission?.askedFor;
       if (askMore) return this.replyChallenge(conv, msg, askMore);
       if (rep && rep.outcome !== "accepted") {
+        if (rep.reason === "representation-out-of-scope") {
+          const detail = `A current mandate credential must cover ${handler.description.id}; accepted roles: ${this.options.gates?.organizations?.policy.requiredRoles[handler.description.id]?.join(", ") ?? "a representative authorized for this operation"}.`;
+          this.inbound.decisionEvent("ask-more", detail, rep.reason);
+          return this.replyClaimChallenge(conv, msg, rep.reason, detail);
+        }
         return this.replyClose(
           conv,
           msg,
@@ -2627,7 +2657,7 @@ export class AgentRuntime {
     const reply = await handler.onInvoke(
       this.context(conv, msg, rep),
       msg.body,
-      msg.evidence ?? [],
+      this.coreEvidence(msg.evidence ?? []),
     );
     return this.applyReply(conv, msg, reply, handler);
   }
@@ -2639,7 +2669,11 @@ export class AgentRuntime {
     const refused = await this.admitToCore(conv, msg);
     if (refused) return refused;
     if (!handler?.onDeliver) return { disposition: "accepted" as const, outbound: [] };
-    const reply = await handler.onDeliver(this.context(conv, msg), msg.body, msg.evidence ?? []);
+    const reply = await handler.onDeliver(
+      this.context(conv, msg),
+      msg.body,
+      this.coreEvidence(msg.evidence ?? []),
+    );
     return this.applyReply(this.mustConversation(conv.id), msg, reply, handler);
   }
 
@@ -2665,7 +2699,10 @@ export class AgentRuntime {
   /** The inbound gate's remaining checks and decision, right before the core sees `msg`. */
   private async admitToCore(conv: ConversationState, msg: AnyMessage, entersCore = true) {
     const r = await this.admission?.complete(conv, msg);
-    if (r && !r.ok) return this.replyClose(conv, msg, "refuse", r.reason, r.detail);
+    if (r && !r.ok) {
+      if (r.askMore) return this.replyClaimChallenge(conv, msg, r.reason, r.detail);
+      return this.replyClose(conv, msg, "refuse", r.reason, r.detail);
+    }
     if (!entersCore) return undefined;
     const task = this.options.gates?.taskId ?? conv.id;
     if (msg.kind === "invoke")
@@ -2686,18 +2723,6 @@ export class AgentRuntime {
         const digest = digestOf(claim);
         if (fact && fact.digest === digest)
           this.gateMemory.enter(task, { ...fact, kind: "statement", accepted: true, digest });
-        else
-          this.gateMemory.enter(task, {
-            id: typeof claim.id === "string" ? claim.id : digest,
-            digest,
-            kind: "statement",
-            accepted: false,
-            label: "Unaccepted statement shown as untrusted data",
-            identifiers: identifiersIn(claim),
-            claimType: typeof claim.claimType === "string" ? claim.claimType : "unknown",
-            source: typeof claim.issuer === "string" ? claim.issuer : "unknown",
-            subject: typeof claim.subject === "string" ? claim.subject : "unknown",
-          });
       } catch {
         /* An unaccepted claim is never a fact. The message below retains its labels. */
       }
@@ -3040,8 +3065,9 @@ export class AgentRuntime {
     }
     const revoked = this.mandate ? this.isRevoked(this.mandate) : false;
     let decision = evaluateIntent({
-      loaded: revoked ? undefined : this.mandate,
-      loadFailure: revoked ? "revoked by owner (persisted revocation)" : this.mandateFailure,
+      loaded: this.mandate,
+      withdrawn: revoked,
+      loadFailure: this.mandateFailure,
       intent,
       decider: this.identity.actor,
       at,
@@ -4938,6 +4964,31 @@ export class AgentRuntime {
     return { disposition: "accepted" as const, outbound: [out], ...local };
   }
 
+  private async replyClaimChallenge(
+    conv: ConversationState,
+    msg: AnyMessage,
+    reason: ReasonCode,
+    detail: string,
+  ) {
+    const out = await this.emit(
+      conv.id,
+      "challenge",
+      {
+        ref: msg.id,
+        reason,
+        detail,
+        needs: {
+          claim: detail,
+          id: this.newId(),
+          nonce: this.newId(),
+          expiresAt: new Date(this.clock().getTime() + 5 * 60_000).toISOString(),
+        },
+      },
+      { inReplyTo: msg.id },
+    );
+    return { disposition: "accepted" as const, outbound: [out], reason, detail };
+  }
+
   /** Answer a request with a challenge: what more would let it be admitted (CORE-IN-8). */
   private async replyChallenge(
     conv: ConversationState,
@@ -4980,6 +5031,82 @@ export class AgentRuntime {
 
   // ---------------------------------------------------------------- helpers
 
+  private coreEvidence(items: readonly EvidenceItem[]): EvidenceItem[] {
+    return items.filter((item) => {
+      if (!isClaimEvidence(item)) return true;
+      try {
+        const claim = unverifiedEvidenceClaim(item);
+        return this.gateMemory.facts.get(String(claim.id))?.digest === digestOf(claim);
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  /**
+   * What the gate tells a handler about evidence it did not admit: whether the signature
+   * verified, the labels of a statement whose signature did, and the gate's reason. The
+   * claim's value is never included.
+   */
+  private async refusedEvidence(
+    conversation: Iri,
+    items: readonly EvidenceItem[],
+  ): Promise<RefusedEvidence[]> {
+    const kept = new Set(this.coreEvidence(items));
+    const out: RefusedEvidence[] = [];
+    for (const item of items) {
+      if (kept.has(item) || !isClaimEvidence(item)) continue;
+      let protectedObject: string;
+      let valid: boolean;
+      if (item.format === "selective-disclosure+jws") {
+        const check = await verifySelectivePresentation(
+          item,
+          this.trust,
+          this.now(),
+          this.identity.actor,
+        );
+        protectedObject = check.verification.protectedObject;
+        valid = check.verification.outcome === "valid";
+      } else {
+        const v = await verifyCompact(item.value, {
+          resolve: this.trust.resolver("issuer"),
+          typ: TYP.statement,
+          allowedAlgs: ["EdDSA", "ES256"],
+          limits: this.limits,
+        });
+        protectedObject = v.digest;
+        valid = v.outcome === "valid";
+      }
+      let claim: JsonObject | undefined;
+      try {
+        claim = valid ? unverifiedEvidenceClaim(item) : undefined;
+      } catch {
+        claim = undefined;
+      }
+      if (!claim) {
+        out.push({ integrity: "invalid", protectedObject, reason: "evidence-invalid" });
+        continue;
+      }
+      const reason =
+        this.gateMemory.refusals[`statement:${String(claim.id ?? digestOf(claim))}`] ??
+        "evidence-invalid";
+      out.push({
+        integrity: "valid",
+        protectedObject,
+        reason,
+        ...(typeof claim.id === "string" ? { id: claim.id as Iri } : {}),
+        ...(typeof claim.claimType === "string" ? { claimType: claim.claimType } : {}),
+        ...(typeof claim.issuer === "string" ? { issuer: claim.issuer as Iri } : {}),
+        ...(reason === "source-not-authoritative" || reason === "source-unknown"
+          ? { sourceAuthority: "not-accepted" as const }
+          : {}),
+      });
+    }
+    // The summaries are gate output: a receipt may carry their labels back to the sender.
+    this.gateMemory.rememberIdentifiers(conversation, out as unknown as Json);
+    return out;
+  }
+
   private context(
     conv: ConversationState,
     message?: AnyMessage,
@@ -4991,12 +5118,15 @@ export class AgentRuntime {
       peer: conv.peer,
       conversation: conv,
       now: this.now(),
-      ...(message ? { message } : {}),
+      ...(message
+        ? { message: { ...message, evidence: this.coreEvidence(message.evidence ?? []) } }
+        : {}),
       ...(message && this.kidOf(message) ? { signerKid: this.kidOf(message) as string } : {}),
       ...(representation ? { representation } : {}),
       trust: this.trust,
       mintIdentifier: () => this.newId(),
       admittedStatement: (id, digest) => this.gateMemory.facts.get(id)?.digest === digest,
+      refusedEvidence: () => this.refusedEvidence(conv.id, message?.evidence ?? []),
       evaluateRule: (rule, subject, purpose) => {
         const result = evaluateRule({
           rules: this.options.gates?.rules ?? [],

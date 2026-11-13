@@ -208,7 +208,8 @@
             "statements": [
               "degree"
             ],
-            "purpose": "urn:purpose:degree-recognition"
+            "purpose": "urn:purpose:degree-recognition",
+            "operation": "urn:op:degree-recognition"
           }
         ],
         "traceSteps": {
@@ -216,7 +217,7 @@
         }
       },
       "expect": {
-        "outcome": "refuse",
+        "outcome": "ask-more",
         "check": "source",
         "reason": "source-unknown"
       },
@@ -249,13 +250,13 @@
           "agent": "receiver-agent",
           "part": "inbound-gate",
           "kind": "decision",
-          "verdict": "fail",
+          "verdict": "ask-more",
           "reason": "source-unknown"
         }
       ],
       "catalogueExpected": {
         "outcome": "ask-more",
-        "reason": "lookup-failed"
+        "reason": "source-unknown"
       }
     }
   ],

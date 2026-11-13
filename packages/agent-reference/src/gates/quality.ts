@@ -96,6 +96,98 @@ export interface TermsVerdict {
   readonly text: string;
 }
 
+/** Validate the entire attached policy before selecting matching rules (UNS-15). */
+export function unsupportedTerms(terms: ItemTerms): boolean {
+  const p = terms.policy;
+  if (
+    Object.keys(terms).some(
+      (key) => !["policy", "inherited", "deleteWithinDays", "recipientMustBe"].includes(key),
+    )
+  )
+    return true;
+  const actions = new Set(["pay", "use", "read", "distribute", "compensate", "transfer"]);
+  const operands = new Set(["dateTime", "purpose", "recipient"]);
+  const operators = new Set(["eq", "neq", "isAnyOf", "isNoneOf", "lt", "lteq", "gt", "gteq"]);
+  if (p.conflict && p.conflict !== "prohibit") return true;
+  if (p.type && !["Set", "Offer", "Agreement"].includes(p.type)) return true;
+  if (
+    Object.keys(p).some(
+      (key) =>
+        ![
+          "id",
+          "type",
+          "assigner",
+          "assignee",
+          "conflict",
+          "permissions",
+          "prohibitions",
+          "obligations",
+        ].includes(key),
+    )
+  )
+    return true;
+  for (const r of [...(p.permissions ?? []), ...(p.prohibitions ?? [])]) {
+    if (!actions.has(String(r.action))) return true;
+    if (r.type && !["permission", "prohibition"].includes(r.type)) return true;
+    if (
+      Object.keys(r).some(
+        (key) =>
+          !["id", "type", "action", "target", "assignee", "assigner", "constraints"].includes(key),
+      )
+    )
+      return true;
+    for (const c of r.constraints ?? [])
+      if (
+        !operands.has(c.leftOperand) ||
+        !operators.has(c.operator) ||
+        Object.keys(c).some((key) => !["leftOperand", "operator", "rightOperand"].includes(key))
+      )
+        return true;
+  }
+  for (const duty of p.obligations ?? []) {
+    if (
+      duty.action !== "delete" ||
+      !duty.constraints?.length ||
+      Object.keys(duty).some(
+        (key) => !["id", "type", "action", "target", "constraints"].includes(key),
+      )
+    )
+      return true;
+    for (const c of duty.constraints)
+      if (
+        c.leftOperand !== "elapsedTime" ||
+        c.operator !== "lteq" ||
+        !/^P\d+D$/.test(String(c.rightOperand)) ||
+        Object.keys(c).some((key) => !["leftOperand", "operator", "rightOperand"].includes(key))
+      )
+        return true;
+  }
+  return false;
+}
+
+/** Can the principal accept every use the request's offered terms would authorize? */
+export function acceptsOfferedTerms(terms: ItemTerms, allowedPurposes: readonly string[]): boolean {
+  for (const r of terms.policy.permissions ?? []) {
+    const purposes = (r.constraints ?? []).filter((c) => c.leftOperand === "purpose");
+    if (
+      !purposes.length ||
+      !purposes.some((c) => {
+        const values = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+        return (
+          ["eq", "isAnyOf"].includes(c.operator) &&
+          values.length > 0 &&
+          values.every((p) => allowedPurposes.includes(String(p)))
+        );
+      })
+    )
+      return false;
+  }
+  return (
+    !terms.inherited ||
+    terms.inherited.every((i) => !!i.terms && acceptsOfferedTerms(i.terms, allowedPurposes))
+  );
+}
+
 /** Plain words for an item's terms. */
 export function termsSummary(terms: ItemTerms | undefined): string {
   if (!terms) return "no terms attached";
@@ -151,6 +243,12 @@ export function evaluateItemTerms(
       verdict: "indeterminate",
       reason: "indeterminate-policy",
       text: "The attached terms are not understood.",
+    };
+  if (terms && unsupportedTerms(terms))
+    return {
+      verdict: "indeterminate",
+      reason: "unsupported-term",
+      text: "An attached term, prohibition or duty has no supported rule.",
     };
   if (!terms && need.action === "distribute")
     return {

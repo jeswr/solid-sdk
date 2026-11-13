@@ -93,8 +93,16 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
     },
     {
       "agent": "receiver-agent",
@@ -149,37 +157,74 @@
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
-      "verdict": "not-applicable",
-      "reason": "no-data"
-    },
-    {
-      "agent": "owner-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "fitness",
-      "verdict": "not-applicable",
-      "reason": "no-claims"
+      "verdict": "fail",
+      "reason": "terms-not-acceptable"
     },
     {
       "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "pass"
+      "verdict": "fail",
+      "reason": "terms-not-acceptable"
     },
     {
       "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
-      "verdict": "fail",
-      "reason": "not-authorised"
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
     },
     {
       "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "not-authorised"
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
     }
   ]
 }

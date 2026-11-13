@@ -131,6 +131,14 @@
         "business.accounts",
         "business.tax-filing"
       ]
+    },
+    {
+      "action": "urn:op:small-business-loan",
+      "claims": [
+        "business.accounts",
+        "business.tax-filing",
+        "organization.role"
+      ]
     }
   ],
   "standIns": [

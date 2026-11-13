@@ -56,6 +56,36 @@
     },
     "input.requestedPurpose": {
       "type": "identifier"
+    },
+    "input.terms.policy.id": {
+      "type": "identifier"
+    },
+    "input.terms.policy.permissions.*.type": {
+      "type": "code",
+      "values": [
+        "permission"
+      ]
+    },
+    "input.terms.policy.permissions.*.action": {
+      "type": "code",
+      "values": [
+        "use"
+      ]
+    },
+    "input.terms.policy.permissions.*.constraints.*.leftOperand": {
+      "type": "code",
+      "values": [
+        "purpose"
+      ]
+    },
+    "input.terms.policy.permissions.*.constraints.*.operator": {
+      "type": "code",
+      "values": [
+        "eq"
+      ]
+    },
+    "input.terms.policy.permissions.*.constraints.*.rightOperand": {
+      "type": "identifier"
     }
   },
   "operations": [
@@ -83,5 +113,12 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "termsAcceptance": {
+    "urn:fictional:wearable-data:owner-agent:actor": {
+      "purposes": [
+        "urn:purpose:wearable-data"
+      ]
+    }
+  }
 }

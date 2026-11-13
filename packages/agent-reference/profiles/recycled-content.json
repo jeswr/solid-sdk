@@ -74,5 +74,13 @@
       ],
       "requiresRepresentation": true
     }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:recycled-content",
+      "claims": [
+        "material.recycled-fraction"
+      ]
+    }
   ]
 }

@@ -40,6 +40,7 @@ import type { OutboundCheck, OutboundOutcome, TraceEventInput, Verdict } from ".
 import {
   type CheckVerdict,
   checkRefs,
+  claimRequest,
   defaultName,
   type GateContext,
   type GateMemory,
@@ -123,7 +124,9 @@ function article(word: string): string {
 }
 
 function mandateReason(decision: AuthorisationDecision): string {
-  if (["source-unknown", "excessive-scope", "expired"].includes(decision.reason))
+  if (
+    ["source-unknown", "excessive-scope", "expired", "mandate-withdrawn"].includes(decision.reason)
+  )
     return decision.reason;
   if (decision.reason.startsWith("mandate-invalid")) return "mandate-invalid";
   if (decision.outcome === "indeterminate") return "indeterminate-policy";
@@ -383,7 +386,20 @@ export class OutboundGate {
       };
 
     const taskItems = this.deps.memory.context(ctx.taskId ?? intent.conversation);
-    const requiredClaims = ctx.actionClaims?.find((r) => r.action === intent.action)?.claims ?? [];
+    const supportIds = [intent.parameters.support, intent.parameters.evidence].flatMap((v) =>
+      Array.isArray(v) ? v.map(String) : [],
+    );
+    const requiredClaims =
+      ctx.actionClaims?.filter((r) => r.action === intent.action).flatMap((r) => r.claims) ?? [];
+    const reliance = Object.values(this.deps.memory.relianceHolds).filter(
+      (held) =>
+        held.task === (ctx.taskId ?? intent.conversation) &&
+        ctx.personMayRelyOn?.includes(String(held.statement.claimType)) &&
+        (supportIds.includes(String(held.statement.id)) ||
+          (!supportIds.length && requiredClaims.includes(String(held.statement.claimType)))),
+    );
+    const relianceIds = new Set(reliance.map((h) => String(h.statement.id)));
+
     for (const claimType of requiredClaims) {
       const admitted = [...this.deps.memory.facts.values()].some(
         (f) =>
@@ -403,8 +419,15 @@ export class OutboundGate {
             at: this.deps.now(),
           }).verdict === "pass",
       );
-      const reading = taskItems.find((i) => i.kind === "reading" && i.claimType === claimType);
+      const proposedSupport = [intent.parameters.support, intent.parameters.evidence].flatMap(
+        (v) => (Array.isArray(v) ? v : []),
+      );
+      const reading = taskItems.find(
+        (i) =>
+          i.kind === "reading" && (i.claimType === claimType || proposedSupport.includes(i.id)),
+      );
       if (!admitted) {
+        if (reliance.some((h) => h.statement.claimType === claimType)) continue;
         const refusal = Object.entries(this.deps.memory.refusals).find(([key]) =>
           key.startsWith(`${ctx.taskId ?? intent.conversation}|${claimType}|`),
         )?.[1];
@@ -424,18 +447,40 @@ export class OutboundGate {
             decision: { ...decision, outcome: "deny", reason: refusal },
           };
         }
+        if (!reading && !taskItems.some((i) => i.kind === "content")) {
+          this.verdict(verdicts, subject, "fitness", "fail", claimRequest(ctx, claimType), {
+            reason: "evidence-missing",
+          });
+          this.decide("stop", "Required evidence is missing.", "evidence-missing");
+          return {
+            outcome: "stop",
+            verdicts,
+            decision: { ...decision, outcome: "deny", reason: "evidence-missing" },
+          };
+        }
         const original = taskItems.find((i) => i.digest === reading?.statement?.originalDigest);
+        const acceptedSources = (ctx.claimSources?.[claimType] ?? []).filter(
+          (source) =>
+            (ctx.resolver?.resolveSource({
+              evaluator: this.deps.identity.actor,
+              source,
+              claimType,
+              subject: reading?.subject,
+              at: this.deps.now(),
+            }).outcome ?? "accepted") === "accepted",
+        );
+        const requestSource = acceptedSources[0] ?? original?.source ?? "unknown";
         this.verdict(
           verdicts,
           subject,
           "fitness",
           "ask-more",
-          `Structured form required: ${claimType}; request source ${original?.source ?? "unknown"}; original ${reading?.statement?.originalDigest}.`,
+          `Structured form required: ${claimType}; request source ${requestSource}; original ${reading?.statement?.originalDigest}. ${claimRequest(ctx, claimType, acceptedSources)}`,
           { reason: "structured-form-required" },
         );
         this.decide(
           "ask-more",
-          `Ask source ${original?.source ?? "unknown"} for ${claimType}.`,
+          `Ask source ${requestSource} for ${claimType}.`,
           "structured-form-required",
         );
         return {
@@ -450,11 +495,16 @@ export class OutboundGate {
     const support = [intent.parameters.support, intent.parameters.evidence].flatMap((v) =>
       Array.isArray(v) ? v : [],
     );
-    if (support.some((id) => !this.deps.memory.facts.has(String(id)))) {
+    if (
+      support.some((id) => !this.deps.memory.facts.has(String(id)) && !relianceIds.has(String(id)))
+    ) {
       const unacceptedReading = taskItems.find(
         (i) => i.kind === "reading" && support.includes(i.id),
       );
-      const reason = unacceptedReading ? "method-not-accepted" : "evidence-invalid";
+      const failed = support
+        .map((id) => this.deps.memory.refusals[`statement:${String(id)}`])
+        .find(Boolean);
+      const reason = failed ?? (unacceptedReading ? "method-not-accepted" : "evidence-invalid");
       this.verdict(
         verdicts,
         subject,
@@ -467,7 +517,7 @@ export class OutboundGate {
       return {
         outcome: "stop",
         verdicts,
-        decision: { ...decision, outcome: "deny", reason: "evidence-invalid" },
+        decision: { ...decision, outcome: "deny", reason },
       };
     }
 
@@ -528,7 +578,94 @@ export class OutboundGate {
       : undefined;
     if (blocked) {
       this.decide("stop", "The action is stopped; nothing leaves.", blocked);
-      return { outcome: "stop", verdicts, decision: { ...decision, outcome: "deny" } };
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: blocked },
+      };
+    }
+
+    if (reliance.length) {
+      const unsafe =
+        intent.action === "pay" ||
+        ((intent.action === "distribute" ||
+          (Array.isArray(intent.parameters.evidence) && intent.parameters.evidence.length > 0)) &&
+          reliance.some((h) => intent.recipient !== h.statement.issuer));
+      const termsFailure = reliance
+        .map((h) =>
+          evaluateItemTerms(h.statement.terms as ItemTerms | undefined, {
+            agent: this.deps.identity.actor,
+            action: "use",
+            target: String(h.statement.id),
+            purpose: intent.purpose,
+            at: this.deps.now(),
+          }),
+        )
+        .find((v) => v.verdict !== "pass");
+      const binding = digestOf(reliance.map((h) => h.digest).sort());
+      const approved = this.deps.personApproved?.(intent) === true;
+      const changed = approved && this.deps.memory.relianceBindings[subject] !== binding;
+      if (unsafe || termsFailure || changed) {
+        const reason = unsafe
+          ? "not-authorised"
+          : changed
+            ? "approval-denied"
+            : (termsFailure?.reason ?? "terms-not-acceptable");
+        this.verdict(
+          verdicts,
+          subject,
+          "limits-approval",
+          "fail",
+          "Personal reliance cannot override this action's safety, evidence binding or terms.",
+          { reason },
+        );
+        this.decide("stop", "The action cannot rely on this statement.", reason);
+        return { outcome: "stop", verdicts, decision: { ...decision, outcome: "deny", reason } };
+      }
+      if (!approved) {
+        this.deps.memory.relianceBindings[subject] = binding;
+        const request =
+          `Action: ${JSON.stringify(intent)}. Action digest: ${subject}. ` +
+          reliance
+            .map(
+              (h) =>
+                `Statement: ${JSON.stringify(h.statement)}. Made by: ${String(h.statement.issuer)}. Nobody vouches for this statement. It was not admitted. Statement digest: ${h.digest}.`,
+            )
+            .join(" ") +
+          " Do you choose to rely on it for this exact action only?";
+        this.verdict(
+          verdicts,
+          subject,
+          "limits-approval",
+          "ask-principal",
+          "The principal may choose whether to rely on this self-made statement.",
+          {
+            reason: "method-not-accepted",
+            rule: {
+              id: "RL-8",
+              text: "The profile permits personal reliance for this kind of claim only.",
+            },
+          },
+        );
+        this.decide(
+          "ask-principal",
+          "The gate holds this exact action for the person's decision.",
+          "method-not-accepted",
+        );
+        this.emit({
+          part: "principal",
+          kind: "ask-principal",
+          reason: "method-not-accepted",
+          chat: { who: "agent", text: request },
+          caption:
+            "The gate shows the self-made statement, its author and its lack of anyone vouching for it.",
+        });
+        return {
+          outcome: "ask-principal",
+          verdicts,
+          decision: { ...decision, outcome: "approval-required", reason: "method-not-accepted" },
+        };
+      }
     }
 
     // 5. Limits and approval. Profile judgement and role approvals cannot be overridden by
@@ -935,6 +1072,27 @@ export class OutboundGate {
     intent: ActionIntent,
   ): string | undefined {
     const p = intent.parameters;
+    // Issuer-authored text cannot hide unsupported machine terms on the actual items.
+    for (const id of intent.action === "distribute" && Array.isArray(p.evidence)
+      ? p.evidence
+      : []) {
+      const fact = this.deps.memory.facts.get(String(id));
+      if (!fact?.terms) continue;
+      const checked = evaluateItemTerms(fact.terms, {
+        agent: this.deps.identity.actor,
+        action: "distribute",
+        target: fact.id,
+        purpose: intent.purpose,
+        recipient: intent.recipient,
+        at: this.deps.now(),
+      });
+      if (checked.verdict === "indeterminate") {
+        this.verdict(verdicts, subject, "data-terms", checked.verdict, checked.text, {
+          reason: checked.reason,
+        });
+        return checked.reason ?? "unsupported-term";
+      }
+    }
     if (intent.action === "distribute" && typeof p.attachedTerms === "string") {
       // An issuer releasing its own statement: the terms it attaches travel with it.
       this.verdict(
@@ -1308,6 +1466,27 @@ export class OutboundGate {
       try {
         const claim = unverifiedEvidenceClaim(evidence);
         const fact = this.deps.memory.facts.get(String(claim.id));
+        if (claim.terms) {
+          const checked = evaluateItemTerms(claim.terms as unknown as ItemTerms, {
+            agent: this.deps.identity.actor,
+            action: "distribute",
+            target: String(claim.id),
+            purpose,
+            recipient: intent.recipient,
+            at: this.deps.now(),
+          });
+          if (checked.verdict === "indeterminate") {
+            this.verdict(verdicts, digest, "data-terms", checked.verdict, checked.text, {
+              reason: checked.reason,
+            });
+            this.decide(
+              "stop",
+              "An unknown attached term cannot be passed as permission.",
+              checked.reason,
+            );
+            return finish("stop", checked.reason);
+          }
+        }
         if (!fact && claim.issuer !== this.deps.identity.party) {
           this.stopEvidence(digest);
           return finish("stop", "evidence-invalid");

@@ -1078,14 +1078,14 @@
           "kind": "check",
           "check": "evidence",
           "verdict": "fail",
-          "reason": "evidence-invalid"
+          "reason": "source-not-authoritative"
         },
         {
           "agent": "finance-agent",
           "part": "outbound-gate",
           "kind": "decision",
           "verdict": "fail",
-          "reason": "evidence-invalid"
+          "reason": "source-not-authoritative"
         }
       ]
     }

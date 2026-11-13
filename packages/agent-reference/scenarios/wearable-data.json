@@ -200,7 +200,25 @@
       "operation": "urn:op:wearable-data:request",
       "contents": {
         "request": "activity.weekly-total",
-        "requestedPurpose": "urn:purpose:wearable-data"
+        "requestedPurpose": "urn:purpose:wearable-data",
+        "terms": {
+          "policy": {
+            "id": "urn:terms:wearable-data:requested-use",
+            "permissions": [
+              {
+                "type": "permission",
+                "action": "use",
+                "constraints": [
+                  {
+                    "leftOperand": "purpose",
+                    "operator": "eq",
+                    "rightOperand": "urn:purpose:wearable-data"
+                  }
+                ]
+              }
+            ]
+          }
+        }
       },
       "intent": {
         "action": "use",
@@ -294,7 +312,25 @@
             "operation": "urn:op:wearable-data:request",
             "contents": {
               "request": "activity.weekly-total",
-              "requestedPurpose": "urn:purpose:underwriting"
+              "requestedPurpose": "urn:purpose:underwriting",
+              "terms": {
+                "policy": {
+                  "id": "urn:terms:wearable-data:requested-use",
+                  "permissions": [
+                    {
+                      "type": "permission",
+                      "action": "use",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "eq",
+                          "rightOperand": "urn:purpose:underwriting"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
             },
             "intent": {
               "action": "use",
@@ -311,46 +347,18 @@
             "agent": "owner-agent",
             "type": "receive",
             "from": "receiver-agent"
-          },
-          {
-            "id": "share",
-            "agent": "owner-agent",
-            "type": "start",
-            "peer": "receiver-agent",
-            "kind": "invoke",
-            "operation": "urn:op:wearable-data",
-            "contents": {
-              "items": [
-                "urn:scenario:wearable-data:weekly-total"
-              ]
-            },
-            "intent": {
-              "action": "distribute",
-              "target": "urn:op:wearable-data",
-              "operation": "urn:op:wearable-data",
-              "recipient": "urn:fictional:wearable-data:receiver",
-              "purpose": {
-                "$ref": "steps.request.outbound.0.message.body.input.requestedPurpose"
-              },
-              "parameters": {}
-            },
-            "evidence": [
-              "weekly-total"
-            ],
-            "purpose": "urn:purpose:underwriting"
           }
         ],
         "traceSteps": {
-          "1": "The person’s agent checks the signed statements.",
-          "2": "The insurer’s agent sends the signed request.",
-          "3": "The person’s agent checks the message and prepares a response.",
-          "4": "The person’s agent sends the signed request."
+          "1": "The person’s agent checks the device maker’s weekly total.",
+          "2": "The insurer sends its signed request with terms allowing underwriting.",
+          "3": "The person’s inbound gate compares the offered terms with their policy."
         }
       },
       "expect": {
-        "outcome": "stop",
-        "check": "mandate",
-        "reason": "not-authorised"
+        "outcome": "refuse",
+        "check": "terms",
+        "reason": "terms-not-acceptable"
       },
       "outline": [
         {
@@ -444,8 +452,16 @@
           "part": "outbound-gate",
           "kind": "check",
           "check": "disclosure",
-          "verdict": "not-applicable",
-          "reason": "no-personal-data"
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
         },
         {
           "agent": "receiver-agent",
@@ -500,37 +516,74 @@
           "part": "inbound-gate",
           "kind": "check",
           "check": "terms",
-          "verdict": "not-applicable",
-          "reason": "no-data"
-        },
-        {
-          "agent": "owner-agent",
-          "part": "inbound-gate",
-          "kind": "check",
-          "check": "fitness",
-          "verdict": "not-applicable",
-          "reason": "no-claims"
+          "verdict": "fail",
+          "reason": "terms-not-acceptable"
         },
         {
           "agent": "owner-agent",
           "part": "inbound-gate",
           "kind": "decision",
-          "verdict": "pass"
+          "verdict": "fail",
+          "reason": "terms-not-acceptable"
         },
         {
           "agent": "owner-agent",
           "part": "outbound-gate",
           "kind": "check",
           "check": "mandate",
-          "verdict": "fail",
-          "reason": "not-authorised"
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
         },
         {
           "agent": "owner-agent",
           "part": "outbound-gate",
           "kind": "decision",
-          "verdict": "fail",
-          "reason": "not-authorised"
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
         }
       ],
       "catalogueExpected": {
@@ -631,8 +684,16 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
     },
     {
       "agent": "receiver-agent",
@@ -687,8 +748,8 @@
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
-      "verdict": "not-applicable",
-      "reason": "no-data"
+      "verdict": "pass",
+      "reason": "terms-acceptable"
     },
     {
       "agent": "owner-agent",
