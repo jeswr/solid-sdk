@@ -233,5 +233,9 @@
         "tenancy-application.answer"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:tenancy-application": "Tenancy application",
+    "urn:purpose:tenant-finances": "Tenant finances"
+  }
 }

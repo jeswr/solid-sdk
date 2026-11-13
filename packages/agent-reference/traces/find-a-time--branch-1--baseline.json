@@ -86,7 +86,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -210,9 +210,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:find-a-time:reason",
-        "text": "Its terms allow this: use for urn:purpose:private calendar."
+        "text": "Its terms allow this: use for Private calendar."
       },
-      "caption": "The first person's calendar.busy-reason statement: its terms allow this: use for urn:purpose:private calendar."
+      "caption": "The first person's calendar.busy-reason statement: its terms allow this: use for Private calendar."
     },
     {
       "seq": 5,
@@ -227,14 +227,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:find-a-time:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:find-a-time:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:find-a-time:calendar.busy-reason",
-        "text": "Accept calendar.busy-reason from urn:fictional:find-a-time:owner by self-reported, at most 30 days old."
+        "text": "Accept calendar.busy-reason from The first person by self-reported, at most 30 days old."
       },
-      "caption": "The first person's calendar.busy-reason statement is fit for urn:scenario:find-a-time:task: self-reported, 0 days old."
+      "caption": "The first person's calendar.busy-reason statement is fit for Two people's agents find a time to meet: self-reported, 0 days old."
     },
     {
       "seq": 6,
@@ -263,7 +273,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:find-a-time:reason",
-          "summary": "use for urn:purpose:private calendar"
+          "summary": "use for Private calendar"
         },
         "provenance": "signed by The first person"
       },
@@ -822,7 +832,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:find a time with The second person."
+      "caption": "The core proposes to share Two people's agents find a time to meet with The second person."
     },
     {
       "seq": 26,

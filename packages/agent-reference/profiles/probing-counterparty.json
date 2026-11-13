@@ -77,5 +77,8 @@
     "cedar": "The fictional service",
     "person-agent": "Rowan’s agent",
     "service-agent": "The service’s agent"
+  },
+  "labels": {
+    "urn:purpose:service-query": "Service query"
   }
 }

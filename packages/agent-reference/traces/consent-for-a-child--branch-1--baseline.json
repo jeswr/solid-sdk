@@ -75,7 +75,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -634,10 +634,15 @@
           "layer": "authority",
           "suite": "mandate-credential",
           "clause": "CORE-IN-7"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:consent-for-a-child"
         }
       ],
       "reason": "approval-required",
-      "caption": "The authority register records another holder's objection. Decision required from role school-safeguarding-lead for urn:op:consent-for-a-child; message digest sha-256:405878d91f1e4541867e80978af22c77e148ce5be765a5163bf3fff1f45f6a80."
+      "caption": "The authority register records another holder's objection. Decision required from role school-safeguarding-lead for A parent consents for a child; message digest sha-256:405878d91f1e4541867e80978af22c77e148ce5be765a5163bf3fff1f45f6a80."
     },
     {
       "seq": 16,
@@ -648,7 +653,14 @@
       "verdict": "ask-principal",
       "outcome": "ask-principal",
       "reason": "approval-required",
-      "caption": "The authority register records another holder's objection. Decision required from role school-safeguarding-lead for urn:op:consent-for-a-child; message digest sha-256:405878d91f1e4541867e80978af22c77e148ce5be765a5163bf3fff1f45f6a80."
+      "caption": "The authority register records another holder's objection. Decision required from role school-safeguarding-lead for A parent consents for a child; message digest sha-256:405878d91f1e4541867e80978af22c77e148ce5be765a5163bf3fff1f45f6a80.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:consent-for-a-child"
+        }
+      ]
     }
   ]
 }

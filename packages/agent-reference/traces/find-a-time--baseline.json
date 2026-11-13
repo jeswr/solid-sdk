@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -154,7 +154,7 @@
         "text": "The fictional shared calendar service is accepted for calendar.first-free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
@@ -207,9 +207,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:fictional:find-a-time:calendar.first-free-terms",
-        "text": "Its terms allow this: use for urn:purpose:find a time; share for urn:purpose:find a time."
+        "text": "Its terms allow this: use for Find a time; share for Find a time."
       },
-      "caption": "The fictional shared calendar service's calendar.first-free statement: its terms allow this: use for urn:purpose:find a time; share for urn:purpose:find a time."
+      "caption": "The fictional shared calendar service's calendar.first-free statement: its terms allow this: use for Find a time; share for Find a time."
     },
     {
       "seq": 5,
@@ -224,14 +224,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:find-a-time:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:find-a-time:calendar-service"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:find-a-time:calendar.first-free",
-        "text": "Accept calendar.first-free from urn:fictional:find-a-time:calendar-service by recorded-by-authority, at most 1 days old."
+        "text": "Accept calendar.first-free from The fictional shared calendar service by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The fictional shared calendar service's calendar.first-free statement is fit for urn:scenario:find-a-time:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional shared calendar service's calendar.first-free statement is fit for Two people's agents find a time to meet: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -260,7 +270,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:fictional:find-a-time:calendar.first-free-terms",
-          "summary": "use for urn:purpose:find a time; share for urn:purpose:find a time"
+          "summary": "use for Find a time; share for Find a time"
         },
         "provenance": "signed by The fictional shared calendar service"
       },
@@ -315,7 +325,7 @@
         "text": "The fictional shared calendar service is accepted for calendar.second-free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
@@ -368,9 +378,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:fictional:find-a-time:calendar.second-free-terms",
-        "text": "Its terms allow this: use for urn:purpose:find a time; share for urn:purpose:find a time."
+        "text": "Its terms allow this: use for Find a time; share for Find a time."
       },
-      "caption": "The fictional shared calendar service's calendar.second-free statement: its terms allow this: use for urn:purpose:find a time; share for urn:purpose:find a time."
+      "caption": "The fictional shared calendar service's calendar.second-free statement: its terms allow this: use for Find a time; share for Find a time."
     },
     {
       "seq": 12,
@@ -385,14 +395,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:find-a-time:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:find-a-time:calendar-service"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:find-a-time:calendar.second-free",
-        "text": "Accept calendar.second-free from urn:fictional:find-a-time:calendar-service by recorded-by-authority, at most 1 days old."
+        "text": "Accept calendar.second-free from The fictional shared calendar service by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The fictional shared calendar service's calendar.second-free statement is fit for urn:scenario:find-a-time:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional shared calendar service's calendar.second-free statement is fit for Two people's agents find a time to meet: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -421,7 +441,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:fictional:find-a-time:calendar.second-free-terms",
-          "summary": "use for urn:purpose:find a time; share for urn:purpose:find a time"
+          "summary": "use for Find a time; share for Find a time"
         },
         "provenance": "signed by The fictional shared calendar service"
       },
@@ -472,7 +492,7 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
@@ -506,7 +526,7 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
@@ -544,7 +564,7 @@
         "text": "The fictional shared calendar service is accepted for calendar.slot-free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
@@ -614,14 +634,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:find-a-time:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:find-a-time:calendar-service"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:find-a-time:calendar.slot-free",
-        "text": "Accept calendar.slot-free from urn:fictional:find-a-time:calendar-service by derived, at most 1 days old."
+        "text": "Accept calendar.slot-free from The fictional shared calendar service by derived, at most 1 days old."
       },
-      "caption": "The fictional shared calendar service's calendar.slot-free statement is fit for urn:scenario:find-a-time:task: derived, 0 days old."
+      "caption": "The fictional shared calendar service's calendar.slot-free statement is fit for Two people's agents find a time to meet: derived, 0 days old."
     },
     {
       "seq": 22,
@@ -662,7 +692,7 @@
       "agent": "calendar-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:find a time:slots with The first person."
+      "caption": "The core proposes to share Share a signed free-slot derivation with The first person."
     },
     {
       "seq": 25,
@@ -1469,7 +1499,7 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The first person's own list",
@@ -1503,7 +1533,7 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The first person's own list",
@@ -1541,7 +1571,7 @@
         "text": "The fictional shared calendar service is accepted for calendar.slot-free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The first person's own list",
@@ -1615,12 +1645,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:find-a-time:calendar-service"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:find-a-time:calendar.slot-free",
-        "text": "Accept calendar.slot-free from urn:fictional:find-a-time:calendar-service by derived, at most 1 days old."
+        "text": "Accept calendar.slot-free from The fictional shared calendar service by derived, at most 1 days old."
       },
       "caption": "The fictional shared calendar service's calendar.slot-free statement is fit for Share a signed free-slot derivation: derived, 0 days old."
     },
@@ -1663,7 +1698,7 @@
       "agent": "calendar-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:find a time:slots with The second person."
+      "caption": "The core proposes to share Share a signed free-slot derivation with The second person."
     },
     {
       "seq": 48,
@@ -2470,7 +2505,7 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The second person's own list",
@@ -2504,7 +2539,7 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The second person's own list",
@@ -2542,7 +2577,7 @@
         "text": "The fictional shared calendar service is accepted for calendar.slot-free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The second person's own list",
@@ -2616,12 +2651,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:find-a-time:calendar-service"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:find-a-time:calendar.slot-free",
-        "text": "Accept calendar.slot-free from urn:fictional:find-a-time:calendar-service by derived, at most 1 days old."
+        "text": "Accept calendar.slot-free from The fictional shared calendar service by derived, at most 1 days old."
       },
       "caption": "The fictional shared calendar service's calendar.slot-free statement is fit for Share a signed free-slot derivation: derived, 0 days old."
     },

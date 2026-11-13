@@ -81,7 +81,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -205,9 +205,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:tenancy-application:statements",
-        "text": "Its terms allow this: use for urn:purpose:tenant finances."
+        "text": "Its terms allow this: use for Tenant finances."
       },
-      "caption": "The tenant’s bank's bank.full-statements statement: its terms allow this: use for urn:purpose:tenant finances."
+      "caption": "The tenant’s bank's bank.full-statements statement: its terms allow this: use for Tenant finances."
     },
     {
       "seq": 5,
@@ -222,14 +222,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:tenancy-application:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:tenancy-application:bank"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:tenancy-application:bank.full-statements",
-        "text": "Accept bank.full-statements from urn:fictional:tenancy-application:bank by recorded-by-authority, at most 30 days old."
+        "text": "Accept bank.full-statements from The tenant’s bank by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The tenant’s bank's bank.full-statements statement is fit for urn:scenario:tenancy-application:task: recorded-by-authority, 0 days old."
+      "caption": "The tenant’s bank's bank.full-statements statement is fit for Applying to rent a home: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -258,7 +268,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:tenancy-application:statements",
-          "summary": "use for urn:purpose:tenant finances"
+          "summary": "use for Tenant finances"
         },
         "provenance": "signed by The tenant’s bank"
       },
@@ -821,7 +831,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:tenancy application:raw with The letting agency."
+      "caption": "The core proposes to share Attempt raw-statement disclosure with The letting agency."
     },
     {
       "seq": 26,
@@ -846,9 +856,9 @@
       "reason": "not-authorised",
       "rule": {
         "id": "urn:awp:mandate:eeeeff5453f4499a4ab524d5ae740e9f:tenancy-application",
-        "text": "No rule in The tenant's mandate lets the agent share urn:op:tenancy application:raw with The letting agency for urn:purpose:tenancy application (no applicable grant in the mandate (deny by default))."
+        "text": "No rule in The tenant's mandate lets the agent share Attempt raw-statement disclosure with The letting agency for Tenancy application (no applicable grant in the mandate (deny by default))."
       },
-      "caption": "The tenant's mandate does not allow this: share urn:op:tenancy application:raw with The letting agency."
+      "caption": "The tenant's mandate does not allow this: share Attempt raw-statement disclosure with The letting agency."
     },
     {
       "seq": 27,

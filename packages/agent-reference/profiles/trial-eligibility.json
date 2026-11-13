@@ -256,5 +256,8 @@
         "trial-eligibility.answer"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:trial-eligibility": "Trial eligibility"
+  }
 }

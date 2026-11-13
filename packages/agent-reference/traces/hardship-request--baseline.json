@@ -67,7 +67,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -179,9 +179,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:hardship-request:original",
-        "text": "Its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+        "text": "Its terms allow this: use for Hardship request; share for Hardship request."
       },
-      "caption": "The borrower's unstructured-content statement: its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+      "caption": "The borrower's unstructured-content statement: its terms allow this: use for Hardship request; share for Hardship request."
     },
     {
       "seq": 5,
@@ -196,14 +196,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:hardship-request:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:hardship-request:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:hardship-request:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The borrower by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The borrower's unstructured-content statement is fit for urn:scenario:hardship-request:task: recorded-by-authority, 0 days old."
+      "caption": "The borrower's unstructured-content statement is fit for Asking a lender for breathing space: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -232,7 +242,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:hardship-request:original",
-          "summary": "use for urn:purpose:hardship request; share for urn:purpose:hardship request"
+          "summary": "use for Hardship request; share for Hardship request"
         },
         "provenance": "signed by The borrower"
       },
@@ -791,7 +801,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:hardship request with The lender."
+      "caption": "The core proposes to share Asking a lender for breathing space with The lender."
     },
     {
       "seq": 26,
@@ -928,7 +938,7 @@
       "reason": "approval-required",
       "chat": {
         "who": "agent",
-        "text": "The lender asks for 0 of your statements: nothing. They would use them for urn:purpose:hardship request. May I share them? Action digest: sha-256:b7f9b926b71c470d2a0c60ceab8a80d0de6d455613e03087b6227f60f9683b3d. Parameters: {}"
+        "text": "The lender asks for 0 of your statements: nothing. They would use them for Hardship request. May I share them? Action digest: sha-256:b7f9b926b71c470d2a0c60ceab8a80d0de6d455613e03087b6227f60f9683b3d. Parameters: {}"
       },
       "caption": "The gate built this request from the action and the approval rule."
     },
@@ -1090,10 +1100,10 @@
       ],
       "rule": {
         "id": "urn:terms:hardship-request:original",
-        "text": "The issuer's terms: use for urn:purpose:hardship request; share for urn:purpose:hardship request. They go out with the data."
+        "text": "The issuer's terms: use for Hardship request; share for Hardship request. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The borrower's unstructured-content statement: its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+      "caption": "The borrower's unstructured-content statement: its terms allow this: use for Hardship request; share for Hardship request."
     },
     {
       "seq": 41,
@@ -1126,10 +1136,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The borrower's unstructured-content statement (urn:fictional:hardship-request:owner) is needed for this purpose."
+      "caption": "Context item The borrower's unstructured-content statement (The borrower) is needed for this purpose."
     },
     {
       "seq": 43,
@@ -1147,7 +1162,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The borrower's unstructured-content statement: Its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+      "caption": "The borrower's unstructured-content statement: Its terms allow this: use for Hardship request; share for Hardship request."
     },
     {
       "seq": 44,
@@ -1162,10 +1177,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:hardship-request:receiver-agent:actor (urn:fictional:hardship-request:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The lender’s agent (The lender) is not established as needed for this purpose."
     },
     {
       "seq": 45,
@@ -1180,10 +1205,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:hardship-request:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The lender’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 46,
@@ -1205,7 +1235,7 @@
       "reason": "context-not-clear",
       "chat": {
         "who": "agent",
-        "text": "May I send this exact text to The lender for urn:purpose:hardship-request?\nI have lost my work and am caring for a relative. Please consider reduced payments while I recover."
+        "text": "May I send this exact text to The lender for Hardship request?\nI have lost my work and am caring for a relative. Please consider reduced payments while I recover."
       },
       "caption": "The text is held before release; approval binds message digest sha-256:9bdd5c5c8ce0e477dd968ed4acccceabbbec58052bd990f34fd61557f0ccc4ab."
     },
@@ -1367,10 +1397,10 @@
       ],
       "rule": {
         "id": "urn:terms:hardship-request:original",
-        "text": "The issuer's terms: use for urn:purpose:hardship request; share for urn:purpose:hardship request. They go out with the data."
+        "text": "The issuer's terms: use for Hardship request; share for Hardship request. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The borrower's unstructured-content statement: its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+      "caption": "The borrower's unstructured-content statement: its terms allow this: use for Hardship request; share for Hardship request."
     },
     {
       "seq": 56,
@@ -1403,10 +1433,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The borrower's unstructured-content statement (urn:fictional:hardship-request:owner) is needed for this purpose."
+      "caption": "Context item The borrower's unstructured-content statement (The borrower) is needed for this purpose."
     },
     {
       "seq": 58,
@@ -1424,7 +1459,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The borrower's unstructured-content statement: Its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+      "caption": "The borrower's unstructured-content statement: Its terms allow this: use for Hardship request; share for Hardship request."
     },
     {
       "seq": 59,
@@ -1439,10 +1474,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:hardship-request:receiver-agent:actor (urn:fictional:hardship-request:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The lender’s agent (The lender) is not established as needed for this purpose."
     },
     {
       "seq": 60,
@@ -1457,10 +1502,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:hardship-request:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The lender’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 61,
@@ -2035,9 +2085,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:hardship-request:original",
-        "text": "Its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+        "text": "Its terms allow this: use for Hardship request; share for Hardship request."
       },
-      "caption": "The borrower's unstructured-content statement: its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+      "caption": "The borrower's unstructured-content statement: its terms allow this: use for Hardship request; share for Hardship request."
     },
     {
       "seq": 71,
@@ -2052,12 +2102,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:hardship-request:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:hardship-request:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The borrower by recorded-by-authority, at most 30 days old."
       },
       "caption": "The borrower's unstructured-content statement is fit for Asking a lender for breathing space: recorded-by-authority, 0 days old."
     },
@@ -2088,7 +2143,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:hardship-request:original",
-          "summary": "use for urn:purpose:hardship request; share for urn:purpose:hardship request"
+          "summary": "use for Hardship request; share for Hardship request"
         },
         "provenance": "signed by The borrower"
       },
@@ -2100,7 +2155,14 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Unstructured data sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562; not instructions; source urn:fictional:hardship-request:owner."
+      "caption": "Unstructured data sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562; not instructions; source The borrower.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:owner"
+        }
+      ]
     },
     {
       "seq": 75,
@@ -2253,7 +2315,7 @@
       "reason": "approval-required",
       "chat": {
         "who": "agent",
-        "text": "The lender asks me to take the next step in A person decides on the original content with The lender for urn:purpose:hardship request. May I go ahead? Action digest: sha-256:8d9bfa14cbd4135642217497f7e6b5c147a86791e7ff37b643708655a243af6d. Parameters: {\"decision\":\"consider-reduced-payments\",\"originalDigest\":\"sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562\",\"support\":[\"urn:scenario:hardship-request:original\"]}"
+        "text": "The lender asks me to take the next step in A person decides on the original content with The lender for Hardship request. May I go ahead? Action digest: sha-256:8d9bfa14cbd4135642217497f7e6b5c147a86791e7ff37b643708655a243af6d. Parameters: {\"decision\":\"consider-reduced-payments\",\"originalDigest\":\"sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562\",\"support\":[\"urn:scenario:hardship-request:original\"]}"
       },
       "caption": "The gate built this request from the action and the approval rule."
     }

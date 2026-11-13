@@ -120,5 +120,9 @@
         "urn:purpose:wearable-data"
       ]
     }
+  },
+  "labels": {
+    "urn:purpose:underwriting": "Underwriting",
+    "urn:purpose:wearable-data": "Wearable data"
   }
 }

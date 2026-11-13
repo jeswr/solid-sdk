@@ -87,7 +87,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -199,9 +199,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:prescription-dispensing:item",
-        "text": "Its terms allow this: use for urn:purpose:prescription dispensing."
+        "text": "Its terms allow this: use for Prescription dispensing."
       },
-      "caption": "The prescriber's prescription statement: its terms allow this: use for urn:purpose:prescription dispensing."
+      "caption": "The prescriber's prescription statement: its terms allow this: use for Prescription dispensing."
     },
     {
       "seq": 5,
@@ -216,14 +216,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:prescription-dispensing:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:prescription-dispensing:issuer"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:prescription-dispensing:prescription",
-        "text": "Accept prescription from urn:fictional:prescription-dispensing:issuer by recorded-by-authority, at most 1 days old."
+        "text": "Accept prescription from The prescriber by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The prescriber's prescription statement is fit for urn:scenario:prescription-dispensing:task: recorded-by-authority, 0 days old."
+      "caption": "The prescriber's prescription statement is fit for Dispensing a prescription: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -252,7 +262,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:prescription-dispensing:item",
-          "summary": "use for urn:purpose:prescription dispensing"
+          "summary": "use for Prescription dispensing"
         },
         "provenance": "signed by The prescriber"
       },
@@ -646,9 +656,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:prescription-dispensing:item",
-        "text": "Its terms allow this: use for urn:purpose:prescription dispensing."
+        "text": "Its terms allow this: use for Prescription dispensing."
       },
-      "caption": "The prescriber's prescription statement: its terms allow this: use for urn:purpose:prescription dispensing."
+      "caption": "The prescriber's prescription statement: its terms allow this: use for Prescription dispensing."
     },
     {
       "seq": 32,
@@ -663,14 +673,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:prescription-dispensing:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:prescription-dispensing:issuer"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:prescription-dispensing:prescription",
-        "text": "Accept prescription from urn:fictional:prescription-dispensing:issuer by recorded-by-authority, at most 1 days old."
+        "text": "Accept prescription from The prescriber by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The prescriber's prescription statement is fit for urn:scenario:prescription-dispensing:task: recorded-by-authority, 0 days old."
+      "caption": "The prescriber's prescription statement is fit for Dispensing a prescription: recorded-by-authority, 0 days old."
     },
     {
       "seq": 33,
@@ -699,7 +719,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:prescription-dispensing:item",
-          "summary": "use for urn:purpose:prescription dispensing"
+          "summary": "use for Prescription dispensing"
         },
         "provenance": "signed by The prescriber"
       },

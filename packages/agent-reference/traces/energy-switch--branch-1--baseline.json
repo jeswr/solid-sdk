@@ -104,7 +104,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -228,9 +228,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:energy-switch:readings",
-        "text": "Its terms allow this: use for urn:purpose:meter billing."
+        "text": "Its terms allow this: use for Meter billing."
       },
-      "caption": "The meter data service's energy.half-hourly statement: its terms allow this: use for urn:purpose:meter billing."
+      "caption": "The meter data service's energy.half-hourly statement: its terms allow this: use for Meter billing."
     },
     {
       "seq": 5,
@@ -245,14 +245,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:energy-switch:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:energy-switch:meter-service"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:energy-switch:energy.half-hourly",
-        "text": "Accept energy.half-hourly from urn:fictional:energy-switch:meter-service by recorded-by-authority, at most 30 days old."
+        "text": "Accept energy.half-hourly from The meter data service by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The meter data service's energy.half-hourly statement is fit for urn:scenario:energy-switch:task: recorded-by-authority, 0 days old."
+      "caption": "The meter data service's energy.half-hourly statement is fit for Switching energy supplier: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -281,7 +291,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:energy-switch:readings",
-          "summary": "use for urn:purpose:meter billing"
+          "summary": "use for Meter billing"
         },
         "provenance": "signed by The meter data service"
       },
@@ -840,7 +850,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:energy switch with The energy supplier."
+      "caption": "The core proposes to share Switching energy supplier with The energy supplier."
     },
     {
       "seq": 26,

@@ -69,7 +69,8 @@ it("does not treat a sender's asserted principal as the content source without i
     path?.trace?.events.some(
       (e) =>
         e.caption.includes("Unstructured data") &&
-        e.caption.includes("source urn:fictional:patient"),
+        e.caption.includes("source The patient") &&
+        e.refs?.some((ref) => ref.id === "urn:fictional:patient"),
     ),
   ).toBe(true);
 });

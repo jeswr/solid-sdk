@@ -104,7 +104,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -228,9 +228,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:joint-mortgage:other-payslip",
-        "text": "Its terms allow this: use for urn:purpose:joint mortgage."
+        "text": "Its terms allow this: use for Joint mortgage."
       },
-      "caption": "The second applicant’s employer's income.payslip statement: its terms allow this: use for urn:purpose:joint mortgage."
+      "caption": "The second applicant’s employer's income.payslip statement: its terms allow this: use for Joint mortgage."
     },
     {
       "seq": 5,
@@ -245,14 +245,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:joint-mortgage:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:joint-mortgage:employer"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:joint-mortgage:income.payslip",
-        "text": "Accept income.payslip from urn:fictional:joint-mortgage:employer by recorded-by-authority, at most 30 days old."
+        "text": "Accept income.payslip from The second applicant’s employer by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The second applicant’s employer's income.payslip statement is fit for urn:scenario:joint-mortgage:task: recorded-by-authority, 0 days old."
+      "caption": "The second applicant’s employer's income.payslip statement is fit for A joint mortgage for two people: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -281,7 +291,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:joint-mortgage:other-payslip",
-          "summary": "use for urn:purpose:joint mortgage"
+          "summary": "use for Joint mortgage"
         },
         "provenance": "signed by The second applicant’s employer"
       },
@@ -840,7 +850,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:joint mortgage with The lender."
+      "caption": "The core proposes to share A joint mortgage for two people with The lender."
     },
     {
       "seq": 26,
@@ -865,9 +875,9 @@
       "reason": "mandate-withdrawn",
       "rule": {
         "id": "urn:awp:mandate:5affcbfa5bb794032afff372ad56844e:joint-mortgage",
-        "text": "No rule in The first applicant's mandate lets the agent share urn:op:joint mortgage with The lender for urn:purpose:joint mortgage (mandate-withdrawn)."
+        "text": "No rule in The first applicant's mandate lets the agent share A joint mortgage for two people with The lender for Joint mortgage (mandate-withdrawn)."
       },
-      "caption": "The first applicant's mandate does not allow this: share urn:op:joint mortgage with The lender."
+      "caption": "The first applicant's mandate does not allow this: share A joint mortgage for two people with The lender."
     },
     {
       "seq": 27,

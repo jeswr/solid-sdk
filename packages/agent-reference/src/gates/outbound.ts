@@ -297,6 +297,7 @@ export class OutboundGate {
       const item = this.deps.memory.facts.get(id);
       for (const action of ["use", "distribute"] as const) {
         const t = evaluateItemTerms(item?.terms, {
+          name: this.deps.gate.name,
           agent: this.deps.identity.actor,
           action,
           target: id,
@@ -388,11 +389,11 @@ export class OutboundGate {
       return `pay ${String(p.amount ?? "?")} ${String(p.currency ?? "")} to ${this.name(intent.recipient)}`;
     if (intent.action === "distribute") {
       const labels = this.labels(intent);
-      return `share ${labels.length > 0 ? listWords(labels) : idWords(intent.target)} with ${this.name(intent.recipient)}`;
+      return `share ${labels.length > 0 ? listWords(labels) : idWords(intent.target, this.name)} with ${this.name(intent.recipient)}`;
     }
     if (task && task !== intent.target)
       return `take the next step in ${task} with ${this.name(intent.recipient)}`;
-    return `${intent.action} ${idWords(intent.target)} with ${this.name(intent.recipient)}`;
+    return `${intent.action} ${idWords(intent.target, this.name)} with ${this.name(intent.recipient)}`;
   }
 
   private exceededLimit(intent: ActionIntent): string | undefined {
@@ -417,7 +418,7 @@ export class OutboundGate {
     if (intent.action === "distribute") {
       const labels = this.labels(intent);
       const uses = [
-        intent.purpose ? `use them for ${idWords(intent.purpose)}` : "",
+        intent.purpose ? `use them for ${idWords(intent.purpose, this.name)}` : "",
         typeof p.retentionDays === "number" ? `keep them for ${p.retentionDays} days` : "",
         Array.isArray(p.onward) && p.onward.length > 0
           ? `pass them on only to ${listWords(p.onward.map((o) => this.name(String(o))))}`
@@ -428,7 +429,7 @@ export class OutboundGate {
       } May I share them?`;
     }
     return `${who} asks me to ${this.describeAction(intent)}${
-      intent.purpose ? ` for ${idWords(intent.purpose)}` : ""
+      intent.purpose ? ` for ${idWords(intent.purpose, this.name)}` : ""
     }.${limitText ? ` ${limitText}` : ""} May I go ahead?`;
   }
 
@@ -480,7 +481,8 @@ export class OutboundGate {
 
   /** The request the principal sees when a recipient asked for a stronger approval. */
   strongerApprovalRequest(intent: ActionIntent, label: string): string {
-    const task = this.deps.gate.taskLabel?.(intent.operation) ?? idWords(intent.operation);
+    const task =
+      this.deps.gate.taskLabel?.(intent.operation) ?? idWords(intent.operation, this.name);
     return `Before ${this.name(intent.recipient)} will go ahead with ${task}, it asks you to approve with ${label}. May I ask you to do that now?`;
   }
 
@@ -533,7 +535,7 @@ export class OutboundGate {
           rule: {
             id: decision.policy.id,
             text: `No rule in ${this.owner}'s mandate lets the agent ${this.describeAction(intent)}${
-              intent.purpose ? ` for ${idWords(intent.purpose)}` : ""
+              intent.purpose ? ` for ${idWords(intent.purpose, this.name)}` : ""
             } (${decision.reason}).`,
           },
         },
@@ -587,6 +589,7 @@ export class OutboundGate {
             this.deps.now(),
           ).verdict === "pass" &&
           evaluateItemTerms(f.terms, {
+            name: this.deps.gate.name,
             agent: this.deps.identity.actor,
             action: "use",
             target: f.id,
@@ -769,6 +772,7 @@ export class OutboundGate {
       const termsFailure = reliance
         .map((h) =>
           evaluateItemTerms(h.statement.terms as ItemTerms | undefined, {
+            name: this.deps.gate.name,
             agent: this.deps.identity.actor,
             action: "use",
             target: String(h.statement.id),
@@ -1119,7 +1123,7 @@ export class OutboundGate {
       );
       return true;
     }
-    const label = this.deps.gate.taskLabel?.(task) ?? idWords(task);
+    const label = this.deps.gate.taskLabel?.(task) ?? idWords(task, this.name);
     const r = resolver.resolveRecipient({ party, task, taskLabel: label, at: this.deps.now() });
     const resolution = { resolution: resolutionView(r) };
     if (r.outcome === "accepted") {
@@ -1260,6 +1264,7 @@ export class OutboundGate {
       const fact = this.deps.memory.facts.get(String(id));
       if (!fact?.terms) continue;
       const checked = evaluateItemTerms(fact.terms, {
+        name: this.deps.gate.name,
         agent: this.deps.identity.actor,
         action: "distribute",
         target: fact.id,
@@ -1306,6 +1311,7 @@ export class OutboundGate {
       const fact = this.deps.memory.facts.get(String(id));
       const terms: ItemTerms | undefined = fact?.terms;
       const t = evaluateItemTerms(terms, {
+        name: this.deps.gate.name,
         agent: this.deps.identity.actor,
         action: "distribute",
         target: String(id),
@@ -1346,7 +1352,7 @@ export class OutboundGate {
           rule: {
             id: terms?.policy?.id ?? "default-terms",
             text: terms
-              ? `The issuer's terms: ${termsSummary(terms)}. They go out with the data.`
+              ? `The issuer's terms: ${termsSummary(terms, this.name)}. They go out with the data.`
               : text,
           },
         },
@@ -1672,6 +1678,7 @@ export class OutboundGate {
         const fact = this.deps.memory.facts.get(String(claim.id));
         if (claim.terms) {
           const checked = evaluateItemTerms(claim.terms as unknown as ItemTerms, {
+            name: this.deps.gate.name,
             agent: this.deps.identity.actor,
             action: "distribute",
             target: String(claim.id),
@@ -1808,6 +1815,7 @@ export class OutboundGate {
       for (const item of this.deps.memory.context(this.deps.gate.taskId ?? message.conversation)) {
         if (!payload.claims.includes(item.claimType)) continue;
         const terms = evaluateItemTerms(item.terms, {
+          name: this.deps.gate.name,
           agent: this.deps.identity.actor,
           action: "distribute",
           target: item.id,
@@ -1882,6 +1890,7 @@ export class OutboundGate {
           { reason: minimal ? "minimal-disclosure" : "context-not-clear" },
         );
         const terms = evaluateItemTerms(item.terms, {
+          name: this.deps.gate.name,
           agent: this.deps.identity.actor,
           action: "distribute",
           target: item.id,
@@ -1944,7 +1953,7 @@ export class OutboundGate {
             reason: "context-not-clear",
             chat: {
               who: "agent",
-              text: `May I send this exact text to ${this.name(intent.recipient)} for ${purpose ?? "an undeclared purpose"}?\n${free.map((f) => f.text).join("\n")}`,
+              text: `May I send this exact text to ${this.name(intent.recipient)} for ${purpose ? this.name(purpose) : "an undeclared purpose"}?\n${free.map((f) => f.text).join("\n")}`,
             },
             caption: `The text is held before release; approval binds message digest ${digest}.`,
           });
@@ -2063,6 +2072,7 @@ export class OutboundGate {
         },
       );
       const terms = evaluateItemTerms(item.terms, {
+        name: this.deps.gate.name,
         agent: this.deps.identity.actor,
         action: "distribute",
         target: item.id,

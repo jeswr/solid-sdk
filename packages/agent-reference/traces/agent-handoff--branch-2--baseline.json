@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -188,9 +188,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:agent-handoff:address",
-        "text": "Its terms allow this: use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing."
+        "text": "Its terms allow this: use for Delivery; share for Delivery; never for Marketing."
       },
-      "caption": "A taxpayer's delivery.address statement: its terms allow this: use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing."
+      "caption": "A taxpayer's delivery.address statement: its terms allow this: use for Delivery; share for Delivery; never for Marketing."
     },
     {
       "seq": 5,
@@ -205,14 +205,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:agent-handoff:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:agent-handoff:subject"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:agent-handoff:delivery.address",
-        "text": "Accept delivery.address from urn:fictional:agent-handoff:subject by recorded-by-authority, at most 1 days old."
+        "text": "Accept delivery.address from A taxpayer by recorded-by-authority, at most 1 days old."
       },
-      "caption": "A taxpayer's delivery.address statement is fit for urn:scenario:agent-handoff:task: recorded-by-authority, 0 days old."
+      "caption": "A taxpayer's delivery.address statement is fit for A service agent hands a customer to a partner's agent: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -241,7 +251,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:agent-handoff:address",
-          "summary": "use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing"
+          "summary": "use for Delivery; share for Delivery; never for Marketing"
         },
         "provenance": "signed by A taxpayer"
       },
@@ -253,7 +263,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:agent handoff with The tax authority."
+      "caption": "The core proposes to share A service agent hands a customer to a partner's agent with The tax authority."
     },
     {
       "seq": 9,
@@ -401,10 +411,10 @@
       ],
       "rule": {
         "id": "urn:terms:agent-handoff:address",
-        "text": "The issuer's terms: use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing. They go out with the data."
+        "text": "The issuer's terms: use for Delivery; share for Delivery; never for Marketing. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "A taxpayer's delivery.address statement: its terms allow this: use for urn:purpose:delivery; share for urn:purpose:delivery; never for urn:purpose:marketing."
+      "caption": "A taxpayer's delivery.address statement: its terms allow this: use for Delivery; share for Delivery; never for Marketing."
     },
     {
       "seq": 16,

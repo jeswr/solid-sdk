@@ -86,7 +86,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -202,9 +202,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:small-business-loan:accounts",
-        "text": "Its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+        "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The accounting platform's business.accounts statement: its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+      "caption": "The accounting platform's business.accounts statement: its terms allow this: use for Small business loan; share for Small business loan."
     },
     {
       "seq": 5,
@@ -219,14 +219,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:small-business-loan:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:small-business-loan:accounting"
         }
       ],
       "reason": "method-not-accepted",
       "rule": {
         "id": "urn:profile:small-business-loan:business.accounts",
-        "text": "Accept business.accounts from urn:fictional:small-business-loan:accounting by recorded-by-authority, at most 30 days old."
+        "text": "Accept business.accounts from The accounting platform by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The accounting platform's business.accounts statement was not produced in a way urn:scenario:small-business-loan:task accepts."
+      "caption": "The accounting platform's business.accounts statement was not produced in a way A loan for a small company accepts."
     },
     {
       "seq": 6,
@@ -237,7 +247,14 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "method-not-accepted",
-      "caption": "Required claim: business.accounts. Accepted sources: urn:fictional:small-business-loan:accounting. Accepted methods: recorded-by-authority."
+      "caption": "Required claim: business.accounts. Accepted sources: The accounting platform. Accepted methods: recorded-by-authority.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:small-business-loan:accounting"
+        }
+      ]
     },
     {
       "seq": 7,
@@ -341,9 +358,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:small-business-loan:tax-filing",
-        "text": "Its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+        "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The fictional tax authority's business.tax-filing statement: its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+      "caption": "The fictional tax authority's business.tax-filing statement: its terms allow this: use for Small business loan; share for Small business loan."
     },
     {
       "seq": 11,
@@ -358,14 +375,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:small-business-loan:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:small-business-loan:tax"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:small-business-loan:business.tax-filing",
-        "text": "Accept business.tax-filing from urn:fictional:small-business-loan:tax by recorded-by-authority, at most 30 days old."
+        "text": "Accept business.tax-filing from The fictional tax authority by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional tax authority's business.tax-filing statement is fit for urn:scenario:small-business-loan:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional tax authority's business.tax-filing statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
     },
     {
       "seq": 12,
@@ -394,7 +421,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:small-business-loan:tax-filing",
-          "summary": "use for urn:purpose:small business loan; share for urn:purpose:small business loan"
+          "summary": "use for Small business loan; share for Small business loan"
         },
         "provenance": "signed by The fictional tax authority"
       },
@@ -502,9 +529,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:small-business-loan:director-role",
-        "text": "Its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+        "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The company register's organization.role statement: its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+      "caption": "The company register's organization.role statement: its terms allow this: use for Small business loan; share for Small business loan."
     },
     {
       "seq": 18,
@@ -519,14 +546,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:small-business-loan:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:small-business-loan:register"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:small-business-loan:organization.role",
-        "text": "Accept organization.role from urn:fictional:small-business-loan:register by recorded-by-authority, at most 30 days old."
+        "text": "Accept organization.role from The company register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The company register's organization.role statement is fit for urn:scenario:small-business-loan:task: recorded-by-authority, 0 days old."
+      "caption": "The company register's organization.role statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
     },
     {
       "seq": 19,
@@ -555,7 +592,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:small-business-loan:director-role",
-          "summary": "use for urn:purpose:small business loan; share for urn:purpose:small business loan"
+          "summary": "use for Small business loan; share for Small business loan"
         },
         "provenance": "signed by The company register"
       },
@@ -591,7 +628,7 @@
       ],
       "rule": {
         "id": "urn:rule:director-borrowing",
-        "text": "The company's mandate lets the agent use urn:op:small business loan, on its own."
+        "text": "The company's mandate lets the agent use A loan for a small company, on its own."
       },
       "reason": "within-mandate",
       "caption": "The company's mandate covers this action."

@@ -118,5 +118,8 @@
         "benefit.household"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:benefit-claim": "Benefit claim"
+  }
 }

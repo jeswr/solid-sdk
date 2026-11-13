@@ -105,7 +105,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -238,14 +238,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:emergency-access:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:clinician"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:emergency-access:emergency.declaration",
-        "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
+        "text": "Accept emergency.declaration from The clinician by self-reported, at most 1 days old."
       },
-      "caption": "The clinician's emergency.declaration statement is fit for urn:scenario:emergency-access:task: self-reported, 0 days old."
+      "caption": "The clinician's emergency.declaration statement is fit for Access to allergies in an emergency: self-reported, 0 days old."
     },
     {
       "seq": 6,
@@ -399,14 +409,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:emergency-access:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:practice"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:emergency-access:clinical.summary",
-        "text": "Accept clinical.summary from urn:fictional:practice by recorded-by-authority, at most 1 days old."
+        "text": "Accept clinical.summary from The family practice by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The family practice's clinical.summary statement is fit for urn:scenario:emergency-access:task: recorded-by-authority, 0 days old."
+      "caption": "The family practice's clinical.summary statement is fit for Access to allergies in an emergency: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -447,7 +467,7 @@
       "agent": "clinician-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:emergency read with The patient."
+      "caption": "The core proposes to use the unlabelled resource with The patient."
     },
     {
       "seq": 16,
@@ -490,6 +510,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:emergency-read"
         }
       ],
       "resolution": {
@@ -504,7 +529,7 @@
         "answer": "Accepted, for urn:op:emergency-read only."
       },
       "reason": "recipient-established",
-      "caption": "The patient: Accepted, for urn:op:emergency-read only."
+      "caption": "The patient: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 18,
@@ -1110,14 +1135,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:emergency-read"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:clinician"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:emergency-access:emergency.declaration",
-        "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
+        "text": "Accept emergency.declaration from The clinician by self-reported, at most 1 days old."
       },
-      "caption": "The clinician's emergency.declaration statement is fit for urn:op:emergency-read: self-reported, 0 days old."
+      "caption": "The clinician's emergency.declaration statement is fit for the unlabelled resource: self-reported, 0 days old."
     },
     {
       "seq": 33,
@@ -1181,7 +1216,7 @@
       "agent": "record-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to read urn:op:emergency read with The clinician."
+      "caption": "The core proposes to read the unlabelled resource with The clinician."
     },
     {
       "seq": 37,
@@ -1206,9 +1241,9 @@
       "reason": "source-unknown",
       "rule": {
         "id": "urn:awp:mandate:52b76acca7332ca12262f6e32ee71914:emergency-access",
-        "text": "No rule in The patient's mandate lets the agent read urn:op:emergency read with The clinician for urn:purpose:emergency access (source-unknown)."
+        "text": "No rule in The patient's mandate lets the agent read the unlabelled resource with The clinician for Emergency access (source-unknown)."
       },
-      "caption": "The patient's mandate does not allow this: read urn:op:emergency read with The clinician."
+      "caption": "The patient's mandate does not allow this: read the unlabelled resource with The clinician."
     },
     {
       "seq": 38,

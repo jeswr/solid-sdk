@@ -1,0 +1,1488 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/credentials/v2",
+    {
+      "@version": 1.1,
+      "@protected": true,
+      "Policy": "http://www.w3.org/ns/odrl/2/Policy",
+      "Agreement": "http://www.w3.org/ns/odrl/2/Agreement",
+      "Activity": "http://www.w3.org/ns/prov#Activity",
+      "Offer": "https://schema.org/Offer",
+      "PayAction": "https://schema.org/PayAction",
+      "Invoice": "https://schema.org/Invoice",
+      "ParticipantRef": "https://w3id.org/jeswr/awp#ParticipantRef",
+      "AudienceRef": "https://w3id.org/jeswr/awp#AudienceRef",
+      "OperationRef": "https://w3id.org/jeswr/awp#OperationRef",
+      "EvidenceItem": "https://w3id.org/jeswr/awp#EvidenceItem",
+      "DescribeBody": "https://w3id.org/jeswr/awp#DescribeBody",
+      "DescriptionBody": "https://w3id.org/jeswr/awp#DescriptionBody",
+      "ProposeBody": "https://w3id.org/jeswr/awp#ProposeBody",
+      "AcceptBody": "https://w3id.org/jeswr/awp#AcceptBody",
+      "ChallengeBody": "https://w3id.org/jeswr/awp#ChallengeBody",
+      "RefuseBody": "https://w3id.org/jeswr/awp#RefuseBody",
+      "InvokeBody": "https://w3id.org/jeswr/awp#InvokeBody",
+      "InvokeBodyChallenge": "https://w3id.org/jeswr/awp#InvokeBodyChallenge",
+      "DeliverBody": "https://w3id.org/jeswr/awp#DeliverBody",
+      "ReceiptBody": "https://w3id.org/jeswr/awp#ReceiptBody",
+      "UnsupportedBody": "https://w3id.org/jeswr/awp#UnsupportedBody",
+      "IndeterminateBody": "https://w3id.org/jeswr/awp#IndeterminateBody",
+      "ContentPart": "https://w3id.org/jeswr/awp#ContentPart",
+      "Message": {
+        "@id": "https://w3id.org/jeswr/awp#Message",
+        "@context": {
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "MessageAuthorship": "https://w3id.org/jeswr/awp#MessageAuthorship",
+      "VerificationResult": "https://w3id.org/jeswr/awp#VerificationResult",
+      "RepresentationAssessment": "https://w3id.org/jeswr/awp#RepresentationAssessment",
+      "SourceAuthorityAssessment": "https://w3id.org/jeswr/awp#SourceAuthorityAssessment",
+      "SourceAuthorityAssessmentRule": "https://w3id.org/jeswr/awp#SourceAuthorityAssessmentRule",
+      "ActionIntent": "https://w3id.org/jeswr/awp#ActionIntent",
+      "AuthorisationDecision": "https://w3id.org/jeswr/awp#AuthorisationDecision",
+      "AuthorisationDecisionPolicy": "https://w3id.org/jeswr/awp#AuthorisationDecisionPolicy",
+      "GrantRecord": {
+        "@id": "https://w3id.org/jeswr/awp#GrantRecord",
+        "@context": {
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "owner-mandate": "https://w3id.org/jeswr/awp#grant-kind/owner-mandate",
+              "data-use": "https://w3id.org/jeswr/awp#grant-kind/data-use",
+              "access": "https://w3id.org/jeswr/awp#grant-kind/access",
+              "onward-use": "https://w3id.org/jeswr/awp#grant-kind/onward-use",
+              "delegation": "https://w3id.org/jeswr/awp#grant-kind/delegation"
+            }
+          }
+        }
+      },
+      "OutcomeRecord": "https://w3id.org/jeswr/awp#OutcomeRecord",
+      "RequestBasis": "https://w3id.org/jeswr/awp#RequestBasis",
+      "StatementSubject": "https://w3id.org/jeswr/awp#StatementSubject",
+      "Assurance": "https://w3id.org/jeswr/awp#Assurance",
+      "ReasonCode": "https://w3id.org/jeswr/awp#ReasonCode",
+      "MessageKind": "https://w3id.org/jeswr/awp#MessageKind",
+      "CheckName": "https://w3id.org/jeswr/awp#CheckName",
+      "Verdict": "https://w3id.org/jeswr/awp#Verdict",
+      "CheckResultCode": "https://w3id.org/jeswr/awp#CheckResultCode",
+      "ProofBinding": "https://w3id.org/jeswr/awp#ProofBinding",
+      "Describe": {
+        "@id": "https://w3id.org/jeswr/awp#Describe",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "want": "https://w3id.org/jeswr/awp#want"
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Description": {
+        "@id": "https://w3id.org/jeswr/awp#Description",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "description": "https://w3id.org/jeswr/awp#description"
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Propose": {
+        "@id": "https://w3id.org/jeswr/awp#Propose",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "operation": "https://w3id.org/jeswr/awp#operation",
+              "terms": "https://w3id.org/jeswr/awp#terms",
+              "termsDigest": "https://w3id.org/jeswr/awp#termsDigest",
+              "round": "https://w3id.org/jeswr/awp#round",
+              "counters": {
+                "@id": "https://w3id.org/jeswr/awp#counters",
+                "@type": "@id"
+              }
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Accept": {
+        "@id": "https://w3id.org/jeswr/awp#Accept",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "proposal": {
+                "@id": "https://w3id.org/jeswr/awp#proposal",
+                "@type": "@id"
+              },
+              "termsDigest": "https://w3id.org/jeswr/awp#termsDigest",
+              "selection": "https://w3id.org/jeswr/awp#selection",
+              "agreement": {
+                "@id": "https://w3id.org/jeswr/awp#agreement",
+                "@type": "@id"
+              }
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Refuse": {
+        "@id": "https://w3id.org/jeswr/awp#Refuse",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "ref": {
+                "@id": "https://w3id.org/jeswr/awp#ref",
+                "@type": "@id"
+              },
+              "reason": {
+                "@id": "https://w3id.org/jeswr/awp#reason",
+                "@type": "@vocab",
+                "@context": {
+                  "malformed": "https://w3id.org/jeswr/awp#reason/malformed",
+                  "bounds-exceeded": "https://w3id.org/jeswr/awp#reason/bounds-exceeded",
+                  "unsigned-not-allowed": "https://w3id.org/jeswr/awp#reason/unsigned-not-allowed",
+                  "unknown-key": "https://w3id.org/jeswr/awp#reason/unknown-key",
+                  "bad-signature": "https://w3id.org/jeswr/awp#reason/bad-signature",
+                  "disallowed-header": "https://w3id.org/jeswr/awp#reason/disallowed-header",
+                  "configuration-mismatch": "https://w3id.org/jeswr/awp#reason/configuration-mismatch",
+                  "sender-key-mismatch": "https://w3id.org/jeswr/awp#reason/sender-key-mismatch",
+                  "wrong-audience": "https://w3id.org/jeswr/awp#reason/wrong-audience",
+                  "expired": "https://w3id.org/jeswr/awp#reason/expired",
+                  "not-yet-valid": "https://w3id.org/jeswr/awp#reason/not-yet-valid",
+                  "lifetime-too-long": "https://w3id.org/jeswr/awp#reason/lifetime-too-long",
+                  "replay-conflict": "https://w3id.org/jeswr/awp#reason/replay-conflict",
+                  "capacity": "https://w3id.org/jeswr/awp#reason/capacity",
+                  "no-structured-content": "https://w3id.org/jeswr/awp#reason/no-structured-content",
+                  "conflicting-structured-copies": "https://w3id.org/jeswr/awp#reason/conflicting-structured-copies",
+                  "human-parity-mismatch": "https://w3id.org/jeswr/awp#reason/human-parity-mismatch",
+                  "unsupported-profile": "https://w3id.org/jeswr/awp#reason/unsupported-profile",
+                  "unsupported-configuration": "https://w3id.org/jeswr/awp#reason/unsupported-configuration",
+                  "unsupported-operation": "https://w3id.org/jeswr/awp#reason/unsupported-operation",
+                  "unsupported-kind": "https://w3id.org/jeswr/awp#reason/unsupported-kind",
+                  "unsupported-term": "https://w3id.org/jeswr/awp#reason/unsupported-term",
+                  "protocol-violation": "https://w3id.org/jeswr/awp#reason/protocol-violation",
+                  "terms-digest-mismatch": "https://w3id.org/jeswr/awp#reason/terms-digest-mismatch",
+                  "round-limit": "https://w3id.org/jeswr/awp#reason/round-limit",
+                  "conversation-closed": "https://w3id.org/jeswr/awp#reason/conversation-closed",
+                  "representation-missing": "https://w3id.org/jeswr/awp#reason/representation-missing",
+                  "representation-invalid": "https://w3id.org/jeswr/awp#reason/representation-invalid",
+                  "representation-expired": "https://w3id.org/jeswr/awp#reason/representation-expired",
+                  "representation-out-of-scope": "https://w3id.org/jeswr/awp#reason/representation-out-of-scope",
+                  "source-not-authoritative": "https://w3id.org/jeswr/awp#reason/source-not-authoritative",
+                  "evidence-invalid": "https://w3id.org/jeswr/awp#reason/evidence-invalid",
+                  "not-authorised": "https://w3id.org/jeswr/awp#reason/not-authorised",
+                  "mandate-invalid": "https://w3id.org/jeswr/awp#reason/mandate-invalid",
+                  "assurance-insufficient": "https://w3id.org/jeswr/awp#reason/assurance-insufficient",
+                  "approval-required": "https://w3id.org/jeswr/awp#reason/approval-required",
+                  "approval-denied": "https://w3id.org/jeswr/awp#reason/approval-denied",
+                  "missing-context": "https://w3id.org/jeswr/awp#reason/missing-context",
+                  "indeterminate-policy": "https://w3id.org/jeswr/awp#reason/indeterminate-policy",
+                  "grant-invalid": "https://w3id.org/jeswr/awp#reason/grant-invalid",
+                  "grant-expired": "https://w3id.org/jeswr/awp#reason/grant-expired",
+                  "grant-revoked": "https://w3id.org/jeswr/awp#reason/grant-revoked",
+                  "insufficient-scope": "https://w3id.org/jeswr/awp#reason/insufficient-scope",
+                  "purpose-not-permitted": "https://w3id.org/jeswr/awp#reason/purpose-not-permitted",
+                  "no-agreement": "https://w3id.org/jeswr/awp#reason/no-agreement",
+                  "context-not-clear": "https://w3id.org/jeswr/awp#reason/context-not-clear",
+                  "terms-not-acceptable": "https://w3id.org/jeswr/awp#reason/terms-not-acceptable",
+                  "structured-form-required": "https://w3id.org/jeswr/awp#reason/structured-form-required",
+                  "method-not-accepted": "https://w3id.org/jeswr/awp#reason/method-not-accepted",
+                  "source-unknown": "https://w3id.org/jeswr/awp#reason/source-unknown",
+                  "lookup-failed": "https://w3id.org/jeswr/awp#reason/lookup-failed",
+                  "status-withdrawn": "https://w3id.org/jeswr/awp#reason/status-withdrawn",
+                  "mandate-withdrawn": "https://w3id.org/jeswr/awp#reason/mandate-withdrawn",
+                  "prohibited": "https://w3id.org/jeswr/awp#reason/prohibited",
+                  "confidence-too-low": "https://w3id.org/jeswr/awp#reason/confidence-too-low",
+                  "superseded-by-better-source": "https://w3id.org/jeswr/awp#reason/superseded-by-better-source",
+                  "partial-result": "https://w3id.org/jeswr/awp#reason/partial-result",
+                  "completeness-not-established": "https://w3id.org/jeswr/awp#reason/completeness-not-established",
+                  "rule-not-accepted": "https://w3id.org/jeswr/awp#reason/rule-not-accepted",
+                  "deriver-not-accepted": "https://w3id.org/jeswr/awp#reason/deriver-not-accepted",
+                  "form-not-available": "https://w3id.org/jeswr/awp#reason/form-not-available",
+                  "rule-unbounded": "https://w3id.org/jeswr/awp#reason/rule-unbounded",
+                  "limit-exceeded": "https://w3id.org/jeswr/awp#reason/limit-exceeded",
+                  "budget-exceeded": "https://w3id.org/jeswr/awp#reason/budget-exceeded",
+                  "stopped-by-principal": "https://w3id.org/jeswr/awp#reason/stopped-by-principal",
+                  "record-unavailable": "https://w3id.org/jeswr/awp#reason/record-unavailable",
+                  "derivation-not-verified": "https://w3id.org/jeswr/awp#reason/derivation-not-verified",
+                  "result-uncertain": "https://w3id.org/jeswr/awp#reason/result-uncertain",
+                  "evidence-missing": "https://w3id.org/jeswr/awp#reason/evidence-missing",
+                  "invalid-terms": "https://w3id.org/jeswr/awp#reason/invalid-terms",
+                  "no-acceptable-slot": "https://w3id.org/jeswr/awp#reason/no-acceptable-slot",
+                  "fee-not-acceptable": "https://w3id.org/jeswr/awp#reason/fee-not-acceptable",
+                  "excessive-scope": "https://w3id.org/jeswr/awp#reason/excessive-scope",
+                  "stale-data": "https://w3id.org/jeswr/awp#reason/stale-data",
+                  "credentials-required": "https://w3id.org/jeswr/awp#reason/credentials-required",
+                  "execution-failed": "https://w3id.org/jeswr/awp#reason/execution-failed"
+                }
+              },
+              "detail": "https://w3id.org/jeswr/awp#detail"
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Challenge": {
+        "@id": "https://w3id.org/jeswr/awp#Challenge",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "ref": {
+                "@id": "https://w3id.org/jeswr/awp#ref",
+                "@type": "@id"
+              },
+              "reason": {
+                "@id": "https://w3id.org/jeswr/awp#reason",
+                "@type": "@vocab",
+                "@context": {
+                  "malformed": "https://w3id.org/jeswr/awp#reason/malformed",
+                  "bounds-exceeded": "https://w3id.org/jeswr/awp#reason/bounds-exceeded",
+                  "unsigned-not-allowed": "https://w3id.org/jeswr/awp#reason/unsigned-not-allowed",
+                  "unknown-key": "https://w3id.org/jeswr/awp#reason/unknown-key",
+                  "bad-signature": "https://w3id.org/jeswr/awp#reason/bad-signature",
+                  "disallowed-header": "https://w3id.org/jeswr/awp#reason/disallowed-header",
+                  "configuration-mismatch": "https://w3id.org/jeswr/awp#reason/configuration-mismatch",
+                  "sender-key-mismatch": "https://w3id.org/jeswr/awp#reason/sender-key-mismatch",
+                  "wrong-audience": "https://w3id.org/jeswr/awp#reason/wrong-audience",
+                  "expired": "https://w3id.org/jeswr/awp#reason/expired",
+                  "not-yet-valid": "https://w3id.org/jeswr/awp#reason/not-yet-valid",
+                  "lifetime-too-long": "https://w3id.org/jeswr/awp#reason/lifetime-too-long",
+                  "replay-conflict": "https://w3id.org/jeswr/awp#reason/replay-conflict",
+                  "capacity": "https://w3id.org/jeswr/awp#reason/capacity",
+                  "no-structured-content": "https://w3id.org/jeswr/awp#reason/no-structured-content",
+                  "conflicting-structured-copies": "https://w3id.org/jeswr/awp#reason/conflicting-structured-copies",
+                  "human-parity-mismatch": "https://w3id.org/jeswr/awp#reason/human-parity-mismatch",
+                  "unsupported-profile": "https://w3id.org/jeswr/awp#reason/unsupported-profile",
+                  "unsupported-configuration": "https://w3id.org/jeswr/awp#reason/unsupported-configuration",
+                  "unsupported-operation": "https://w3id.org/jeswr/awp#reason/unsupported-operation",
+                  "unsupported-kind": "https://w3id.org/jeswr/awp#reason/unsupported-kind",
+                  "unsupported-term": "https://w3id.org/jeswr/awp#reason/unsupported-term",
+                  "protocol-violation": "https://w3id.org/jeswr/awp#reason/protocol-violation",
+                  "terms-digest-mismatch": "https://w3id.org/jeswr/awp#reason/terms-digest-mismatch",
+                  "round-limit": "https://w3id.org/jeswr/awp#reason/round-limit",
+                  "conversation-closed": "https://w3id.org/jeswr/awp#reason/conversation-closed",
+                  "representation-missing": "https://w3id.org/jeswr/awp#reason/representation-missing",
+                  "representation-invalid": "https://w3id.org/jeswr/awp#reason/representation-invalid",
+                  "representation-expired": "https://w3id.org/jeswr/awp#reason/representation-expired",
+                  "representation-out-of-scope": "https://w3id.org/jeswr/awp#reason/representation-out-of-scope",
+                  "source-not-authoritative": "https://w3id.org/jeswr/awp#reason/source-not-authoritative",
+                  "evidence-invalid": "https://w3id.org/jeswr/awp#reason/evidence-invalid",
+                  "not-authorised": "https://w3id.org/jeswr/awp#reason/not-authorised",
+                  "mandate-invalid": "https://w3id.org/jeswr/awp#reason/mandate-invalid",
+                  "assurance-insufficient": "https://w3id.org/jeswr/awp#reason/assurance-insufficient",
+                  "approval-required": "https://w3id.org/jeswr/awp#reason/approval-required",
+                  "approval-denied": "https://w3id.org/jeswr/awp#reason/approval-denied",
+                  "missing-context": "https://w3id.org/jeswr/awp#reason/missing-context",
+                  "indeterminate-policy": "https://w3id.org/jeswr/awp#reason/indeterminate-policy",
+                  "grant-invalid": "https://w3id.org/jeswr/awp#reason/grant-invalid",
+                  "grant-expired": "https://w3id.org/jeswr/awp#reason/grant-expired",
+                  "grant-revoked": "https://w3id.org/jeswr/awp#reason/grant-revoked",
+                  "insufficient-scope": "https://w3id.org/jeswr/awp#reason/insufficient-scope",
+                  "purpose-not-permitted": "https://w3id.org/jeswr/awp#reason/purpose-not-permitted",
+                  "no-agreement": "https://w3id.org/jeswr/awp#reason/no-agreement",
+                  "context-not-clear": "https://w3id.org/jeswr/awp#reason/context-not-clear",
+                  "terms-not-acceptable": "https://w3id.org/jeswr/awp#reason/terms-not-acceptable",
+                  "structured-form-required": "https://w3id.org/jeswr/awp#reason/structured-form-required",
+                  "method-not-accepted": "https://w3id.org/jeswr/awp#reason/method-not-accepted",
+                  "source-unknown": "https://w3id.org/jeswr/awp#reason/source-unknown",
+                  "lookup-failed": "https://w3id.org/jeswr/awp#reason/lookup-failed",
+                  "status-withdrawn": "https://w3id.org/jeswr/awp#reason/status-withdrawn",
+                  "mandate-withdrawn": "https://w3id.org/jeswr/awp#reason/mandate-withdrawn",
+                  "prohibited": "https://w3id.org/jeswr/awp#reason/prohibited",
+                  "confidence-too-low": "https://w3id.org/jeswr/awp#reason/confidence-too-low",
+                  "superseded-by-better-source": "https://w3id.org/jeswr/awp#reason/superseded-by-better-source",
+                  "partial-result": "https://w3id.org/jeswr/awp#reason/partial-result",
+                  "completeness-not-established": "https://w3id.org/jeswr/awp#reason/completeness-not-established",
+                  "rule-not-accepted": "https://w3id.org/jeswr/awp#reason/rule-not-accepted",
+                  "deriver-not-accepted": "https://w3id.org/jeswr/awp#reason/deriver-not-accepted",
+                  "form-not-available": "https://w3id.org/jeswr/awp#reason/form-not-available",
+                  "rule-unbounded": "https://w3id.org/jeswr/awp#reason/rule-unbounded",
+                  "limit-exceeded": "https://w3id.org/jeswr/awp#reason/limit-exceeded",
+                  "budget-exceeded": "https://w3id.org/jeswr/awp#reason/budget-exceeded",
+                  "stopped-by-principal": "https://w3id.org/jeswr/awp#reason/stopped-by-principal",
+                  "record-unavailable": "https://w3id.org/jeswr/awp#reason/record-unavailable",
+                  "derivation-not-verified": "https://w3id.org/jeswr/awp#reason/derivation-not-verified",
+                  "result-uncertain": "https://w3id.org/jeswr/awp#reason/result-uncertain",
+                  "evidence-missing": "https://w3id.org/jeswr/awp#reason/evidence-missing",
+                  "invalid-terms": "https://w3id.org/jeswr/awp#reason/invalid-terms",
+                  "no-acceptable-slot": "https://w3id.org/jeswr/awp#reason/no-acceptable-slot",
+                  "fee-not-acceptable": "https://w3id.org/jeswr/awp#reason/fee-not-acceptable",
+                  "excessive-scope": "https://w3id.org/jeswr/awp#reason/excessive-scope",
+                  "stale-data": "https://w3id.org/jeswr/awp#reason/stale-data",
+                  "credentials-required": "https://w3id.org/jeswr/awp#reason/credentials-required",
+                  "execution-failed": "https://w3id.org/jeswr/awp#reason/execution-failed"
+                }
+              },
+              "detail": "https://w3id.org/jeswr/awp#detail",
+              "needs": {
+                "@id": "https://w3id.org/jeswr/awp#needs",
+                "@context": {
+                  "nonce": {
+                    "@id": "https://w3id.org/jeswr/awp#nonce",
+                    "@type": "@id"
+                  },
+                  "approval": {
+                    "@id": "https://w3id.org/jeswr/awp#approval",
+                    "@type": "@id"
+                  },
+                  "label": "http://www.w3.org/2000/01/rdf-schema#label",
+                  "expiresAt": {
+                    "@id": "https://w3id.org/jeswr/awp#expiresAt",
+                    "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+                  }
+                }
+              }
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Invoke": {
+        "@id": "https://w3id.org/jeswr/awp#Invoke",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "challenge": {
+                "@id": "https://w3id.org/jeswr/awp#challenge",
+                "@context": {
+                  "nonce": {
+                    "@id": "https://w3id.org/jeswr/awp#nonce",
+                    "@type": "@id"
+                  }
+                }
+              },
+              "operation": "https://w3id.org/jeswr/awp#operation",
+              "input": "https://w3id.org/jeswr/awp#input",
+              "basis": {
+                "@id": "https://w3id.org/jeswr/awp#basis",
+                "@context": {
+                  "kind": {
+                    "@id": "https://w3id.org/jeswr/awp#basisKind",
+                    "@type": "@vocab",
+                    "@context": {
+                      "agreement": "https://w3id.org/jeswr/awp#basis/agreement",
+                      "public": "https://w3id.org/jeswr/awp#basis/public",
+                      "represented": "https://w3id.org/jeswr/awp#basis/represented",
+                      "grant": "https://w3id.org/jeswr/awp#basis/grant",
+                      "invocation": "https://w3id.org/jeswr/awp#basis/invocation"
+                    }
+                  }
+                }
+              },
+              "purpose": "https://w3id.org/dpv#hasPurpose"
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Deliver": {
+        "@id": "https://w3id.org/jeswr/awp#Deliver",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "ref": {
+                "@id": "https://w3id.org/jeswr/awp#ref",
+                "@type": "@id"
+              },
+              "basis": {
+                "@id": "https://w3id.org/jeswr/awp#basis",
+                "@context": {
+                  "kind": {
+                    "@id": "https://w3id.org/jeswr/awp#basisKind",
+                    "@type": "@vocab",
+                    "@context": {
+                      "agreement": "https://w3id.org/jeswr/awp#basis/agreement",
+                      "public": "https://w3id.org/jeswr/awp#basis/public",
+                      "represented": "https://w3id.org/jeswr/awp#basis/represented",
+                      "grant": "https://w3id.org/jeswr/awp#basis/grant",
+                      "invocation": "https://w3id.org/jeswr/awp#basis/invocation"
+                    }
+                  }
+                }
+              },
+              "operation": "https://w3id.org/jeswr/awp#operation",
+              "output": "https://w3id.org/jeswr/awp#output"
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Receipt": {
+        "@id": "https://w3id.org/jeswr/awp#Receipt",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "ref": {
+                "@id": "https://w3id.org/jeswr/awp#ref",
+                "@type": "@id"
+              },
+              "activity": {
+                "@id": "https://w3id.org/jeswr/awp#activity",
+                "@type": "@id"
+              },
+              "outcome": {
+                "@id": "https://w3id.org/jeswr/awp#outcome",
+                "@type": "@vocab",
+                "@context": {
+                  "completed": "https://w3id.org/jeswr/awp#outcome/completed",
+                  "not-executed": "https://w3id.org/jeswr/awp#outcome/not-executed",
+                  "uncertain": "https://w3id.org/jeswr/awp#outcome/uncertain"
+                }
+              },
+              "observed": "https://w3id.org/jeswr/awp#observed",
+              "final": "https://w3id.org/jeswr/awp#final"
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Unsupported": {
+        "@id": "https://w3id.org/jeswr/awp#Unsupported",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "ref": {
+                "@id": "https://w3id.org/jeswr/awp#ref",
+                "@type": "@id"
+              },
+              "reason": {
+                "@id": "https://w3id.org/jeswr/awp#reason",
+                "@type": "@vocab",
+                "@context": {
+                  "malformed": "https://w3id.org/jeswr/awp#reason/malformed",
+                  "bounds-exceeded": "https://w3id.org/jeswr/awp#reason/bounds-exceeded",
+                  "unsigned-not-allowed": "https://w3id.org/jeswr/awp#reason/unsigned-not-allowed",
+                  "unknown-key": "https://w3id.org/jeswr/awp#reason/unknown-key",
+                  "bad-signature": "https://w3id.org/jeswr/awp#reason/bad-signature",
+                  "disallowed-header": "https://w3id.org/jeswr/awp#reason/disallowed-header",
+                  "configuration-mismatch": "https://w3id.org/jeswr/awp#reason/configuration-mismatch",
+                  "sender-key-mismatch": "https://w3id.org/jeswr/awp#reason/sender-key-mismatch",
+                  "wrong-audience": "https://w3id.org/jeswr/awp#reason/wrong-audience",
+                  "expired": "https://w3id.org/jeswr/awp#reason/expired",
+                  "not-yet-valid": "https://w3id.org/jeswr/awp#reason/not-yet-valid",
+                  "lifetime-too-long": "https://w3id.org/jeswr/awp#reason/lifetime-too-long",
+                  "replay-conflict": "https://w3id.org/jeswr/awp#reason/replay-conflict",
+                  "capacity": "https://w3id.org/jeswr/awp#reason/capacity",
+                  "no-structured-content": "https://w3id.org/jeswr/awp#reason/no-structured-content",
+                  "conflicting-structured-copies": "https://w3id.org/jeswr/awp#reason/conflicting-structured-copies",
+                  "human-parity-mismatch": "https://w3id.org/jeswr/awp#reason/human-parity-mismatch",
+                  "unsupported-profile": "https://w3id.org/jeswr/awp#reason/unsupported-profile",
+                  "unsupported-configuration": "https://w3id.org/jeswr/awp#reason/unsupported-configuration",
+                  "unsupported-operation": "https://w3id.org/jeswr/awp#reason/unsupported-operation",
+                  "unsupported-kind": "https://w3id.org/jeswr/awp#reason/unsupported-kind",
+                  "unsupported-term": "https://w3id.org/jeswr/awp#reason/unsupported-term",
+                  "protocol-violation": "https://w3id.org/jeswr/awp#reason/protocol-violation",
+                  "terms-digest-mismatch": "https://w3id.org/jeswr/awp#reason/terms-digest-mismatch",
+                  "round-limit": "https://w3id.org/jeswr/awp#reason/round-limit",
+                  "conversation-closed": "https://w3id.org/jeswr/awp#reason/conversation-closed",
+                  "representation-missing": "https://w3id.org/jeswr/awp#reason/representation-missing",
+                  "representation-invalid": "https://w3id.org/jeswr/awp#reason/representation-invalid",
+                  "representation-expired": "https://w3id.org/jeswr/awp#reason/representation-expired",
+                  "representation-out-of-scope": "https://w3id.org/jeswr/awp#reason/representation-out-of-scope",
+                  "source-not-authoritative": "https://w3id.org/jeswr/awp#reason/source-not-authoritative",
+                  "evidence-invalid": "https://w3id.org/jeswr/awp#reason/evidence-invalid",
+                  "not-authorised": "https://w3id.org/jeswr/awp#reason/not-authorised",
+                  "mandate-invalid": "https://w3id.org/jeswr/awp#reason/mandate-invalid",
+                  "assurance-insufficient": "https://w3id.org/jeswr/awp#reason/assurance-insufficient",
+                  "approval-required": "https://w3id.org/jeswr/awp#reason/approval-required",
+                  "approval-denied": "https://w3id.org/jeswr/awp#reason/approval-denied",
+                  "missing-context": "https://w3id.org/jeswr/awp#reason/missing-context",
+                  "indeterminate-policy": "https://w3id.org/jeswr/awp#reason/indeterminate-policy",
+                  "grant-invalid": "https://w3id.org/jeswr/awp#reason/grant-invalid",
+                  "grant-expired": "https://w3id.org/jeswr/awp#reason/grant-expired",
+                  "grant-revoked": "https://w3id.org/jeswr/awp#reason/grant-revoked",
+                  "insufficient-scope": "https://w3id.org/jeswr/awp#reason/insufficient-scope",
+                  "purpose-not-permitted": "https://w3id.org/jeswr/awp#reason/purpose-not-permitted",
+                  "no-agreement": "https://w3id.org/jeswr/awp#reason/no-agreement",
+                  "context-not-clear": "https://w3id.org/jeswr/awp#reason/context-not-clear",
+                  "terms-not-acceptable": "https://w3id.org/jeswr/awp#reason/terms-not-acceptable",
+                  "structured-form-required": "https://w3id.org/jeswr/awp#reason/structured-form-required",
+                  "method-not-accepted": "https://w3id.org/jeswr/awp#reason/method-not-accepted",
+                  "source-unknown": "https://w3id.org/jeswr/awp#reason/source-unknown",
+                  "lookup-failed": "https://w3id.org/jeswr/awp#reason/lookup-failed",
+                  "status-withdrawn": "https://w3id.org/jeswr/awp#reason/status-withdrawn",
+                  "mandate-withdrawn": "https://w3id.org/jeswr/awp#reason/mandate-withdrawn",
+                  "prohibited": "https://w3id.org/jeswr/awp#reason/prohibited",
+                  "confidence-too-low": "https://w3id.org/jeswr/awp#reason/confidence-too-low",
+                  "superseded-by-better-source": "https://w3id.org/jeswr/awp#reason/superseded-by-better-source",
+                  "partial-result": "https://w3id.org/jeswr/awp#reason/partial-result",
+                  "completeness-not-established": "https://w3id.org/jeswr/awp#reason/completeness-not-established",
+                  "rule-not-accepted": "https://w3id.org/jeswr/awp#reason/rule-not-accepted",
+                  "deriver-not-accepted": "https://w3id.org/jeswr/awp#reason/deriver-not-accepted",
+                  "form-not-available": "https://w3id.org/jeswr/awp#reason/form-not-available",
+                  "rule-unbounded": "https://w3id.org/jeswr/awp#reason/rule-unbounded",
+                  "limit-exceeded": "https://w3id.org/jeswr/awp#reason/limit-exceeded",
+                  "budget-exceeded": "https://w3id.org/jeswr/awp#reason/budget-exceeded",
+                  "stopped-by-principal": "https://w3id.org/jeswr/awp#reason/stopped-by-principal",
+                  "record-unavailable": "https://w3id.org/jeswr/awp#reason/record-unavailable",
+                  "derivation-not-verified": "https://w3id.org/jeswr/awp#reason/derivation-not-verified",
+                  "result-uncertain": "https://w3id.org/jeswr/awp#reason/result-uncertain",
+                  "evidence-missing": "https://w3id.org/jeswr/awp#reason/evidence-missing",
+                  "invalid-terms": "https://w3id.org/jeswr/awp#reason/invalid-terms",
+                  "no-acceptable-slot": "https://w3id.org/jeswr/awp#reason/no-acceptable-slot",
+                  "fee-not-acceptable": "https://w3id.org/jeswr/awp#reason/fee-not-acceptable",
+                  "excessive-scope": "https://w3id.org/jeswr/awp#reason/excessive-scope",
+                  "stale-data": "https://w3id.org/jeswr/awp#reason/stale-data",
+                  "credentials-required": "https://w3id.org/jeswr/awp#reason/credentials-required",
+                  "execution-failed": "https://w3id.org/jeswr/awp#reason/execution-failed"
+                }
+              },
+              "detail": "https://w3id.org/jeswr/awp#detail"
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "Indeterminate": {
+        "@id": "https://w3id.org/jeswr/awp#Indeterminate",
+        "@context": {
+          "body": {
+            "@id": "https://w3id.org/jeswr/awp#body",
+            "@context": {
+              "ref": {
+                "@id": "https://w3id.org/jeswr/awp#ref",
+                "@type": "@id"
+              },
+              "reason": {
+                "@id": "https://w3id.org/jeswr/awp#reason",
+                "@type": "@vocab",
+                "@context": {
+                  "malformed": "https://w3id.org/jeswr/awp#reason/malformed",
+                  "bounds-exceeded": "https://w3id.org/jeswr/awp#reason/bounds-exceeded",
+                  "unsigned-not-allowed": "https://w3id.org/jeswr/awp#reason/unsigned-not-allowed",
+                  "unknown-key": "https://w3id.org/jeswr/awp#reason/unknown-key",
+                  "bad-signature": "https://w3id.org/jeswr/awp#reason/bad-signature",
+                  "disallowed-header": "https://w3id.org/jeswr/awp#reason/disallowed-header",
+                  "configuration-mismatch": "https://w3id.org/jeswr/awp#reason/configuration-mismatch",
+                  "sender-key-mismatch": "https://w3id.org/jeswr/awp#reason/sender-key-mismatch",
+                  "wrong-audience": "https://w3id.org/jeswr/awp#reason/wrong-audience",
+                  "expired": "https://w3id.org/jeswr/awp#reason/expired",
+                  "not-yet-valid": "https://w3id.org/jeswr/awp#reason/not-yet-valid",
+                  "lifetime-too-long": "https://w3id.org/jeswr/awp#reason/lifetime-too-long",
+                  "replay-conflict": "https://w3id.org/jeswr/awp#reason/replay-conflict",
+                  "capacity": "https://w3id.org/jeswr/awp#reason/capacity",
+                  "no-structured-content": "https://w3id.org/jeswr/awp#reason/no-structured-content",
+                  "conflicting-structured-copies": "https://w3id.org/jeswr/awp#reason/conflicting-structured-copies",
+                  "human-parity-mismatch": "https://w3id.org/jeswr/awp#reason/human-parity-mismatch",
+                  "unsupported-profile": "https://w3id.org/jeswr/awp#reason/unsupported-profile",
+                  "unsupported-configuration": "https://w3id.org/jeswr/awp#reason/unsupported-configuration",
+                  "unsupported-operation": "https://w3id.org/jeswr/awp#reason/unsupported-operation",
+                  "unsupported-kind": "https://w3id.org/jeswr/awp#reason/unsupported-kind",
+                  "unsupported-term": "https://w3id.org/jeswr/awp#reason/unsupported-term",
+                  "protocol-violation": "https://w3id.org/jeswr/awp#reason/protocol-violation",
+                  "terms-digest-mismatch": "https://w3id.org/jeswr/awp#reason/terms-digest-mismatch",
+                  "round-limit": "https://w3id.org/jeswr/awp#reason/round-limit",
+                  "conversation-closed": "https://w3id.org/jeswr/awp#reason/conversation-closed",
+                  "representation-missing": "https://w3id.org/jeswr/awp#reason/representation-missing",
+                  "representation-invalid": "https://w3id.org/jeswr/awp#reason/representation-invalid",
+                  "representation-expired": "https://w3id.org/jeswr/awp#reason/representation-expired",
+                  "representation-out-of-scope": "https://w3id.org/jeswr/awp#reason/representation-out-of-scope",
+                  "source-not-authoritative": "https://w3id.org/jeswr/awp#reason/source-not-authoritative",
+                  "evidence-invalid": "https://w3id.org/jeswr/awp#reason/evidence-invalid",
+                  "not-authorised": "https://w3id.org/jeswr/awp#reason/not-authorised",
+                  "mandate-invalid": "https://w3id.org/jeswr/awp#reason/mandate-invalid",
+                  "assurance-insufficient": "https://w3id.org/jeswr/awp#reason/assurance-insufficient",
+                  "approval-required": "https://w3id.org/jeswr/awp#reason/approval-required",
+                  "approval-denied": "https://w3id.org/jeswr/awp#reason/approval-denied",
+                  "missing-context": "https://w3id.org/jeswr/awp#reason/missing-context",
+                  "indeterminate-policy": "https://w3id.org/jeswr/awp#reason/indeterminate-policy",
+                  "grant-invalid": "https://w3id.org/jeswr/awp#reason/grant-invalid",
+                  "grant-expired": "https://w3id.org/jeswr/awp#reason/grant-expired",
+                  "grant-revoked": "https://w3id.org/jeswr/awp#reason/grant-revoked",
+                  "insufficient-scope": "https://w3id.org/jeswr/awp#reason/insufficient-scope",
+                  "purpose-not-permitted": "https://w3id.org/jeswr/awp#reason/purpose-not-permitted",
+                  "no-agreement": "https://w3id.org/jeswr/awp#reason/no-agreement",
+                  "context-not-clear": "https://w3id.org/jeswr/awp#reason/context-not-clear",
+                  "terms-not-acceptable": "https://w3id.org/jeswr/awp#reason/terms-not-acceptable",
+                  "structured-form-required": "https://w3id.org/jeswr/awp#reason/structured-form-required",
+                  "method-not-accepted": "https://w3id.org/jeswr/awp#reason/method-not-accepted",
+                  "source-unknown": "https://w3id.org/jeswr/awp#reason/source-unknown",
+                  "lookup-failed": "https://w3id.org/jeswr/awp#reason/lookup-failed",
+                  "status-withdrawn": "https://w3id.org/jeswr/awp#reason/status-withdrawn",
+                  "mandate-withdrawn": "https://w3id.org/jeswr/awp#reason/mandate-withdrawn",
+                  "prohibited": "https://w3id.org/jeswr/awp#reason/prohibited",
+                  "confidence-too-low": "https://w3id.org/jeswr/awp#reason/confidence-too-low",
+                  "superseded-by-better-source": "https://w3id.org/jeswr/awp#reason/superseded-by-better-source",
+                  "partial-result": "https://w3id.org/jeswr/awp#reason/partial-result",
+                  "completeness-not-established": "https://w3id.org/jeswr/awp#reason/completeness-not-established",
+                  "rule-not-accepted": "https://w3id.org/jeswr/awp#reason/rule-not-accepted",
+                  "deriver-not-accepted": "https://w3id.org/jeswr/awp#reason/deriver-not-accepted",
+                  "form-not-available": "https://w3id.org/jeswr/awp#reason/form-not-available",
+                  "rule-unbounded": "https://w3id.org/jeswr/awp#reason/rule-unbounded",
+                  "limit-exceeded": "https://w3id.org/jeswr/awp#reason/limit-exceeded",
+                  "budget-exceeded": "https://w3id.org/jeswr/awp#reason/budget-exceeded",
+                  "stopped-by-principal": "https://w3id.org/jeswr/awp#reason/stopped-by-principal",
+                  "record-unavailable": "https://w3id.org/jeswr/awp#reason/record-unavailable",
+                  "derivation-not-verified": "https://w3id.org/jeswr/awp#reason/derivation-not-verified",
+                  "result-uncertain": "https://w3id.org/jeswr/awp#reason/result-uncertain",
+                  "evidence-missing": "https://w3id.org/jeswr/awp#reason/evidence-missing",
+                  "invalid-terms": "https://w3id.org/jeswr/awp#reason/invalid-terms",
+                  "no-acceptable-slot": "https://w3id.org/jeswr/awp#reason/no-acceptable-slot",
+                  "fee-not-acceptable": "https://w3id.org/jeswr/awp#reason/fee-not-acceptable",
+                  "excessive-scope": "https://w3id.org/jeswr/awp#reason/excessive-scope",
+                  "stale-data": "https://w3id.org/jeswr/awp#reason/stale-data",
+                  "credentials-required": "https://w3id.org/jeswr/awp#reason/credentials-required",
+                  "execution-failed": "https://w3id.org/jeswr/awp#reason/execution-failed"
+                }
+              },
+              "detail": "https://w3id.org/jeswr/awp#detail"
+            }
+          },
+          "evidence": {
+            "@id": "https://w3id.org/jeswr/awp#evidence",
+            "@context": {
+              "value": {
+                "@id": "https://www.w3.org/2018/credentials#verifiableCredential"
+              },
+              "role": {
+                "@id": "https://w3id.org/jeswr/awp#role",
+                "@type": "@vocab",
+                "@context": {
+                  "representation": "https://w3id.org/jeswr/awp#evidence-role/representation",
+                  "approval": "https://w3id.org/jeswr/awp#evidence-role/approval",
+                  "credential": "https://w3id.org/jeswr/awp#evidence-role/credential",
+                  "grant": "https://w3id.org/jeswr/awp#evidence-role/grant",
+                  "membership": "https://w3id.org/jeswr/awp#evidence-role/membership",
+                  "authorisation": "https://w3id.org/jeswr/awp#evidence-role/authorisation"
+                }
+              }
+            }
+          },
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#kind",
+            "@type": "@vocab",
+            "@context": {
+              "describe": "https://w3id.org/jeswr/awp#kind/describe",
+              "description": "https://w3id.org/jeswr/awp#kind/description",
+              "propose": "https://w3id.org/jeswr/awp#kind/propose",
+              "accept": "https://w3id.org/jeswr/awp#kind/accept",
+              "refuse": "https://w3id.org/jeswr/awp#kind/refuse",
+              "challenge": "https://w3id.org/jeswr/awp#kind/challenge",
+              "invoke": "https://w3id.org/jeswr/awp#kind/invoke",
+              "deliver": "https://w3id.org/jeswr/awp#kind/deliver",
+              "receipt": "https://w3id.org/jeswr/awp#kind/receipt",
+              "unsupported": "https://w3id.org/jeswr/awp#kind/unsupported",
+              "indeterminate": "https://w3id.org/jeswr/awp#kind/indeterminate"
+            }
+          }
+        }
+      },
+      "ImplementationDescription": "https://w3id.org/jeswr/awp#ImplementationDescription",
+      "Configuration": "https://w3id.org/jeswr/awp#Configuration",
+      "OwnerMandate": "https://w3id.org/jeswr/awp#OwnerMandate",
+      "RepresentationStatement": "https://w3id.org/jeswr/awp#RepresentationStatement",
+      "AgreementRecord": "https://w3id.org/jeswr/awp#AgreementRecord",
+      "OutcomeConclusion": "https://w3id.org/jeswr/awp#OutcomeConclusion",
+      "actor": {
+        "@id": "https://w3id.org/jeswr/awp#actor",
+        "@type": "@id"
+      },
+      "onBehalfOf": {
+        "@id": "http://www.w3.org/ns/prov#actedOnBehalfOf",
+        "@type": "@id"
+      },
+      "operator": {
+        "@id": "https://w3id.org/jeswr/awp#operator",
+        "@type": "@id"
+      },
+      "party": {
+        "@id": "https://w3id.org/jeswr/awp#party",
+        "@type": "@id"
+      },
+      "version": "https://w3id.org/jeswr/awp#version",
+      "role": "https://w3id.org/jeswr/awp#role",
+      "format": "https://w3id.org/jeswr/awp#format",
+      "value": "https://w3id.org/jeswr/awp#value",
+      "want": "https://w3id.org/jeswr/awp#want",
+      "operation": "https://w3id.org/jeswr/awp#operation",
+      "terms": "https://w3id.org/jeswr/awp#terms",
+      "termsDigest": "https://w3id.org/jeswr/awp#termsDigest",
+      "round": {
+        "@id": "https://w3id.org/jeswr/awp#round",
+        "@type": "http://www.w3.org/2001/XMLSchema#integer"
+      },
+      "counters": {
+        "@id": "https://w3id.org/jeswr/awp#counters",
+        "@type": "@id"
+      },
+      "proposal": {
+        "@id": "https://w3id.org/jeswr/awp#proposal",
+        "@type": "@id"
+      },
+      "selection": "https://w3id.org/jeswr/awp#selection",
+      "agreement": {
+        "@id": "https://w3id.org/jeswr/awp#agreement",
+        "@type": "@id"
+      },
+      "ref": {
+        "@id": "https://w3id.org/jeswr/awp#ref",
+        "@type": "@id"
+      },
+      "reason": {
+        "@id": "https://w3id.org/jeswr/awp#reason",
+        "@type": "@vocab",
+        "@context": {
+          "malformed": "https://w3id.org/jeswr/awp#reason/malformed",
+          "bounds-exceeded": "https://w3id.org/jeswr/awp#reason/bounds-exceeded",
+          "unsigned-not-allowed": "https://w3id.org/jeswr/awp#reason/unsigned-not-allowed",
+          "unknown-key": "https://w3id.org/jeswr/awp#reason/unknown-key",
+          "bad-signature": "https://w3id.org/jeswr/awp#reason/bad-signature",
+          "disallowed-header": "https://w3id.org/jeswr/awp#reason/disallowed-header",
+          "configuration-mismatch": "https://w3id.org/jeswr/awp#reason/configuration-mismatch",
+          "sender-key-mismatch": "https://w3id.org/jeswr/awp#reason/sender-key-mismatch",
+          "wrong-audience": "https://w3id.org/jeswr/awp#reason/wrong-audience",
+          "expired": "https://w3id.org/jeswr/awp#reason/expired",
+          "not-yet-valid": "https://w3id.org/jeswr/awp#reason/not-yet-valid",
+          "lifetime-too-long": "https://w3id.org/jeswr/awp#reason/lifetime-too-long",
+          "replay-conflict": "https://w3id.org/jeswr/awp#reason/replay-conflict",
+          "capacity": "https://w3id.org/jeswr/awp#reason/capacity",
+          "no-structured-content": "https://w3id.org/jeswr/awp#reason/no-structured-content",
+          "conflicting-structured-copies": "https://w3id.org/jeswr/awp#reason/conflicting-structured-copies",
+          "human-parity-mismatch": "https://w3id.org/jeswr/awp#reason/human-parity-mismatch",
+          "unsupported-profile": "https://w3id.org/jeswr/awp#reason/unsupported-profile",
+          "unsupported-configuration": "https://w3id.org/jeswr/awp#reason/unsupported-configuration",
+          "unsupported-operation": "https://w3id.org/jeswr/awp#reason/unsupported-operation",
+          "unsupported-kind": "https://w3id.org/jeswr/awp#reason/unsupported-kind",
+          "unsupported-term": "https://w3id.org/jeswr/awp#reason/unsupported-term",
+          "protocol-violation": "https://w3id.org/jeswr/awp#reason/protocol-violation",
+          "terms-digest-mismatch": "https://w3id.org/jeswr/awp#reason/terms-digest-mismatch",
+          "round-limit": "https://w3id.org/jeswr/awp#reason/round-limit",
+          "conversation-closed": "https://w3id.org/jeswr/awp#reason/conversation-closed",
+          "representation-missing": "https://w3id.org/jeswr/awp#reason/representation-missing",
+          "representation-invalid": "https://w3id.org/jeswr/awp#reason/representation-invalid",
+          "representation-expired": "https://w3id.org/jeswr/awp#reason/representation-expired",
+          "representation-out-of-scope": "https://w3id.org/jeswr/awp#reason/representation-out-of-scope",
+          "source-not-authoritative": "https://w3id.org/jeswr/awp#reason/source-not-authoritative",
+          "evidence-invalid": "https://w3id.org/jeswr/awp#reason/evidence-invalid",
+          "not-authorised": "https://w3id.org/jeswr/awp#reason/not-authorised",
+          "mandate-invalid": "https://w3id.org/jeswr/awp#reason/mandate-invalid",
+          "assurance-insufficient": "https://w3id.org/jeswr/awp#reason/assurance-insufficient",
+          "approval-required": "https://w3id.org/jeswr/awp#reason/approval-required",
+          "approval-denied": "https://w3id.org/jeswr/awp#reason/approval-denied",
+          "missing-context": "https://w3id.org/jeswr/awp#reason/missing-context",
+          "indeterminate-policy": "https://w3id.org/jeswr/awp#reason/indeterminate-policy",
+          "grant-invalid": "https://w3id.org/jeswr/awp#reason/grant-invalid",
+          "grant-expired": "https://w3id.org/jeswr/awp#reason/grant-expired",
+          "grant-revoked": "https://w3id.org/jeswr/awp#reason/grant-revoked",
+          "insufficient-scope": "https://w3id.org/jeswr/awp#reason/insufficient-scope",
+          "purpose-not-permitted": "https://w3id.org/jeswr/awp#reason/purpose-not-permitted",
+          "no-agreement": "https://w3id.org/jeswr/awp#reason/no-agreement",
+          "context-not-clear": "https://w3id.org/jeswr/awp#reason/context-not-clear",
+          "terms-not-acceptable": "https://w3id.org/jeswr/awp#reason/terms-not-acceptable",
+          "structured-form-required": "https://w3id.org/jeswr/awp#reason/structured-form-required",
+          "method-not-accepted": "https://w3id.org/jeswr/awp#reason/method-not-accepted",
+          "source-unknown": "https://w3id.org/jeswr/awp#reason/source-unknown",
+          "lookup-failed": "https://w3id.org/jeswr/awp#reason/lookup-failed",
+          "status-withdrawn": "https://w3id.org/jeswr/awp#reason/status-withdrawn",
+          "mandate-withdrawn": "https://w3id.org/jeswr/awp#reason/mandate-withdrawn",
+          "prohibited": "https://w3id.org/jeswr/awp#reason/prohibited",
+          "confidence-too-low": "https://w3id.org/jeswr/awp#reason/confidence-too-low",
+          "superseded-by-better-source": "https://w3id.org/jeswr/awp#reason/superseded-by-better-source",
+          "partial-result": "https://w3id.org/jeswr/awp#reason/partial-result",
+          "completeness-not-established": "https://w3id.org/jeswr/awp#reason/completeness-not-established",
+          "rule-not-accepted": "https://w3id.org/jeswr/awp#reason/rule-not-accepted",
+          "deriver-not-accepted": "https://w3id.org/jeswr/awp#reason/deriver-not-accepted",
+          "form-not-available": "https://w3id.org/jeswr/awp#reason/form-not-available",
+          "rule-unbounded": "https://w3id.org/jeswr/awp#reason/rule-unbounded",
+          "limit-exceeded": "https://w3id.org/jeswr/awp#reason/limit-exceeded",
+          "budget-exceeded": "https://w3id.org/jeswr/awp#reason/budget-exceeded",
+          "stopped-by-principal": "https://w3id.org/jeswr/awp#reason/stopped-by-principal",
+          "record-unavailable": "https://w3id.org/jeswr/awp#reason/record-unavailable",
+          "derivation-not-verified": "https://w3id.org/jeswr/awp#reason/derivation-not-verified",
+          "result-uncertain": "https://w3id.org/jeswr/awp#reason/result-uncertain",
+          "evidence-missing": "https://w3id.org/jeswr/awp#reason/evidence-missing",
+          "invalid-terms": "https://w3id.org/jeswr/awp#reason/invalid-terms",
+          "no-acceptable-slot": "https://w3id.org/jeswr/awp#reason/no-acceptable-slot",
+          "fee-not-acceptable": "https://w3id.org/jeswr/awp#reason/fee-not-acceptable",
+          "excessive-scope": "https://w3id.org/jeswr/awp#reason/excessive-scope",
+          "stale-data": "https://w3id.org/jeswr/awp#reason/stale-data",
+          "credentials-required": "https://w3id.org/jeswr/awp#reason/credentials-required",
+          "execution-failed": "https://w3id.org/jeswr/awp#reason/execution-failed"
+        }
+      },
+      "detail": "https://w3id.org/jeswr/awp#detail",
+      "needs": "https://w3id.org/jeswr/awp#needs",
+      "input": "https://w3id.org/jeswr/awp#input",
+      "basis": {
+        "@id": "https://w3id.org/jeswr/awp#basis",
+        "@context": {
+          "kind": {
+            "@id": "https://w3id.org/jeswr/awp#basisKind",
+            "@type": "@vocab",
+            "@context": {
+              "agreement": "https://w3id.org/jeswr/awp#basis/agreement",
+              "public": "https://w3id.org/jeswr/awp#basis/public",
+              "represented": "https://w3id.org/jeswr/awp#basis/represented",
+              "grant": "https://w3id.org/jeswr/awp#basis/grant",
+              "invocation": "https://w3id.org/jeswr/awp#basis/invocation"
+            }
+          }
+        }
+      },
+      "purpose": "https://w3id.org/dpv#hasPurpose",
+      "output": "https://w3id.org/jeswr/awp#output",
+      "activity": {
+        "@id": "https://w3id.org/jeswr/awp#activity",
+        "@type": "@id"
+      },
+      "outcome": {
+        "@id": "https://w3id.org/jeswr/awp#outcome",
+        "@type": "@vocab",
+        "@context": {
+          "completed": "https://w3id.org/jeswr/awp#outcome/completed",
+          "not-executed": "https://w3id.org/jeswr/awp#outcome/not-executed",
+          "uncertain": "https://w3id.org/jeswr/awp#outcome/uncertain"
+        }
+      },
+      "observed": "https://w3id.org/jeswr/awp#observed",
+      "final": "https://w3id.org/jeswr/awp#final",
+      "digest": "https://w3id.org/jeswr/awp#digest",
+      "bytes": "https://w3id.org/jeswr/awp#bytes",
+      "profile": {
+        "@id": "https://w3id.org/jeswr/awp#profile",
+        "@type": "@id"
+      },
+      "configuration": {
+        "@id": "https://w3id.org/jeswr/awp#configuration",
+        "@type": "@id"
+      },
+      "conversation": {
+        "@id": "https://w3id.org/jeswr/awp#conversation",
+        "@type": "@id"
+      },
+      "from": "https://w3id.org/jeswr/awp#from",
+      "to": "https://w3id.org/jeswr/awp#to",
+      "createdAt": {
+        "@id": "https://w3id.org/jeswr/awp#createdAt",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "expiresAt": {
+        "@id": "https://w3id.org/jeswr/awp#expiresAt",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "inReplyTo": {
+        "@id": "https://w3id.org/jeswr/awp#inReplyTo",
+        "@type": "@id"
+      },
+      "method": "https://w3id.org/jeswr/awp#method",
+      "authorship": "https://w3id.org/jeswr/awp#authorship",
+      "content": {
+        "@id": "https://w3id.org/jeswr/awp#content",
+        "@context": {
+          "mediaType": {
+            "@id": "https://schema.org/encodingFormat"
+          }
+        }
+      },
+      "protectedObject": "https://w3id.org/jeswr/awp#protectedObject",
+      "property": "https://w3id.org/jeswr/awp#property",
+      "mechanism": "https://w3id.org/jeswr/awp#mechanism",
+      "verificationMaterial": "https://w3id.org/jeswr/awp#verificationMaterial",
+      "source": {
+        "@id": "http://www.w3.org/ns/prov#wasAttributedTo",
+        "@type": "@id"
+      },
+      "verifier": "https://w3id.org/jeswr/awp#verifier",
+      "at": {
+        "@id": "https://w3id.org/jeswr/awp#at",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "limitations": "https://w3id.org/jeswr/awp#limitations",
+      "deciderRole": "https://w3id.org/jeswr/awp#deciderRole",
+      "evaluator": "https://w3id.org/jeswr/awp#evaluator",
+      "statement": "https://w3id.org/jeswr/awp#statement",
+      "claimType": "https://w3id.org/jeswr/awp#claimType",
+      "subject": {
+        "@id": "https://w3id.org/jeswr/awp#subject",
+        "@type": "@id"
+      },
+      "rule": "https://w3id.org/jeswr/awp#rule",
+      "action": "http://www.w3.org/ns/odrl/2/action",
+      "target": {
+        "@id": "http://www.w3.org/ns/odrl/2/target",
+        "@type": "@id"
+      },
+      "recipient": {
+        "@id": "https://w3id.org/jeswr/awp#recipient",
+        "@type": "@id"
+      },
+      "parameters": "https://w3id.org/jeswr/awp#parameters",
+      "decider": "https://w3id.org/jeswr/awp#decider",
+      "actionDigest": "https://w3id.org/jeswr/awp#actionDigest",
+      "policy": "https://w3id.org/jeswr/awp#policy",
+      "approval": {
+        "@id": "https://w3id.org/jeswr/awp#approval",
+        "@type": "@id"
+      },
+      "matchedRule": "https://w3id.org/jeswr/awp#matchedRule",
+      "offer": {
+        "@id": "https://w3id.org/jeswr/awp#offer",
+        "@type": "@id"
+      },
+      "acceptance": {
+        "@id": "https://w3id.org/jeswr/awp#acceptance",
+        "@type": "@id"
+      },
+      "offeror": "https://w3id.org/jeswr/awp#offeror",
+      "acceptor": "https://w3id.org/jeswr/awp#acceptor",
+      "formedAt": {
+        "@id": "https://w3id.org/jeswr/awp#formedAt",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "grantor": {
+        "@id": "https://w3id.org/jeswr/awp#grantor",
+        "@type": "@id"
+      },
+      "grantee": {
+        "@id": "https://w3id.org/jeswr/awp#grantee",
+        "@type": "@id"
+      },
+      "validUntil": {
+        "@id": "https://www.w3.org/2018/credentials#validUntil",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "derivedFrom": {
+        "@id": "http://www.w3.org/ns/prov#wasDerivedFrom",
+        "@type": "@id"
+      },
+      "activityType": "https://w3id.org/jeswr/awp#activityType",
+      "effectKey": "https://w3id.org/jeswr/awp#effectKey",
+      "startedAt": {
+        "@id": "https://w3id.org/jeswr/awp#startedAt",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "endedAt": {
+        "@id": "https://w3id.org/jeswr/awp#endedAt",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "status": "https://w3id.org/jeswr/awp#status",
+      "conclusion": "https://w3id.org/jeswr/awp#conclusion",
+      "grant": {
+        "@id": "https://w3id.org/jeswr/awp#grant",
+        "@type": "@id"
+      },
+      "invocation": {
+        "@id": "https://w3id.org/jeswr/awp#invocation",
+        "@type": "@id"
+      },
+      "issuer": {
+        "@id": "https://www.w3.org/2018/credentials#issuer",
+        "@type": "@id"
+      },
+      "credentialSubject": {
+        "@id": "https://www.w3.org/2018/credentials#credentialSubject",
+        "@type": "@id"
+      },
+      "validFrom": {
+        "@id": "https://www.w3.org/2018/credentials#validFrom",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "credentialStatus": {
+        "@id": "https://www.w3.org/2018/credentials#credentialStatus",
+        "@type": "@id"
+      },
+      "proof": {
+        "@id": "https://w3id.org/security#proof",
+        "@type": "@id",
+        "@container": "@graph"
+      },
+      "autonomous": "https://w3id.org/jeswr/awp#autonomous",
+      "withApproval": "https://w3id.org/jeswr/awp#withApproval",
+      "asOf": {
+        "@id": "https://w3id.org/jeswr/awp#asOf",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+      },
+      "proofBinds": {
+        "@id": "https://w3id.org/jeswr/awp#proofBinds",
+        "@type": "@vocab",
+        "@context": {
+          "rule": "https://w3id.org/jeswr/awp#binding/rule",
+          "issuers": "https://w3id.org/jeswr/awp#binding/issuers",
+          "subject": "https://w3id.org/jeswr/awp#binding/subject",
+          "fresh": "https://w3id.org/jeswr/awp#binding/fresh",
+          "complete": "https://w3id.org/jeswr/awp#binding/complete"
+        }
+      },
+      "price": {
+        "@id": "https://schema.org/price",
+        "@type": "http://www.w3.org/2001/XMLSchema#decimal"
+      },
+      "priceCurrency": "https://schema.org/priceCurrency",
+      "amount": {
+        "@id": "https://schema.org/amount",
+        "@type": "http://www.w3.org/2001/XMLSchema#decimal"
+      },
+      "permissions": "http://www.w3.org/ns/odrl/2/permission",
+      "prohibitions": "http://www.w3.org/ns/odrl/2/prohibition",
+      "duties": "http://www.w3.org/ns/odrl/2/duty",
+      "label": "http://www.w3.org/2000/01/rdf-schema#label",
+      "assurance": {
+        "@id": "https://w3id.org/jeswr/awp#assurance",
+        "@type": "@vocab",
+        "@context": {
+          "by-source": "https://w3id.org/jeswr/awp#assurance/by-source",
+          "recomputed": "https://w3id.org/jeswr/awp#assurance/recomputed",
+          "proved": "https://w3id.org/jeswr/awp#assurance/proved",
+          "joint": "https://w3id.org/jeswr/awp#assurance/joint",
+          "attested": "https://w3id.org/jeswr/awp#assurance/attested"
+        }
+      },
+      "check": {
+        "@id": "https://w3id.org/jeswr/awp#check",
+        "@type": "@vocab",
+        "@context": {
+          "integrity": "https://w3id.org/jeswr/awp#check/integrity",
+          "source": "https://w3id.org/jeswr/awp#check/source",
+          "authority": "https://w3id.org/jeswr/awp#check/authority",
+          "terms": "https://w3id.org/jeswr/awp#check/terms",
+          "fitness": "https://w3id.org/jeswr/awp#check/fitness",
+          "mandate": "https://w3id.org/jeswr/awp#check/mandate",
+          "recipient": "https://w3id.org/jeswr/awp#check/recipient",
+          "disclosure": "https://w3id.org/jeswr/awp#check/disclosure",
+          "data-terms": "https://w3id.org/jeswr/awp#check/data-terms",
+          "limits-approval": "https://w3id.org/jeswr/awp#check/limits-approval",
+          "evidence": "https://w3id.org/jeswr/awp#check/evidence"
+        }
+      },
+      "verdict": {
+        "@id": "https://w3id.org/jeswr/awp#verdict",
+        "@type": "@vocab",
+        "@context": {
+          "pass": "https://w3id.org/jeswr/awp#verdict/pass",
+          "fail": "https://w3id.org/jeswr/awp#verdict/fail",
+          "ask-more": "https://w3id.org/jeswr/awp#verdict/ask-more",
+          "ask-principal": "https://w3id.org/jeswr/awp#verdict/ask-principal",
+          "not-applicable": "https://w3id.org/jeswr/awp#verdict/not-applicable",
+          "indeterminate": "https://w3id.org/jeswr/awp#verdict/indeterminate"
+        }
+      },
+      "JwsProof": {
+        "@id": "https://w3id.org/jeswr/awp#JwsProof",
+        "@context": {
+          "jws": "https://w3id.org/jeswr/awp#jws"
+        }
+      },
+      "GrantKind": "https://w3id.org/jeswr/awp#GrantKind",
+      "GateOutcome": "https://w3id.org/jeswr/awp#GateOutcome",
+      "binds": {
+        "@id": "https://w3id.org/jeswr/awp#proofBinds",
+        "@type": "@vocab",
+        "@context": {
+          "rule": "https://w3id.org/jeswr/awp#binding/rule",
+          "issuers": "https://w3id.org/jeswr/awp#binding/issuers",
+          "subject": "https://w3id.org/jeswr/awp#binding/subject",
+          "fresh": "https://w3id.org/jeswr/awp#binding/fresh",
+          "complete": "https://w3id.org/jeswr/awp#binding/complete"
+        }
+      }
+    }
+  ]
+}

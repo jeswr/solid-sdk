@@ -102,5 +102,8 @@
     "email": "An unverified email sender",
     "erp": "The business’s account system",
     "erp-agent": "The account system’s agent"
+  },
+  "labels": {
+    "urn:purpose:master-data-change": "Master data change"
   }
 }

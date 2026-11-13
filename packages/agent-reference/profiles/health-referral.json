@@ -118,5 +118,8 @@
     "clinician": "The clinician",
     "practice-agent": "The family practice’s agent",
     "clinic-agent": "The specialist clinic’s agent"
+  },
+  "labels": {
+    "urn:purpose:health-referral": "Health referral"
   }
 }

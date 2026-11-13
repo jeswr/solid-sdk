@@ -80,7 +80,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -191,7 +191,7 @@
       "agent": "practice-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:health referral with The specialist clinic."
+      "caption": "The core proposes to use the unlabelled resource with The specialist clinic."
     },
     {
       "seq": 6,
@@ -215,7 +215,7 @@
       ],
       "rule": {
         "id": "urn:rule:refer",
-        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
+        "text": "The family practice's mandate lets the agent use the unlabelled resource, on its own."
       },
       "reason": "within-mandate",
       "caption": "The family practice's mandate covers this action."

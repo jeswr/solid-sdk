@@ -495,17 +495,7 @@ export interface Agreement {
 }
 
 /** A grant: an authorisation artefact (mandate, data-use grant, access grant) (A4). */
-export interface GrantRecord {
-  readonly type: "grant";
-  readonly id: Iri;
-  readonly kind: "owner-mandate" | "data-use" | "access" | "onward-use" | "delegation";
-  readonly grantor: Iri;
-  readonly grantee: Iri;
-  readonly digest: string;
-  readonly validUntil?: string;
-  readonly derivedFrom?: Iri;
-  readonly at: string;
-}
+export type GrantRecord = import("../generated/model.js").GrantRecordWrapper;
 
 /** Conclusion about an attempted effect (A11). Never upgraded from uncertain to success. */
 export type OutcomeConclusion = "completed" | "not-executed" | "uncertain";

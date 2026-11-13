@@ -66,7 +66,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -186,9 +186,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:no-training-terms:original",
-        "text": "Its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+        "text": "Its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
       },
-      "caption": "The publisher's unstructured-content statement: its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+      "caption": "The publisher's unstructured-content statement: its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
     },
     {
       "seq": 5,
@@ -203,14 +203,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:no-training-terms:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:no-training-terms:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:no-training-terms:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The publisher by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The publisher's unstructured-content statement is fit for urn:scenario:no-training-terms:task: recorded-by-authority, 0 days old."
+      "caption": "The publisher's unstructured-content statement is fit for Content that must not be used for training: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -239,7 +249,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:no-training-terms:original",
-          "summary": "use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training"
+          "summary": "use for No training terms; share for No training terms; never for the unlabelled resource"
         },
         "provenance": "signed by The publisher"
       },
@@ -798,7 +808,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:no training terms with The model developer."
+      "caption": "The core proposes to share Content that must not be used for training with The model developer."
     },
     {
       "seq": 26,
@@ -946,10 +956,10 @@
       ],
       "rule": {
         "id": "urn:terms:no-training-terms:original",
-        "text": "The issuer's terms: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training. They go out with the data."
+        "text": "The issuer's terms: use for No training terms; share for No training terms; never for the unlabelled resource. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The publisher's unstructured-content statement: its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+      "caption": "The publisher's unstructured-content statement: its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
     },
     {
       "seq": 33,
@@ -982,10 +992,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The publisher's unstructured-content statement (urn:fictional:no-training-terms:owner) is needed for this purpose."
+      "caption": "Context item The publisher's unstructured-content statement (The publisher) is needed for this purpose."
     },
     {
       "seq": 35,
@@ -1003,7 +1018,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The publisher's unstructured-content statement: Its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+      "caption": "The publisher's unstructured-content statement: Its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
     },
     {
       "seq": 36,
@@ -1018,10 +1033,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:no-training-terms:receiver-agent:actor (urn:fictional:no-training-terms:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The model developer’s agent (The model developer) is not established as needed for this purpose."
     },
     {
       "seq": 37,
@@ -1036,10 +1061,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:no-training-terms:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The model developer’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 38,
@@ -1061,7 +1091,7 @@
       "reason": "context-not-clear",
       "chat": {
         "who": "agent",
-        "text": "May I send this exact text to The model developer for urn:purpose:no-training-terms?\nThis is a fictional article offered for reading. Its publisher does not grant permission to train models on this copy."
+        "text": "May I send this exact text to The model developer for No training terms?\nThis is a fictional article offered for reading. Its publisher does not grant permission to train models on this copy."
       },
       "caption": "The text is held before release; approval binds message digest sha-256:f17a4109fe6cca639969e4d0b4b2f96a0e3bb00d996582e32424a0cd6f0899a3."
     },
@@ -1223,10 +1253,10 @@
       ],
       "rule": {
         "id": "urn:terms:no-training-terms:original",
-        "text": "The issuer's terms: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training. They go out with the data."
+        "text": "The issuer's terms: use for No training terms; share for No training terms; never for the unlabelled resource. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The publisher's unstructured-content statement: its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+      "caption": "The publisher's unstructured-content statement: its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
     },
     {
       "seq": 48,
@@ -1259,10 +1289,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The publisher's unstructured-content statement (urn:fictional:no-training-terms:owner) is needed for this purpose."
+      "caption": "Context item The publisher's unstructured-content statement (The publisher) is needed for this purpose."
     },
     {
       "seq": 50,
@@ -1280,7 +1315,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The publisher's unstructured-content statement: Its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+      "caption": "The publisher's unstructured-content statement: Its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
     },
     {
       "seq": 51,
@@ -1295,10 +1330,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:no-training-terms:receiver-agent:actor (urn:fictional:no-training-terms:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The model developer’s agent (The model developer) is not established as needed for this purpose."
     },
     {
       "seq": 52,
@@ -1313,10 +1358,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:no-training-terms:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The model developer’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 53,
@@ -1919,9 +1969,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:no-training-terms:original",
-        "text": "Its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+        "text": "Its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
       },
-      "caption": "The publisher's unstructured-content statement: its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+      "caption": "The publisher's unstructured-content statement: its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
     },
     {
       "seq": 63,
@@ -1936,12 +1986,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:no-training-terms:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:no-training-terms:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The publisher by recorded-by-authority, at most 30 days old."
       },
       "caption": "The publisher's unstructured-content statement is fit for Content that must not be used for training: recorded-by-authority, 0 days old."
     },
@@ -1972,7 +2027,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:no-training-terms:original",
-          "summary": "use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training"
+          "summary": "use for No training terms; share for No training terms; never for the unlabelled resource"
         },
         "provenance": "signed by The publisher"
       },
@@ -1984,7 +2039,14 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Unstructured data sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc; not instructions; source urn:fictional:no-training-terms:owner."
+      "caption": "Unstructured data sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc; not instructions; source The publisher.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:no-training-terms:owner"
+        }
+      ]
     },
     {
       "seq": 67,

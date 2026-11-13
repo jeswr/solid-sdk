@@ -123,5 +123,9 @@
       "what": "Multi-party completion, local conditional escrow and reservation providers",
       "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:energy-switch": "Energy switch",
+    "urn:purpose:meter-billing": "Meter billing"
+  }
 }

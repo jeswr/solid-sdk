@@ -82,7 +82,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -202,9 +202,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:sell-a-car:keeper",
-        "text": "Its terms allow this: use for urn:purpose:sell a car; share for urn:purpose:sell a car."
+        "text": "Its terms allow this: use for Sell a car; share for Sell a car."
       },
-      "caption": "The fictional vehicle register's vehicle.keeper statement: its terms allow this: use for urn:purpose:sell a car; share for urn:purpose:sell a car."
+      "caption": "The fictional vehicle register's vehicle.keeper statement: its terms allow this: use for Sell a car; share for Sell a car."
     },
     {
       "seq": 5,
@@ -219,14 +219,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:sell-a-car:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:sell-a-car:vehicle-register"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:sell-a-car:vehicle.keeper",
-        "text": "Accept vehicle.keeper from urn:fictional:sell-a-car:vehicle-register by recorded-by-authority, at most 30 days old."
+        "text": "Accept vehicle.keeper from The fictional vehicle register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional vehicle register's vehicle.keeper statement is fit for urn:scenario:sell-a-car:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional vehicle register's vehicle.keeper statement is fit for Selling a used car to a stranger: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -255,7 +265,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:sell-a-car:keeper",
-          "summary": "use for urn:purpose:sell a car; share for urn:purpose:sell a car"
+          "summary": "use for Sell a car; share for Sell a car"
         },
         "provenance": "signed by The fictional vehicle register"
       },

@@ -2980,18 +2980,42 @@ importers:
 
   packages/agent-reference:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: 'workspace:*'
+        version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: 'workspace:*'
+        version: link:../model-runtime
+      '@jeswr/rdf-serialize':
+        specifier: 'workspace:*'
+        version: link:../rdf-serialize
       '@jeswr/solid-odrl':
         specifier: workspace:*
         version: link:../solid-odrl
+      '@jeswr/solid-vc':
+        specifier: 'workspace:*'
+        version: link:../solid-vc
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
       canonicalize:
         specifier: ^1.0.8
         version: 1.0.8
       jose:
         specifier: ^6.2.3
         version: 6.2.14
+      jsonld:
+        specifier: ^9.0.0
+        version: 9.0.0
       n3:
         specifier: ^2.1.0
         version: 2.1.1
+      rdf-validate-shacl:
+        specifier: ^0.6.5
+        version: 0.6.5
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2999,6 +3023,12 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: 'workspace:*'
+        version: link:../federation-codegen
+      '@types/jsonld':
+        specifier: ^1.5.15
+        version: 1.5.15
       '@types/n3':
         specifier: ^1.26.1
         version: 1.26.1

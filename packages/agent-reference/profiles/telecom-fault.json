@@ -86,5 +86,8 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:telecom-fault": "Telecom fault"
+  }
 }

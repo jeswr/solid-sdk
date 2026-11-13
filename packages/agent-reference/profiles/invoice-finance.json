@@ -69,5 +69,8 @@
       "what": "Dispensing/financing register and local effects",
       "replacedBy": "Separately keyed fictional register with its own five checks, signed current answers and durable compare-and-set state; the effect adapter records synthetic performance only."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:invoice-finance": "Invoice finance"
+  }
 }

@@ -97,5 +97,9 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:clinical-care": "Clinical care",
+    "urn:purpose:fit-note-to-employer": "Fit note to employer"
+  }
 }

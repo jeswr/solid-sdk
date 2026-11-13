@@ -172,5 +172,10 @@
       "what": "Multi-party completion, local conditional escrow and reservation providers",
       "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:passport-management": "Passport management",
+    "urn:purpose:ticketing": "Ticketing",
+    "urn:purpose:trip-booking": "Trip booking"
+  }
 }

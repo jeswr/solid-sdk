@@ -665,5 +665,10 @@
     "identity-provider": "The fictional identity provider",
     "index-agent": "The mortgage product index’s agent",
     "harbour-agent": "Sam’s fictional bank’s agent"
+  },
+  "labels": {
+    "https://w3id.org/jeswr/awp#purpose/credit-assessment": "Credit assessment",
+    "https://w3id.org/jeswr/awp#purpose/mortgage-application": "Mortgage application",
+    "https://w3id.org/jeswr/awp#purpose/product-search": "Product search"
   }
 }

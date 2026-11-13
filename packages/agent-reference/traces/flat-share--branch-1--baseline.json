@@ -67,7 +67,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [],
@@ -102,7 +102,7 @@
       ],
       "rule": {
         "id": "urn:rule:authorised",
-        "text": "Alex, a fictional flatmate's mandate lets the agent use urn:op:flat share, on its own."
+        "text": "Alex, a fictional flatmate's mandate lets the agent use flat-share, on its own."
       },
       "reason": "within-mandate",
       "caption": "Alex, a fictional flatmate's mandate covers this action."

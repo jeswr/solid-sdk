@@ -125,5 +125,8 @@
       "what": "Vehicle/finance registers and escrow holding GBP 7500",
       "replacedBy": "Independent synthetic signing parties, a signed complete finance search and local escrow CAS release; no real money moves."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:sell-a-car": "Sell a car"
+  }
 }

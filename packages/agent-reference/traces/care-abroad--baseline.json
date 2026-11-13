@@ -60,7 +60,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -184,9 +184,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:fictional:care-abroad:medicine-terms",
-        "text": "Its terms allow this: use for urn:purpose:care abroad; share for urn:purpose:care abroad."
+        "text": "Its terms allow this: use for Care abroad; share for Care abroad."
       },
-      "caption": "A home practice's medicine.code statement: its terms allow this: use for urn:purpose:care abroad; share for urn:purpose:care abroad."
+      "caption": "A home practice's medicine.code statement: its terms allow this: use for Care abroad; share for Care abroad."
     },
     {
       "seq": 5,
@@ -201,14 +201,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "registry-lookup",
+          "id": "urn:scenario:care-abroad:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "registry-lookup",
+          "id": "urn:fictional:care-abroad:party-2"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:care-abroad:medicine.code",
-        "text": "Accept medicine.code from urn:fictional:care-abroad:party-2 by recorded-by-authority, derived, at most 30 days old."
+        "text": "Accept medicine.code from A home practice by recorded-by-authority, derived, at most 30 days old."
       },
-      "caption": "A home practice's medicine.code statement is fit for urn:scenario:care-abroad:task: recorded-by-authority, 0 days old."
+      "caption": "A home practice's medicine.code statement is fit for Health data across a border: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,

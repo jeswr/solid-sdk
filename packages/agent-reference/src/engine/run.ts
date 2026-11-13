@@ -37,6 +37,7 @@ import {
 import { LocalSingleUseRegister, type SingleUseItem } from "../mechanisms/single-use.js";
 import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
+import { LabelIndex } from "../model/labels.js";
 import {
   CONFIG_AGREEMENT,
   CONFIG_CORROBORATION,
@@ -1202,9 +1203,18 @@ async function runPath(
   const openings = new Map<string, unknown>();
   const responses = new Map<string, { reply?: unknown; agreementPlan?: unknown }>();
   const partyName = (party: Scenario["parties"][number]) => profile.parties[party.id] ?? party.name;
+  const labels = new LabelIndex();
+  for (const [iri, label] of Object.entries(profile.labels)) labels.add(iri, label);
+  for (const operation of profile.operations) labels.add(operation.id, operation.label);
+  for (const party of scenario.parties) {
+    labels.add(party.identity, partyName(party));
+    if (party.actor) labels.add(party.actor, partyName(party));
+  }
+  labels.add(`urn:scenario:${scenario.id}:task`, scenario.title);
+  recorder.labels(labels, configuration.layers.meaning);
   const name = (iri: string | undefined) => {
     const party = scenario.parties.find((p) => p.identity === iri || p.actor === iri);
-    return party ? partyName(party) : (iri ?? "anonymous");
+    return party ? partyName(party) : labels.name(iri);
   };
   const task = `urn:scenario:${scenario.id}:task`;
   const variables = (current?: HandlerContext) => ({
@@ -1287,7 +1297,7 @@ async function runPath(
       taskId: task,
       name,
       taskLabel: (operation) =>
-        profile.operations.find((op) => op.id === operation)?.label ?? operation,
+        profile.operations.find((op) => op.id === operation)?.label ?? labels.name(operation),
       vocabulary: profile.vocabulary,
       identifiers: profile.identifiers,
       sourceAliases: profile.sources,

@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -203,14 +203,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:right-to-work:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:immigration-office"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:right-to-work:work.entitled",
-        "text": "Accept work.entitled from urn:fictional:immigration-office by recorded-by-authority, at most 30 days old."
+        "text": "Accept work.entitled from The fictional immigration office by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional immigration office's work.entitled statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional immigration office's work.entitled statement is fit for Hiring: right to work and qualifications: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -364,14 +374,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:right-to-work:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:university"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:right-to-work:degree",
-        "text": "Accept degree from urn:fictional:university by recorded-by-authority, at most 3650 days old."
+        "text": "Accept degree from The fictional university by recorded-by-authority, at most 3650 days old."
       },
-      "caption": "The fictional university's degree statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional university's degree statement is fit for Hiring: right to work and qualifications: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -412,7 +432,7 @@
       "agent": "candidate-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:right to work with The employer."
+      "caption": "The core proposes to use the unlabelled resource with The employer."
     },
     {
       "seq": 16,
@@ -455,6 +475,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:right-to-work"
         }
       ],
       "resolution": {
@@ -469,7 +494,7 @@
         "answer": "Accepted, for urn:op:right-to-work only."
       },
       "reason": "recipient-established",
-      "caption": "The employer: Accepted, for urn:op:right-to-work only."
+      "caption": "The employer: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 18,
@@ -1242,14 +1267,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:right-to-work"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:immigration-office"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:right-to-work:work.entitled",
-        "text": "Accept work.entitled from urn:fictional:immigration-office by recorded-by-authority, at most 30 days old."
+        "text": "Accept work.entitled from The fictional immigration office by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional immigration office's work.entitled statement is fit for urn:op:right-to-work: recorded-by-authority, 0 days old."
+      "caption": "The fictional immigration office's work.entitled statement is fit for the unlabelled resource: recorded-by-authority, 0 days old."
     },
     {
       "seq": 37,
@@ -1264,14 +1299,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:right-to-work"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:university"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:right-to-work:degree",
-        "text": "Accept degree from urn:fictional:university by recorded-by-authority, at most 3650 days old."
+        "text": "Accept degree from The fictional university by recorded-by-authority, at most 3650 days old."
       },
-      "caption": "The fictional university's degree statement is fit for urn:op:right-to-work: recorded-by-authority, 0 days old."
+      "caption": "The fictional university's degree statement is fit for the unlabelled resource: recorded-by-authority, 0 days old."
     },
     {
       "seq": 38,

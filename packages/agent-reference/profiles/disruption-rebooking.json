@@ -108,5 +108,9 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:disruption-rebooking": "Disruption rebooking",
+    "urn:purpose:traveller-planning": "Traveller planning"
+  }
 }

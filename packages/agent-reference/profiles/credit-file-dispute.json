@@ -217,5 +217,10 @@
     "responseSeconds": 60,
     "observers": []
   },
-  "agreementDeadlineSeconds": 60
+  "agreementDeadlineSeconds": 60,
+  "labels": {
+    "urn:purpose:credit-file-dispute": "Credit file dispute",
+    "urn:purpose:duties": "Duties",
+    "urn:purpose:redress": "Redress"
+  }
 }

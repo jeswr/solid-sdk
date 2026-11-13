@@ -180,5 +180,9 @@
         "age-check.answer"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:age-check": "Age check",
+    "urn:purpose:identity-management": "Identity management"
+  }
 }

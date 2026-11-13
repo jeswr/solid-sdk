@@ -103,5 +103,8 @@
         "requires-review"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:employment-reference": "Employment reference"
+  }
 }

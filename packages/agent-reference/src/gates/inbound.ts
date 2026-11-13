@@ -1027,6 +1027,7 @@ export class InboundGate {
     const terms = c.terms as ItemTerms | undefined;
     if (phase === "terms") {
       const t = evaluateItemTerms(terms, {
+        name: this.deps.gate.name,
         agent: this.deps.identity.actor,
         action: "use",
         target: c.id ?? "",
@@ -1278,7 +1279,9 @@ export class InboundGate {
         ...(method ? { method } : {}),
         ...(c.asOf ? { asOf: c.asOf } : {}),
         ...(c.period ? { period: c.period } : {}),
-        ...(terms ? { terms: { id: terms.policy.id, summary: termsSummary(terms) } } : {}),
+        ...(terms
+          ? { terms: { id: terms.policy.id, summary: termsSummary(terms, this.name) } }
+          : {}),
         provenance: `${((c as JsonObject).derivation as JsonObject | undefined)?.type === "code-mapping" ? "Locally mapped; original signed by" : "signed by"} ${this.name(c.issuer)}${c.issuedAt ? `, issued ${c.issuedAt}` : ""}`,
       },
       ...(chat
@@ -1322,6 +1325,7 @@ export class InboundGate {
       const c = checked.claim;
       if (
         evaluateItemTerms(c.terms as ItemTerms | undefined, {
+          name: this.deps.gate.name,
           agent: this.deps.identity.actor,
           action: "use",
           target: c.id ?? "",
@@ -1612,6 +1616,7 @@ export class Admission {
           (r.claim as JsonObject).level === need.level &&
           fitnessOf(r.claim, this.deps.gate.reliance, this.deps.now()).verdict === "pass" &&
           evaluateItemTerms(r.claim.terms as ItemTerms | undefined, {
+            name: this.deps.gate.name,
             agent: this.deps.identity.actor,
             action: "use",
             target: r.claim.id ?? "",
@@ -1851,6 +1856,7 @@ export class Admission {
     const offered = msg.kind === "invoke" ? msg.body.input.terms : undefined;
     if (offered !== undefined) {
       const evaluated = evaluateItemTerms(offered as unknown as ItemTerms, {
+        name: this.deps.gate.name,
         agent: this.deps.identity.actor,
         action: "use",
         target: "",

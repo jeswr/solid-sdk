@@ -114,5 +114,8 @@
         "repair.booking"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:repair-request": "Repair request"
+  }
 }

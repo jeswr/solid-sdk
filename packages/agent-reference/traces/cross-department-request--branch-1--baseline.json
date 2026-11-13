@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -184,9 +184,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:cross-department-request:named-salary",
-        "text": "Its terms allow this: use for urn:purpose:payroll administration."
+        "text": "Its terms allow this: use for Payroll administration."
       },
-      "caption": "The finance department's salary.named-person statement: its terms allow this: use for urn:purpose:payroll administration."
+      "caption": "The finance department's salary.named-person statement: its terms allow this: use for Payroll administration."
     },
     {
       "seq": 5,
@@ -201,14 +201,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:cross-department-request:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:cross-department-request:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:cross-department-request:salary.named-person",
-        "text": "Accept salary.named-person from urn:fictional:cross-department-request:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept salary.named-person from The finance department by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The finance department's salary.named-person statement is fit for urn:scenario:cross-department-request:task: recorded-by-authority, 0 days old."
+      "caption": "The finance department's salary.named-person statement is fit for One department's agent asks another's for data: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -237,7 +247,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:cross-department-request:named-salary",
-          "summary": "use for urn:purpose:payroll administration"
+          "summary": "use for Payroll administration"
         },
         "provenance": "signed by The finance department"
       },
@@ -794,7 +804,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:cross department request with The people team."
+      "caption": "The core proposes to share One department's agent asks another's for data with The people team."
     },
     {
       "seq": 26,

@@ -92,5 +92,8 @@
       "what": "Sensitive research dataset holder",
       "replacedBy": "A separately keyed fictional holder with private synthetic people, a source-signed protocol grant, closed rule evaluation and a durable counter. Only a signed aggregate answer is returned."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:approved-research": "Approved research"
+  }
 }

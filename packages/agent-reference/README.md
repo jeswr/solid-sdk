@@ -1,6 +1,16 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-reference
+
+Brief 22 R1 is **partly implemented**. The published RDF model is in `vocab/`;
+`@jeswr/agent-reference/wire` provides pinned JSON-LD reading, SHACL validation,
+stable writing, JCS/JWS and RDFC/Data Integrity primitives, and
+`@jeswr/agent-reference/model` provides RDF views and the generated GrantRecord.
+The running reference gates still use the legacy object pipeline. The
+`check:rdf-pipeline` command reports that remaining migration and fails; no Data
+Integrity scenario configuration is advertised as implemented. See
+[the Brief 22 report](ENGINE-REPORT.md#brief-22) for exact boundaries and validation.
 
 The reference agent runtime of the accountable agent architecture. It began as the September
 pilot runtime lifted from `@jeswr/personal-agent/pilot`, and now executes profile/scenario

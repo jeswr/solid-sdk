@@ -407,7 +407,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -519,9 +519,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:change-of-address:new-address",
-        "text": "Its terms allow this: use for urn:purpose:change of address; share for urn:purpose:change of address."
+        "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
-      "caption": "The fictional address register's contact.address statement: its terms allow this: use for urn:purpose:change of address; share for urn:purpose:change of address."
+      "caption": "The fictional address register's contact.address statement: its terms allow this: use for Change of address; share for Change of address."
     },
     {
       "seq": 5,
@@ -536,14 +536,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:change-of-address:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:change-of-address:address-register"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:change-of-address:contact.address",
-        "text": "Accept contact.address from urn:fictional:change-of-address:address-register by recorded-by-authority, at most 30 days old."
+        "text": "Accept contact.address from The fictional address register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional address register's contact.address statement is fit for urn:scenario:change-of-address:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional address register's contact.address statement is fit for Telling everyone about a new address: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -572,7 +582,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:change-of-address:new-address",
-          "summary": "use for urn:purpose:change of address; share for urn:purpose:change of address"
+          "summary": "use for Change of address; share for Change of address"
         },
         "provenance": "signed by The fictional address register"
       },
@@ -584,7 +594,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:change of address with Fictional organization 21."
+      "caption": "The core proposes to share Telling everyone about a new address with Fictional organization 21."
     },
     {
       "seq": 9,
@@ -720,7 +730,7 @@
       "kind": "ask-principal",
       "chat": {
         "who": "agent",
-        "text": "Fictional organization 21 asks for 0 of your statements: nothing. They would use them for urn:purpose:change of address. May I share them?"
+        "text": "Fictional organization 21 asks for 0 of your statements: nothing. They would use them for Change of address. May I share them?"
       },
       "caption": "The person is asked to approve this exact action; the approval will be bound to its digest."
     }

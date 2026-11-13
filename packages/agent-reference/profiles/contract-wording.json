@@ -102,5 +102,8 @@
         "requires-review"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:contract-wording": "Contract wording"
+  }
 }

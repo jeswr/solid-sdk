@@ -117,5 +117,8 @@
         "requires-review"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:hardship-request": "Hardship request"
+  }
 }

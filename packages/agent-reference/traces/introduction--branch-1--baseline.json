@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -92,7 +92,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:introduction with The second person."
+      "caption": "The core proposes to share Being introduced to a stranger safely with The second person."
     },
     {
       "seq": 2,

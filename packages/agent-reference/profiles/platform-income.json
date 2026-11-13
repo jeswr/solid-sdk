@@ -168,5 +168,8 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:platform-income": "Platform income"
+  }
 }

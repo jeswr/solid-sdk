@@ -82,5 +82,8 @@
         "product.recall"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:recall-notice": "Recall notice"
+  }
 }

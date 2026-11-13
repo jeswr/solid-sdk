@@ -174,5 +174,8 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:cohort-count": "Cohort count"
+  }
 }

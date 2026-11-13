@@ -14,9 +14,9 @@ it("keeps hospital provenance through a patient relay, quarantines readings and 
   expect(events.some((e) => e.check === "fitness" && e.reason === "structured-form-required")).toBe(
     true,
   );
-  expect(events.some((e) => e.caption.includes("request source urn:fictional:hospital"))).toBe(
-    true,
-  );
+  const request = events.find((e) => e.caption.includes("request source The hospital"));
+  expect(request).toBeDefined();
+  expect(request?.refs?.some((ref) => ref.id === "urn:fictional:hospital")).toBe(true);
   expect(events.some((e) => e.caption.includes("Model-output reading of unstructured data"))).toBe(
     true,
   );

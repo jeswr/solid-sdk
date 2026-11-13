@@ -111,5 +111,8 @@
       "claimType": "building.height",
       "type": "number"
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:permit-application": "Permit application"
+  }
 }

@@ -72,5 +72,8 @@
     "tax-register": "The fictional tax register",
     "employee": "The employee",
     "employer-agent": "The employer’s agent"
+  },
+  "labels": {
+    "urn:purpose:false-but-signed": "False but signed"
   }
 }

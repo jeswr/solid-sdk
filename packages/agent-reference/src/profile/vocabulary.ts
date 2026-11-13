@@ -8,9 +8,10 @@
  * (our usage is a subset), or `related` (informative only, no entailment).
  *
  * The provisional namespace is NOT registered with w3id.org (a supervisor decision; see
- * docs/PILOT-PROFILE.md). The JSON wire serialisation (`awp-json`) is a local
- * instantiation of these terms; it is not JSON-LD and does not promote its field names
- * into the abstract model.
+ * docs/PILOT-PROFILE.md). The RDF model is published in vocab/answerable.ttl, with
+ * structural constraints in vocab/answerable.shacl.ttl and the immutable JSON-LD 1.1
+ * context in vocab/context/v1.jsonld. The legacy object pipeline remains supported
+ * during the RDF migration; only the wire module admits the new JSON-LD format.
  */
 
 /** Provisional namespace for minted pilot terms. Unregistered; see module doc. */

@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -192,9 +192,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:salary-account-change:account",
-        "text": "Its terms allow this: use for urn:purpose:salary account change; share for urn:purpose:salary account change."
+        "text": "Its terms allow this: use for Salary account change; share for Salary account change."
       },
-      "caption": "The employee’s bank's salary.account statement: its terms allow this: use for urn:purpose:salary account change; share for urn:purpose:salary account change."
+      "caption": "The employee’s bank's salary.account statement: its terms allow this: use for Salary account change; share for Salary account change."
     },
     {
       "seq": 5,
@@ -209,14 +209,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:salary-account-change:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:salary-account-change:bank"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:salary-account-change:salary.account",
-        "text": "Accept salary.account from urn:fictional:salary-account-change:bank by recorded-by-authority, at most 30 days old."
+        "text": "Accept salary.account from The employee’s bank by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The employee’s bank's salary.account statement is fit for urn:scenario:salary-account-change:task: recorded-by-authority, 0 days old."
+      "caption": "The employee’s bank's salary.account statement is fit for A request to change where salary is paid: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -245,7 +255,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:salary-account-change:account",
-          "summary": "use for urn:purpose:salary account change; share for urn:purpose:salary account change"
+          "summary": "use for Salary account change; share for Salary account change"
         },
         "provenance": "signed by The employee’s bank"
       },
@@ -804,7 +814,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:salary account change with The employer."
+      "caption": "The core proposes to share A request to change where salary is paid with The employer."
     },
     {
       "seq": 26,
@@ -952,10 +962,10 @@
       ],
       "rule": {
         "id": "urn:terms:salary-account-change:account",
-        "text": "The issuer's terms: use for urn:purpose:salary account change; share for urn:purpose:salary account change. They go out with the data."
+        "text": "The issuer's terms: use for Salary account change; share for Salary account change. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The employee’s bank's salary.account statement: its terms allow this: use for urn:purpose:salary account change; share for urn:purpose:salary account change."
+      "caption": "The employee’s bank's salary.account statement: its terms allow this: use for Salary account change; share for Salary account change."
     },
     {
       "seq": 33,
@@ -1385,10 +1395,15 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
         }
       ],
       "reason": "unsigned-not-allowed",
-      "caption": "Integrity fails: unsigned invoke not permitted by https://w3id.org/jeswr/awp#config/signed-ed25519/0.1."
+      "caption": "Integrity fails: unsigned invoke not permitted by the unlabelled resource."
     },
     {
       "seq": 39,
@@ -1399,7 +1414,14 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "unsigned-not-allowed",
-      "caption": "The message is refused (unsigned-not-allowed: unsigned invoke not permitted by https://w3id.org/jeswr/awp#config/signed-ed25519/0.1); the core never sees it."
+      "caption": "The message is refused (unsigned-not-allowed: unsigned invoke not permitted by the unlabelled resource); the core never sees it.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+        }
+      ]
     },
     {
       "seq": 40,

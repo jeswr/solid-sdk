@@ -86,6 +86,7 @@ const baseDomainProfileSchema = z.strictObject({
     .optional(),
   id: slug,
   parties: z.record(slug, z.string()).default({}),
+  labels: z.record(iri, z.string().min(1)).default({}),
   sources: z.record(z.string(), iri).default({}),
   claims: z.array(
     z.strictObject({

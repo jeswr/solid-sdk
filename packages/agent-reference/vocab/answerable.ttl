@@ -1,0 +1,1568 @@
+# AUTHORED-BY Codex GPT-6
+@prefix awp: <https://w3id.org/jeswr/awp#>.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+@prefix sh: <http://www.w3.org/ns/shacl#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+<https://w3id.org/jeswr/awp> a <http://www.w3.org/2002/07/owl#Ontology>;
+    rdfs:label "Answerable agent interaction model";
+    rdfs:comment "The message model, gate questions, outcomes and proof bindings of the Answerable protocol. Version 1 is immutable; semantic changes require a new context version.";
+    <http://www.w3.org/2002/07/owl#versionInfo> "1".
+rdfs:label a rdf:Property;
+    rdfs:label "Label";
+    rdfs:comment "The human-readable name of this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awp:ParticipantRef a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Participant Ref";
+    rdfs:comment "Who produced a statement (A1). `actor` is the software agent that produced (and, under\nthe signed configurations, signed) the message; `onBehalfOf` is the represented party;\n`operator` is who runs the software. All three are CLAIMS until assessed. `actor` is\nabsent only under a configuration that permits anonymous requests.".
+awp:AudienceRef a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Audience Ref";
+    rdfs:comment "The intended audience of a message. Absent only for public responses.".
+awp:OperationRef a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Operation Ref";
+    rdfs:comment "A versioned reference to an operation definition.";
+    <http://www.w3.org/2004/02/skos/core#relatedMatch> <https://schema.org/Action>.
+awp:EvidenceItem a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Evidence Item";
+    rdfs:comment "A protected statement carried alongside a message (A1 relay, A6 evidence).".
+awp:DescribeBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Describe Body";
+    rdfs:comment "The describe body defined by the interaction model.".
+awp:DescriptionBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Description Body";
+    rdfs:comment "The description body defined by the interaction model.".
+awp:ProposeBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Propose Body";
+    rdfs:comment "The propose body defined by the interaction model.".
+awp:AcceptBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Accept Body";
+    rdfs:comment "The accept body defined by the interaction model.".
+awp:ChallengeBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Challenge Body";
+    rdfs:comment "What more the sender must supply before its request can be admitted (CORE-M-8).".
+awp:RefuseBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Refuse Body";
+    rdfs:comment "The refuse body defined by the interaction model.".
+awp:InvokeBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Invoke Body";
+    rdfs:comment "The invoke body defined by the interaction model.".
+awp:InvokeBodyChallenge a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Invoke Body Challenge";
+    rdfs:comment "The challenge component of InvokeBody.".
+awp:DeliverBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Deliver Body";
+    rdfs:comment "The deliver body defined by the interaction model.".
+awp:ReceiptBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Receipt Body";
+    rdfs:comment "A report of an executed activity and the reporter's conclusion about it (A11).".
+awp:UnsupportedBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Unsupported Body";
+    rdfs:comment "The unsupported body defined by the interaction model.".
+awp:IndeterminateBody a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Indeterminate Body";
+    rdfs:comment "The indeterminate body defined by the interaction model.".
+awp:ContentPart a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Content Part";
+    rdfs:comment "One logical interaction message. Every field here is consequential and therefore\nprotected by the selected integrity mechanism: profile, configuration, identity, kind,\naudience, conversation, times, reply linkage, body and evidence.".
+awp:Message a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Message";
+    rdfs:comment "The message defined by the interaction model.".
+awp:MessageAuthorship a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Message Authorship";
+    rdfs:comment "The authorship component of Message.".
+awp:VerificationResult a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Verification Result";
+    rdfs:comment "The verification result defined by the interaction model.".
+awp:RepresentationAssessment a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Representation Assessment";
+    rdfs:comment "Does the evaluator accept that `actor` speaks for `party` for this operation (A1/A3)?".
+awp:SourceAuthorityAssessment a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Source Authority Assessment";
+    rdfs:comment "Does the evaluator accept `source` for this claim type about this subject (A7)?".
+awp:SourceAuthorityAssessmentRule a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Source Authority Assessment Rule";
+    rdfs:comment "The rule component of SourceAuthorityAssessment.".
+awp:ActionIntent a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Action Intent";
+    rdfs:comment "An action the local executor is about to perform, as evaluated against a mandate.".
+awp:AuthorisationDecision a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Authorisation Decision";
+    rdfs:comment "The authorisation decision defined by the interaction model.".
+awp:AuthorisationDecisionPolicy a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Authorisation Decision Policy";
+    rdfs:comment "The policy component of AuthorisationDecision.".
+<http://www.w3.org/ns/odrl/2/Agreement> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Agreement";
+    rdfs:comment "An agreement formed by an accept referring to an identified offer (A8).".
+awp:GrantRecord a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Grant Record";
+    rdfs:comment "A grant: an authorisation artefact (mandate, data-use grant, access grant) (A4).".
+<http://www.w3.org/ns/prov#Activity> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Activity";
+    rdfs:comment "The activity record defined by the interaction model.".
+awp:OutcomeRecord a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Outcome Record";
+    rdfs:comment "The outcome record defined by the interaction model.".
+awp:RequestBasis a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Request Basis";
+    rdfs:comment "The basis claimed for a request; it grants no authority by itself.".
+<https://www.w3.org/2018/credentials#VerifiableCredential> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Verifiable Credential";
+    rdfs:comment "A principal-issued Verifiable Credential binding the agent to ODRL policies and a validity window.".
+awp:StatementSubject a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Statement Subject";
+    rdfs:comment "The subject and claims to which the source credential applies.".
+awp:Assurance a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Assurance";
+    rdfs:comment "The receiver’s means of being assured of a derivation; it establishes only its stated bindings.".
+awp:ReasonCode a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Reason Code";
+    rdfs:comment "A named explanation of a verdict. A reason never grants authority.".
+awp:MessageKind a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Message Kind";
+    rdfs:comment "A named protocol-message kind.".
+awp:CheckName a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Check Name";
+    rdfs:comment "A named question answered by a gate.".
+awp:Verdict a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Verdict";
+    rdfs:comment "The answer to one gate check.".
+awp:CheckResultCode a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Check Result Code";
+    rdfs:comment "A passing or not-applicable explanation of a check.".
+awp:ProofBinding a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Proof Binding";
+    rdfs:comment "One aspect independently established by a derivation proof.".
+<http://www.w3.org/ns/prov#Agent> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Agent";
+    rdfs:comment "A person, organization or software actor; roles and authority are assessed separately.".
+<https://schema.org/Offer> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Offer";
+    rdfs:comment "An offer whose price and currency are explicit.".
+<https://schema.org/PayAction> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Pay Action";
+    rdfs:comment "An attempted payment, distinct from settlement.".
+<https://schema.org/Invoice> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Invoice";
+    rdfs:comment "A document requesting payment.".
+<http://www.w3.org/ns/odrl/2/Policy> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Policy";
+    rdfs:comment "An ODRL policy defining permissions, prohibitions and duties.".
+awp:Describe a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Describe";
+    rdfs:comment "The describe message: asks a party to describe its configurations and operations.";
+    rdfs:subClassOf awp:Message.
+awp:Description a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Description";
+    rdfs:comment "The description message: answers a description request.";
+    rdfs:subClassOf awp:Message.
+awp:Propose a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Propose";
+    rdfs:comment "The propose message: offers exact terms for an operation.";
+    rdfs:subClassOf awp:Message.
+awp:Accept a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Accept";
+    rdfs:comment "The accept message: accepts exact terms by digest.";
+    rdfs:subClassOf awp:Message.
+awp:Refuse a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Refuse";
+    rdfs:comment "The refuse message: declines with a reason.";
+    rdfs:subClassOf awp:Message.
+awp:Challenge a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Challenge";
+    rdfs:comment "The challenge message: states what additional evidence would satisfy the gate.";
+    rdfs:subClassOf awp:Message.
+awp:Invoke a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Invoke";
+    rdfs:comment "The invoke message: requests an operation on an explicit basis.";
+    rdfs:subClassOf awp:Message.
+awp:Deliver a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Deliver";
+    rdfs:comment "The deliver message: delivers data or a result.";
+    rdfs:subClassOf awp:Message.
+awp:Receipt a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Receipt";
+    rdfs:comment "The receipt message: reports what was received or done.";
+    rdfs:subClassOf awp:Message.
+awp:Unsupported a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Unsupported";
+    rdfs:comment "The unsupported message: identifies an unsupported request.";
+    rdfs:subClassOf awp:Message.
+awp:Indeterminate a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Indeterminate";
+    rdfs:comment "The indeterminate message: reports that the receiver cannot decide.";
+    rdfs:subClassOf awp:Message.
+<http://www.w3.org/ns/dx/prof/Profile> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Profile";
+    rdfs:comment "The pilot profile description uses prof:Profile / hasResource / hasRole.".
+<https://schema.org/Event> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Event";
+    rdfs:comment "The agreed meeting slot is a schema:Event (startDate/endDate).".
+awp:ImplementationDescription a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Implementation Description";
+    rdfs:comment "What one agent implements vs accepts: configurations, operations, vocabularies. No reused term separates 'implemented' from 'accepted for interaction' (A3).";
+    <http://www.w3.org/2004/02/skos/core#relatedMatch> <http://www.w3.org/ns/dcat#DataService>.
+awp:Configuration a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Configuration";
+    rdfs:comment "One coherent mechanism combination (integrity + authentication + representation + authorisation + binding). Selection is per conversation; lists never imply products.".
+awp:OwnerMandate a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Owner Mandate";
+    rdfs:comment "Owner-signed bound on what a software actor may do (autonomous vs with-approval ODRL policies + validity). Not a representation assertion.";
+    rdfs:subClassOf <https://www.w3.org/2018/credentials#VerifiableCredential>;
+    <http://www.w3.org/2004/02/skos/core#narrowMatch> <http://www.w3.org/ns/odrl/2/Policy>.
+awp:RepresentationStatement a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Representation Statement";
+    rdfs:comment "Party-signed statement that an actor key speaks for the party for listed operations. Establishes representation only; it authorises nothing at the receiver.".
+awp:AgreementRecord a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Agreement Record";
+    rdfs:comment "Documentary record relating offer, acceptance and exact terms digest (A8).";
+    <http://www.w3.org/2004/02/skos/core#relatedMatch> <http://www.w3.org/ns/odrl/2/Agreement>.
+awp:OutcomeConclusion a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Outcome Conclusion";
+    rdfs:comment "completed | not-executed | uncertain — an evaluator's conclusion about an activity.".
+awp:EvidenceRole a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Evidence Role";
+    rdfs:comment "The role in which a credential or presentation is offered as evidence.".
+awp:JwsProof a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Jws Proof";
+    rdfs:comment "An enveloping Ed25519 JWS over the JCS canonical JSON-LD document with its proof removed.".
+<https://w3id.org/security#DataIntegrityProof> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Data Integrity Proof";
+    rdfs:comment "An embedded W3C Data Integrity proof over the canonical RDF document.".
+awp:actor a rdf:Property;
+    rdfs:label "Actor";
+    rdfs:comment "The software actor responsible for producing a message or attempting an effect.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<http://www.w3.org/ns/prov#actedOnBehalfOf> a rdf:Property;
+    rdfs:label "On Behalf Of";
+    rdfs:comment "The on behalf of recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<http://www.w3.org/ns/odrl/2/operator> a rdf:Property;
+    rdfs:label "Operator";
+    rdfs:comment "The comparison operator used by an ODRL constraint.";
+    rdfs:domain <http://www.w3.org/ns/odrl/2/Constraint>;
+    rdfs:range rdfs:Resource.
+awp:operator a rdf:Property;
+    rdfs:label "Software operator";
+    rdfs:comment "The party running the software; this implies no representation or authorization.";
+    rdfs:domain awp:ParticipantRef;
+    rdfs:range rdfs:Resource.
+awp:party a rdf:Property;
+    rdfs:label "Party";
+    rdfs:comment "The person or organization concerned.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:version a rdf:Property;
+    rdfs:label "Version";
+    rdfs:comment "The version recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awp:role a rdf:Property;
+    rdfs:label "Role";
+    rdfs:comment "The role in which an evidence document is offered.";
+    rdfs:domain awp:EvidenceItem;
+    rdfs:range xsd:string.
+awp:format a rdf:Property;
+    rdfs:label "Format";
+    rdfs:comment "The protection format used by the evidence document.";
+    rdfs:domain awp:EvidenceItem;
+    rdfs:range xsd:string.
+awp:value a rdf:Property;
+    rdfs:label "Value";
+    rdfs:comment "The statement or value this evidence item carries; not a declaration of truth.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range <https://www.w3.org/2018/credentials#VerifiableCredential>.
+awp:want a rdf:Property;
+    rdfs:label "Want";
+    rdfs:comment "The want recorded for this resource.";
+    rdfs:domain awp:DescribeBody;
+    rdfs:range xsd:string.
+awp:description a rdf:Property;
+    rdfs:label "Description";
+    rdfs:comment "The description recorded for this resource.";
+    rdfs:domain awp:DescriptionBody;
+    rdfs:range rdfs:Resource.
+awp:operation a rdf:Property;
+    rdfs:label "Operation";
+    rdfs:comment "A versioned reference to the operation being proposed or invoked.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range awp:OperationRef.
+awp:terms a rdf:Property;
+    rdfs:label "Terms";
+    rdfs:comment "The terms of this offer or the policy restricting use of this data.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:termsDigest a rdf:Property;
+    rdfs:label "Terms Digest";
+    rdfs:comment "The digest of the exact document containing the terms being offered or accepted.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awp:round a rdf:Property;
+    rdfs:label "Round";
+    rdfs:comment "The one-based proposal round; loops are bounded by the configuration.";
+    rdfs:domain awp:ProposeBody;
+    rdfs:range xsd:integer.
+awp:counters a rdf:Property;
+    rdfs:label "Counters";
+    rdfs:comment "The proposal this one counters, if any.";
+    rdfs:domain awp:ProposeBody;
+    rdfs:range rdfs:Resource.
+awp:proposal a rdf:Property;
+    rdfs:label "Proposal";
+    rdfs:comment "The proposal recorded for this resource.";
+    rdfs:domain awp:AcceptBody;
+    rdfs:range rdfs:Resource.
+awp:selection a rdf:Property;
+    rdfs:label "Selection";
+    rdfs:comment "The option chosen where the offer permitted a choice.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:agreement a rdf:Property;
+    rdfs:label "Agreement";
+    rdfs:comment "Deterministic agreement id (both sides compute and compare it).";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:ref a rdf:Property;
+    rdfs:label "Ref";
+    rdfs:comment "The message or action to which this response refers.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:reason a rdf:Property;
+    rdfs:label "Reason";
+    rdfs:comment "The reason for a verdict or refusal; a reason never grants authority.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range awp:ReasonCode.
+awp:detail a rdf:Property;
+    rdfs:label "Detail";
+    rdfs:comment "Additional diagnostic content; it does not grant authority.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awp:needs a rdf:Property;
+    rdfs:label "Needs";
+    rdfs:comment "The gate-built requirement that a sender must satisfy before admission.";
+    rdfs:domain awp:ChallengeBody;
+    rdfs:range rdfs:Resource.
+awp:nonce a rdf:Property;
+    rdfs:label "Nonce";
+    rdfs:comment "The one-time challenge value binding the retry to this request.";
+    rdfs:domain awp:InvokeBodyChallenge;
+    rdfs:range rdfs:Resource.
+awp:challenge a rdf:Property;
+    rdfs:label "Challenge";
+    rdfs:comment "The challenge recorded for this resource.";
+    rdfs:domain awp:InvokeBody;
+    rdfs:range awp:InvokeBodyChallenge.
+awp:input a rdf:Property;
+    rdfs:label "Input";
+    rdfs:comment "The input recorded for this resource.";
+    rdfs:domain awp:InvokeBody;
+    rdfs:range rdfs:Resource.
+awp:basis a rdf:Property;
+    rdfs:label "Basis";
+    rdfs:comment "The agreement, public request, representation, grant or invocation on which this request relies.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range awp:RequestBasis.
+<https://w3id.org/dpv#hasPurpose> a rdf:Property;
+    rdfs:label "Purpose";
+    rdfs:comment "The purpose recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:output a rdf:Property;
+    rdfs:label "Output";
+    rdfs:comment "The output recorded for this resource.";
+    rdfs:domain awp:DeliverBody;
+    rdfs:range rdfs:Resource.
+awp:activity a rdf:Property;
+    rdfs:label "Activity";
+    rdfs:comment "The attempted effect whose outcome is reported.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:outcome a rdf:Property;
+    rdfs:label "Outcome";
+    rdfs:comment "The evaluator’s conclusion about an attempted effect, distinct from the effect itself.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range awp:OutcomeConclusion.
+awp:observed a rdf:Property;
+    rdfs:label "Observed";
+    rdfs:comment "The observed recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:final a rdf:Property;
+    rdfs:label "Final";
+    rdfs:comment "True if this is the reporter's final receipt for `ref`.";
+    rdfs:domain awp:ReceiptBody;
+    rdfs:range xsd:boolean.
+awp:mediaType a rdf:Property;
+    rdfs:label "Media Type";
+    rdfs:comment "The media type recorded for this resource.";
+    rdfs:domain awp:ContentPart;
+    rdfs:range xsd:string.
+awp:digest a rdf:Property;
+    rdfs:label "Digest";
+    rdfs:comment "The digest recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awp:bytes a rdf:Property;
+    rdfs:label "Bytes";
+    rdfs:comment "UTF-8 text or raw byte values in this JSON binding.";
+    rdfs:domain awp:ContentPart;
+    rdfs:range rdfs:Resource.
+awp:profile a rdf:Property;
+    rdfs:label "Profile";
+    rdfs:comment "The versioned semantic profile under which this resource is interpreted.";
+    rdfs:domain awp:Message;
+    rdfs:range rdfs:Resource.
+awp:configuration a rdf:Property;
+    rdfs:label "Configuration";
+    rdfs:comment "The complete configuration of suites selected for the conversation.";
+    rdfs:domain awp:Message;
+    rdfs:range rdfs:Resource.
+awp:conversation a rdf:Property;
+    rdfs:label "Conversation";
+    rdfs:comment "The interaction to which this message or action belongs.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:kind a rdf:Property;
+    rdfs:label "Kind";
+    rdfs:comment "The protocol kind of the message; not an authorization.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:from a rdf:Property;
+    rdfs:label "From";
+    rdfs:comment "The claimed sender, including software actor, represented principal and operator.";
+    rdfs:domain awp:Message;
+    rdfs:range awp:ParticipantRef.
+awp:to a rdf:Property;
+    rdfs:label "To";
+    rdfs:comment "The intended audience of the message; absent only for a public response.";
+    rdfs:domain awp:Message;
+    rdfs:range awp:AudienceRef.
+awp:createdAt a rdf:Property;
+    rdfs:label "Created At";
+    rdfs:comment "The time at which the message was created.";
+    rdfs:domain awp:Message;
+    rdfs:range xsd:dateTime.
+awp:expiresAt a rdf:Property;
+    rdfs:label "Expires At";
+    rdfs:comment "The time after which the message must not be accepted.";
+    rdfs:domain awp:Message;
+    rdfs:range xsd:dateTime.
+awp:inReplyTo a rdf:Property;
+    rdfs:label "In Reply To";
+    rdfs:comment "The earlier message to which this message replies.";
+    rdfs:domain awp:Message;
+    rdfs:range rdfs:Resource.
+awp:method a rdf:Property;
+    rdfs:label "Method";
+    rdfs:comment "How the source states that it produced the claim.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awp:authorship a rdf:Property;
+    rdfs:label "Authorship";
+    rdfs:comment "The authorship recorded for this resource.";
+    rdfs:domain awp:Message;
+    rdfs:range awp:MessageAuthorship.
+awp:body a rdf:Property;
+    rdfs:label "Body";
+    rdfs:comment "The content whose interpretation is fixed by the message kind.";
+    rdfs:domain awp:Message;
+    rdfs:range rdfs:Resource.
+awp:evidence a rdf:Property;
+    rdfs:label "Evidence";
+    rdfs:comment "The evidence offered for a claim; its authority is assessed independently.";
+    rdfs:domain awp:Message;
+    rdfs:range awp:EvidenceItem.
+awp:content a rdf:Property;
+    rdfs:label "Content";
+    rdfs:comment "A bounded original content part protected by this message.";
+    rdfs:domain awp:Message;
+    rdfs:range awp:ContentPart.
+awp:protectedObject a rdf:Property;
+    rdfs:label "Protected Object";
+    rdfs:comment "Digest of the exact protected bytes examined.";
+    rdfs:domain awp:VerificationResult;
+    rdfs:range xsd:string.
+awp:property a rdf:Property;
+    rdfs:label "Property";
+    rdfs:comment "What was tested — never \"truth\" or \"authority\".";
+    rdfs:domain awp:VerificationResult;
+    rdfs:range xsd:string.
+awp:mechanism a rdf:Property;
+    rdfs:label "Mechanism";
+    rdfs:comment "The mechanism recorded for this resource.";
+    rdfs:domain awp:VerificationResult;
+    rdfs:range xsd:string.
+awp:verificationMaterial a rdf:Property;
+    rdfs:label "Verification Material";
+    rdfs:comment "Pinned verification material used (key thumbprint), if any.";
+    rdfs:domain awp:VerificationResult;
+    rdfs:range xsd:string.
+<http://www.w3.org/ns/prov#wasAttributedTo> a rdf:Property;
+    rdfs:label "Attributed To";
+    rdfs:comment "The identifier the pinned material is bound to in the local trust store.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:verifier a rdf:Property;
+    rdfs:label "Verifier";
+    rdfs:comment "The verifier recorded for this resource.";
+    rdfs:domain awp:VerificationResult;
+    rdfs:range rdfs:Resource.
+awp:at a rdf:Property;
+    rdfs:label "At";
+    rdfs:comment "The at recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:dateTime.
+awp:limitations a rdf:Property;
+    rdfs:label "Limitations";
+    rdfs:comment "The limitations recorded for this resource.";
+    rdfs:domain awp:VerificationResult;
+    rdfs:range xsd:string.
+awp:deciderRole a rdf:Property;
+    rdfs:label "Decider Role";
+    rdfs:comment "The decider role recorded for this resource.";
+    rdfs:domain awp:RepresentationAssessment;
+    rdfs:range xsd:string.
+awp:evaluator a rdf:Property;
+    rdfs:label "Evaluator";
+    rdfs:comment "The evaluator recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:statement a rdf:Property;
+    rdfs:label "Statement";
+    rdfs:comment "The statement recorded for this resource.";
+    rdfs:domain awp:RepresentationAssessment;
+    rdfs:range rdfs:Resource.
+awp:claimType a rdf:Property;
+    rdfs:label "Claim Type";
+    rdfs:comment "The profile-defined kind of claim for which source authority and fitness are checked.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awp:subject a rdf:Property;
+    rdfs:label "Subject";
+    rdfs:comment "The subject about which a claim is made; a mandate binds its agent here.";
+    rdfs:domain awp:SourceAuthorityAssessment;
+    rdfs:range rdfs:Resource.
+awp:rule a rdf:Property;
+    rdfs:label "Rule";
+    rdfs:comment "The rule recorded for this resource.";
+    rdfs:domain awp:SourceAuthorityAssessment;
+    rdfs:range awp:SourceAuthorityAssessmentRule.
+<http://www.w3.org/ns/odrl/2/action> a rdf:Property;
+    rdfs:label "Action";
+    rdfs:comment "The ODRL-level action class (e.g. `use`, `distribute`, `compensate`, `read`).";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+<http://www.w3.org/ns/odrl/2/target> a rdf:Property;
+    rdfs:label "Target";
+    rdfs:comment "Target asset/operation/resource.";
+    rdfs:domain awp:ActionIntent;
+    rdfs:range rdfs:Resource.
+awp:recipient a rdf:Property;
+    rdfs:label "Recipient";
+    rdfs:comment "The party that receives the effect or data.";
+    rdfs:domain awp:ActionIntent;
+    rdfs:range rdfs:Resource.
+awp:parameters a rdf:Property;
+    rdfs:label "Parameters";
+    rdfs:comment "The consequential parameters of the proposed action, as evaluated by the gate.";
+    rdfs:domain awp:ActionIntent;
+    rdfs:range rdfs:Resource.
+awp:decider a rdf:Property;
+    rdfs:label "Decider";
+    rdfs:comment "The decider recorded for this resource.";
+    rdfs:domain awp:AuthorisationDecision;
+    rdfs:range rdfs:Resource.
+awp:actionDigest a rdf:Property;
+    rdfs:label "Action Digest";
+    rdfs:comment "The digest of the exact proposed message or action approved by the principal.";
+    rdfs:domain awp:AuthorisationDecision;
+    rdfs:range xsd:string.
+awp:policy a rdf:Property;
+    rdfs:label "Policy";
+    rdfs:comment "The grant/policy evaluated (id + digest), e.g. the owner mandate.";
+    rdfs:domain awp:AuthorisationDecision;
+    rdfs:range awp:AuthorisationDecisionPolicy.
+awp:approval a rdf:Property;
+    rdfs:label "Approval";
+    rdfs:comment "The approval level requested by an authority challenge.";
+    rdfs:domain awp:AuthorisationDecision;
+    rdfs:range rdfs:Resource.
+awp:matchedRule a rdf:Property;
+    rdfs:label "Matched Rule";
+    rdfs:comment "The matched rule recorded for this resource.";
+    rdfs:domain awp:AuthorisationDecision;
+    rdfs:range xsd:string.
+awp:offer a rdf:Property;
+    rdfs:label "Offer";
+    rdfs:comment "The offer recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/odrl/2/Agreement>;
+    rdfs:range rdfs:Resource.
+awp:acceptance a rdf:Property;
+    rdfs:label "Acceptance";
+    rdfs:comment "The acceptance recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/odrl/2/Agreement>;
+    rdfs:range rdfs:Resource.
+awp:offeror a rdf:Property;
+    rdfs:label "Offeror";
+    rdfs:comment "The offeror recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/odrl/2/Agreement>;
+    rdfs:range awp:ParticipantRef.
+awp:acceptor a rdf:Property;
+    rdfs:label "Acceptor";
+    rdfs:comment "The acceptor recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/odrl/2/Agreement>;
+    rdfs:range awp:ParticipantRef.
+awp:formedAt a rdf:Property;
+    rdfs:label "Formed At";
+    rdfs:comment "The formed at recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/odrl/2/Agreement>;
+    rdfs:range xsd:dateTime.
+awp:grantor a rdf:Property;
+    rdfs:label "Grantor";
+    rdfs:comment "The grantor recorded for this resource.";
+    rdfs:domain awp:GrantRecord;
+    rdfs:range rdfs:Resource.
+awp:grantee a rdf:Property;
+    rdfs:label "Grantee";
+    rdfs:comment "The grantee recorded for this resource.";
+    rdfs:domain awp:GrantRecord;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#validUntil> a rdf:Property;
+    rdfs:label "Valid Until";
+    rdfs:comment "The valid until recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:dateTime.
+<http://www.w3.org/ns/prov#wasDerivedFrom> a rdf:Property;
+    rdfs:label "Derived From";
+    rdfs:comment "The derived from recorded for this resource.";
+    rdfs:domain awp:GrantRecord;
+    rdfs:range rdfs:Resource.
+awp:activityType a rdf:Property;
+    rdfs:label "Activity Type";
+    rdfs:comment "The activity type recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/prov#Activity>;
+    rdfs:range xsd:string.
+awp:effectKey a rdf:Property;
+    rdfs:label "Effect Key";
+    rdfs:comment "The effect key recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/prov#Activity>;
+    rdfs:range xsd:string.
+awp:startedAt a rdf:Property;
+    rdfs:label "Started At";
+    rdfs:comment "The started at recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/prov#Activity>;
+    rdfs:range xsd:dateTime.
+awp:endedAt a rdf:Property;
+    rdfs:label "Ended At";
+    rdfs:comment "The ended at recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/prov#Activity>;
+    rdfs:range xsd:dateTime.
+awp:status a rdf:Property;
+    rdfs:label "Status";
+    rdfs:comment "The status recorded for this resource.";
+    rdfs:domain <http://www.w3.org/ns/prov#Activity>;
+    rdfs:range xsd:string.
+awp:conclusion a rdf:Property;
+    rdfs:label "Conclusion";
+    rdfs:comment "The conclusion recorded for this resource.";
+    rdfs:domain awp:OutcomeRecord;
+    rdfs:range awp:OutcomeConclusion.
+awp:grant a rdf:Property;
+    rdfs:label "Grant";
+    rdfs:comment "The grant recorded for this resource.";
+    rdfs:domain awp:RequestBasis;
+    rdfs:range rdfs:Resource.
+awp:invocation a rdf:Property;
+    rdfs:label "Invocation";
+    rdfs:comment "The invocation recorded for this resource.";
+    rdfs:domain awp:RequestBasis;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#issuer> a rdf:Property;
+    rdfs:label "Issuer";
+    rdfs:comment "The issuer recorded for this resource.";
+    rdfs:domain <https://www.w3.org/2018/credentials#VerifiableCredential>;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#credentialSubject> a rdf:Property;
+    rdfs:label "Credential Subject";
+    rdfs:comment "The credential subject recorded for this resource.";
+    rdfs:domain <https://www.w3.org/2018/credentials#VerifiableCredential>;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#validFrom> a rdf:Property;
+    rdfs:label "Valid From";
+    rdfs:comment "The valid from recorded for this resource.";
+    rdfs:domain <https://www.w3.org/2018/credentials#VerifiableCredential>;
+    rdfs:range xsd:dateTime.
+<https://www.w3.org/2018/credentials#credentialStatus> a rdf:Property;
+    rdfs:label "Credential Status";
+    rdfs:comment "The credential status recorded for this resource.";
+    rdfs:domain <https://www.w3.org/2018/credentials#VerifiableCredential>;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#proof> a rdf:Property;
+    rdfs:label "Proof";
+    rdfs:comment "The proof recorded for this resource.";
+    rdfs:domain <https://www.w3.org/2018/credentials#VerifiableCredential>;
+    rdfs:range rdfs:Resource.
+awp:autonomous a rdf:Property;
+    rdfs:label "Autonomous";
+    rdfs:comment "The ODRL policy for actions the named agent may perform without a further approval.";
+    rdfs:domain <https://www.w3.org/2018/credentials#VerifiableCredential>;
+    rdfs:range rdfs:Resource.
+awp:withApproval a rdf:Property;
+    rdfs:label "With Approval";
+    rdfs:comment "The ODRL policy for actions requiring an exact-action principal approval.";
+    rdfs:domain <https://www.w3.org/2018/credentials#VerifiableCredential>;
+    rdfs:range rdfs:Resource.
+awp:asOf a rdf:Property;
+    rdfs:label "As Of";
+    rdfs:comment "The as of recorded for this resource.";
+    rdfs:domain awp:StatementSubject;
+    rdfs:range xsd:dateTime.
+awp:proofBinds a rdf:Property;
+    rdfs:label "Proof Binds";
+    rdfs:comment "The aspects of a derivation independently established by the proof verifier.";
+    rdfs:domain awp:Assurance;
+    rdfs:range rdfs:Resource.
+<https://schema.org/price> a rdf:Property;
+    rdfs:label "Price";
+    rdfs:comment "The price recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+<https://schema.org/priceCurrency> a rdf:Property;
+    rdfs:label "Price Currency";
+    rdfs:comment "The price currency recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+<https://schema.org/amount> a rdf:Property;
+    rdfs:label "Amount";
+    rdfs:comment "The amount recorded for this resource.";
+    rdfs:domain <https://schema.org/PayAction>;
+    rdfs:range xsd:decimal.
+<http://www.w3.org/ns/odrl/2/permission> a rdf:Property;
+    rdfs:label "Permission";
+    rdfs:comment "The permission recorded for this resource.";
+    rdfs:domain awp:Policy;
+    rdfs:range rdfs:Resource.
+<http://www.w3.org/ns/odrl/2/prohibition> a rdf:Property;
+    rdfs:label "Prohibition";
+    rdfs:comment "The prohibition recorded for this resource.";
+    rdfs:domain awp:Policy;
+    rdfs:range rdfs:Resource.
+<http://www.w3.org/ns/odrl/2/duty> a rdf:Property;
+    rdfs:label "Duty";
+    rdfs:comment "The duty recorded for this resource.";
+    rdfs:domain awp:Policy;
+    rdfs:range rdfs:Resource.
+awp:assurance a rdf:Property;
+    rdfs:label "Assurance";
+    rdfs:comment "How the receiver is assured of this derivation.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range awp:Assurance.
+awp:check a rdf:Property;
+    rdfs:label "Check";
+    rdfs:comment "The question answered by this gate check.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range awp:CheckName.
+awp:verdict a rdf:Property;
+    rdfs:label "Verdict";
+    rdfs:comment "The answer to the gate’s question.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range awp:Verdict.
+awp:basisKind a rdf:Property;
+    rdfs:label "Basis Kind";
+    rdfs:comment "Whether the request relies on an agreement, public request, representation, grant or invocation.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range awp:RequestBasis.
+<https://www.w3.org/2018/credentials#verifiableCredential> a rdf:Property;
+    rdfs:label "Credential";
+    rdfs:comment "The embedded source credential or presentation offered as evidence.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:jws a rdf:Property;
+    rdfs:label "Jws";
+    rdfs:comment "The compact JWS over the exact canonical JSON-LD document.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+<https://w3id.org/security#challenge> a rdf:Property;
+    rdfs:label "Challenge";
+    rdfs:comment "The challenge recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<http://purl.org/dc/terms/created> a rdf:Property;
+    rdfs:label "Created";
+    rdfs:comment "The created recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#domain> a rdf:Property;
+    rdfs:label "Domain";
+    rdfs:comment "The domain recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#expiration> a rdf:Property;
+    rdfs:label "Expires";
+    rdfs:comment "The expires recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#nonce> a rdf:Property;
+    rdfs:label "Nonce";
+    rdfs:comment "The one-time challenge value binding the retry to this request.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#previousProof> a rdf:Property;
+    rdfs:label "Previous Proof";
+    rdfs:comment "The previous proof recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#proofPurpose> a rdf:Property;
+    rdfs:label "Proof Purpose";
+    rdfs:comment "The purpose of the key relationship required by the proof.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#assertionMethod> a rdf:Property;
+    rdfs:label "Assertion Method";
+    rdfs:comment "The assertion method recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#authenticationMethod> a rdf:Property;
+    rdfs:label "Authentication";
+    rdfs:comment "The authentication recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#capabilityInvocationMethod> a rdf:Property;
+    rdfs:label "Capability Invocation";
+    rdfs:comment "The capability invocation recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#capabilityDelegationMethod> a rdf:Property;
+    rdfs:label "Capability Delegation";
+    rdfs:comment "The capability delegation recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#keyAgreementMethod> a rdf:Property;
+    rdfs:label "Key Agreement";
+    rdfs:comment "The key agreement recorded for this resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#cryptosuite> a rdf:Property;
+    rdfs:label "Cryptosuite";
+    rdfs:comment "The registered Data Integrity cryptosuite used for this proof.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#proofValue> a rdf:Property;
+    rdfs:label "Proof Value";
+    rdfs:comment "The encoded cryptographic signature value.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#verificationMethod> a rdf:Property;
+    rdfs:label "Verification Method";
+    rdfs:comment "The independently resolved verification method used to check this proof.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/jeswr/awp#reason/malformed> a awp:ReasonCode;
+    rdfs:label "Malformed";
+    rdfs:comment "The document is not well formed under the selected message model.".
+<https://w3id.org/jeswr/awp#reason/bounds-exceeded> a awp:ReasonCode;
+    rdfs:label "Bounds exceeded";
+    rdfs:comment "The input or task exceeds a configured resource bound.".
+<https://w3id.org/jeswr/awp#reason/unsigned-not-allowed> a awp:ReasonCode;
+    rdfs:label "Unsigned not allowed";
+    rdfs:comment "The selected configuration requires a signature for this request.".
+<https://w3id.org/jeswr/awp#reason/unknown-key> a awp:ReasonCode;
+    rdfs:label "Unknown key";
+    rdfs:comment "The verifier has no independently accepted verification material for this key.".
+<https://w3id.org/jeswr/awp#reason/bad-signature> a awp:ReasonCode;
+    rdfs:label "Bad signature";
+    rdfs:comment "The cryptographic proof does not verify over this exact protected document.".
+<https://w3id.org/jeswr/awp#reason/disallowed-header> a awp:ReasonCode;
+    rdfs:label "Disallowed header";
+    rdfs:comment "A JWS header contains a parameter this profile does not permit.".
+<https://w3id.org/jeswr/awp#reason/configuration-mismatch> a awp:ReasonCode;
+    rdfs:label "Configuration mismatch";
+    rdfs:comment "The protection or mechanism used differs from the configuration named by the document.".
+<https://w3id.org/jeswr/awp#reason/sender-key-mismatch> a awp:ReasonCode;
+    rdfs:label "Sender key mismatch";
+    rdfs:comment "The claimed sender is not the actor to which the independently resolved signing key belongs.".
+<https://w3id.org/jeswr/awp#reason/wrong-audience> a awp:ReasonCode;
+    rdfs:label "Wrong audience";
+    rdfs:comment "The message is addressed to a different actor or party.".
+<https://w3id.org/jeswr/awp#reason/expired> a awp:ReasonCode;
+    rdfs:label "Expired";
+    rdfs:comment "The current time is after the end of the document’s validity window.".
+<https://w3id.org/jeswr/awp#reason/not-yet-valid> a awp:ReasonCode;
+    rdfs:label "Not yet valid";
+    rdfs:comment "The document’s validity window has not started.".
+<https://w3id.org/jeswr/awp#reason/lifetime-too-long> a awp:ReasonCode;
+    rdfs:label "Lifetime too long";
+    rdfs:comment "The document’s validity window exceeds the configured maximum.".
+<https://w3id.org/jeswr/awp#reason/replay-conflict> a awp:ReasonCode;
+    rdfs:label "Replay conflict";
+    rdfs:comment "A one-time identifier or nonce is reused, unissued or bound to different content.".
+<https://w3id.org/jeswr/awp#reason/capacity> a awp:ReasonCode;
+    rdfs:label "Capacity";
+    rdfs:comment "Capacity: the reason code identified by the stable code “capacity”.".
+<https://w3id.org/jeswr/awp#reason/no-structured-content> a awp:ReasonCode;
+    rdfs:label "No structured content";
+    rdfs:comment "No structured content: the reason code identified by the stable code “no-structured-content”.".
+<https://w3id.org/jeswr/awp#reason/conflicting-structured-copies> a awp:ReasonCode;
+    rdfs:label "Conflicting structured copies";
+    rdfs:comment "Conflicting structured copies: the reason code identified by the stable code “conflicting-structured-copies”.".
+<https://w3id.org/jeswr/awp#reason/human-parity-mismatch> a awp:ReasonCode;
+    rdfs:label "Human parity mismatch";
+    rdfs:comment "Human parity mismatch: the reason code identified by the stable code “human-parity-mismatch”.".
+<https://w3id.org/jeswr/awp#reason/unsupported-profile> a awp:ReasonCode;
+    rdfs:label "Unsupported profile";
+    rdfs:comment "Unsupported profile: the reason code identified by the stable code “unsupported-profile”.".
+<https://w3id.org/jeswr/awp#reason/unsupported-configuration> a awp:ReasonCode;
+    rdfs:label "Unsupported configuration";
+    rdfs:comment "The receiver does not implement or accept the requested complete configuration.".
+<https://w3id.org/jeswr/awp#reason/unsupported-operation> a awp:ReasonCode;
+    rdfs:label "Unsupported operation";
+    rdfs:comment "The receiver does not offer the requested operation version.".
+<https://w3id.org/jeswr/awp#reason/unsupported-kind> a awp:ReasonCode;
+    rdfs:label "Unsupported kind";
+    rdfs:comment "The receiver does not implement the requested message kind.".
+<https://w3id.org/jeswr/awp#reason/unsupported-term> a awp:ReasonCode;
+    rdfs:label "Unsupported term";
+    rdfs:comment "A term material to this decision has no supported interpretation.".
+<https://w3id.org/jeswr/awp#reason/protocol-violation> a awp:ReasonCode;
+    rdfs:label "Protocol violation";
+    rdfs:comment "The message is not a permitted transition of this conversation.".
+<https://w3id.org/jeswr/awp#reason/terms-digest-mismatch> a awp:ReasonCode;
+    rdfs:label "Terms digest mismatch";
+    rdfs:comment "The accepted or referenced digest differs from the exact offered terms document.".
+<https://w3id.org/jeswr/awp#reason/round-limit> a awp:ReasonCode;
+    rdfs:label "Round limit";
+    rdfs:comment "The conversation has exhausted its permitted negotiation or request rounds.".
+<https://w3id.org/jeswr/awp#reason/conversation-closed> a awp:ReasonCode;
+    rdfs:label "Conversation closed";
+    rdfs:comment "The conversation has ended and cannot accept this transition.".
+<https://w3id.org/jeswr/awp#reason/representation-missing> a awp:ReasonCode;
+    rdfs:label "Representation missing";
+    rdfs:comment "No required statement of representation was supplied.".
+<https://w3id.org/jeswr/awp#reason/representation-invalid> a awp:ReasonCode;
+    rdfs:label "Representation invalid";
+    rdfs:comment "The supplied representation does not verify or has an invalid delegation structure.".
+<https://w3id.org/jeswr/awp#reason/representation-expired> a awp:ReasonCode;
+    rdfs:label "Representation expired";
+    rdfs:comment "The statement of representation is outside its validity window.".
+<https://w3id.org/jeswr/awp#reason/representation-out-of-scope> a awp:ReasonCode;
+    rdfs:label "Representation out of scope";
+    rdfs:comment "The verified representation does not cover this entity, subject, action, operation or purpose.".
+<https://w3id.org/jeswr/awp#reason/source-not-authoritative> a awp:ReasonCode;
+    rdfs:label "Source not authoritative";
+    rdfs:comment "The source is not accepted for this claim kind, subject or purpose.".
+<https://w3id.org/jeswr/awp#reason/evidence-invalid> a awp:ReasonCode;
+    rdfs:label "Evidence invalid";
+    rdfs:comment "The supplied support does not verify or differs from admitted evidence.".
+<https://w3id.org/jeswr/awp#reason/not-authorised> a awp:ReasonCode;
+    rdfs:label "Not authorised";
+    rdfs:comment "No applicable grant permits the proposed action as actually parameterized.".
+<https://w3id.org/jeswr/awp#reason/mandate-invalid> a awp:ReasonCode;
+    rdfs:label "Mandate invalid";
+    rdfs:comment "The principal’s operational mandate cannot be loaded and verified for this agent.".
+<https://w3id.org/jeswr/awp#reason/assurance-insufficient> a awp:ReasonCode;
+    rdfs:label "Assurance insufficient";
+    rdfs:comment "The supplied assurance or approval strength is weaker than the receiver requires.".
+<https://w3id.org/jeswr/awp#reason/approval-required> a awp:ReasonCode;
+    rdfs:label "Approval required";
+    rdfs:comment "A principal or named decision maker must approve this exact action before it may proceed.".
+<https://w3id.org/jeswr/awp#reason/approval-denied> a awp:ReasonCode;
+    rdfs:label "Approval denied";
+    rdfs:comment "The required person refused approval of the exact held action.".
+<https://w3id.org/jeswr/awp#reason/missing-context> a awp:ReasonCode;
+    rdfs:label "Missing context";
+    rdfs:comment "The gate lacks required task, purpose or authority context.".
+<https://w3id.org/jeswr/awp#reason/indeterminate-policy> a awp:ReasonCode;
+    rdfs:label "Indeterminate policy";
+    rdfs:comment "The policy evaluator cannot establish a permit or prohibition under its supported vocabulary.".
+<https://w3id.org/jeswr/awp#reason/grant-invalid> a awp:ReasonCode;
+    rdfs:label "Grant invalid";
+    rdfs:comment "The legacy grant fails structural, signature or binding checks.".
+<https://w3id.org/jeswr/awp#reason/grant-expired> a awp:ReasonCode;
+    rdfs:label "Grant expired";
+    rdfs:comment "The legacy grant is outside its validity window.".
+<https://w3id.org/jeswr/awp#reason/grant-revoked> a awp:ReasonCode;
+    rdfs:label "Grant revoked";
+    rdfs:comment "The legacy grant has been explicitly revoked.".
+<https://w3id.org/jeswr/awp#reason/insufficient-scope> a awp:ReasonCode;
+    rdfs:label "Insufficient scope";
+    rdfs:comment "The verified grant omits some part of the action or resource selection.".
+<https://w3id.org/jeswr/awp#reason/purpose-not-permitted> a awp:ReasonCode;
+    rdfs:label "Purpose not permitted";
+    rdfs:comment "The data’s terms or the applicable grant do not permit the requested purpose.".
+<https://w3id.org/jeswr/awp#reason/no-agreement> a awp:ReasonCode;
+    rdfs:label "No agreement";
+    rdfs:comment "No applicable live agreement establishes the terms required for this action.".
+<https://w3id.org/jeswr/awp#reason/context-not-clear> a awp:ReasonCode;
+    rdfs:label "Context not clear";
+    rdfs:comment "The gate cannot establish that all context behind this exact free text may be disclosed.".
+<https://w3id.org/jeswr/awp#reason/terms-not-acceptable> a awp:ReasonCode;
+    rdfs:label "Terms not acceptable";
+    rdfs:comment "The receiver cannot meet all the proposed prohibitions and duties for this use.".
+<https://w3id.org/jeswr/awp#reason/structured-form-required> a awp:ReasonCode;
+    rdfs:label "Structured form required";
+    rdfs:comment "This decision requires a structured claim that the supplied prose or reading cannot establish.".
+<https://w3id.org/jeswr/awp#reason/method-not-accepted> a awp:ReasonCode;
+    rdfs:label "Method not accepted";
+    rdfs:comment "The receiving profile does not accept the stated method of producing this claim.".
+<https://w3id.org/jeswr/awp#reason/source-unknown> a awp:ReasonCode;
+    rdfs:label "Source unknown";
+    rdfs:comment "No accepted source route or scoped own-list entry establishes this party for the task.".
+<https://w3id.org/jeswr/awp#reason/lookup-failed> a awp:ReasonCode;
+    rdfs:label "Lookup failed";
+    rdfs:comment "The required independently anchored lookup could not produce a usable answer.".
+<https://w3id.org/jeswr/awp#reason/status-withdrawn> a awp:ReasonCode;
+    rdfs:label "Status withdrawn";
+    rdfs:comment "A current verified status answer marks the credential or registered item withdrawn.".
+<https://w3id.org/jeswr/awp#reason/mandate-withdrawn> a awp:ReasonCode;
+    rdfs:label "Mandate withdrawn";
+    rdfs:comment "The principal has withdrawn the mandate or an authority link it depends on.".
+<https://w3id.org/jeswr/awp#reason/prohibited> a awp:ReasonCode;
+    rdfs:label "Prohibited";
+    rdfs:comment "An applicable prohibition forbids the proposed action or disclosure.".
+<https://w3id.org/jeswr/awp#reason/confidence-too-low> a awp:ReasonCode;
+    rdfs:label "Confidence too low";
+    rdfs:comment "The evidence’s stated confidence or mapping quality is below the receiving profile’s requirement.".
+<https://w3id.org/jeswr/awp#reason/superseded-by-better-source> a awp:ReasonCode;
+    rdfs:label "Superseded by better source";
+    rdfs:comment "The stated precedence policy selects other evidence over this claim for the purpose.".
+<https://w3id.org/jeswr/awp#reason/partial-result> a awp:ReasonCode;
+    rdfs:label "Partial result";
+    rdfs:comment "The result covers less than the scope needed for the task.".
+<https://w3id.org/jeswr/awp#reason/completeness-not-established> a awp:ReasonCode;
+    rdfs:label "Completeness not established";
+    rdfs:comment "Accepted evidence does not establish that all required inputs or scope are covered.".
+<https://w3id.org/jeswr/awp#reason/rule-not-accepted> a awp:ReasonCode;
+    rdfs:label "Rule not accepted";
+    rdfs:comment "The receiving profile does not accept this derivation rule or version.".
+<https://w3id.org/jeswr/awp#reason/deriver-not-accepted> a awp:ReasonCode;
+    rdfs:label "Deriver not accepted";
+    rdfs:comment "The receiving profile does not accept this deriver for the rule and purpose.".
+<https://w3id.org/jeswr/awp#reason/form-not-available> a awp:ReasonCode;
+    rdfs:label "Form not available";
+    rdfs:comment "The required less-disclosing form cannot be produced under this configuration.".
+<https://w3id.org/jeswr/awp#reason/rule-unbounded> a awp:ReasonCode;
+    rdfs:label "Rule unbounded";
+    rdfs:comment "The derivation rule is not within the receiver’s bounded, accepted rule language.".
+<https://w3id.org/jeswr/awp#reason/limit-exceeded> a awp:ReasonCode;
+    rdfs:label "Limit exceeded";
+    rdfs:comment "The proposed action exceeds an applicable operational or principal limit.".
+<https://w3id.org/jeswr/awp#reason/budget-exceeded> a awp:ReasonCode;
+    rdfs:label "Budget exceeded";
+    rdfs:comment "The proposed commitment exceeds the applicable cumulative budget.".
+<https://w3id.org/jeswr/awp#reason/stopped-by-principal> a awp:ReasonCode;
+    rdfs:label "Stopped by principal";
+    rdfs:comment "The principal has stopped the agent, preventing further action.".
+<https://w3id.org/jeswr/awp#reason/record-unavailable> a awp:ReasonCode;
+    rdfs:label "Record unavailable";
+    rdfs:comment "The required durable record cannot be written, obtained or verified.".
+<https://w3id.org/jeswr/awp#reason/derivation-not-verified> a awp:ReasonCode;
+    rdfs:label "Derivation not verified";
+    rdfs:comment "The offered proof, recomputation or joint outcome has not verified for the requested derivation.".
+<https://w3id.org/jeswr/awp#reason/result-uncertain> a awp:ReasonCode;
+    rdfs:label "Result uncertain";
+    rdfs:comment "The observer cannot establish the outcome of an attempted effect.".
+<https://w3id.org/jeswr/awp#reason/evidence-missing> a awp:ReasonCode;
+    rdfs:label "Evidence missing";
+    rdfs:comment "Required supporting evidence is absent or unavailable.".
+<https://w3id.org/jeswr/awp#reason/invalid-terms> a awp:ReasonCode;
+    rdfs:label "Invalid terms";
+    rdfs:comment "The operation’s offered terms fail its domain constraints.".
+<https://w3id.org/jeswr/awp#reason/no-acceptable-slot> a awp:ReasonCode;
+    rdfs:label "No acceptable slot";
+    rdfs:comment "No proposed scheduling slot satisfies the applicable constraints.".
+<https://w3id.org/jeswr/awp#reason/fee-not-acceptable> a awp:ReasonCode;
+    rdfs:label "Fee not acceptable";
+    rdfs:comment "The proposed fee is outside the terms the principal accepts.".
+<https://w3id.org/jeswr/awp#reason/excessive-scope> a awp:ReasonCode;
+    rdfs:label "Excessive scope";
+    rdfs:comment "The proposed disclosure includes data beyond what the permitted purpose needs.".
+<https://w3id.org/jeswr/awp#reason/stale-data> a awp:ReasonCode;
+    rdfs:label "Stale data";
+    rdfs:comment "The evidence or status answer is older than the receiving profile permits.".
+<https://w3id.org/jeswr/awp#reason/credentials-required> a awp:ReasonCode;
+    rdfs:label "Credentials required";
+    rdfs:comment "The operation requires supporting credentials before it can proceed.".
+<https://w3id.org/jeswr/awp#reason/execution-failed> a awp:ReasonCode;
+    rdfs:label "Execution failed";
+    rdfs:comment "The executor observed a failure of the attempted effect.".
+<https://w3id.org/jeswr/awp#kind/describe> a awp:MessageKind;
+    rdfs:label "Describe";
+    rdfs:comment "Describe: the message kind identified by the stable code “describe”.".
+<https://w3id.org/jeswr/awp#kind/description> a awp:MessageKind;
+    rdfs:label "Description";
+    rdfs:comment "Description: the message kind identified by the stable code “description”.".
+<https://w3id.org/jeswr/awp#kind/propose> a awp:MessageKind;
+    rdfs:label "Propose";
+    rdfs:comment "Propose: the message kind identified by the stable code “propose”.".
+<https://w3id.org/jeswr/awp#kind/accept> a awp:MessageKind;
+    rdfs:label "Accept";
+    rdfs:comment "Accept: the message kind identified by the stable code “accept”.".
+<https://w3id.org/jeswr/awp#kind/refuse> a awp:MessageKind;
+    rdfs:label "Refuse";
+    rdfs:comment "Refuse: the message kind identified by the stable code “refuse”.".
+<https://w3id.org/jeswr/awp#kind/challenge> a awp:MessageKind;
+    rdfs:label "Challenge";
+    rdfs:comment "Challenge: the message kind identified by the stable code “challenge”.".
+<https://w3id.org/jeswr/awp#kind/invoke> a awp:MessageKind;
+    rdfs:label "Invoke";
+    rdfs:comment "Invoke: the message kind identified by the stable code “invoke”.".
+<https://w3id.org/jeswr/awp#kind/deliver> a awp:MessageKind;
+    rdfs:label "Deliver";
+    rdfs:comment "Deliver: the message kind identified by the stable code “deliver”.".
+<https://w3id.org/jeswr/awp#kind/receipt> a awp:MessageKind;
+    rdfs:label "Receipt";
+    rdfs:comment "Receipt: the message kind identified by the stable code “receipt”.".
+<https://w3id.org/jeswr/awp#kind/unsupported> a awp:MessageKind;
+    rdfs:label "Unsupported";
+    rdfs:comment "Unsupported: the message kind identified by the stable code “unsupported”.".
+<https://w3id.org/jeswr/awp#kind/indeterminate> a awp:MessageKind;
+    rdfs:label "Indeterminate";
+    rdfs:comment "Indeterminate: the message kind identified by the stable code “indeterminate”.".
+<https://w3id.org/jeswr/awp#outcome/completed> a awp:OutcomeConclusion;
+    rdfs:label "Completed";
+    rdfs:comment "Completed: the outcome conclusion identified by the stable code “completed”.".
+<https://w3id.org/jeswr/awp#outcome/not-executed> a awp:OutcomeConclusion;
+    rdfs:label "Not executed";
+    rdfs:comment "Not executed: the outcome conclusion identified by the stable code “not-executed”.".
+<https://w3id.org/jeswr/awp#outcome/uncertain> a awp:OutcomeConclusion;
+    rdfs:label "Uncertain";
+    rdfs:comment "Uncertain: the outcome conclusion identified by the stable code “uncertain”.".
+<https://w3id.org/jeswr/awp#assurance/by-source> a awp:Assurance;
+    rdfs:label "By source";
+    rdfs:comment "The original source applies the published rule to its own inputs and signs the result.".
+<https://w3id.org/jeswr/awp#assurance/recomputed> a awp:Assurance;
+    rdfs:label "Recomputed";
+    rdfs:comment "The receiver repeats the published rule over the supplied admitted input statements.".
+<https://w3id.org/jeswr/awp#assurance/proved> a awp:Assurance;
+    rdfs:label "Proved";
+    rdfs:comment "A registered proof verifier establishes only the specific bindings it reports for the result; authority and truth remain separate.".
+<https://w3id.org/jeswr/awp#assurance/joint> a awp:Assurance;
+    rdfs:label "Joint";
+    rdfs:comment "Named parties compute under a declared joint protocol; its verified outcome and privacy assumptions are explicit.".
+<https://w3id.org/jeswr/awp#assurance/attested> a awp:Assurance;
+    rdfs:label "Attested";
+    rdfs:comment "A deriver explicitly accepted for this rule and purpose signs its computed result.".
+<https://w3id.org/jeswr/awp#binding/rule> a awp:ProofBinding;
+    rdfs:label "Rule";
+    rdfs:comment "The proof binds the exact receiver-accepted rule and its parameters to this result.".
+<https://w3id.org/jeswr/awp#binding/issuers> a awp:ProofBinding;
+    rdfs:label "Issuers";
+    rdfs:comment "The proof authenticates the input-signing keys it reports; their authority is checked separately.".
+<https://w3id.org/jeswr/awp#binding/subject> a awp:ProofBinding;
+    rdfs:label "Subject";
+    rdfs:comment "The proof binds this result to the requested subject independently of the holder’s outer signature.".
+<https://w3id.org/jeswr/awp#binding/fresh> a awp:ProofBinding;
+    rdfs:label "Fresh";
+    rdfs:comment "The proof establishes the specific input validity or freshness condition accepted by the receiver.".
+<https://w3id.org/jeswr/awp#binding/complete> a awp:ProofBinding;
+    rdfs:label "Complete";
+    rdfs:comment "The proof binds the result to an independently agreed complete input dataset or scope, not merely a holder-selected subset.".
+<https://w3id.org/jeswr/awp#check/integrity> a awp:CheckName;
+    rdfs:label "Integrity";
+    rdfs:comment "Integrity: the check name identified by the stable code “integrity”.".
+<https://w3id.org/jeswr/awp#check/source> a awp:CheckName;
+    rdfs:label "Source";
+    rdfs:comment "Source: the check name identified by the stable code “source”.".
+<https://w3id.org/jeswr/awp#check/authority> a awp:CheckName;
+    rdfs:label "Authority";
+    rdfs:comment "Authority: the check name identified by the stable code “authority”.".
+<https://w3id.org/jeswr/awp#check/terms> a awp:CheckName;
+    rdfs:label "Terms";
+    rdfs:comment "Terms: the check name identified by the stable code “terms”.".
+<https://w3id.org/jeswr/awp#check/fitness> a awp:CheckName;
+    rdfs:label "Fitness";
+    rdfs:comment "Fitness: the check name identified by the stable code “fitness”.".
+<https://w3id.org/jeswr/awp#check/mandate> a awp:CheckName;
+    rdfs:label "Mandate";
+    rdfs:comment "Mandate: the check name identified by the stable code “mandate”.".
+<https://w3id.org/jeswr/awp#check/recipient> a awp:CheckName;
+    rdfs:label "Recipient";
+    rdfs:comment "Recipient: the check name identified by the stable code “recipient”.".
+<https://w3id.org/jeswr/awp#check/disclosure> a awp:CheckName;
+    rdfs:label "Disclosure";
+    rdfs:comment "Disclosure: the check name identified by the stable code “disclosure”.".
+<https://w3id.org/jeswr/awp#check/data-terms> a awp:CheckName;
+    rdfs:label "Data terms";
+    rdfs:comment "Data terms: the check name identified by the stable code “data-terms”.".
+<https://w3id.org/jeswr/awp#check/limits-approval> a awp:CheckName;
+    rdfs:label "Limits approval";
+    rdfs:comment "Limits approval: the check name identified by the stable code “limits-approval”.".
+<https://w3id.org/jeswr/awp#check/evidence> a awp:CheckName;
+    rdfs:label "Evidence";
+    rdfs:comment "Evidence: the check name identified by the stable code “evidence”.".
+<https://w3id.org/jeswr/awp#verdict/pass> a awp:Verdict;
+    rdfs:label "Pass";
+    rdfs:comment "Pass: the verdict identified by the stable code “pass”.".
+<https://w3id.org/jeswr/awp#verdict/fail> a awp:Verdict;
+    rdfs:label "Fail";
+    rdfs:comment "Fail: the verdict identified by the stable code “fail”.".
+<https://w3id.org/jeswr/awp#verdict/ask-more> a awp:Verdict;
+    rdfs:label "Ask more";
+    rdfs:comment "Ask more: the verdict identified by the stable code “ask-more”.".
+<https://w3id.org/jeswr/awp#verdict/ask-principal> a awp:Verdict;
+    rdfs:label "Ask principal";
+    rdfs:comment "Ask principal: the verdict identified by the stable code “ask-principal”.".
+<https://w3id.org/jeswr/awp#verdict/not-applicable> a awp:Verdict;
+    rdfs:label "Not applicable";
+    rdfs:comment "Not applicable: the verdict identified by the stable code “not-applicable”.".
+<https://w3id.org/jeswr/awp#verdict/indeterminate> a awp:Verdict;
+    rdfs:label "Indeterminate";
+    rdfs:comment "Indeterminate: the verdict identified by the stable code “indeterminate”.".
+<https://w3id.org/jeswr/awp#result/source-accepted> a awp:CheckResultCode;
+    rdfs:label "Source accepted";
+    rdfs:comment "Source accepted: the check result code identified by the stable code “source-accepted”.".
+<https://w3id.org/jeswr/awp#result/minimal-disclosure> a awp:CheckResultCode;
+    rdfs:label "Minimal disclosure";
+    rdfs:comment "Minimal disclosure: the check result code identified by the stable code “minimal-disclosure”.".
+<https://w3id.org/jeswr/awp#result/intact> a awp:CheckResultCode;
+    rdfs:label "Intact";
+    rdfs:comment "Intact: the check result code identified by the stable code “intact”.".
+<https://w3id.org/jeswr/awp#result/authority-valid> a awp:CheckResultCode;
+    rdfs:label "Authority valid";
+    rdfs:comment "Authority valid: the check result code identified by the stable code “authority-valid”.".
+<https://w3id.org/jeswr/awp#result/terms-acceptable> a awp:CheckResultCode;
+    rdfs:label "Terms acceptable";
+    rdfs:comment "Terms acceptable: the check result code identified by the stable code “terms-acceptable”.".
+<https://w3id.org/jeswr/awp#result/fit-for-use> a awp:CheckResultCode;
+    rdfs:label "Fit for use";
+    rdfs:comment "Fit for use: the check result code identified by the stable code “fit-for-use”.".
+<https://w3id.org/jeswr/awp#result/within-mandate> a awp:CheckResultCode;
+    rdfs:label "Within mandate";
+    rdfs:comment "Within mandate: the check result code identified by the stable code “within-mandate”.".
+<https://w3id.org/jeswr/awp#result/recipient-established> a awp:CheckResultCode;
+    rdfs:label "Recipient established";
+    rdfs:comment "Recipient established: the check result code identified by the stable code “recipient-established”.".
+<https://w3id.org/jeswr/awp#result/terms-allow> a awp:CheckResultCode;
+    rdfs:label "Terms allow";
+    rdfs:comment "Terms allow: the check result code identified by the stable code “terms-allow”.".
+<https://w3id.org/jeswr/awp#result/within-limits> a awp:CheckResultCode;
+    rdfs:label "Within limits";
+    rdfs:comment "Within limits: the check result code identified by the stable code “within-limits”.".
+<https://w3id.org/jeswr/awp#result/approval-given> a awp:CheckResultCode;
+    rdfs:label "Approval given";
+    rdfs:comment "Approval given: the check result code identified by the stable code “approval-given”.".
+<https://w3id.org/jeswr/awp#result/evidence-complete> a awp:CheckResultCode;
+    rdfs:label "Evidence complete";
+    rdfs:comment "Evidence complete: the check result code identified by the stable code “evidence-complete”.".
+<https://w3id.org/jeswr/awp#result/established-earlier> a awp:CheckResultCode;
+    rdfs:label "Established earlier";
+    rdfs:comment "Established earlier: the check result code identified by the stable code “established-earlier”.".
+<https://w3id.org/jeswr/awp#result/no-action> a awp:CheckResultCode;
+    rdfs:label "No action";
+    rdfs:comment "No action: the check result code identified by the stable code “no-action”.".
+<https://w3id.org/jeswr/awp#result/no-claims> a awp:CheckResultCode;
+    rdfs:label "No claims";
+    rdfs:comment "No claims: the check result code identified by the stable code “no-claims”.".
+<https://w3id.org/jeswr/awp#result/no-principal> a awp:CheckResultCode;
+    rdfs:label "No principal";
+    rdfs:comment "No principal: the check result code identified by the stable code “no-principal”.".
+<https://w3id.org/jeswr/awp#result/no-data> a awp:CheckResultCode;
+    rdfs:label "No data";
+    rdfs:comment "No data: the check result code identified by the stable code “no-data”.".
+<https://w3id.org/jeswr/awp#result/no-personal-data> a awp:CheckResultCode;
+    rdfs:label "No personal data";
+    rdfs:comment "No personal data: the check result code identified by the stable code “no-personal-data”.".
+<https://w3id.org/jeswr/awp#basis/agreement> a awp:RequestBasis;
+    rdfs:label "Agreement";
+    rdfs:comment "Agreement: the request basis identified by the stable code “agreement”.".
+<https://w3id.org/jeswr/awp#basis/public> a awp:RequestBasis;
+    rdfs:label "Public";
+    rdfs:comment "Public: the request basis identified by the stable code “public”.".
+<https://w3id.org/jeswr/awp#basis/represented> a awp:RequestBasis;
+    rdfs:label "Represented";
+    rdfs:comment "Represented: the request basis identified by the stable code “represented”.".
+<https://w3id.org/jeswr/awp#basis/grant> a awp:RequestBasis;
+    rdfs:label "Grant";
+    rdfs:comment "Grant: the request basis identified by the stable code “grant”.".
+<https://w3id.org/jeswr/awp#basis/invocation> a awp:RequestBasis;
+    rdfs:label "Invocation";
+    rdfs:comment "Invocation: the request basis identified by the stable code “invocation”.".
+<https://w3id.org/jeswr/awp#evidence-role/representation> a awp:EvidenceRole;
+    rdfs:label "Representation";
+    rdfs:comment "Representation: the evidence role identified by the stable code “representation”.".
+<https://w3id.org/jeswr/awp#evidence-role/approval> a awp:EvidenceRole;
+    rdfs:label "Approval";
+    rdfs:comment "Approval: the evidence role identified by the stable code “approval”.".
+<https://w3id.org/jeswr/awp#evidence-role/credential> a awp:EvidenceRole;
+    rdfs:label "Credential";
+    rdfs:comment "Credential: the evidence role identified by the stable code “credential”.".
+<https://w3id.org/jeswr/awp#evidence-role/grant> a awp:EvidenceRole;
+    rdfs:label "Grant";
+    rdfs:comment "Grant: the evidence role identified by the stable code “grant”.".
+<https://w3id.org/jeswr/awp#evidence-role/membership> a awp:EvidenceRole;
+    rdfs:label "Membership";
+    rdfs:comment "Membership: the evidence role identified by the stable code “membership”.".
+<https://w3id.org/jeswr/awp#evidence-role/authorisation> a awp:EvidenceRole;
+    rdfs:label "Authorisation";
+    rdfs:comment "Authorisation: the evidence role identified by the stable code “authorisation”.".
+<https://w3id.org/jeswr/awp#purpose/credit-assessment> a <https://w3id.org/dpv#Purpose>;
+    rdfs:label "Credit Assessment";
+    rdfs:comment "The credit assessment purpose defined by the mortgage profile; compared by exact IRI.".
+<https://w3id.org/jeswr/awp#purpose/mortgage-application> a <https://w3id.org/dpv#Purpose>;
+    rdfs:label "Mortgage Application";
+    rdfs:comment "The mortgage application purpose defined by the mortgage profile; compared by exact IRI.".
+<https://w3id.org/jeswr/awp#purpose/product-search> a <https://w3id.org/dpv#Purpose>;
+    rdfs:label "Product Search";
+    rdfs:comment "The product search purpose defined by the mortgage profile; compared by exact IRI.".
+<https://www.w3.org/2018/credentials#confidenceMethod> a rdf:Property;
+    rdfs:label "Confidence Method";
+    rdfs:comment "The published confidence method term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#credentialSchema> a rdf:Property;
+    rdfs:label "Credential Schema";
+    rdfs:comment "The published credential schema term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://schema.org/description> a rdf:Property;
+    rdfs:label "Description";
+    rdfs:comment "The published description term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#evidence> a rdf:Property;
+    rdfs:label "Evidence";
+    rdfs:comment "The published evidence term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://schema.org/name> a rdf:Property;
+    rdfs:label "Name";
+    rdfs:comment "The published name term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#refreshService> a rdf:Property;
+    rdfs:label "Refresh Service";
+    rdfs:comment "The published refresh service term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#relatedResource> a rdf:Property;
+    rdfs:label "Related Resource";
+    rdfs:comment "The published related resource term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#renderMethod> a rdf:Property;
+    rdfs:label "Render Method";
+    rdfs:comment "The published render method term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#termsOfUse> a rdf:Property;
+    rdfs:label "Terms Of Use";
+    rdfs:comment "The published terms of use term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://schema.org/encodingFormat> a rdf:Property;
+    rdfs:label "Media Type";
+    rdfs:comment "The published media type term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://w3id.org/security#digestMultibase> a rdf:Property;
+    rdfs:label "Digest Multibase";
+    rdfs:comment "The published digest multibase term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#digestSRI> a rdf:Property;
+    rdfs:label "Digest SRI";
+    rdfs:comment "The published digest sri term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#EnvelopedVerifiableCredential> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Enveloped Verifiable Credential";
+    rdfs:comment "The published enveloped verifiable credential term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.".
+<https://www.w3.org/2018/credentials#VerifiablePresentation> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Verifiable Presentation";
+    rdfs:comment "The published verifiable presentation term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.".
+<https://www.w3.org/2018/credentials#holder> a rdf:Property;
+    rdfs:label "Holder";
+    rdfs:comment "The published holder term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/2018/credentials#EnvelopedVerifiablePresentation> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Enveloped Verifiable Presentation";
+    rdfs:comment "The published enveloped verifiable presentation term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.".
+<https://www.w3.org/2018/credentials#JsonSchemaCredential> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Json Schema Credential";
+    rdfs:comment "The published json schema credential term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.".
+<https://www.w3.org/2018/credentials#JsonSchema> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Json Schema";
+    rdfs:comment "The published json schema term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.".
+<https://www.w3.org/2018/credentials#jsonSchema> a rdf:Property;
+    rdfs:label "Json Schema";
+    rdfs:comment "The published json schema term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#BitstringStatusListCredential> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Bitstring Status List Credential";
+    rdfs:comment "The published bitstring status list credential term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.".
+<https://www.w3.org/ns/credentials/status#BitstringStatusList> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Bitstring Status List";
+    rdfs:comment "The published bitstring status list term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.".
+<https://www.w3.org/ns/credentials/status#encodedList> a rdf:Property;
+    rdfs:label "Encoded List";
+    rdfs:comment "The published encoded list term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#statusPurpose> a rdf:Property;
+    rdfs:label "Status Purpose";
+    rdfs:comment "The published status purpose term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#ttl> a rdf:Property;
+    rdfs:label "Ttl";
+    rdfs:comment "The published ttl term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#BitstringStatusListEntry> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Bitstring Status List Entry";
+    rdfs:comment "The published bitstring status list entry term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.".
+<https://www.w3.org/ns/credentials/status#statusListCredential> a rdf:Property;
+    rdfs:label "Status List Credential";
+    rdfs:comment "The published status list credential term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#statusListIndex> a rdf:Property;
+    rdfs:label "Status List Index";
+    rdfs:comment "The published status list index term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#statusMessage> a rdf:Property;
+    rdfs:label "Status Message";
+    rdfs:comment "The published status message term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#message> a rdf:Property;
+    rdfs:label "Message";
+    rdfs:comment "The published message term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#status> a rdf:Property;
+    rdfs:label "Status";
+    rdfs:comment "The published status term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#statusReference> a rdf:Property;
+    rdfs:label "Status Reference";
+    rdfs:comment "The published status reference term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.w3.org/ns/credentials/status#statusSize> a rdf:Property;
+    rdfs:label "Status Size";
+    rdfs:comment "The published status size term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#...> a rdf:Property;
+    rdfs:label "...";
+    rdfs:comment "The published ... term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#_sd> a rdf:Property;
+    rdfs:label " sd";
+    rdfs:comment "The published  sd term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#_sd_alg> a rdf:Property;
+    rdfs:label " sd alg";
+    rdfs:comment "The published  sd alg term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#aud> a rdf:Property;
+    rdfs:label "Aud";
+    rdfs:comment "The published aud term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#cnf> a rdf:Property;
+    rdfs:label "Cnf";
+    rdfs:comment "The published cnf term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#kid> a rdf:Property;
+    rdfs:label "Kid";
+    rdfs:comment "The published kid term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#jwk> a rdf:Property;
+    rdfs:label "Jwk";
+    rdfs:comment "The published jwk term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#exp> a rdf:Property;
+    rdfs:label "Exp";
+    rdfs:comment "The published exp term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#iat> a rdf:Property;
+    rdfs:label "Iat";
+    rdfs:comment "The published iat term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jose#iss> a rdf:Property;
+    rdfs:label "Iss";
+    rdfs:comment "The published iss term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jose#jku> a rdf:Property;
+    rdfs:label "Jku";
+    rdfs:comment "The published jku term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jose#kid> a rdf:Property;
+    rdfs:label "Kid";
+    rdfs:comment "The published kid term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jwt#nbf> a rdf:Property;
+    rdfs:label "Nbf";
+    rdfs:comment "The published nbf term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jose#sub> a rdf:Property;
+    rdfs:label "Sub";
+    rdfs:comment "The published sub term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+<https://www.iana.org/assignments/jose#x5u> a rdf:Property;
+    rdfs:label "X5u";
+    rdfs:comment "The published x5u term used by the bundled W3C Verifiable Credentials or Data Integrity context; it retains its published meaning.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awp:GateOutcome a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Gate outcome";
+    rdfs:comment "What the agent does after a run of checks, distinct from any one verdict.".
+<https://w3id.org/jeswr/awp#gate-outcome/admit> a awp:GateOutcome;
+    rdfs:label "Admit";
+    rdfs:comment "The inbound gate admits the labelled message after every required check passes.".
+<https://w3id.org/jeswr/awp#gate-outcome/ask-more> a awp:GateOutcome;
+    rdfs:label "Ask more";
+    rdfs:comment "The gate requests curative evidence or clarification and does not admit or release the requested action.".
+<https://w3id.org/jeswr/awp#gate-outcome/refuse> a awp:GateOutcome;
+    rdfs:label "Refuse";
+    rdfs:comment "The inbound gate declines the message; refused statements do not become factual support.".
+<https://w3id.org/jeswr/awp#gate-outcome/go> a awp:GateOutcome;
+    rdfs:label "Go";
+    rdfs:comment "The outbound gate releases the exact checked action after its decision is durably recorded.".
+<https://w3id.org/jeswr/awp#gate-outcome/ask-principal> a awp:GateOutcome;
+    rdfs:label "Ask principal";
+    rdfs:comment "The gate holds the exact action or message for the required principal’s decision.".
+<https://w3id.org/jeswr/awp#gate-outcome/stop> a awp:GateOutcome;
+    rdfs:label "Stop";
+    rdfs:comment "The outbound gate does not release the proposed action.".
+awp:GrantKind a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Kind of grant";
+    rdfs:comment "The kind of authorization artifact recorded; it does not itself establish a permission.".
+<https://w3id.org/jeswr/awp#grant-kind/owner-mandate> a awp:GrantKind;
+    rdfs:label "Owner mandate";
+    rdfs:comment "A recorded owner mandate authorization artifact; the current verified grant and policy determine what it permits.".
+<https://w3id.org/jeswr/awp#grant-kind/data-use> a awp:GrantKind;
+    rdfs:label "Data use";
+    rdfs:comment "A recorded data use authorization artifact; the current verified grant and policy determine what it permits.".
+<https://w3id.org/jeswr/awp#grant-kind/access> a awp:GrantKind;
+    rdfs:label "Access";
+    rdfs:comment "A recorded access authorization artifact; the current verified grant and policy determine what it permits.".
+<https://w3id.org/jeswr/awp#grant-kind/onward-use> a awp:GrantKind;
+    rdfs:label "Onward use";
+    rdfs:comment "A recorded onward use authorization artifact; the current verified grant and policy determine what it permits.".
+<https://w3id.org/jeswr/awp#grant-kind/delegation> a awp:GrantKind;
+    rdfs:label "Delegation";
+    rdfs:comment "A recorded delegation authorization artifact; the current verified grant and policy determine what it permits.".

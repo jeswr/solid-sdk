@@ -63,8 +63,14 @@ it("honours source and freshness order, asks with both identifiers when no order
     const events = path?.trace?.events ?? [];
     if (order === "unordered") {
       const request = events.find((e) => e.reason === "completeness-not-established");
-      expect(request?.caption).toContain("patient-note");
-      expect(request?.caption).toContain("clinical");
+      expect(request?.caption).toContain("The patient's health.allergy statement");
+      expect(request?.caption).toContain("The clinician's health.allergy statement");
+      expect(request?.refs?.map((ref) => ref.id)).toEqual(
+        expect.arrayContaining([
+          "urn:scenario:records-to-new-practice:patient-note",
+          "urn:scenario:records-to-new-practice:clinical",
+        ]),
+      );
       expect(events.some((e) => e.outcome === "ask-more")).toBe(true);
     } else if (order === "different-period")
       expect(events.some((e) => e.reason === "superseded-by-better-source")).toBe(false);
@@ -72,8 +78,14 @@ it("honours source and freshness order, asks with both identifiers when no order
       const selected = events.find((e) => e.reason === "superseded-by-better-source");
       expect(selected?.caption).toContain(
         order === "source-first"
-          ? "patient-note is retained but superseded by urn:scenario:records-to-new-practice:clinical"
-          : "clinical is retained but superseded by urn:scenario:records-to-new-practice:patient-note",
+          ? "The patient's health.allergy statement is retained but superseded by The clinician's health.allergy statement"
+          : "The clinician's health.allergy statement is retained but superseded by The patient's health.allergy statement",
+      );
+      expect(selected?.refs?.map((ref) => ref.id)).toEqual(
+        expect.arrayContaining([
+          "urn:scenario:records-to-new-practice:patient-note",
+          "urn:scenario:records-to-new-practice:clinical",
+        ]),
       );
     }
   }

@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -177,7 +177,14 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "source-unknown",
-      "caption": "Required claim: education.degree. Accepted sources: urn:fictional:degree-recognition:university. Accepted methods: recorded-by-authority."
+      "caption": "Required claim: education.degree. Accepted sources: The fictional university. Accepted methods: recorded-by-authority.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:degree-recognition:university"
+        }
+      ]
     }
   ]
 }

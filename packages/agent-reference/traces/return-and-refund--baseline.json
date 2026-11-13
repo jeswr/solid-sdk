@@ -66,7 +66,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -186,9 +186,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:return-and-refund:receipt",
-        "text": "Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+        "text": "Its terms allow this: use for Return and refund; share for Return and refund."
       },
-      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 5,
@@ -203,14 +203,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:return-and-refund:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:receiver"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:return-and-refund:merchant.receipt",
-        "text": "Accept merchant.receipt from urn:fictional:return-and-refund:receiver by recorded-by-authority, at most 365 days old."
+        "text": "Accept merchant.receipt from The merchant by recorded-by-authority, at most 365 days old."
       },
-      "caption": "The merchant's merchant.receipt statement is fit for urn:scenario:return-and-refund:task: recorded-by-authority, 0 days old."
+      "caption": "The merchant's merchant.receipt statement is fit for Returning a faulty item: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -239,7 +249,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:return-and-refund:receipt",
-          "summary": "use for urn:purpose:return and refund; share for urn:purpose:return and refund"
+          "summary": "use for Return and refund; share for Return and refund"
         },
         "provenance": "signed by The merchant"
       },
@@ -347,9 +357,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:return-and-refund:photo",
-        "text": "Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+        "text": "Its terms allow this: use for Return and refund; share for Return and refund."
       },
-      "caption": "The customer's unstructured-content statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The customer's unstructured-content statement: its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 12,
@@ -364,14 +374,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:return-and-refund:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:return-and-refund:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:return-and-refund:owner by self-reported, at most 365 days old."
+        "text": "Accept unstructured-content from The customer by self-reported, at most 365 days old."
       },
-      "caption": "The customer's unstructured-content statement is fit for urn:scenario:return-and-refund:task: self-reported, 0 days old."
+      "caption": "The customer's unstructured-content statement is fit for Returning a faulty item: self-reported, 0 days old."
     },
     {
       "seq": 13,
@@ -400,7 +420,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:return-and-refund:photo",
-          "summary": "use for urn:purpose:return and refund; share for urn:purpose:return and refund"
+          "summary": "use for Return and refund; share for Return and refund"
         },
         "provenance": "signed by The customer"
       },
@@ -957,7 +977,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:return and refund with The merchant."
+      "caption": "The core proposes to share Returning a faulty item with The merchant."
     },
     {
       "seq": 33,
@@ -1105,10 +1125,10 @@
       ],
       "rule": {
         "id": "urn:terms:return-and-refund:receipt",
-        "text": "The issuer's terms: use for urn:purpose:return and refund; share for urn:purpose:return and refund. They go out with the data."
+        "text": "The issuer's terms: use for Return and refund; share for Return and refund. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 40,
@@ -1145,10 +1165,10 @@
       ],
       "rule": {
         "id": "urn:terms:return-and-refund:photo",
-        "text": "The issuer's terms: use for urn:purpose:return and refund; share for urn:purpose:return and refund. They go out with the data."
+        "text": "The issuer's terms: use for Return and refund; share for Return and refund. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The customer's unstructured-content statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The customer's unstructured-content statement: its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 42,
@@ -1181,10 +1201,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The merchant's merchant.receipt statement (urn:fictional:return-and-refund:owner) is needed for this purpose."
+      "caption": "Context item The merchant's merchant.receipt statement (The customer) is needed for this purpose."
     },
     {
       "seq": 44,
@@ -1202,7 +1227,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The merchant's merchant.receipt statement: Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The merchant's merchant.receipt statement: Its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 45,
@@ -1217,10 +1242,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The customer's unstructured-content statement (urn:fictional:return-and-refund:owner) is needed for this purpose."
+      "caption": "Context item The customer's unstructured-content statement (The customer) is needed for this purpose."
     },
     {
       "seq": 46,
@@ -1238,7 +1268,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The customer's unstructured-content statement: Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The customer's unstructured-content statement: Its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 47,
@@ -1253,10 +1283,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:return-and-refund:receiver-agent:actor (urn:fictional:return-and-refund:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The merchant’s agent (The merchant) is not established as needed for this purpose."
     },
     {
       "seq": 48,
@@ -1271,10 +1311,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:return-and-refund:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The merchant’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 49,
@@ -1296,7 +1341,7 @@
       "reason": "context-not-clear",
       "chat": {
         "who": "agent",
-        "text": "May I send this exact text to The merchant for urn:purpose:return-and-refund?\nUnstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+        "text": "May I send this exact text to The merchant for Return and refund?\nUnstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
       },
       "caption": "The text is held before release; approval binds message digest sha-256:f6a13770aeee641f6889440f084bed7effed34a8ded6c63dec0d2767e962d07d."
     },
@@ -1458,10 +1503,10 @@
       ],
       "rule": {
         "id": "urn:terms:return-and-refund:receipt",
-        "text": "The issuer's terms: use for urn:purpose:return and refund; share for urn:purpose:return and refund. They go out with the data."
+        "text": "The issuer's terms: use for Return and refund; share for Return and refund. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 59,
@@ -1498,10 +1543,10 @@
       ],
       "rule": {
         "id": "urn:terms:return-and-refund:photo",
-        "text": "The issuer's terms: use for urn:purpose:return and refund; share for urn:purpose:return and refund. They go out with the data."
+        "text": "The issuer's terms: use for Return and refund; share for Return and refund. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The customer's unstructured-content statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The customer's unstructured-content statement: its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 61,
@@ -1534,10 +1579,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The merchant's merchant.receipt statement (urn:fictional:return-and-refund:owner) is needed for this purpose."
+      "caption": "Context item The merchant's merchant.receipt statement (The customer) is needed for this purpose."
     },
     {
       "seq": 63,
@@ -1555,7 +1605,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The merchant's merchant.receipt statement: Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The merchant's merchant.receipt statement: Its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 64,
@@ -1570,10 +1620,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The customer's unstructured-content statement (urn:fictional:return-and-refund:owner) is needed for this purpose."
+      "caption": "Context item The customer's unstructured-content statement (The customer) is needed for this purpose."
     },
     {
       "seq": 65,
@@ -1591,7 +1646,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The customer's unstructured-content statement: Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The customer's unstructured-content statement: Its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 66,
@@ -1606,10 +1661,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:return-and-refund:receiver-agent:actor (urn:fictional:return-and-refund:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The merchant’s agent (The merchant) is not established as needed for this purpose."
     },
     {
       "seq": 67,
@@ -1624,10 +1689,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:return-and-refund:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The merchant’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 68,
@@ -2474,9 +2544,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:return-and-refund:receipt",
-        "text": "Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+        "text": "Its terms allow this: use for Return and refund; share for Return and refund."
       },
-      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 79,
@@ -2501,9 +2571,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:return-and-refund:photo",
-        "text": "Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+        "text": "Its terms allow this: use for Return and refund; share for Return and refund."
       },
-      "caption": "The customer's unstructured-content statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      "caption": "The customer's unstructured-content statement: its terms allow this: use for Return and refund; share for Return and refund."
     },
     {
       "seq": 80,
@@ -2518,12 +2588,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:receiver"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:return-and-refund:merchant.receipt",
-        "text": "Accept merchant.receipt from urn:fictional:return-and-refund:receiver by recorded-by-authority, at most 365 days old."
+        "text": "Accept merchant.receipt from The merchant by recorded-by-authority, at most 365 days old."
       },
       "caption": "The merchant's merchant.receipt statement is fit for Returning a faulty item: recorded-by-authority, 0 days old."
     },
@@ -2540,12 +2615,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:return-and-refund:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:return-and-refund:owner by self-reported, at most 365 days old."
+        "text": "Accept unstructured-content from The customer by self-reported, at most 365 days old."
       },
       "caption": "The customer's unstructured-content statement is fit for Returning a faulty item: self-reported, 0 days old."
     },
@@ -2576,7 +2656,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:return-and-refund:receipt",
-          "summary": "use for urn:purpose:return and refund; share for urn:purpose:return and refund"
+          "summary": "use for Return and refund; share for Return and refund"
         },
         "provenance": "signed by The merchant"
       },
@@ -2599,7 +2679,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:return-and-refund:photo",
-          "summary": "use for urn:purpose:return and refund; share for urn:purpose:return and refund"
+          "summary": "use for Return and refund; share for Return and refund"
         },
         "provenance": "signed by The customer"
       },
@@ -2611,7 +2691,14 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; not instructions; source urn:fictional:return-and-refund:owner."
+      "caption": "Unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; not instructions; source The customer.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:return-and-refund:owner"
+        }
+      ]
     },
     {
       "seq": 86,

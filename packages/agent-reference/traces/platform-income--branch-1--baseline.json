@@ -82,7 +82,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -194,9 +194,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:platform-income:supplied-platforms",
-        "text": "Its terms allow this: use for urn:purpose:platform income; share for urn:purpose:platform income."
+        "text": "Its terms allow this: use for Platform income; share for Platform income."
       },
-      "caption": "The self-employed worker's income.platform-list statement: its terms allow this: use for urn:purpose:platform income; share for urn:purpose:platform income."
+      "caption": "The self-employed worker's income.platform-list statement: its terms allow this: use for Platform income; share for Platform income."
     },
     {
       "seq": 5,
@@ -211,14 +211,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:platform-income:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:platform-income:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:platform-income:income.platform-list",
-        "text": "Accept income.platform-list from urn:fictional:platform-income:owner by self-reported, at most 30 days old."
+        "text": "Accept income.platform-list from The self-employed worker by self-reported, at most 30 days old."
       },
-      "caption": "The self-employed worker's income.platform-list statement is fit for urn:scenario:platform-income:task: self-reported, 0 days old."
+      "caption": "The self-employed worker's income.platform-list statement is fit for Proving income from several platforms: self-reported, 0 days old."
     },
     {
       "seq": 6,

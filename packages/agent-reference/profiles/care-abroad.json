@@ -83,5 +83,8 @@
         "urn:purpose:care-abroad"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:care-abroad": "Care abroad"
+  }
 }

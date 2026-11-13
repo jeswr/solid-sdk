@@ -155,5 +155,9 @@
       "what": "Companies, onward recipients, customers and regulator",
       "replacedBy": "Independently keyed fictional runtimes exchanging locally gated signed messages; no claim of remote deletion or human readership."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:duties": "Duties",
+    "urn:purpose:erasure-request": "Erasure request"
+  }
 }

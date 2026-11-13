@@ -7,6 +7,7 @@
  */
 import type { OdrlRule } from "@jeswr/solid-odrl";
 import type { Iri } from "../core/types.js";
+import { vocabularyLabel } from "../model/labels.js";
 import { type ContentVocabulary, identifiersIn } from "../profile/content.js";
 import type { Configuration, LayerId } from "../suites/registry.js";
 import type { Namer } from "../trace/packet.js";
@@ -395,7 +396,7 @@ export function checkRefs(ctx: GateContext, check: Check): { refs?: readonly Tra
 }
 
 export function defaultName(iri: string | undefined): string {
-  return iri ?? "(none)";
+  return iri === undefined ? "(none)" : (vocabularyLabel(iri) ?? "the unlabelled resource");
 }
 
 export function resolutionView(r: Resolution): NonNullable<TraceEventInput["resolution"]> {
@@ -404,7 +405,9 @@ export function resolutionView(r: Resolution): NonNullable<TraceEventInput["reso
 
 const short = (iri: string) => iri.split(/[#/]/).filter(Boolean).pop() ?? iri;
 
-function words(id: string): string {
+function words(id: string, name?: Namer): string {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(id))
+    return vocabularyLabel(id) ?? name?.(id) ?? "the unlabelled resource";
   return short(id)
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/[-_]/g, " ")
@@ -420,12 +423,13 @@ export function ruleText(
   const recipients: string[] = [];
   for (const c of rule.constraints ?? []) {
     const values = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
-    if (c.leftOperand === "purpose") purposes.push(...values.map((v) => words(String(v))));
+    if (c.leftOperand === "purpose")
+      purposes.push(...values.map((v) => words(String(v), opts.name)));
     if (c.leftOperand === "recipient") recipients.push(...values.map((v) => opts.name(String(v))));
   }
   const verb = rule.type === "prohibition" ? "never lets the agent" : "lets the agent";
   return [
-    `${opts.owner}'s mandate ${verb} ${rule.action} ${words(rule.target ?? "anything")}`,
+    `${opts.owner}'s mandate ${verb} ${rule.action} ${words(rule.target ?? "anything", opts.name)}`,
     purposes.length > 0 ? ` for ${purposes.join(" or ")}` : "",
     recipients.length > 0 ? ` with ${recipients.join(" or ")}` : "",
     rule.type === "prohibition"

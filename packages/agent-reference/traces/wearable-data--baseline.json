@@ -69,7 +69,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -181,9 +181,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:wearable-data:weekly-total",
-        "text": "Its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+        "text": "Its terms allow this: use for Wearable data; share for Wearable data."
       },
-      "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+      "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for Wearable data; share for Wearable data."
     },
     {
       "seq": 5,
@@ -198,14 +198,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:wearable-data:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:wearable-data:device-maker"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:wearable-data:activity.weekly-total",
-        "text": "Accept activity.weekly-total from urn:fictional:wearable-data:device-maker by recorded-by-authority, at most 30 days old."
+        "text": "Accept activity.weekly-total from The device maker by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The device maker's activity.weekly-total statement is fit for urn:scenario:wearable-data:task: recorded-by-authority, 0 days old."
+      "caption": "The device maker's activity.weekly-total statement is fit for Sharing activity data for a discount: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -238,7 +248,7 @@
         },
         "terms": {
           "id": "urn:terms:wearable-data:weekly-total",
-          "summary": "use for urn:purpose:wearable data; share for urn:purpose:wearable data"
+          "summary": "use for Wearable data; share for Wearable data"
         },
         "provenance": "signed by The device maker"
       },
@@ -869,7 +879,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:wearable data with The insurer."
+      "caption": "The core proposes to share Sharing activity data for a discount with The insurer."
     },
     {
       "seq": 27,
@@ -1017,10 +1027,10 @@
       ],
       "rule": {
         "id": "urn:terms:wearable-data:weekly-total",
-        "text": "The issuer's terms: use for urn:purpose:wearable data; share for urn:purpose:wearable data. They go out with the data."
+        "text": "The issuer's terms: use for Wearable data; share for Wearable data. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+      "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for Wearable data; share for Wearable data."
     },
     {
       "seq": 34,
@@ -1553,9 +1563,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:wearable-data:weekly-total",
-        "text": "Its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+        "text": "Its terms allow this: use for Wearable data; share for Wearable data."
       },
-      "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+      "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for Wearable data; share for Wearable data."
     },
     {
       "seq": 43,
@@ -1570,12 +1580,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:wearable-data:device-maker"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:wearable-data:activity.weekly-total",
-        "text": "Accept activity.weekly-total from urn:fictional:wearable-data:device-maker by recorded-by-authority, at most 30 days old."
+        "text": "Accept activity.weekly-total from The device maker by recorded-by-authority, at most 30 days old."
       },
       "caption": "The device maker's activity.weekly-total statement is fit for Sharing activity data for a discount: recorded-by-authority, 0 days old."
     },
@@ -1610,7 +1625,7 @@
         },
         "terms": {
           "id": "urn:terms:wearable-data:weekly-total",
-          "summary": "use for urn:purpose:wearable data; share for urn:purpose:wearable data"
+          "summary": "use for Wearable data; share for Wearable data"
         },
         "provenance": "signed by The device maker"
       },

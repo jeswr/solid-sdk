@@ -90,5 +90,9 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:cross-department-request": "Cross department request",
+    "urn:purpose:payroll-administration": "Payroll administration"
+  }
 }

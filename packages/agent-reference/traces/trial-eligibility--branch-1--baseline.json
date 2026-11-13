@@ -66,7 +66,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -186,9 +186,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:trial-eligibility:completeness",
-        "text": "Its terms allow this: use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility."
+        "text": "Its terms allow this: use for Trial eligibility; share for Trial eligibility."
       },
-      "caption": "The family practice's medication.completeness statement: its terms allow this: use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility."
+      "caption": "The family practice's medication.completeness statement: its terms allow this: use for Trial eligibility; share for Trial eligibility."
     },
     {
       "seq": 5,
@@ -203,14 +203,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:trial-eligibility:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:trial-eligibility:practice"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:trial-eligibility:medication.completeness",
-        "text": "Accept medication.completeness from urn:fictional:trial-eligibility:practice by recorded-by-authority, at most 30 days old."
+        "text": "Accept medication.completeness from The family practice by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The family practice's medication.completeness statement is fit for urn:scenario:trial-eligibility:task: recorded-by-authority, 0 days old."
+      "caption": "The family practice's medication.completeness statement is fit for Proving eligibility for a clinical trial: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -243,7 +253,7 @@
         },
         "terms": {
           "id": "urn:terms:trial-eligibility:completeness",
-          "summary": "use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility"
+          "summary": "use for Trial eligibility; share for Trial eligibility"
         },
         "provenance": "signed by The family practice"
       },
@@ -351,9 +361,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:trial-eligibility:medicines",
-        "text": "Its terms allow this: use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility."
+        "text": "Its terms allow this: use for Trial eligibility; share for Trial eligibility."
       },
-      "caption": "The family practice's medication.list statement: its terms allow this: use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility."
+      "caption": "The family practice's medication.list statement: its terms allow this: use for Trial eligibility; share for Trial eligibility."
     },
     {
       "seq": 12,
@@ -368,14 +378,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:trial-eligibility:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:trial-eligibility:practice"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:trial-eligibility:medication.list",
-        "text": "Accept medication.list from urn:fictional:trial-eligibility:practice by recorded-by-authority, at most 30 days old."
+        "text": "Accept medication.list from The family practice by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The family practice's medication.list statement is fit for urn:scenario:trial-eligibility:task: recorded-by-authority, 0 days old."
+      "caption": "The family practice's medication.list statement is fit for Proving eligibility for a clinical trial: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,

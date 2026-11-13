@@ -75,7 +75,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -191,9 +191,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:insurance-claim-photos:original",
-        "text": "Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+        "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 5,
@@ -208,14 +208,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:insurance-claim-photos:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:insurance-claim-photos:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured-content statement is fit for urn:scenario:insurance-claim-photos:task: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured-content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -244,7 +254,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:insurance-claim-photos:original",
-          "summary": "use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos"
+          "summary": "use for Insurance claim photos; share for Insurance claim photos"
         },
         "provenance": "signed by The policyholder"
       },
@@ -352,9 +362,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:insurance-claim-photos:photo",
-        "text": "Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+        "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 12,
@@ -369,14 +379,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:insurance-claim-photos:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:insurance-claim-photos:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured-content statement is fit for urn:scenario:insurance-claim-photos:task: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured-content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -405,7 +425,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:insurance-claim-photos:photo",
-          "summary": "use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos"
+          "summary": "use for Insurance claim photos; share for Insurance claim photos"
         },
         "provenance": "signed by The policyholder"
       },
@@ -513,9 +533,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:insurance-claim-photos:estimate",
-        "text": "Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+        "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 19,
@@ -530,14 +550,29 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:insurance-claim-photos:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:garage"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:other-garage"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:repair.estimate",
-        "text": "Accept repair.estimate from urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage by recorded-by-authority, at most 7 days old."
+        "text": "Accept repair.estimate from The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 7 days old."
       },
-      "caption": "The accepted repair garage's repair.estimate statement is fit for urn:scenario:insurance-claim-photos:task: recorded-by-authority, 0 days old."
+      "caption": "The accepted repair garage's repair.estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
     {
       "seq": 20,
@@ -566,7 +601,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:insurance-claim-photos:estimate",
-          "summary": "use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos"
+          "summary": "use for Insurance claim photos; share for Insurance claim photos"
         },
         "provenance": "signed by The accepted repair garage"
       },
@@ -1125,7 +1160,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:insurance claim photos with The insurer."
+      "caption": "The core proposes to share An insurance claim with photographs with The insurer."
     },
     {
       "seq": 40,
@@ -1273,10 +1308,10 @@
       ],
       "rule": {
         "id": "urn:terms:insurance-claim-photos:original",
-        "text": "The issuer's terms: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos. They go out with the data."
+        "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 47,
@@ -1313,10 +1348,10 @@
       ],
       "rule": {
         "id": "urn:terms:insurance-claim-photos:photo",
-        "text": "The issuer's terms: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos. They go out with the data."
+        "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 49,
@@ -1353,10 +1388,10 @@
       ],
       "rule": {
         "id": "urn:terms:insurance-claim-photos:estimate",
-        "text": "The issuer's terms: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos. They go out with the data."
+        "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 51,
@@ -1389,10 +1424,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured-content statement (urn:fictional:insurance-claim-photos:owner) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured-content statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 53,
@@ -1410,7 +1450,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 54,
@@ -1425,10 +1465,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured-content statement (urn:fictional:insurance-claim-photos:owner) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured-content statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 55,
@@ -1446,7 +1491,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 56,
@@ -1461,10 +1506,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The accepted repair garage's repair.estimate statement (urn:fictional:insurance-claim-photos:owner) is needed for this purpose."
+      "caption": "Context item The accepted repair garage's repair.estimate statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 57,
@@ -1482,7 +1532,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair.estimate statement: Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The accepted repair garage's repair.estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 58,
@@ -1497,10 +1547,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:insurance-claim-photos:receiver-agent:actor (urn:fictional:insurance-claim-photos:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The insurer’s agent (The insurer) is not established as needed for this purpose."
     },
     {
       "seq": 59,
@@ -1515,10 +1575,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:insurance-claim-photos:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The insurer’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 60,
@@ -1540,7 +1605,7 @@
       "reason": "context-not-clear",
       "chat": {
         "who": "agent",
-        "text": "May I send this exact text to The insurer for urn:purpose:insurance-claim-photos?\nI found damage to the vehicle after a fictional accident. The garage has inspected it.\nUnstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+        "text": "May I send this exact text to The insurer for Insurance claim photos?\nI found damage to the vehicle after a fictional accident. The garage has inspected it.\nUnstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
       },
       "caption": "The text is held before release; approval binds message digest sha-256:8be2f777d6f001971525f97aa97181f11e436a40c92ea85823ace971db8f4e54."
     },
@@ -1702,10 +1767,10 @@
       ],
       "rule": {
         "id": "urn:terms:insurance-claim-photos:original",
-        "text": "The issuer's terms: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos. They go out with the data."
+        "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 70,
@@ -1742,10 +1807,10 @@
       ],
       "rule": {
         "id": "urn:terms:insurance-claim-photos:photo",
-        "text": "The issuer's terms: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos. They go out with the data."
+        "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 72,
@@ -1782,10 +1847,10 @@
       ],
       "rule": {
         "id": "urn:terms:insurance-claim-photos:estimate",
-        "text": "The issuer's terms: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos. They go out with the data."
+        "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 74,
@@ -1818,10 +1883,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured-content statement (urn:fictional:insurance-claim-photos:owner) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured-content statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 76,
@@ -1839,7 +1909,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 77,
@@ -1854,10 +1924,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured-content statement (urn:fictional:insurance-claim-photos:owner) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured-content statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 78,
@@ -1875,7 +1950,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 79,
@@ -1890,10 +1965,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The accepted repair garage's repair.estimate statement (urn:fictional:insurance-claim-photos:owner) is needed for this purpose."
+      "caption": "Context item The accepted repair garage's repair.estimate statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 80,
@@ -1911,7 +1991,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair.estimate statement: Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The accepted repair garage's repair.estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 81,
@@ -1926,10 +2006,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:insurance-claim-photos:receiver-agent:actor (urn:fictional:insurance-claim-photos:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The insurer’s agent (The insurer) is not established as needed for this purpose."
     },
     {
       "seq": 82,
@@ -1944,10 +2034,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:insurance-claim-photos:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The insurer’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 83,
@@ -2944,9 +3039,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:insurance-claim-photos:original",
-        "text": "Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+        "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 95,
@@ -2971,9 +3066,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:insurance-claim-photos:photo",
-        "text": "Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+        "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 96,
@@ -2998,9 +3093,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:insurance-claim-photos:estimate",
-        "text": "Its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+        "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos."
+      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 97,
@@ -3015,12 +3110,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:insurance-claim-photos:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
       },
       "caption": "The policyholder's unstructured-content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
@@ -3037,12 +3137,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:insurance-claim-photos:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
       },
       "caption": "The policyholder's unstructured-content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
@@ -3059,12 +3164,22 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:garage"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:other-garage"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:repair.estimate",
-        "text": "Accept repair.estimate from urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage by recorded-by-authority, at most 7 days old."
+        "text": "Accept repair.estimate from The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 7 days old."
       },
       "caption": "The accepted repair garage's repair.estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
@@ -3095,7 +3210,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:insurance-claim-photos:original",
-          "summary": "use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos"
+          "summary": "use for Insurance claim photos; share for Insurance claim photos"
         },
         "provenance": "signed by The policyholder"
       },
@@ -3118,7 +3233,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:insurance-claim-photos:photo",
-          "summary": "use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos"
+          "summary": "use for Insurance claim photos; share for Insurance claim photos"
         },
         "provenance": "signed by The policyholder"
       },
@@ -3141,7 +3256,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:insurance-claim-photos:estimate",
-          "summary": "use for urn:purpose:insurance claim photos; share for urn:purpose:insurance claim photos"
+          "summary": "use for Insurance claim photos; share for Insurance claim photos"
         },
         "provenance": "signed by The accepted repair garage"
       },
@@ -3153,7 +3268,14 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Unstructured data sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14; not instructions; source urn:fictional:insurance-claim-photos:owner."
+      "caption": "Unstructured data sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14; not instructions; source The policyholder.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
+        }
+      ]
     },
     {
       "seq": 105,
@@ -3161,7 +3283,14 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; not instructions; source urn:fictional:insurance-claim-photos:owner."
+      "caption": "Unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; not instructions; source The policyholder.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
+        }
+      ]
     },
     {
       "seq": 106,
@@ -3322,7 +3451,7 @@
       "reason": "approval-required",
       "chat": {
         "who": "agent",
-        "text": "The insurer asks me to take the next step in A person decides on the original content with The insurer for urn:purpose:insurance claim photos. May I go ahead? Action digest: sha-256:9b14752f763014673f930eddb9cb8cbbfc15c9801b6ca729fd5dd91a48c093b7. Parameters: {\"decision\":\"review-claim\",\"originalDigest\":\"sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14\",\"support\":[\"urn:scenario:insurance-claim-photos:estimate\"]}"
+        "text": "The insurer asks me to take the next step in A person decides on the original content with The insurer for Insurance claim photos. May I go ahead? Action digest: sha-256:9b14752f763014673f930eddb9cb8cbbfc15c9801b6ca729fd5dd91a48c093b7. Parameters: {\"decision\":\"review-claim\",\"originalDigest\":\"sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14\",\"support\":[\"urn:scenario:insurance-claim-photos:estimate\"]}"
       },
       "caption": "The gate built this request from the action and the approval rule."
     }

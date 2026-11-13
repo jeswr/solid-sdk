@@ -96,5 +96,8 @@
         "subscription.control"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:cancel-subscription": "Cancel subscription"
+  }
 }

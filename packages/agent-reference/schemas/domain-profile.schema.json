@@ -283,6 +283,18 @@
         "type": "string"
       }
     },
+    "labels": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "sources": {
       "default": {},
       "type": "object",
@@ -1659,6 +1671,7 @@
     "attestedDerivers",
     "id",
     "parties",
+    "labels",
     "sources",
     "claims",
     "purposes",

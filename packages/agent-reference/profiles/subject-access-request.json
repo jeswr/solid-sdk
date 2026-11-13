@@ -94,5 +94,9 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:identity-management": "Identity management",
+    "urn:purpose:subject-access-request": "Subject access request"
+  }
 }

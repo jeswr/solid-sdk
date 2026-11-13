@@ -113,5 +113,9 @@
       "what": "Retailer delegation and delivery service",
       "replacedBy": "Separately keyed local parties using direct signed messages. This is a local authority-chain run, not an A2A transport implementation."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:delivery": "Delivery",
+    "urn:purpose:marketing": "Marketing"
+  }
 }

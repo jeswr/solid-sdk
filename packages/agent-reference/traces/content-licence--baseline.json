@@ -117,7 +117,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -1979,7 +1979,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:agreement with The publishing platform."
+      "caption": "The core proposes to share Accepting the same agreement terms with The publishing platform."
     },
     {
       "seq": 120,
@@ -2127,7 +2127,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: share urn:op:agreement with The publishing platform."
+      "caption": "The action goes: share Accepting the same agreement terms with The publishing platform."
     },
     {
       "seq": 127,

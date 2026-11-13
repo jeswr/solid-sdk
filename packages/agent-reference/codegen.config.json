@@ -1,0 +1,15 @@
+{
+  "shapesBase": "https://w3id.org/jeswr/awp/shapes/v1#",
+  "prefixes": {
+    "awp": "https://w3id.org/jeswr/awp#",
+    "prov": "http://www.w3.org/ns/prov#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://w3id.org/jeswr/awp#GrantRecord",
+      "name": "GrantRecord",
+      "subject": { "convention": "self" }
+    }
+  ]
+}

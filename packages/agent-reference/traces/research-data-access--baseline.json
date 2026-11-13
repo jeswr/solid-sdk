@@ -61,7 +61,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -395,7 +395,7 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is A data holder an authority for research.measurement claims about urn:fictional:research-data-access:dataset?",
+        "question": "Is A data holder an authority for research.measurement claims about the unlabelled resource?",
         "path": [
           {
             "at": "A researcher's own list",
@@ -433,7 +433,7 @@
         "text": "A data holder is accepted for research.count claims."
       },
       "resolution": {
-        "question": "Is A data holder an authority for research.count claims about urn:fictional:research-data-access:dataset?",
+        "question": "Is A data holder an authority for research.count claims about the unlabelled resource?",
         "path": [
           {
             "at": "A researcher's own list",
@@ -486,9 +486,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:query-terms:1a3183768809967dd8a8cedf89ffd0d016d300d1ac426f5932898f5d0f20e351",
-        "text": "Its terms allow this: use for urn:purpose:approved research; share for urn:purpose:approved research."
+        "text": "Its terms allow this: use for Approved research; share for Approved research."
       },
-      "caption": "A data holder's research.count statement: its terms allow this: use for urn:purpose:approved research; share for urn:purpose:approved research."
+      "caption": "A data holder's research.count statement: its terms allow this: use for Approved research; share for Approved research."
     },
     {
       "seq": 25,
@@ -503,14 +503,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:research-data-access:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:research-data-access:party-2"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:research-data-access:research.count",
-        "text": "Accept research.count from urn:fictional:research-data-access:party-2 by derived, at most 1 days old."
+        "text": "Accept research.count from A data holder by derived, at most 1 days old."
       },
-      "caption": "A data holder's research.count statement is fit for urn:scenario:research-data-access:task: derived, 0 days old."
+      "caption": "A data holder's research.count statement is fit for A researcher queries sensitive data: derived, 0 days old."
     },
     {
       "seq": 26,
@@ -539,7 +549,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:query-terms:1a3183768809967dd8a8cedf89ffd0d016d300d1ac426f5932898f5d0f20e351",
-          "summary": "use for urn:purpose:approved research; share for urn:purpose:approved research"
+          "summary": "use for Approved research; share for Approved research"
         },
         "provenance": "signed by A data holder"
       },

@@ -87,5 +87,8 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:salary-account-change": "Salary account change"
+  }
 }

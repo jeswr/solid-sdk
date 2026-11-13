@@ -120,5 +120,8 @@
     "email": "An unverified email sender",
     "merchant": "The merchant",
     "employee-agent": "The employee’s agent"
+  },
+  "labels": {
+    "urn:purpose:expenses": "Expenses"
   }
 }

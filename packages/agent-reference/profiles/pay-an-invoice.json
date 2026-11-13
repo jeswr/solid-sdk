@@ -99,5 +99,8 @@
     "bank-agent": "The supplier’s bank’s agent",
     "supplier": "The supplier",
     "email": "An unverified email sender"
+  },
+  "labels": {
+    "urn:purpose:pay-an-invoice": "Pay an invoice"
   }
 }

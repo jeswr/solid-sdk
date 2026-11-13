@@ -123,5 +123,8 @@
     "registrar": "The local registrar",
     "supplier-agent": "The supplier’s agent",
     "buyer-agent": "The buyer’s agent"
+  },
+  "labels": {
+    "urn:purpose:supplier-onboarding": "Supplier onboarding"
   }
 }

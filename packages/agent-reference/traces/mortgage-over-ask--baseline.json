@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -1541,7 +1541,7 @@
       ],
       "rule": {
         "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
-        "text": "Sam, the fictional applicant's mandate lets the agent use mortgage prequalification for mortgage application with The fictional lender or https://valleybank.example/#org, on its own."
+        "text": "Sam, the fictional applicant's mandate lets the agent use Mortgage decision in principle for Mortgage Application with The fictional lender or the unlabelled resource, on its own."
       },
       "reason": "within-mandate",
       "caption": "Sam, the fictional applicant's mandate covers this action."
@@ -2134,7 +2134,7 @@
       ],
       "rule": {
         "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
-        "text": "The fictional lender's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
+        "text": "The fictional lender's mandate lets the agent use Mortgage decision in principle for Credit Assessment, on its own."
       },
       "reason": "within-mandate",
       "caption": "The fictional lender's mandate covers this action."
@@ -2604,9 +2604,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
-        "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+        "text": "Its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
       },
-      "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+      "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
     },
     {
       "seq": 63,
@@ -2621,6 +2621,11 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:mortgage-over-ask:task"
         }
       ],
       "reason": "fit-for-use",
@@ -2628,7 +2633,7 @@
         "id": "urn:profile:mortgage:income.*",
         "text": "Accept income.* from  by recorded-by-authority, at most 92 days old."
       },
-      "caption": "The fictional payroll provider's income.gross.monthly-series statement is fit for urn:scenario:mortgage-over-ask:task: recorded-by-authority, 12 days old."
+      "caption": "The fictional payroll provider's income.gross.monthly-series statement is fit for A mortgage in principle: The lender asks for full statements: recorded-by-authority, 12 days old."
     },
     {
       "seq": 64,
@@ -2709,7 +2714,7 @@
         },
         "terms": {
           "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
-          "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
+          "summary": "use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource"
         },
         "provenance": "signed by The fictional payroll provider, issued 2026-11-02T09:00:00Z"
       },
@@ -2817,9 +2822,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
-        "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+        "text": "Its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
       },
-      "caption": "Sam’s fictional bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+      "caption": "Sam’s fictional bank's deposit.balance statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
     },
     {
       "seq": 70,
@@ -2834,6 +2839,11 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:mortgage-over-ask:task"
         }
       ],
       "reason": "fit-for-use",
@@ -2841,7 +2851,7 @@
         "id": "urn:profile:mortgage:deposit.*",
         "text": "Accept deposit.* from  by recorded-by-authority, at most 31 days old."
       },
-      "caption": "Sam’s fictional bank's deposit.balance statement is fit for urn:scenario:mortgage-over-ask:task: recorded-by-authority, 12 days old."
+      "caption": "Sam’s fictional bank's deposit.balance statement is fit for A mortgage in principle: The lender asks for full statements: recorded-by-authority, 12 days old."
     },
     {
       "seq": 71,
@@ -2874,7 +2884,7 @@
         },
         "terms": {
           "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
-          "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
+          "summary": "use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource"
         },
         "provenance": "signed by Sam’s fictional bank, issued 2026-11-01T09:00:00Z"
       },
@@ -3295,7 +3305,7 @@
       "reason": "not-authorised",
       "rule": {
         "id": "urn:awp:mandate:fa78f4f441c2872e99ac95ee563866e7:mortgage-over-ask",
-        "text": "No rule in Sam, the fictional applicant's mandate lets the agent share Sam’s fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement with The fictional lender for mortgage application (no applicable grant in the mandate (deny by default))."
+        "text": "No rule in Sam, the fictional applicant's mandate lets the agent share Sam’s fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement with The fictional lender for Mortgage Application (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Sam, the fictional applicant's mandate does not allow this: share Sam’s fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement with The fictional lender."
     },

@@ -79,5 +79,8 @@
       "what": "A business with no agent",
       "replacedBy": "A scripted unsigned mailbox with no key, core or gates. Owner-signed endpoint pins and exact principal approvals govern the customer agent; no real email is sent."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:business-enquiry": "Business enquiry"
+  }
 }

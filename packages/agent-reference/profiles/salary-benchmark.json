@@ -180,5 +180,8 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:salary-benchmark": "Salary benchmark"
+  }
 }

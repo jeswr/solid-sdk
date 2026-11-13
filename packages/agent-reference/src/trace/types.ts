@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /**
  * Trace format `agent-trace/0.1`: the ordered events an agent emits as work crosses each part
  * of the architecture. The gates and the runtime emit these events themselves; a scenario
@@ -85,6 +86,8 @@ export interface PacketView {
 }
 
 export interface TraceRef {
+  /** The exact resource identifier rendered by label in a generated annotation. */
+  readonly id?: string;
   readonly layer: LayerId;
   readonly suite: SuiteId;
   readonly clause?: string;

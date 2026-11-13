@@ -105,7 +105,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -238,14 +238,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:emergency-access:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:register"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:emergency-access:organization.role",
-        "text": "Accept organization.role from urn:fictional:register by recorded-by-authority, at most 1 days old."
+        "text": "Accept organization.role from The professional register by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The professional register's organization.role statement is fit for urn:scenario:emergency-access:task: recorded-by-authority, 0 days old."
+      "caption": "The professional register's organization.role statement is fit for Access to allergies in an emergency: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -399,14 +409,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:emergency-access:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:clinician"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:emergency-access:emergency.declaration",
-        "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
+        "text": "Accept emergency.declaration from The clinician by self-reported, at most 1 days old."
       },
-      "caption": "The clinician's emergency.declaration statement is fit for urn:scenario:emergency-access:task: self-reported, 0 days old."
+      "caption": "The clinician's emergency.declaration statement is fit for Access to allergies in an emergency: self-reported, 0 days old."
     },
     {
       "seq": 13,
@@ -560,14 +580,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:emergency-access:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:practice"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:emergency-access:clinical.summary",
-        "text": "Accept clinical.summary from urn:fictional:practice by recorded-by-authority, at most 1 days old."
+        "text": "Accept clinical.summary from The family practice by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The family practice's clinical.summary statement is fit for urn:scenario:emergency-access:task: recorded-by-authority, 0 days old."
+      "caption": "The family practice's clinical.summary statement is fit for Access to allergies in an emergency: recorded-by-authority, 0 days old."
     },
     {
       "seq": 20,
@@ -608,7 +638,7 @@
       "agent": "clinician-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:emergency read with The patient."
+      "caption": "The core proposes to use the unlabelled resource with The patient."
     },
     {
       "seq": 23,
@@ -651,6 +681,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:emergency-read"
         }
       ],
       "resolution": {
@@ -665,7 +700,7 @@
         "answer": "Accepted, for urn:op:emergency-read only."
       },
       "reason": "recipient-established",
-      "caption": "The patient: Accepted, for urn:op:emergency-read only."
+      "caption": "The patient: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 25,
@@ -1450,14 +1485,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:emergency-read"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:register"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:emergency-access:organization.role",
-        "text": "Accept organization.role from urn:fictional:register by recorded-by-authority, at most 1 days old."
+        "text": "Accept organization.role from The professional register by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The professional register's organization.role statement is fit for urn:op:emergency-read: recorded-by-authority, 0 days old."
+      "caption": "The professional register's organization.role statement is fit for the unlabelled resource: recorded-by-authority, 0 days old."
     },
     {
       "seq": 44,
@@ -1472,14 +1517,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:emergency-read"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:clinician"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:emergency-access:emergency.declaration",
-        "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
+        "text": "Accept emergency.declaration from The clinician by self-reported, at most 1 days old."
       },
-      "caption": "The clinician's emergency.declaration statement is fit for urn:op:emergency-read: self-reported, 0 days old."
+      "caption": "The clinician's emergency.declaration statement is fit for the unlabelled resource: self-reported, 0 days old."
     },
     {
       "seq": 45,
@@ -1543,7 +1598,7 @@
       "agent": "record-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to read urn:op:emergency read with The clinician."
+      "caption": "The core proposes to read the unlabelled resource with The clinician."
     },
     {
       "seq": 49,
@@ -1586,6 +1641,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:emergency-read"
         }
       ],
       "resolution": {
@@ -1600,7 +1660,7 @@
         "answer": "Accepted, for urn:op:emergency-read only."
       },
       "reason": "recipient-established",
-      "caption": "The clinician: Accepted, for urn:op:emergency-read only."
+      "caption": "The clinician: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 51,
@@ -2117,6 +2177,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:duty-notification"
         }
       ],
       "resolution": {
@@ -2131,7 +2196,7 @@
         "answer": "Accepted, for urn:op:duty-notification only."
       },
       "reason": "recipient-established",
-      "caption": "The patient: Accepted, for urn:op:duty-notification only."
+      "caption": "The patient: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 68,
@@ -2316,7 +2381,14 @@
       "agent": "record-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Notification duty sha-256:296181d537a447e3fade89e46573db390d27b6b1241c2d6d021656825319eaf7 discharged at 2026-11-13T09:00:00.000Z by message urn:awp:engine-emergency-access-branch-1:record-agent:0002."
+      "caption": "Notification duty sha-256:296181d537a447e3fade89e46573db390d27b6b1241c2d6d021656825319eaf7 discharged at 2026-11-13T09:00:00.000Z by message describe message.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0002"
+        }
+      ]
     },
     {
       "seq": 75,
@@ -2359,6 +2431,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:duty-notification"
         }
       ],
       "resolution": {
@@ -2373,7 +2450,7 @@
         "answer": "Accepted, for urn:op:duty-notification only."
       },
       "reason": "recipient-established",
-      "caption": "The trusted contact: Accepted, for urn:op:duty-notification only."
+      "caption": "The trusted contact: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 77,
@@ -2558,7 +2635,14 @@
       "agent": "record-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Notification duty sha-256:9ff0adf1453f9aedba54141b08c0606de817331165c7bc50041f2b0938ecfe3a discharged at 2026-11-13T09:00:00.000Z by message urn:awp:engine-emergency-access-branch-1:record-agent:0003."
+      "caption": "Notification duty sha-256:9ff0adf1453f9aedba54141b08c0606de817331165c7bc50041f2b0938ecfe3a discharged at 2026-11-13T09:00:00.000Z by message describe message.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:awp:engine-emergency-access-branch-1:record-agent:0003"
+        }
+      ]
     },
     {
       "seq": 84,

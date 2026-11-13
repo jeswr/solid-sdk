@@ -5,7 +5,7 @@
   "description": "The reference agent runtime of the accountable agent architecture: the pilot's transport-neutral core, mechanisms, stores and the synthetic mortgage scenario, lifted out of @jeswr/personal-agent/pilot. Experimental; synthetic test use only.",
   "type": "module",
   "license": "MIT",
-  "x-authored-by": "Claude Opus 5.5",
+  "x-authored-by": "Claude Opus 5.5; Codex GPT-6",
   "securityCritical": true,
   "engines": {
     "node": ">=24"
@@ -24,7 +24,16 @@
     "./profiles/*.json": "./profiles/*.json",
     "./scenarios/*.json": "./scenarios/*.json",
     "./schemas/*.json": "./schemas/*.json",
-    "./outlines/*.json": "./outlines/*.json"
+    "./outlines/*.json": "./outlines/*.json",
+    "./vocab/*": "./vocab/*",
+    "./wire": {
+      "types": "./dist/wire/index.d.ts",
+      "default": "./dist/wire/index.js"
+    },
+    "./model": {
+      "types": "./dist/model/index.d.ts",
+      "default": "./dist/model/index.js"
+    }
   },
   "files": [
     "dist",
@@ -34,29 +43,42 @@
     "profiles",
     "scenarios",
     "schemas",
-    "outlines"
+    "outlines",
+    "vocab"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/export-schemas.mjs --check && node scripts/generate-traces.mjs && node scripts/run-scenarios.mjs",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs && node scripts/export-schemas.mjs --check && node scripts/generate-traces.mjs && node scripts/run-scenarios.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check src test scripts",
     "test": "vitest run",
     "scenarios": "node scripts/run-scenarios.mjs",
     "schemas": "node scripts/export-schemas.mjs",
-    "proofs": "node scripts/generate-proofs.mjs"
+    "proofs": "node scripts/generate-proofs.mjs",
+    "codegen": "node scripts/federation-codegen.mjs --out src/generated",
+    "check:rdf-pipeline": "node scripts/check-rdf-pipeline.mjs"
   },
   "dependencies": {
     "@jeswr/solid-odrl": "workspace:*",
     "canonicalize": "^1.0.8",
     "jose": "^6.2.3",
     "n3": "^2.1.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-vc": "workspace:*",
+    "@jeswr/model-runtime": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "rdf-validate-shacl": "^0.6.5",
+    "jsonld": "^9.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^25.9.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "@jeswr/federation-codegen": "workspace:*",
+    "@types/jsonld": "^1.5.15"
   }
 }

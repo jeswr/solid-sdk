@@ -115,5 +115,8 @@
     "supplier": "The chosen merchant",
     "email": "The unverified account sender",
     "other-merchant": "The other merchant"
+  },
+  "labels": {
+    "urn:purpose:shopping-agent": "Shopping agent"
   }
 }

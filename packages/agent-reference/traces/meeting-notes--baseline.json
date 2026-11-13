@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -184,9 +184,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:meeting-notes:original",
-        "text": "Its terms allow this: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes."
+        "text": "Its terms allow this: use for Meeting notes; share for Meeting notes."
       },
-      "caption": "The fictional team's unstructured-content statement: its terms allow this: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes."
+      "caption": "The fictional team's unstructured-content statement: its terms allow this: use for Meeting notes; share for Meeting notes."
     },
     {
       "seq": 5,
@@ -201,14 +201,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:meeting-notes:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:meeting-notes:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:meeting-notes:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The fictional team by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional team's unstructured-content statement is fit for urn:scenario:meeting-notes:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional team's unstructured-content statement is fit for An assistant that remembers meetings: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -237,7 +247,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:meeting-notes:original",
-          "summary": "use for urn:purpose:meeting notes; share for urn:purpose:meeting notes"
+          "summary": "use for Meeting notes; share for Meeting notes"
         },
         "provenance": "signed by The fictional team"
       },
@@ -796,7 +806,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:meeting notes with The team’s coordination service."
+      "caption": "The core proposes to share An assistant that remembers meetings with The team’s coordination service."
     },
     {
       "seq": 26,
@@ -944,10 +954,10 @@
       ],
       "rule": {
         "id": "urn:terms:meeting-notes:original",
-        "text": "The issuer's terms: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes. They go out with the data."
+        "text": "The issuer's terms: use for Meeting notes; share for Meeting notes. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The fictional team's unstructured-content statement: its terms allow this: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes."
+      "caption": "The fictional team's unstructured-content statement: its terms allow this: use for Meeting notes; share for Meeting notes."
     },
     {
       "seq": 33,
@@ -980,10 +990,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The fictional team's unstructured-content statement (urn:fictional:meeting-notes:owner) is needed for this purpose."
+      "caption": "Context item The fictional team's unstructured-content statement (The fictional team) is needed for this purpose."
     },
     {
       "seq": 35,
@@ -1001,7 +1016,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The fictional team's unstructured-content statement: Its terms allow this: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes."
+      "caption": "The fictional team's unstructured-content statement: Its terms allow this: use for Meeting notes; share for Meeting notes."
     },
     {
       "seq": 36,
@@ -1016,10 +1031,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:meeting-notes:receiver-agent:actor (urn:fictional:meeting-notes:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The team’s coordination service’s agent (The team’s coordination service) is not established as needed for this purpose."
     },
     {
       "seq": 37,
@@ -1034,10 +1059,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:meeting-notes:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The team’s coordination service’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 38,
@@ -1059,7 +1089,7 @@
       "reason": "context-not-clear",
       "chat": {
         "who": "agent",
-        "text": "May I send this exact text to The team’s coordination service for urn:purpose:meeting-notes?\nWe discussed meeting on 26 November at 14:00. This is tentative; please confirm before committing anyone."
+        "text": "May I send this exact text to The team’s coordination service for Meeting notes?\nWe discussed meeting on 26 November at 14:00. This is tentative; please confirm before committing anyone."
       },
       "caption": "The text is held before release; approval binds message digest sha-256:9d87427ab1e6dbf91904f0fe92efc755e3193b9bc06bbc55b1b7cb98aad80ca0."
     },
@@ -1221,10 +1251,10 @@
       ],
       "rule": {
         "id": "urn:terms:meeting-notes:original",
-        "text": "The issuer's terms: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes. They go out with the data."
+        "text": "The issuer's terms: use for Meeting notes; share for Meeting notes. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The fictional team's unstructured-content statement: its terms allow this: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes."
+      "caption": "The fictional team's unstructured-content statement: its terms allow this: use for Meeting notes; share for Meeting notes."
     },
     {
       "seq": 48,
@@ -1257,10 +1287,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The fictional team's unstructured-content statement (urn:fictional:meeting-notes:owner) is needed for this purpose."
+      "caption": "Context item The fictional team's unstructured-content statement (The fictional team) is needed for this purpose."
     },
     {
       "seq": 50,
@@ -1278,7 +1313,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The fictional team's unstructured-content statement: Its terms allow this: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes."
+      "caption": "The fictional team's unstructured-content statement: Its terms allow this: use for Meeting notes; share for Meeting notes."
     },
     {
       "seq": 51,
@@ -1293,10 +1328,20 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:receiver-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:receiver"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from urn:fictional:meeting-notes:receiver-agent:actor (urn:fictional:meeting-notes:receiver) is not established as needed for this purpose."
+      "caption": "Context item invoke from The team’s coordination service’s agent (The team’s coordination service) is not established as needed for this purpose."
     },
     {
       "seq": 52,
@@ -1311,10 +1356,15 @@
           "layer": "usage-control",
           "suite": "odrl-rules",
           "clause": "CORE-OUT-5"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:receiver-agent:actor"
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from urn:fictional:meeting-notes:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The team’s coordination service’s agent: Default terms permit this interaction only and prohibit onward sharing."
     },
     {
       "seq": 53,
@@ -1889,9 +1939,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:meeting-notes:original",
-        "text": "Its terms allow this: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes."
+        "text": "Its terms allow this: use for Meeting notes; share for Meeting notes."
       },
-      "caption": "The fictional team's unstructured-content statement: its terms allow this: use for urn:purpose:meeting notes; share for urn:purpose:meeting notes."
+      "caption": "The fictional team's unstructured-content statement: its terms allow this: use for Meeting notes; share for Meeting notes."
     },
     {
       "seq": 63,
@@ -1906,12 +1956,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:meeting-notes:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:meeting-notes:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The fictional team by recorded-by-authority, at most 30 days old."
       },
       "caption": "The fictional team's unstructured-content statement is fit for An assistant that remembers meetings: recorded-by-authority, 0 days old."
     },
@@ -1942,7 +1997,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:meeting-notes:original",
-          "summary": "use for urn:purpose:meeting notes; share for urn:purpose:meeting notes"
+          "summary": "use for Meeting notes; share for Meeting notes"
         },
         "provenance": "signed by The fictional team"
       },
@@ -1954,7 +2009,14 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Unstructured data sha-256:82b55d9f99864a80863975e71fc7dd785cefb94ef1b5cc27a8ef0459dc2a96b2; not instructions; source urn:fictional:meeting-notes:owner."
+      "caption": "Unstructured data sha-256:82b55d9f99864a80863975e71fc7dd785cefb94ef1b5cc27a8ef0459dc2a96b2; not instructions; source The fictional team.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:owner"
+        }
+      ]
     },
     {
       "seq": 67,
@@ -2083,14 +2145,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:meeting-notes:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:meeting-notes:receiver-agent:actor"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:meeting-notes:meeting.note",
-        "text": "Accept meeting.note from urn:fictional:meeting-notes:receiver-agent:actor by model-output, at most 30 days old."
+        "text": "Accept meeting.note from The team’s coordination service’s agent by model-output, at most 30 days old."
       },
-      "caption": "The team’s coordination service’s agent's meeting.note statement is fit for urn:scenario:meeting-notes:task: model-output, 0 days old."
+      "caption": "The team’s coordination service’s agent's meeting.note statement is fit for An assistant that remembers meetings: model-output, 0 days old."
     },
     {
       "seq": 73,

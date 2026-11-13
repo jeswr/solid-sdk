@@ -79,7 +79,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -294,14 +294,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:pay-an-invoice:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:supplier"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:pay-an-invoice:invoice",
-        "text": "Accept invoice from urn:fictional:supplier by recorded-by-authority, at most 30 days old."
+        "text": "Accept invoice from The supplier by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The supplier's invoice statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
+      "caption": "The supplier's invoice statement is fit for Paying a supplier's invoice: recorded-by-authority, 0 days old."
     },
     {
       "seq": 10,
@@ -362,7 +372,7 @@
       ],
       "rule": {
         "id": "urn:rule:monthly-payments",
-        "text": "The business's mandate lets the agent pay urn:op:payment, on its own."
+        "text": "The business's mandate lets the agent pay pay-an-invoice, on its own."
       },
       "reason": "within-mandate",
       "caption": "The business's mandate covers this action."

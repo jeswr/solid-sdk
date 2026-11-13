@@ -197,5 +197,8 @@
         "right-to-work.answer"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:right-to-work": "Right to work"
+  }
 }

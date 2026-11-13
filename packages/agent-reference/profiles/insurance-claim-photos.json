@@ -138,5 +138,8 @@
         "repair.estimate"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:insurance-claim-photos": "Insurance claim photos"
+  }
 }

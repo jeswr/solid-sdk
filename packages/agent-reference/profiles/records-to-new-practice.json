@@ -58,5 +58,8 @@
       "what": "Old practice resource holder",
       "replacedBy": "A separately keyed local holder returning original source-signed statements inside its signed envelope, under an item/reader/purpose/expiry grant. This replaces by-reference-solid; no Solid endpoint is claimed."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:health-record": "Health record"
+  }
 }

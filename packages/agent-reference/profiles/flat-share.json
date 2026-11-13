@@ -48,5 +48,8 @@
     "alex-agent": "Alex’s agent",
     "blair": "Blair, a fictional flatmate",
     "blair-agent": "Blair’s agent"
+  },
+  "labels": {
+    "urn:purpose:flat-share": "Flat share"
   }
 }

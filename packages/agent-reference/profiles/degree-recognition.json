@@ -184,5 +184,8 @@
       "what": "Planned proof method sparq-zk-result/5",
       "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:degree-recognition": "Degree recognition"
+  }
 }

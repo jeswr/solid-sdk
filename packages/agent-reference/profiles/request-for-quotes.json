@@ -147,5 +147,8 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:request-for-quotes": "Request for quotes"
+  }
 }

@@ -158,5 +158,10 @@
       "what": "Regulator-claim forum and record release transport",
       "replacedBy": "A separately keyed local forum using signed control requests and source-verified record segments. Each record release is an exact owner-approved effect through the releasing runtime\u2019s gate; no network or legal adjudication is claimed."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:lending": "Lending",
+    "urn:purpose:onward-leak": "Onward leak",
+    "urn:purpose:redress": "Redress"
+  }
 }

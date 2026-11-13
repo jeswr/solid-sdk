@@ -77,5 +77,8 @@
       "what": "Public authority register and care/tax/school endpoints",
       "replacedBy": "Declared fictional parties with independent introduced keys and local signed current-status documents; no live service or legal authority claim."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:consent-for-a-child": "Consent for a child"
+  }
 }

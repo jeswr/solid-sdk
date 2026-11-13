@@ -267,5 +267,9 @@
         "insurance-quote.answer"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:driver-record": "Driver record",
+    "urn:purpose:insurance-quote": "Insurance quote"
+  }
 }

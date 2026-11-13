@@ -9,6 +9,7 @@
 import { z } from "zod";
 import type { Iri } from "../core/types.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
+import type { Namer } from "../trace/packet.js";
 import type { ItemTerms, RelianceProfile } from "./common.js";
 import { idWords } from "./common.js";
 
@@ -193,7 +194,7 @@ export function acceptsOfferedTerms(terms: ItemTerms, allowedPurposes: readonly 
 }
 
 /** Plain words for an item's terms. */
-export function termsSummary(terms: ItemTerms | undefined): string {
+export function termsSummary(terms: ItemTerms | undefined, name?: Namer): string {
   if (!terms) return "no terms attached";
   if (!termsShape.safeParse(terms).success) return "unsupported terms";
   const uses = new Set<string>();
@@ -203,13 +204,14 @@ export function termsSummary(terms: ItemTerms | undefined): string {
     for (const c of r.constraints ?? [])
       if (c.leftOperand === "purpose") {
         const v = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
-        for (const p of v) (r.action === "distribute" ? shares : uses).add(idWords(String(p)));
+        for (const p of v)
+          (r.action === "distribute" ? shares : uses).add(idWords(String(p), name));
       }
   }
   for (const r of terms.policy.prohibitions ?? [])
     for (const c of r.constraints ?? []) {
       const v = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
-      for (const p of v) never.add(idWords(String(p)));
+      for (const p of v) never.add(idWords(String(p), name));
     }
   return [
     uses.size > 0 ? `use for ${[...uses].join(" or ")}` : "",
@@ -231,6 +233,7 @@ export function termsSummary(terms: ItemTerms | undefined): string {
 export function evaluateItemTerms(
   terms: ItemTerms | undefined,
   need: {
+    readonly name?: Namer;
     readonly agent: Iri;
     readonly action: "use" | "distribute";
     readonly target: Iri;
@@ -324,7 +327,7 @@ export function evaluateItemTerms(
     ...(need.recipient ? { recipient: need.recipient } : {}),
     at: need.at,
   });
-  const summary = termsSummary(terms);
+  const summary = termsSummary(terms, need.name);
   if (v.effect === "indeterminate")
     return {
       verdict: "indeterminate",

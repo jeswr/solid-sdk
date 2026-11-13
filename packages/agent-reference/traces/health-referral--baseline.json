@@ -77,7 +77,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -210,14 +210,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:health-referral:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:register"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:health-referral:organization.role",
-        "text": "Accept organization.role from urn:fictional:register by recorded-by-authority, at most 90 days old."
+        "text": "Accept organization.role from The professional register by recorded-by-authority, at most 90 days old."
       },
-      "caption": "The professional register's organization.role statement is fit for urn:scenario:health-referral:task: recorded-by-authority, 0 days old."
+      "caption": "The professional register's organization.role statement is fit for A referral from a family doctor to a specialist: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -258,7 +268,7 @@
       "agent": "practice-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:health referral with The specialist clinic."
+      "caption": "The core proposes to use the unlabelled resource with The specialist clinic."
     },
     {
       "seq": 9,
@@ -282,7 +292,7 @@
       ],
       "rule": {
         "id": "urn:rule:refer",
-        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
+        "text": "The family practice's mandate lets the agent use the unlabelled resource, on its own."
       },
       "reason": "within-mandate",
       "caption": "The family practice's mandate covers this action."
@@ -305,6 +315,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:health-referral"
         }
       ],
       "resolution": {
@@ -319,7 +334,7 @@
         "answer": "Accepted, for urn:op:health-referral only."
       },
       "reason": "recipient-established",
-      "caption": "The specialist clinic: Accepted, for urn:op:health-referral only."
+      "caption": "The specialist clinic: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 11,
@@ -399,7 +414,7 @@
       "reason": "approval-required",
       "chat": {
         "who": "agent",
-        "text": "To clinician: The specialist clinic asks me to use urn:op:health referral with The specialist clinic for urn:purpose:health referral. May I go ahead? Action digest: sha-256:fbdaea6fb9795796bb0b9d7c2aa1bf62a9c808d8468a04ffcb5663b282f1115b. Parameters: {\"resource\":\"urn:resource:patient-history\",\"items\":[\"urn:scenario:health-referral:history\"],\"grantDigest\":\"sha-256:9e0d10a53932c0ec7658f805a44b5a911c86be7e4dac482f95a9170cde23b8b4\"}"
+        "text": "To clinician: The specialist clinic asks me to use the unlabelled resource with The specialist clinic for Health referral. May I go ahead? Action digest: sha-256:fbdaea6fb9795796bb0b9d7c2aa1bf62a9c808d8468a04ffcb5663b282f1115b. Parameters: {\"resource\":\"urn:resource:patient-history\",\"items\":[\"urn:scenario:health-referral:history\"],\"grantDigest\":\"sha-256:9e0d10a53932c0ec7658f805a44b5a911c86be7e4dac482f95a9170cde23b8b4\"}"
       },
       "caption": "The gate built this request from the action and the approval rule."
     },
@@ -409,7 +424,7 @@
       "agent": "practice-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:health referral with The specialist clinic."
+      "caption": "The core proposes to use the unlabelled resource with The specialist clinic."
     },
     {
       "seq": 17,
@@ -433,7 +448,7 @@
       ],
       "rule": {
         "id": "urn:rule:refer",
-        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
+        "text": "The family practice's mandate lets the agent use the unlabelled resource, on its own."
       },
       "reason": "within-mandate",
       "caption": "The family practice's mandate covers this action."
@@ -456,6 +471,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:health-referral"
         }
       ],
       "resolution": {
@@ -470,7 +490,7 @@
         "answer": "Accepted, for urn:op:health-referral only."
       },
       "reason": "recipient-established",
-      "caption": "The specialist clinic: Accepted, for urn:op:health-referral only."
+      "caption": "The specialist clinic: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 19,
@@ -548,7 +568,7 @@
       ],
       "rule": {
         "id": "urn:rule:refer",
-        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
+        "text": "The family practice's mandate lets the agent use the unlabelled resource, on its own."
       },
       "reason": "within-mandate",
       "caption": "The family practice's mandate covers this action."
@@ -571,6 +591,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:op:health-referral"
         }
       ],
       "resolution": {
@@ -585,7 +610,7 @@
         "answer": "Accepted, for urn:op:health-referral only."
       },
       "reason": "recipient-established",
-      "caption": "The specialist clinic: Accepted, for urn:op:health-referral only."
+      "caption": "The specialist clinic: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 24,
@@ -672,10 +697,15 @@
           "layer": "data-access",
           "suite": "by-reference-local-holder",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:clinician"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The professional register's organization.role statement (urn:fictional:clinician) is needed for this purpose."
+      "caption": "Context item The professional register's organization.role statement (The clinician) is needed for this purpose."
     },
     {
       "seq": 29,
@@ -1176,7 +1206,7 @@
         "text": "The local record holder is accepted for referral.history claims."
       },
       "resolution": {
-        "question": "Is The local record holder an authority for referral.history claims about urn:fictional:patient?",
+        "question": "Is The local record holder an authority for referral.history claims about the unlabelled resource?",
         "path": [
           {
             "at": "The specialist clinic's own list",
@@ -1229,9 +1259,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:grant:health-referral:history-grant",
-        "text": "Its terms allow this: use for urn:purpose:health referral."
+        "text": "Its terms allow this: use for Health referral."
       },
-      "caption": "The local record holder's referral.history statement: its terms allow this: use for urn:purpose:health referral."
+      "caption": "The local record holder's referral.history statement: its terms allow this: use for Health referral."
     },
     {
       "seq": 44,
@@ -1246,14 +1276,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:health-referral:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:record-holder"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:health-referral:referral.history",
-        "text": "Accept referral.history from urn:fictional:record-holder by recorded-by-authority, at most 90 days old."
+        "text": "Accept referral.history from The local record holder by recorded-by-authority, at most 90 days old."
       },
-      "caption": "The local record holder's referral.history statement is fit for urn:scenario:health-referral:task: recorded-by-authority, 0 days old."
+      "caption": "The local record holder's referral.history statement is fit for A referral from a family doctor to a specialist: recorded-by-authority, 0 days old."
     },
     {
       "seq": 45,
@@ -1282,7 +1322,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:grant:health-referral:history-grant",
-          "summary": "use for urn:purpose:health referral"
+          "summary": "use for Health referral"
         },
         "provenance": "signed by The local record holder"
       },

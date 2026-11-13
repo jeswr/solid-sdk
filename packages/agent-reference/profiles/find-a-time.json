@@ -177,5 +177,10 @@
       "what": "Attested calendar derivation",
       "replacedBy": "A separately keyed fictional calendar service holds both synthetic availability records, evaluates the installed all-of rule for a named candidate slot, signs its derivation and releases only that free-slot result through both receiving agents’ gates. No hardware attestation or joint computation is claimed."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:calendar-service": "Calendar service",
+    "urn:purpose:find-a-time": "Find a time",
+    "urn:purpose:private-calendar": "Private calendar"
+  }
 }

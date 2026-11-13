@@ -96,5 +96,8 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:change-of-address": "Change of address"
+  }
 }

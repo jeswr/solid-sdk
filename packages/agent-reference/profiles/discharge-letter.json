@@ -121,5 +121,8 @@
     "patient-agent": "The patient’s agent",
     "practice-agent": "The family practice’s agent",
     "hospital-agent": "The hospital’s agent"
+  },
+  "labels": {
+    "urn:purpose:discharge-letter": "Discharge letter"
   }
 }

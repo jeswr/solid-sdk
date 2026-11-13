@@ -192,5 +192,10 @@
     "party": "forum",
     "responseSeconds": 60,
     "observers": []
+  },
+  "labels": {
+    "urn:purpose:duties": "Duties",
+    "urn:purpose:fee-dispute": "Fee dispute",
+    "urn:purpose:redress": "Redress"
   }
 }

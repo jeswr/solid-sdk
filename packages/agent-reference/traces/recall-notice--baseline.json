@@ -69,7 +69,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -189,9 +189,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:recall-notice:recall",
-        "text": "Its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+        "text": "Its terms allow this: use for Recall notice; share for Recall notice."
       },
-      "caption": "The manufacturer's product.recall statement: its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+      "caption": "The manufacturer's product.recall statement: its terms allow this: use for Recall notice; share for Recall notice."
     },
     {
       "seq": 5,
@@ -206,14 +206,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:recall-notice:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:recall-notice:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:recall-notice:product.recall",
-        "text": "Accept product.recall from urn:fictional:recall-notice:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept product.recall from The manufacturer by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The manufacturer's product.recall statement is fit for urn:scenario:recall-notice:task: recorded-by-authority, 0 days old."
+      "caption": "The manufacturer's product.recall statement is fit for A product recall notice: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -242,7 +252,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:recall-notice:recall",
-          "summary": "use for urn:purpose:recall notice; share for urn:purpose:recall notice"
+          "summary": "use for Recall notice; share for Recall notice"
         },
         "provenance": "signed by The manufacturer"
       },
@@ -799,7 +809,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:recall notice with The product owner."
+      "caption": "The core proposes to share A product recall notice with The product owner."
     },
     {
       "seq": 26,
@@ -947,10 +957,10 @@
       ],
       "rule": {
         "id": "urn:terms:recall-notice:recall",
-        "text": "The issuer's terms: use for urn:purpose:recall notice; share for urn:purpose:recall notice. They go out with the data."
+        "text": "The issuer's terms: use for Recall notice; share for Recall notice. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The manufacturer's product.recall statement: its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+      "caption": "The manufacturer's product.recall statement: its terms allow this: use for Recall notice; share for Recall notice."
     },
     {
       "seq": 33,
@@ -1479,9 +1489,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:recall-notice:recall",
-        "text": "Its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+        "text": "Its terms allow this: use for Recall notice; share for Recall notice."
       },
-      "caption": "The manufacturer's product.recall statement: its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+      "caption": "The manufacturer's product.recall statement: its terms allow this: use for Recall notice; share for Recall notice."
     },
     {
       "seq": 42,
@@ -1496,12 +1506,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:recall-notice:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:recall-notice:product.recall",
-        "text": "Accept product.recall from urn:fictional:recall-notice:owner by recorded-by-authority, at most 30 days old."
+        "text": "Accept product.recall from The manufacturer by recorded-by-authority, at most 30 days old."
       },
       "caption": "The manufacturer's product.recall statement is fit for A product recall notice: recorded-by-authority, 0 days old."
     },
@@ -1532,7 +1547,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:recall-notice:recall",
-          "summary": "use for urn:purpose:recall notice; share for urn:purpose:recall notice"
+          "summary": "use for Recall notice; share for Recall notice"
         },
         "provenance": "signed by The manufacturer"
       },

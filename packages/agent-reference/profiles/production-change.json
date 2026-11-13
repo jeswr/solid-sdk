@@ -95,5 +95,8 @@
         "requires-review"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:production-change": "Production change"
+  }
 }

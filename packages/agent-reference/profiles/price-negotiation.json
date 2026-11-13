@@ -105,5 +105,9 @@
       ],
       "requiresRepresentation": true
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:buyer-planning": "Buyer planning",
+    "urn:purpose:price-negotiation": "Price negotiation"
+  }
 }

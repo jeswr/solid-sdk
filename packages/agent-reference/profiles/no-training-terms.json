@@ -95,5 +95,8 @@
         "requires-review"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:no-training-terms": "No training terms"
+  }
 }

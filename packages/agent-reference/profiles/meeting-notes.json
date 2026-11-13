@@ -110,5 +110,8 @@
       "claimType": "meeting.note",
       "type": "date"
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:meeting-notes": "Meeting notes"
+  }
 }

@@ -97,7 +97,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -160,7 +160,7 @@
       ],
       "reason": "source-not-authoritative",
       "resolution": {
-        "question": "Is An unverified email sender an authority for bank.account-owner claims about urn:fictional:supplier?",
+        "question": "Is An unverified email sender an authority for bank.account-owner claims about the unlabelled resource?",
         "path": [
           {
             "at": "The business's own list",
@@ -320,14 +320,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:master-data-change:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:directory"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:master-data-change:organization.role",
-        "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
+        "text": "Accept organization.role from The staff directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization.role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
     },
     {
       "seq": 10,
@@ -477,14 +487,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:master-data-change:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:directory"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:master-data-change:organization.role",
-        "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
+        "text": "Accept organization.role from The staff directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization.role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
     },
     {
       "seq": 17,
@@ -634,14 +654,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:master-data-change:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:directory"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:master-data-change:organization.role",
-        "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
+        "text": "Accept organization.role from The staff directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization.role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
     },
     {
       "seq": 24,
@@ -702,7 +732,7 @@
       ],
       "rule": {
         "id": "urn:rule:authorised",
-        "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
+        "text": "The business's mandate lets the agent use master-data-change, on its own."
       },
       "reason": "within-mandate",
       "caption": "The business's mandate covers this action."

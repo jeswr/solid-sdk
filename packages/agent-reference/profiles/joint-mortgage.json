@@ -96,5 +96,8 @@
       "what": "Multi-party completion, local conditional escrow and reservation providers",
       "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:joint-mortgage": "Joint mortgage"
+  }
 }

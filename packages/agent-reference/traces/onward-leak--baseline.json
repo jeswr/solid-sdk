@@ -103,7 +103,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -223,9 +223,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:onward-leak:income",
-        "text": "Its terms allow this: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver."
+        "text": "Its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
       },
-      "caption": "The person’s bank's income.total statement: its terms allow this: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver."
+      "caption": "The person’s bank's income.total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
     },
     {
       "seq": 5,
@@ -240,14 +240,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:onward-leak:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:onward-leak:bank"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:onward-leak:income.total",
-        "text": "Accept income.total from urn:fictional:onward-leak:bank by recorded-by-authority, at most 30 days old."
+        "text": "Accept income.total from The person’s bank by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The person’s bank's income.total statement is fit for urn:scenario:onward-leak:task: recorded-by-authority, 0 days old."
+      "caption": "The person’s bank's income.total statement is fit for A receiver passes data on against its terms: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -276,7 +286,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:onward-leak:income",
-          "summary": "use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver"
+          "summary": "use for Lending; share for Lending or Redress; never for The marketing company"
         },
         "provenance": "signed by The person’s bank"
       },
@@ -1384,7 +1394,7 @@
       "agent": "person-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:onward leak:agreement with The lender."
+      "caption": "The core proposes to share Agree the lender’s restrictions with The lender."
     },
     {
       "seq": 42,
@@ -1532,10 +1542,10 @@
       ],
       "rule": {
         "id": "urn:terms:onward-leak:income",
-        "text": "The issuer's terms: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver. They go out with the data."
+        "text": "The issuer's terms: use for Lending; share for Lending or Redress; never for The marketing company. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The person’s bank's income.total statement: its terms allow this: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver."
+      "caption": "The person’s bank's income.total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
     },
     {
       "seq": 49,
@@ -2148,9 +2158,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:onward-leak:income",
-        "text": "Its terms allow this: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver."
+        "text": "Its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
       },
-      "caption": "The person’s bank's income.total statement: its terms allow this: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver."
+      "caption": "The person’s bank's income.total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
     },
     {
       "seq": 58,
@@ -2165,12 +2175,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:onward-leak:bank"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:onward-leak:income.total",
-        "text": "Accept income.total from urn:fictional:onward-leak:bank by recorded-by-authority, at most 30 days old."
+        "text": "Accept income.total from The person’s bank by recorded-by-authority, at most 30 days old."
       },
       "caption": "The person’s bank's income.total statement is fit for Agree the lender’s restrictions: recorded-by-authority, 0 days old."
     },
@@ -2201,7 +2216,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:onward-leak:income",
-          "summary": "use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver"
+          "summary": "use for Lending; share for Lending or Redress; never for The marketing company"
         },
         "provenance": "signed by The person’s bank"
       },
@@ -2311,10 +2326,10 @@
       ],
       "rule": {
         "id": "urn:terms:onward-leak:income",
-        "text": "The issuer's terms: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver. They go out with the data."
+        "text": "The issuer's terms: use for Lending; share for Lending or Redress; never for The marketing company. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The person’s bank's income.total statement: its terms allow this: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver."
+      "caption": "The person’s bank's income.total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
     },
     {
       "seq": 66,
@@ -2357,7 +2372,7 @@
       "kind": "ask-principal",
       "chat": {
         "who": "agent",
-        "text": "The independent fictional ombudsman asks for one of your statements: The person’s bank's income.total statement. They would use them for urn:purpose:redress. May I share them?"
+        "text": "The independent fictional ombudsman asks for one of your statements: The person’s bank's income.total statement. They would use them for Redress. May I share them?"
       },
       "caption": "The person is asked to approve this exact action; the approval will be bound to its digest."
     },
@@ -2469,10 +2484,10 @@
       ],
       "rule": {
         "id": "urn:terms:onward-leak:income",
-        "text": "The issuer's terms: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver. They go out with the data."
+        "text": "The issuer's terms: use for Lending; share for Lending or Redress; never for The marketing company. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The person’s bank's income.total statement: its terms allow this: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver."
+      "caption": "The person’s bank's income.total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
     },
     {
       "seq": 74,
@@ -2597,7 +2612,14 @@
       "check": "recipient",
       "verdict": "pass",
       "reason": "recipient-established",
-      "caption": "The forum requests urn:fictional:onward-leak:owner's record by 2026-11-13T09:01:00.000Z."
+      "caption": "The forum requests The lender's record by 2026-11-13T09:01:00.000Z.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:onward-leak:owner"
+        }
+      ]
     },
     {
       "seq": 83,
@@ -2703,10 +2725,10 @@
       ],
       "rule": {
         "id": "urn:terms:onward-leak:income",
-        "text": "The issuer's terms: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver. They go out with the data."
+        "text": "The issuer's terms: use for Lending; share for Lending or Redress; never for The marketing company. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The person’s bank's income.total statement: its terms allow this: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver."
+      "caption": "The person’s bank's income.total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
     },
     {
       "seq": 88,
@@ -2749,7 +2771,7 @@
       "kind": "ask-principal",
       "chat": {
         "who": "agent",
-        "text": "The independent fictional ombudsman asks for one of your statements: The person’s bank's income.total statement. They would use them for urn:purpose:redress. May I share them?"
+        "text": "The independent fictional ombudsman asks for one of your statements: The person’s bank's income.total statement. They would use them for Redress. May I share them?"
       },
       "caption": "The lender is asked to approve this exact action; the approval will be bound to its digest."
     },
@@ -2861,10 +2883,10 @@
       ],
       "rule": {
         "id": "urn:terms:onward-leak:income",
-        "text": "The issuer's terms: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver. They go out with the data."
+        "text": "The issuer's terms: use for Lending; share for Lending or Redress; never for The marketing company. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The person’s bank's income.total statement: its terms allow this: use for urn:purpose:lending; share for urn:purpose:lending or urn:purpose:redress; never for urn:fictional:onward leak:receiver."
+      "caption": "The person’s bank's income.total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
     },
     {
       "seq": 96,
@@ -2988,7 +3010,24 @@
       "kind": "decision",
       "outcome": "admit",
       "reason": "prohibited",
-      "caption": "Forum decision: urn:fictional:onward-leak:owner; {\"problem\":\"observed-outside-gate\",\"observation\":\"sha-256:aa71ebd9b64b599fae10e4c0a57dd1f5214442f924b0a88d593cec732754883d\",\"acceptance\":\"urn:awp:engine-onward-leak-main:owner-agent:0001\",\"recipient\":\"urn:fictional:onward-leak:receiver\"}. No core was re-run."
+      "caption": "Forum decision: The lender; {\"problem\":\"observed-outside-gate\",\"observation\":\"sha-256:aa71ebd9b64b599fae10e4c0a57dd1f5214442f924b0a88d593cec732754883d\",\"acceptance\":\"accept message\",\"recipient\":\"The marketing company\"}. No core was re-run.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:onward-leak:owner"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:awp:engine-onward-leak-main:owner-agent:0001"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:onward-leak:receiver"
+        }
+      ]
     },
     {
       "seq": 105,
@@ -3109,14 +3148,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:onward-leak:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:onward-leak:forum"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:onward-leak:forum.decision",
-        "text": "Accept forum.decision from urn:fictional:onward-leak:forum by recorded-by-authority, at most 1 days old."
+        "text": "Accept forum.decision from The independent fictional ombudsman by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The independent fictional ombudsman's forum.decision statement is fit for urn:scenario:onward-leak:task: recorded-by-authority, 0 days old."
+      "caption": "The independent fictional ombudsman's forum.decision statement is fit for A receiver passes data on against its terms: recorded-by-authority, 0 days old."
     },
     {
       "seq": 110,

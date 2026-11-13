@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -193,9 +193,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:insurance-quote:identity-details",
-        "text": "Its terms allow this: use for urn:purpose:driver record; share for urn:purpose:driver record."
+        "text": "Its terms allow this: use for Driver record; share for Driver record."
       },
-      "caption": "The driver's identity.details statement: its terms allow this: use for urn:purpose:driver record; share for urn:purpose:driver record."
+      "caption": "The driver's identity.details statement: its terms allow this: use for Driver record; share for Driver record."
     },
     {
       "seq": 5,
@@ -210,14 +210,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:insurance-quote:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:insurance-quote:owner"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-quote:identity.details",
-        "text": "Accept identity.details from urn:fictional:insurance-quote:owner by self-reported, at most 30 days old."
+        "text": "Accept identity.details from The driver by self-reported, at most 30 days old."
       },
-      "caption": "The driver's identity.details statement is fit for urn:scenario:insurance-quote:task: self-reported, 0 days old."
+      "caption": "The driver's identity.details statement is fit for An insurance quote with the least disclosure: self-reported, 0 days old."
     },
     {
       "seq": 6,
@@ -246,7 +256,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:insurance-quote:identity-details",
-          "summary": "use for urn:purpose:driver record; share for urn:purpose:driver record"
+          "summary": "use for Driver record; share for Driver record"
         },
         "provenance": "signed by The driver"
       },
@@ -807,7 +817,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:insurance quote with The insurer."
+      "caption": "The core proposes to share An insurance quote with the least disclosure with The insurer."
     },
     {
       "seq": 26,

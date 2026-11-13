@@ -109,7 +109,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -238,14 +238,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:erasure-request:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:subject"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:erasure-request:contact.data",
-        "text": "Accept contact.data from urn:fictional:erasure-request:subject by recorded-by-authority, at most 1 days old."
+        "text": "Accept contact.data from The data subject by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The data subject's contact.data statement is fit for urn:scenario:erasure-request:task: recorded-by-authority, 0 days old."
+      "caption": "The data subject's contact.data statement is fit for Withdrawing consent and asking for deletion: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -1374,7 +1384,7 @@
       "agent": "subject-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:erasure request:agreement with The company."
+      "caption": "The core proposes to share Form the data-use agreement with The company."
     },
     {
       "seq": 42,
@@ -2049,12 +2059,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:subject"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:erasure-request:contact.data",
-        "text": "Accept contact.data from urn:fictional:erasure-request:subject by recorded-by-authority, at most 1 days old."
+        "text": "Accept contact.data from The data subject by recorded-by-authority, at most 1 days old."
       },
       "caption": "The data subject's contact.data statement is fit for Form the data-use agreement: recorded-by-authority, 0 days old."
     },
@@ -3185,7 +3200,7 @@
       "agent": "company-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:erasure request:agreement with The onward recipient."
+      "caption": "The core proposes to share Form the data-use agreement with The onward recipient."
     },
     {
       "seq": 95,
@@ -3860,12 +3875,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:subject"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:erasure-request:contact.data",
-        "text": "Accept contact.data from urn:fictional:erasure-request:subject by recorded-by-authority, at most 1 days old."
+        "text": "Accept contact.data from The data subject by recorded-by-authority, at most 1 days old."
       },
       "caption": "The data subject's contact.data statement is fit for Form the data-use agreement: recorded-by-authority, 0 days old."
     },
@@ -4996,7 +5016,7 @@
       "agent": "partner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:erasure request:agreement with The second onward recipient."
+      "caption": "The core proposes to share Form the data-use agreement with The second onward recipient."
     },
     {
       "seq": 148,
@@ -5671,12 +5691,17 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:subject"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:erasure-request:contact.data",
-        "text": "Accept contact.data from urn:fictional:erasure-request:subject by recorded-by-authority, at most 1 days old."
+        "text": "Accept contact.data from The data subject by recorded-by-authority, at most 1 days old."
       },
       "caption": "The data subject's contact.data statement is fit for Form the data-use agreement: recorded-by-authority, 0 days old."
     },
@@ -6280,7 +6305,14 @@
       "agent": "company-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Payloads deleted; digest tombstones retained for urn:scenario:erasure-request:data."
+      "caption": "Payloads deleted; digest tombstones retained for The data subject's contact.data statement.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:erasure-request:data"
+        }
+      ]
     },
     {
       "seq": 185,
@@ -6819,7 +6851,34 @@
       "agent": "company-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: [{\"kind\":\"inform-onward\",\"source\":\"urn:awp:engine-erasure-request-main:subject-agent:0005\",\"items\":[\"urn:scenario:erasure-request:data\"],\"subject\":\"urn:fictional:erasure-request:subject\",\"recipient\":{\"actor\":\"urn:fictional:erasure-request:partner-agent:actor\",\"party\":\"urn:fictional:erasure-request:partner\"},\"due\":\"2026-11-13T09:00:00.000Z\",\"id\":\"sha-256:fbe6afaeb957550447b96cfd70612cc7a2db11af2e6fce7c2d6fc76426ae8869\",\"status\":\"pending\"}]"
+      "caption": "Duty audit: [{\"kind\":\"inform-onward\",\"source\":\"invoke message\",\"items\":[\"The data subject's contact.data statement\"],\"subject\":\"The data subject\",\"recipient\":{\"actor\":\"The onward recipient’s agent\",\"party\":\"The onward recipient\"},\"due\":\"2026-11-13T09:00:00.000Z\",\"id\":\"sha-256:fbe6afaeb957550447b96cfd70612cc7a2db11af2e6fce7c2d6fc76426ae8869\",\"status\":\"pending\"}]",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:awp:engine-erasure-request-main:subject-agent:0005"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:erasure-request:data"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:subject"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:partner-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:partner"
+        }
+      ]
     },
     {
       "seq": 201,
@@ -7390,7 +7449,14 @@
       "agent": "partner-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Payloads deleted; digest tombstones retained for urn:scenario:erasure-request:data."
+      "caption": "Payloads deleted; digest tombstones retained for The data subject's contact.data statement.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:erasure-request:data"
+        }
+      ]
     },
     {
       "seq": 219,
@@ -7929,7 +7995,34 @@
       "agent": "partner-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: [{\"kind\":\"inform-onward\",\"source\":\"urn:awp:engine-erasure-request-main:company-agent:0006\",\"items\":[\"urn:scenario:erasure-request:data\"],\"subject\":\"urn:fictional:erasure-request:subject\",\"recipient\":{\"actor\":\"urn:fictional:erasure-request:downstream-agent:actor\",\"party\":\"urn:fictional:erasure-request:downstream\"},\"due\":\"2026-11-13T09:00:00.000Z\",\"id\":\"sha-256:57ec22969a2a5b8db020d1903a0b234b476004a65dcbce996f4dcd87d76d99b0\",\"status\":\"pending\"}]"
+      "caption": "Duty audit: [{\"kind\":\"inform-onward\",\"source\":\"invoke message\",\"items\":[\"The data subject's contact.data statement\"],\"subject\":\"The data subject\",\"recipient\":{\"actor\":\"The second onward recipient’s agent\",\"party\":\"The second onward recipient\"},\"due\":\"2026-11-13T09:00:00.000Z\",\"id\":\"sha-256:57ec22969a2a5b8db020d1903a0b234b476004a65dcbce996f4dcd87d76d99b0\",\"status\":\"pending\"}]",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:awp:engine-erasure-request-main:company-agent:0006"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:erasure-request:data"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:subject"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:downstream-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:downstream"
+        }
+      ]
     },
     {
       "seq": 235,
@@ -8500,7 +8593,14 @@
       "agent": "downstream-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Payloads deleted; digest tombstones retained for urn:scenario:erasure-request:data."
+      "caption": "Payloads deleted; digest tombstones retained for The data subject's contact.data statement.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:erasure-request:data"
+        }
+      ]
     },
     {
       "seq": 253,
@@ -9021,7 +9121,44 @@
       "agent": "company-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: [{\"kind\":\"inform-onward\",\"source\":\"urn:awp:engine-erasure-request-main:subject-agent:0005\",\"items\":[\"urn:scenario:erasure-request:data\"],\"subject\":\"urn:fictional:erasure-request:subject\",\"recipient\":{\"actor\":\"urn:fictional:erasure-request:partner-agent:actor\",\"party\":\"urn:fictional:erasure-request:partner\"},\"due\":\"2026-11-13T09:00:00.000Z\",\"id\":\"sha-256:fbe6afaeb957550447b96cfd70612cc7a2db11af2e6fce7c2d6fc76426ae8869\",\"status\":\"acknowledged\",\"message\":\"urn:awp:engine-erasure-request-main:company-agent:0006\",\"conversation\":\"urn:awp:general-duty:8906289a93e58521d84612379e163787\",\"acknowledgedAt\":\"2026-11-13T09:00:00.000Z\"}]"
+      "caption": "Duty audit: [{\"kind\":\"inform-onward\",\"source\":\"invoke message\",\"items\":[\"The data subject's contact.data statement\"],\"subject\":\"The data subject\",\"recipient\":{\"actor\":\"The onward recipient’s agent\",\"party\":\"The onward recipient\"},\"due\":\"2026-11-13T09:00:00.000Z\",\"id\":\"sha-256:fbe6afaeb957550447b96cfd70612cc7a2db11af2e6fce7c2d6fc76426ae8869\",\"status\":\"acknowledged\",\"message\":\"invoke message\",\"conversation\":\"the unlabelled resource\",\"acknowledgedAt\":\"2026-11-13T09:00:00.000Z\"}]",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:awp:engine-erasure-request-main:subject-agent:0005"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:erasure-request:data"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:subject"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:partner-agent:actor"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:erasure-request:partner"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:awp:engine-erasure-request-main:company-agent:0006"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:awp:general-duty:8906289a93e58521d84612379e163787"
+        }
+      ]
     }
   ]
 }

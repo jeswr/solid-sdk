@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -201,14 +201,29 @@
           "layer": "reliance",
           "suite": "corroboration",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:false-but-signed:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:employer"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:tax-register"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:false-but-signed:annual-income",
-        "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
+        "text": "Accept annual-income from The employer, The fictional tax register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The employer's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
+      "caption": "The employer's annual-income statement is fit for A registered source signs something false: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -358,14 +373,29 @@
           "layer": "reliance",
           "suite": "corroboration",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:false-but-signed:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:employer"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:tax-register"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:false-but-signed:annual-income",
-        "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
+        "text": "Accept annual-income from The employer, The fictional tax register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional tax register's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional tax register's annual-income statement is fit for A registered source signs something false: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,

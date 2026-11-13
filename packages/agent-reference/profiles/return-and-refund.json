@@ -92,5 +92,8 @@
         "merchant.receipt"
       ]
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:return-and-refund": "Return and refund"
+  }
 }

@@ -69,7 +69,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -189,9 +189,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:age-check:document",
-        "text": "Its terms allow this: use for urn:purpose:identity management; share for urn:purpose:identity management."
+        "text": "Its terms allow this: use for Identity management; share for Identity management."
       },
-      "caption": "The identity issuer's identity.document statement: its terms allow this: use for urn:purpose:identity management; share for urn:purpose:identity management."
+      "caption": "The identity issuer's identity.document statement: its terms allow this: use for Identity management; share for Identity management."
     },
     {
       "seq": 5,
@@ -206,14 +206,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:age-check:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:age-check:identity-issuer"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:age-check:identity.document",
-        "text": "Accept identity.document from urn:fictional:age-check:identity-issuer by recorded-by-authority, at most 30 days old."
+        "text": "Accept identity.document from The identity issuer by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The identity issuer's identity.document statement is fit for urn:scenario:age-check:task: recorded-by-authority, 0 days old."
+      "caption": "The identity issuer's identity.document statement is fit for Proving age to buy something: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -242,7 +252,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:age-check:document",
-          "summary": "use for urn:purpose:identity management; share for urn:purpose:identity management"
+          "summary": "use for Identity management; share for Identity management"
         },
         "provenance": "signed by The identity issuer"
       },
@@ -803,7 +813,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:age check with The merchant."
+      "caption": "The core proposes to share Proving age to buy something with The merchant."
     },
     {
       "seq": 26,

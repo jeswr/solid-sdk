@@ -1,0 +1,99 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "awp": "https://w3id.org/jeswr/awp#",
+    "prov": "http://www.w3.org/ns/prov#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "GrantRecord",
+      "typeIris": [
+        "https://w3id.org/jeswr/awp#GrantRecord"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "derivedFrom",
+          "predicate": "http://www.w3.org/ns/prov#wasDerivedFrom",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "at",
+          "predicate": "https://w3id.org/jeswr/awp#at",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "digest",
+          "predicate": "https://w3id.org/jeswr/awp#digest",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "grantee",
+          "predicate": "https://w3id.org/jeswr/awp#grantee",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "grantor",
+          "predicate": "https://w3id.org/jeswr/awp#grantor",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "kind",
+          "predicate": "https://w3id.org/jeswr/awp#kind",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://w3id.org/jeswr/awp#grant-kind/owner-mandate",
+            "https://w3id.org/jeswr/awp#grant-kind/data-use",
+            "https://w3id.org/jeswr/awp#grant-kind/access",
+            "https://w3id.org/jeswr/awp#grant-kind/onward-use",
+            "https://w3id.org/jeswr/awp#grant-kind/delegation"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "validUntil",
+          "predicate": "https://www.w3.org/2018/credentials#validUntil",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    }
+  ]
+}

@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -216,14 +216,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:discharge-letter:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hospital"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:discharge-letter:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:hospital by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The hospital by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The hospital's unstructured-content statement is fit for urn:scenario:discharge-letter:task: recorded-by-authority, 0 days old."
+      "caption": "The hospital's unstructured-content statement is fit for A discharge letter in a doctor's own words: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -377,14 +387,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:discharge-letter:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hospital"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:discharge-letter:clinical.diagnosis",
-        "text": "Accept clinical.diagnosis from urn:fictional:hospital by recorded-by-authority, at most 30 days old."
+        "text": "Accept clinical.diagnosis from The hospital by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The hospital's clinical.diagnosis statement is fit for urn:scenario:discharge-letter:task: recorded-by-authority, 0 days old."
+      "caption": "The hospital's clinical.diagnosis statement is fit for A discharge letter in a doctor's own words: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -425,7 +445,7 @@
       "agent": "patient-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:letter with The family practice."
+      "caption": "The core proposes to use the unlabelled resource with The family practice."
     },
     {
       "seq": 16,
@@ -468,6 +488,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:op:letter"
         }
       ],
       "resolution": {
@@ -482,7 +507,7 @@
         "answer": "Accepted, for urn:op:letter only."
       },
       "reason": "recipient-established",
-      "caption": "The family practice: Accepted, for urn:op:letter only."
+      "caption": "The family practice: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 18,
@@ -609,10 +634,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:patient"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The hospital's unstructured-content statement (urn:fictional:patient) is needed for this purpose."
+      "caption": "Context item The hospital's unstructured-content statement (The patient) is needed for this purpose."
     },
     {
       "seq": 25,
@@ -1146,14 +1176,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:op:letter"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hospital"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:discharge-letter:unstructured-content",
-        "text": "Accept unstructured-content from urn:fictional:hospital by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The hospital by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The hospital's unstructured-content statement is fit for urn:op:letter: recorded-by-authority, 0 days old."
+      "caption": "The hospital's unstructured-content statement is fit for the unlabelled resource: recorded-by-authority, 0 days old."
     },
     {
       "seq": 35,
@@ -1194,7 +1234,14 @@
       "agent": "practice-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Unstructured data sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3; not instructions; source urn:fictional:hospital."
+      "caption": "Unstructured data sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3; not instructions; source The hospital.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hospital"
+        }
+      ]
     },
     {
       "seq": 38,
@@ -1210,7 +1257,7 @@
       "agent": "practice-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to read urn:op:clinical record with The family practice."
+      "caption": "The core proposes to read the unlabelled resource with The family practice."
     },
     {
       "seq": 40,
@@ -1248,10 +1295,15 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hospital"
         }
       ],
       "reason": "structured-form-required",
-      "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3. Required claim: clinical.diagnosis. Accepted sources: urn:fictional:hospital. Accepted methods: recorded-by-authority."
+      "caption": "Structured form required: clinical.diagnosis; request source The hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3. Required claim: clinical.diagnosis. Accepted sources: The hospital. Accepted methods: recorded-by-authority."
     },
     {
       "seq": 42,
@@ -1262,7 +1314,14 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "structured-form-required",
-      "caption": "Ask source urn:fictional:hospital for clinical.diagnosis."
+      "caption": "Ask source The hospital for clinical.diagnosis.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hospital"
+        }
+      ]
     },
     {
       "seq": 43,
@@ -1305,6 +1364,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:op:structured-form"
         }
       ],
       "resolution": {
@@ -1319,7 +1383,7 @@
         "answer": "Accepted, for urn:op:structured-form only."
       },
       "reason": "recipient-established",
-      "caption": "The hospital: Accepted, for urn:op:structured-form only."
+      "caption": "The hospital: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 45,
@@ -2782,6 +2846,11 @@
           "layer": "identity",
           "suite": "pinned-key",
           "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:op:structured-form"
         }
       ],
       "resolution": {
@@ -2796,7 +2865,7 @@
         "answer": "Accepted, for urn:op:structured-form only."
       },
       "reason": "recipient-established",
-      "caption": "The hospital: Accepted, for urn:op:structured-form only."
+      "caption": "The hospital: Accepted, for the unlabelled resource only."
     },
     {
       "seq": 75,
@@ -2986,7 +3055,7 @@
       "agent": "practice-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to read urn:op:clinical record with The family practice."
+      "caption": "The core proposes to read the unlabelled resource with The family practice."
     },
     {
       "seq": 82,
@@ -3024,10 +3093,15 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hospital"
         }
       ],
       "reason": "structured-form-required",
-      "caption": "Structured form required: clinical.diagnosis; request source urn:fictional:hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3. Required claim: clinical.diagnosis. Accepted sources: urn:fictional:hospital. Accepted methods: recorded-by-authority."
+      "caption": "Structured form required: clinical.diagnosis; request source The hospital; original sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3. Required claim: clinical.diagnosis. Accepted sources: The hospital. Accepted methods: recorded-by-authority."
     },
     {
       "seq": 84,
@@ -3038,7 +3112,14 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "structured-form-required",
-      "caption": "Ask source urn:fictional:hospital for clinical.diagnosis."
+      "caption": "Ask source The hospital for clinical.diagnosis.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hospital"
+        }
+      ]
     },
     {
       "seq": 85,

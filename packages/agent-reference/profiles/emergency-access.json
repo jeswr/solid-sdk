@@ -130,5 +130,9 @@
     "record-agent": "The patient’s record agent",
     "patient-agent": "The patient’s agent",
     "contact-agent": "The trusted contact’s agent"
+  },
+  "labels": {
+    "urn:purpose:emergency-access": "Emergency access",
+    "urn:purpose:emergency-notification": "Emergency notification"
   }
 }

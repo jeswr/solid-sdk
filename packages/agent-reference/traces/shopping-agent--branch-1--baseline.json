@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -216,14 +216,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:shopping-agent:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:bank"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:shopping-agent:payee-account",
-        "text": "Accept payee-account from urn:fictional:bank by recorded-by-authority, at most 30 days old."
+        "text": "Accept payee-account from The payment provider by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The payment provider's payee-account statement is fit for urn:scenario:shopping-agent:task: recorded-by-authority, 0 days old."
+      "caption": "The payment provider's payee-account statement is fit for Buying something within a budget: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -377,14 +387,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:shopping-agent:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:supplier"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:shopping-agent:invoice",
-        "text": "Accept invoice from urn:fictional:supplier by recorded-by-authority, at most 30 days old."
+        "text": "Accept invoice from The chosen merchant by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The chosen merchant's invoice statement is fit for urn:scenario:shopping-agent:task: recorded-by-authority, 0 days old."
+      "caption": "The chosen merchant's invoice statement is fit for Buying something within a budget: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -534,14 +554,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:shopping-agent:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:other-merchant"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:shopping-agent:other-offer",
-        "text": "Accept other-offer from urn:fictional:other-merchant by recorded-by-authority, at most 7 days old."
+        "text": "Accept other-offer from The other merchant by recorded-by-authority, at most 7 days old."
       },
-      "caption": "The other merchant's other-offer statement is fit for urn:scenario:shopping-agent:task: recorded-by-authority, 0 days old."
+      "caption": "The other merchant's other-offer statement is fit for Buying something within a budget: recorded-by-authority, 0 days old."
     },
     {
       "seq": 20,
@@ -691,14 +721,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:shopping-agent:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:bank"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:shopping-agent:payee-account",
-        "text": "Accept payee-account from urn:fictional:bank by recorded-by-authority, at most 30 days old."
+        "text": "Accept payee-account from The payment provider by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The payment provider's payee-account statement is fit for urn:scenario:shopping-agent:task: recorded-by-authority, 0 days old."
+      "caption": "The payment provider's payee-account statement is fit for Buying something within a budget: recorded-by-authority, 0 days old."
     },
     {
       "seq": 27,
@@ -763,7 +803,7 @@
       ],
       "rule": {
         "id": "urn:rule:monthly-payments",
-        "text": "The shopper's mandate lets the agent pay urn:op:payment, on its own."
+        "text": "The shopper's mandate lets the agent pay shopping-agent, on its own."
       },
       "reason": "within-mandate",
       "caption": "The shopper's mandate covers this action."
@@ -856,7 +896,7 @@
       "reason": "limit-exceeded",
       "rule": {
         "id": "urn:rule:monthly-payments",
-        "text": "The shopper's mandate lets the agent pay urn:op:payment, on its own. This payment exceeds the mandate's per-action or calendar-month limit."
+        "text": "The shopper's mandate lets the agent pay shopping-agent, on its own. This payment exceeds the mandate's per-action or calendar-month limit."
       },
       "caption": "This is outside The shopper's limits, so the gate asks The shopper."
     },
@@ -879,7 +919,7 @@
       "kind": "ask-principal",
       "chat": {
         "who": "agent",
-        "text": "The payment provider asks me to take the next step in shopping-agent with The payment provider for urn:purpose:shopping agent. This payment exceeds the mandate's per-action or calendar-month limit. May I go ahead?"
+        "text": "The payment provider asks me to take the next step in shopping-agent with The payment provider for Shopping agent. This payment exceeds the mandate's per-action or calendar-month limit. May I go ahead?"
       },
       "caption": "The shopper is asked to approve this exact action; the approval will be bound to its digest."
     }

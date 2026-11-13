@@ -74,7 +74,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -198,9 +198,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:recycled-content:self-declared-tier",
-        "text": "Its terms allow this: use for urn:purpose:recycled content; share for urn:purpose:recycled content."
+        "text": "Its terms allow this: use for Recycled content; share for Recycled content."
       },
-      "caption": "The supplying tier's material.recycled-fraction statement: its terms allow this: use for urn:purpose:recycled content; share for urn:purpose:recycled content."
+      "caption": "The supplying tier's material.recycled-fraction statement: its terms allow this: use for Recycled content; share for Recycled content."
     },
     {
       "seq": 5,
@@ -215,14 +215,34 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:recycled-content:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:recycled-content:tier"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:recycled-content:tier-2"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:recycled-content:tier-3"
         }
       ],
       "reason": "method-not-accepted",
       "rule": {
         "id": "urn:profile:recycled-content:material.recycled-fraction",
-        "text": "Accept material.recycled-fraction from urn:fictional:recycled-content:tier, urn:fictional:recycled-content:tier-2, urn:fictional:recycled-content:tier-3 by audited-by-certifier, at most 30 days old."
+        "text": "Accept material.recycled-fraction from The supplying tier, Fictional independently keyed audited supply tier 2, Fictional independently keyed audited supply tier 3 by audited-by-certifier, at most 30 days old."
       },
-      "caption": "The supplying tier's material.recycled-fraction statement was not produced in a way urn:scenario:recycled-content:task accepts."
+      "caption": "The supplying tier's material.recycled-fraction statement was not produced in a way Proving recycled content along a supply chain accepts."
     },
     {
       "seq": 6,
@@ -233,7 +253,24 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "method-not-accepted",
-      "caption": "Required claim: material.recycled-fraction. Accepted sources: urn:fictional:recycled-content:tier, urn:fictional:recycled-content:tier-2, urn:fictional:recycled-content:tier-3. Accepted methods: audited-by-certifier."
+      "caption": "Required claim: material.recycled-fraction. Accepted sources: The supplying tier, Fictional independently keyed audited supply tier 2, Fictional independently keyed audited supply tier 3. Accepted methods: audited-by-certifier.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:recycled-content:tier"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:recycled-content:tier-2"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:recycled-content:tier-3"
+        }
+      ]
     }
   ]
 }

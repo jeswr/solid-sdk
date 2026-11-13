@@ -80,7 +80,7 @@
     }
   ],
   "generated": {
-    "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -196,9 +196,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:benefit-claim:income",
-        "text": "Its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+        "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
-      "caption": "The employer's benefit.income statement: its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+      "caption": "The employer's benefit.income statement: its terms allow this: use for Benefit claim; share for Benefit claim."
     },
     {
       "seq": 5,
@@ -213,14 +213,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:benefit-claim:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:benefit-claim:employer"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:benefit-claim:benefit.income",
-        "text": "Accept benefit.income from urn:fictional:benefit-claim:employer by recorded-by-authority, at most 30 days old."
+        "text": "Accept benefit.income from The employer by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The employer's benefit.income statement is fit for urn:scenario:benefit-claim:task: recorded-by-authority, 0 days old."
+      "caption": "The employer's benefit.income statement is fit for Claiming a benefit: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -249,7 +259,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:benefit-claim:income",
-          "summary": "use for urn:purpose:benefit claim; share for urn:purpose:benefit claim"
+          "summary": "use for Benefit claim; share for Benefit claim"
         },
         "provenance": "signed by The employer"
       },
@@ -357,9 +367,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:benefit-claim:rent",
-        "text": "Its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+        "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
-      "caption": "The landlord's benefit.rent statement: its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+      "caption": "The landlord's benefit.rent statement: its terms allow this: use for Benefit claim; share for Benefit claim."
     },
     {
       "seq": 12,
@@ -374,14 +384,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:benefit-claim:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:benefit-claim:landlord"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:benefit-claim:benefit.rent",
-        "text": "Accept benefit.rent from urn:fictional:benefit-claim:landlord by recorded-by-authority, at most 30 days old."
+        "text": "Accept benefit.rent from The landlord by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The landlord's benefit.rent statement is fit for urn:scenario:benefit-claim:task: recorded-by-authority, 0 days old."
+      "caption": "The landlord's benefit.rent statement is fit for Claiming a benefit: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -410,7 +430,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:benefit-claim:rent",
-          "summary": "use for urn:purpose:benefit claim; share for urn:purpose:benefit claim"
+          "summary": "use for Benefit claim; share for Benefit claim"
         },
         "provenance": "signed by The landlord"
       },
@@ -518,9 +538,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:benefit-claim:household",
-        "text": "Its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+        "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
-      "caption": "The household register's benefit.household statement: its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+      "caption": "The household register's benefit.household statement: its terms allow this: use for Benefit claim; share for Benefit claim."
     },
     {
       "seq": 19,
@@ -535,14 +555,24 @@
           "layer": "reliance",
           "suite": "precedence-rules",
           "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:scenario:benefit-claim:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:benefit-claim:household-register"
         }
       ],
       "reason": "method-not-accepted",
       "rule": {
         "id": "urn:profile:benefit-claim:benefit.household",
-        "text": "Accept benefit.household from urn:fictional:benefit-claim:household-register by recorded-by-authority, at most 30 days old."
+        "text": "Accept benefit.household from The household register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The household register's benefit.household statement was not produced in a way urn:scenario:benefit-claim:task accepts."
+      "caption": "The household register's benefit.household statement was not produced in a way Claiming a benefit accepts."
     },
     {
       "seq": 20,
@@ -553,7 +583,14 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "method-not-accepted",
-      "caption": "Required claim: benefit.household. Accepted sources: urn:fictional:benefit-claim:household-register. Accepted methods: recorded-by-authority."
+      "caption": "Required claim: benefit.household. Accepted sources: The household register. Accepted methods: recorded-by-authority.",
+      "refs": [
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary",
+          "id": "urn:fictional:benefit-claim:household-register"
+        }
+      ]
     },
     {
       "seq": 21,
@@ -1106,7 +1143,7 @@
       "agent": "owner-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share urn:op:benefit claim with The benefits office."
+      "caption": "The core proposes to share Claiming a benefit with The benefits office."
     },
     {
       "seq": 39,

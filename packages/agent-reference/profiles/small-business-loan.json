@@ -146,5 +146,8 @@
       "what": "Corporate registrar, company register, accounting platform and tax authority",
       "replacedBy": "Separately keyed fictional local documents, role statements and account/tax records; an exact-action director signature binds the GBP 25000 application, with no loan disbursement"
     }
-  ]
+  ],
+  "labels": {
+    "urn:purpose:small-business-loan": "Small business loan"
+  }
 }
