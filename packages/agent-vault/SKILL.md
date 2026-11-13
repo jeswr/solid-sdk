@@ -40,6 +40,13 @@ login and interactive login are injected seams.
 - Captures need an authenticated browser sender/transaction outside this library. Validate
   site/account/time, cookie domains/prefixes and same-origin token endpoint before storing.
   Use account id as executor persona. Do not broaden parent cookie domains automatically.
+  Call `beginLogin(site, account)` before opening the login UI and retain its returned
+  `{ site, account, generation }` binding. Require it in `acceptCapture`; never mint a
+  transaction on message receipt or accept its generation from the message. AgentVault
+  supplies the pre-callback binding as `LoginRequest.transaction` for both login methods.
+  Check the generation and stale/revoked state under the record lock after key acquisition.
+  Preserve the generation through executor/refresh writes so a valid capture still works.
+  Failed login cleanup must pass that transaction to `stale`, preserving newer logins.
 - Refresh only the exact site origin, use manual redirects, validated pointer extraction and
   finite expiry. Frequent probes are opt-in. Keep the floor/backoff and stale-on-401 behavior;
   stop must prevent late in-flight persistence. No default global fetch or timer.
@@ -48,6 +55,14 @@ login and interactive login are injected seams.
   probe cookies. Compare persisted revisions and cancellation at the synchronous record
   commit after key acquisition. Every host session write changes the revision; read/modify/
   write updates and revocation use the same record lock, never a pre-lock snapshot.
+  Provider `get` returns the record revision; `update` silently drops missing/mismatched
+  revisions and stale records under that lock, then rotates the revision on acceptance.
+  Keep the additive executor field typed structurally here when its dependency lacks it.
+  An empty login-reset bundle must carry a revision for the executor's first cookie write;
+  do not treat that empty bundle as authentication. Immediate host `store` and login resets
+  compare invocation snapshots after key acquisition; supplied stale snapshot revisions
+  refuse. Revoking a missing record persists a tombstone. Async work uses login transactions
+  or scheduler commits instead of an unbound host store.
 - Tests use fictional data, temporary stores and fakes for external boundaries, including
   spawn. Never invoke a real password manager or access a real default store. Cover negative
   authorization, option injection, cross-origin/cookie attacks, ciphertext substitution,

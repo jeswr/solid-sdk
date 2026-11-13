@@ -89,9 +89,12 @@ describe("keep-alive injected scheduler", () => {
           stale: false,
         });
       } else if (change === "capture") {
-        await acceptCapture(writer, capture(), { site: SITE, account: "alex" }, clock.now);
+        await acceptCapture(writer, capture(), await writer.beginLogin(SITE, "alex"), clock.now);
       } else if (change === "update") {
-        await writer.update(SITE, "alex", { cookies: [{ ...cookie(), value: "executor-update" }] });
+        await writer.update(SITE, "alex", {
+          ...(await writer.get(SITE, "alex")),
+          cookies: [{ ...cookie(), value: "executor-update" }],
+        });
       } else await writer.stale(SITE, "alex");
       const snapshot = (s: SessionState) => [
         s.bundle.cookies[0]?.value,
@@ -216,7 +219,8 @@ describe("keep-alive injected scheduler", () => {
     release.resolve();
     await drain();
     expect(writes).not.toHaveBeenCalled();
-    expect(await sessions.get(SITE, "alex")).toBeUndefined();
+    if (change === "login") expect((await sessions.get(SITE, "alex"))?.cookies).toEqual([]);
+    else expect(await sessions.get(SITE, "alex")).toBeUndefined();
     k.stop(SITE, "alex");
   });
   it("refreshes before expiry using POST, form body, manual redirects, and JSON pointers", async () => {

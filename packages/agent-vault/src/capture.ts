@@ -1,7 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { z } from "zod";
 import { boundary, identifier, origin, parse, Secret, VaultError } from "./safe.js";
-import { cookieSchema, type SessionBundle, type SessionStore, tokensSchema } from "./sessions.js";
+import {
+  cookieSchema,
+  type LoginTransaction,
+  type SessionBundle,
+  type SessionStore,
+  tokensSchema,
+} from "./sessions.js";
 export const captureSchema = z.strictObject({
   site: z.string(),
   account: identifier.optional(),
@@ -17,7 +24,7 @@ export function sessionCapture(input: unknown): Secret<SessionCapture> {
 export function acceptCapture(
   store: SessionStore,
   input: Secret<SessionCapture>,
-  expected: { site: string; account: string },
+  expected: LoginTransaction,
   now: () => number = Date.now,
 ): Promise<SessionBundle> {
   return boundary(() =>
@@ -31,15 +38,18 @@ export function acceptCapture(
         c.capturedAt < now() - 300000
       )
         throw new VaultError("invalid");
-      await store.store({
-        site,
-        account: expected.account,
-        bundle: { cookies: c.cookies },
-        tokens: c.tokens,
-        capturedAt: c.capturedAt,
-        stale: false,
-      });
-      const result = await store.get(site, expected.account);
+      await store.storeCapture(
+        {
+          site,
+          account: expected.account,
+          bundle: { cookies: c.cookies },
+          tokens: c.tokens,
+          capturedAt: c.capturedAt,
+          stale: false,
+        },
+        expected,
+      );
+      const result = await store.get(site, expected.account, expected.generation);
       if (!result) throw new VaultError("missing");
       return result;
     }),

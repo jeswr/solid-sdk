@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 import { inspect } from "util";
 import { describe, expect, it, vi } from "vitest";
@@ -10,7 +11,17 @@ import {
   type SecretBackend,
   type VaultOptions,
 } from "../src/index.js";
-import { account, capture, login, NOW, PASSWORD, SITE, setup } from "./helpers.js";
+import {
+  account,
+  capture,
+  cookie,
+  deferred,
+  login,
+  NOW,
+  PASSWORD,
+  SITE,
+  setup,
+} from "./helpers.js";
 
 async function fixture(method = "password") {
   const base = setup();
@@ -40,6 +51,79 @@ async function fixture(method = "password") {
   return { ...base, backend, ask, read, save, totp, passwordLogin, interactiveLogin, options };
 }
 describe("ensureSession host orchestration", () => {
+  it.each([
+    "password",
+    "passkey",
+  ])("refuses a pending %s capture revoked before callback completion", async (method) => {
+    const f = await fixture(method);
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const callback = async () => {
+      entered.resolve();
+      await release.promise;
+      return capture();
+    };
+    const vault = new AgentVault({
+      ...f.options,
+      passwordLogin: callback,
+      interactiveLogin: callback,
+    });
+    const outcome = vault.ensureSession(SITE).then(
+      () => "accepted",
+      () => "refused",
+    );
+    await entered.promise;
+    await f.sessions.stale(SITE, "alex");
+    release.resolve();
+    expect(await outcome).toBe("refused");
+    expect(await f.sessions.get(SITE, "alex")).toBeUndefined();
+  });
+  it.each([
+    "capture",
+    "failure",
+    "void",
+  ] as const)("old login %s completion cannot overwrite or revoke a newer login", async (completion) => {
+    const f = await fixture();
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const waitForLogin = async () => {
+      entered.resolve();
+      await release.promise;
+    };
+    const passwordLogin: VaultOptions["passwordLogin"] =
+      completion === "void"
+        ? waitForLogin
+        : async () => {
+            await waitForLogin();
+            if (completion === "failure") throw new Error(PASSWORD);
+            return capture();
+          };
+    const outcome = new AgentVault({ ...f.options, passwordLogin }).ensureSession(SITE).then(
+      () => "accepted",
+      () => "refused",
+    );
+    await entered.promise;
+    await f.sessions.store({
+      site: SITE,
+      account: "alex",
+      bundle: { cookies: [{ ...cookie(), value: "new-login" }] },
+      capturedAt: NOW,
+      stale: false,
+    });
+    const before = await (await f.sessions.state(SITE, "alex"))?.use((s) => s);
+    const writes = vi.spyOn(f.store, "putPrivateRecord");
+    release.resolve();
+    expect(await outcome).toBe("refused");
+    expect(writes).not.toHaveBeenCalled();
+    expect(await (await f.sessions.state(SITE, "alex"))?.use((s) => s)).toEqual(before);
+    expect((await f.sessions.get(SITE, "alex"))?.cookies[0]?.value).toBe("new-login");
+  });
+  it("does not reuse an empty login transaction as an authenticated session", async () => {
+    const f = await fixture();
+    await f.sessions.beginLogin(SITE, "alex");
+    await new AgentVault(f.options).ensureSession(SITE);
+    expect(f.passwordLogin).toHaveBeenCalledTimes(1);
+  });
   it("reads only after consent, logs in once, then reuses the encrypted session", async () => {
     const f = await fixture();
     const vault = new AgentVault(f.options);
@@ -179,7 +263,12 @@ describe("ensureSession host orchestration", () => {
   it("accepts a callback that writes through executor SessionProvider and returns void", async () => {
     const f = await fixture();
     const passwordLogin: VaultOptions["passwordLogin"] = async (r) => {
-      await capture().use((c) => r.sessions.update(SITE, "alex", { cookies: c.cookies }));
+      await capture().use(async (c) =>
+        r.sessions.update(SITE, "alex", {
+          ...(await r.sessions.get(SITE, "alex")),
+          cookies: c.cookies,
+        }),
+      );
     };
     expect(
       await new AgentVault({ ...f.options, passwordLogin }).ensureSession(SITE),
@@ -245,7 +334,12 @@ it("re-login through executor updates replaces stale token metadata", async () =
     stale: true,
   });
   const passwordLogin: VaultOptions["passwordLogin"] = async (r) => {
-    await capture().use((c) => r.sessions.update(SITE, "alex", { cookies: c.cookies }));
+    await capture().use(async (c) =>
+      r.sessions.update(SITE, "alex", {
+        ...(await r.sessions.get(SITE, "alex")),
+        cookies: c.cookies,
+      }),
+    );
   };
   expect(await new AgentVault({ ...f.options, passwordLogin }).ensureSession(SITE)).toHaveProperty(
     "session",
@@ -269,8 +363,10 @@ it("re-authenticates when the named session cookie expired but an unrelated cook
     method: "password",
     sessionCookies: ["sid"],
   });
-  await capture().use((c) =>
+  await f.sessions.beginLogin(SITE, "alex");
+  await capture().use(async (c) =>
     f.sessions.update(SITE, "alex", {
+      ...(await f.sessions.get(SITE, "alex")),
       cookies: [
         { ...(c.cookies[0] as (typeof c.cookies)[number]), expires: 0 },
         { ...(c.cookies[0] as (typeof c.cookies)[number]), name: "analytics" },
