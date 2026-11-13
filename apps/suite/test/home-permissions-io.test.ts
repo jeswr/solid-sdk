@@ -910,6 +910,35 @@ describe("public Client ID Document resolver", () => {
     expect(isClientIdDocument("https://app.test/id")).toBe(true);
     expect(isClientIdDocument("https://app.test/")).toBe(false);
   });
+  it("refuses private, loopback and internal hosts before invoking any transport", async () => {
+    const transport = vi.fn<typeof fetch>();
+    for (const host of [
+      "localhost",
+      "localhost.",
+      "intranet.",
+      "foo..bar",
+      "foo.bar..",
+      ".foo.bar",
+      "sub.localhost.",
+      "printer.local",
+      "internal",
+      "service.internal",
+      "127.0.0.1",
+      "2130706433",
+      "10.0.0.1",
+      "172.16.0.1",
+      "192.168.1.1",
+      "169.254.169.254",
+      "[::1]",
+      "[fc00::1]",
+      "[::ffff:127.0.0.1]",
+    ]) {
+      expect(await resolveClientName(`https://${host}/client-id.jsonld`, transport)).toEqual({});
+    }
+    expect(transport).not.toHaveBeenCalled();
+    expect(isClientIdDocument("https://8.8.8.8/client.json")).toBe(true);
+    expect(isClientIdDocument("https://app.test./client.json")).toBe(true);
+  });
   it("times out a hanging document and retries failures soon instead of caching them for a day", async () => {
     vi.useFakeTimers();
     try {
