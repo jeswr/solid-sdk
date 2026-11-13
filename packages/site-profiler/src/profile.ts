@@ -20,6 +20,7 @@ import { type LoginObservation, performLogin, probeCandidates, refreshInfo } fro
 import { buildOperation } from "./operations.js";
 import { Recorder } from "./recorder.js";
 import { analyseScripts } from "./scripts.js";
+import { learnFilterSelections } from "./selection.js";
 import { discoverSessionTokens, redactTrace } from "./session-tokens.js";
 import {
   candidateFromForm,
@@ -440,8 +441,10 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     }
     const byId = new Map(verifiedOps.map((op) => [op.id, op]));
 
-    // 7b. Flows from demonstrations.
-    const flows = [];
+    // 7b. Selection witnesses and their explicit resolver flows survive RDF round trips.
+    const selected = learnFilterSelections(verifiedOps, modelId, usedIds);
+    warnings.push(...selected.warnings);
+    const flows = [...selected.selections.values()].map((selection) => selection.flow);
     const matchable = [...opCandidate.entries()]
       .filter(([id]) => byId.has(id))
       .sort(([, a], [, b]) => specificity(b) - specificity(a));
@@ -465,6 +468,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         learnedAt,
         derivedFrom: [run.runId],
         usedIds,
+        selections: selected.selections,
       });
       warnings.push(...built.warnings);
       if (built.flow) flows.push(built.flow);

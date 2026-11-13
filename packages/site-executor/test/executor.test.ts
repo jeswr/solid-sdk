@@ -120,7 +120,7 @@ describe("approval gate", () => {
     expect(shop.requests).toHaveLength(0);
     const approval = first.approval;
     expect(approval?.summary).toBe(
-      `Add to cart Trail Runner sneakers on 127.0.0.1:${new URL(shop.url).port}`,
+      `Add to cart "Trail Runner sneakers" on 127.0.0.1:${new URL(shop.url).port}`,
     );
     expect(approval?.effect).toBe("reversible-write");
     expect(approval?.amount).toBeUndefined();
@@ -411,7 +411,7 @@ describe("flows", () => {
     expect(ask.status).toBe("needs-approval");
     expect(ask.target).toMatchObject({ kind: "flow", id: "urn:flow:buy" });
     expect(ask.approval?.effect).toBe("reversible-write");
-    expect(ask.approval?.summary).toMatch(/^Buy Trail Runner for GBP 20.00 on 127\.0\.0\.1:\d+$/);
+    expect(ask.approval?.summary).toMatch(/^Buy "Trail Runner" for GBP 20.00 on 127\.0\.0\.1:\d+$/);
     gate.approve(ask.approval?.id as string);
     const checkout = await executor.execute(buy(), { approvalId: ask.approval?.id as string });
     expect(checkout.status, checkout.error).toBe("needs-approval");

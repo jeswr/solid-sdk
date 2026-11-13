@@ -21,6 +21,7 @@ export type { ParseOptions as ReadSiteModelOptions } from "./rdf.js";
 export { SKOLEM_PREFIX } from "./rdf.js";
 export { readSiteModel } from "./read.js";
 export { responseIdentity } from "./response-identity.js";
+export { isSelectionFilter, SELECTION_IDENTITIES, selectionWitnesses } from "./selection.js";
 export * from "./types.js";
 export {
   isExecutorOwnedHeader,

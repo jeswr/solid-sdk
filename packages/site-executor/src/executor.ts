@@ -21,7 +21,13 @@ import type {
   Operation,
   SiteModel,
 } from "@jeswr/site-model";
-import { actionRequestTerms, endpointItemType, responseIdentity, SCHEMA } from "@jeswr/site-model";
+import {
+  actionRequestTerms,
+  endpointItemType,
+  responseIdentity,
+  SCHEMA,
+  selectionWitnesses,
+} from "@jeswr/site-model";
 import {
   applyCsrfToken,
   bodyInit,
@@ -73,6 +79,15 @@ import {
 import { describeUrl, guardUrl, OriginError, siteOrigin } from "./origin.js";
 import { outcomeTurtle } from "./outcome.js";
 import { secretRedactor } from "./secrets.js";
+import {
+  assertSelectionFilters,
+  itemName,
+  requestsAll,
+  resolveSelection,
+  type SelectionEvidence,
+  SelectionRefusal,
+  selectionSources,
+} from "./selection.js";
 import { UriTemplateError } from "./uri-template.js";
 import { BindingError, expandIri, idFromIri, isClassRange } from "./values.js";
 import { csrfFieldName, effectiveWireFields, transmittedCsrfSecrets } from "./wire.js";
@@ -96,7 +111,8 @@ export type ErrorKind =
   | "limit"
   | "no-session"
   | "gate"
-  | "repeat";
+  | "repeat"
+  | "ambiguous-target";
 
 /** Local extension of the shared receipt contract for possible effects with an incomplete result. */
 export type ExecutionOutcome = Omit<ActionOutcome, "status"> & {
@@ -199,6 +215,7 @@ class SessionError extends Error {
 }
 
 function errorKind(error: unknown): ErrorKind {
+  if (error instanceof SelectionRefusal) return "ambiguous-target";
   if (error instanceof OriginError) return "origin";
   if (error instanceof BindingError || error instanceof UriTemplateError) return "binding";
   if (error instanceof CsrfError) return "csrf";
@@ -285,6 +302,7 @@ function validatedModel(source: SiteModel): SiteModel {
         if (ref && Number(ref[1]) >= index)
           throw new BindingError("flow binds a step which has not run yet");
       }
+      selectionSources(flow, index, steps as Operation[]);
     }
   }
   const freeze = (value: unknown): void => {
@@ -321,6 +339,8 @@ interface Pending {
   digest: string;
   progress: Progress;
   evidence?: MoneyEvidence;
+  selection?: SelectionEvidence;
+  session?: { state: string; credentials: string; binding: string };
 }
 
 export function createExecutor(options: ExecutorOptions): Executor {
@@ -984,7 +1004,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
     };
     const fail = (error: unknown, prefix = ""): Promise<ExecutionResult> =>
       finish({
-        status: error instanceof MoneyRefusal ? "refused" : "error",
+        status:
+          error instanceof MoneyRefusal || error instanceof SelectionRefusal ? "refused" : "error",
         error: prefix + (error instanceof Error ? error.message : "unexpected failure"),
         errorKind: errorKind(error),
       });
@@ -1008,6 +1029,10 @@ export function createExecutor(options: ExecutorOptions): Executor {
         target,
         effect: effectiveEffect(model, flow, operation, steps),
         inputs,
+        binding: {
+          all: requestsAll(request),
+          objectNames: request.values([`${SCHEMA}object`, `${SCHEMA}name`]),
+        },
         ...claims,
         ...(persona !== undefined ? { persona } : {}),
       });
@@ -1039,10 +1064,39 @@ export function createExecutor(options: ExecutorOptions): Executor {
       const signedIn = ctx.jar.length > 0 || Object.keys(ctx.headers).length > 0;
       if (!signedIn && steps.some((op) => op.session === "signed-in"))
         throw new SessionError(`not signed in to ${new URL(origin).host}`);
+      const sessionTarget = target;
+      const sessionFingerprint = (metadata = true) =>
+        approvalDigest({
+          site: origin,
+          modelVersion: model.version,
+          target: sessionTarget,
+          effect: "read",
+          inputs: {},
+          binding: {
+            cookies: metadata
+              ? ctx.jar
+              : ctx.jar
+                  .map(({ expires: _expires, ...cookie }) => cookie)
+                  .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+            headers: ctx.headers,
+            ...(metadata ? { revision: ctx.revision } : {}),
+          },
+        });
+      // Check the exact stored session before any revalidation. Executor-owned reads
+      // may renew expiry metadata/revisions without changing any cookie credentials.
+      // A different vault revision at entry, or any credential/attribute change during
+      // those reads, still requires a fresh approval.
+      const resumingSession = pending?.session?.state === sessionFingerprint();
       // Revalidate the fact source, never replay a completed write. Recompiling
       // below binds any changed money, item identity or concrete inputs anew.
-      if (flow && pending?.evidence) {
-        for (const n of pending.evidence.revalidate) {
+      if (flow && pending) {
+        const revalidate = [
+          ...new Set([
+            ...(pending.evidence?.revalidate ?? []),
+            ...(pending.selection?.revalidate ?? []),
+          ]),
+        ].sort((a, b) => a - b);
+        for (const n of revalidate) {
           const read = steps[n] as Operation;
           const values = operationValues(
             read,
@@ -1096,7 +1150,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
           if (decision.kind !== "allow")
             return await finish({
               status: "denied",
-              error: "price revalidation read was not authorized",
+              error: "evidence revalidation read was not authorized",
             });
           const out = await runOperation(ctx, read, values, compiled);
           progress.stepItems[n] = out.items;
@@ -1108,9 +1162,31 @@ export function createExecutor(options: ExecutorOptions): Executor {
         const op = steps[i] as Operation;
         try {
           checkDeadline(ctx);
+          const selection = flow
+            ? resolveSelection(
+                selectionSources(flow, i, steps),
+                progress.observations,
+                progress.stepItems,
+                request,
+              )
+            : undefined;
+          if (
+            pending?.selection &&
+            selection &&
+            JSON.stringify(pending.selection.identities) !== JSON.stringify(selection.identities)
+          )
+            throw new SelectionRefusal("selection changed since approval; request a new action");
           const values = flow ? stepValues(flow, i, op, inputs, progress.stepItems) : inputs;
           const resolved = operationValues(op, values);
+          if (flow && selection)
+            for (const source of selectionSources(flow, i, steps))
+              for (const [writeName, readName] of Object.entries(source.filters))
+                if (resolved[writeName] !== progress.observations[source.step]?.inputs?.[readName])
+                  throw new SelectionRefusal("selection read and write filter values differ");
           const compiled = compileOperation(op, resolved, origin);
+          if (flow && selection)
+            for (const source of selectionSources(flow, i, steps))
+              assertSelectionFilters(progress.observations[source.step]?.compiled, compiled);
           const sources = stepSources(flow, i);
           // Only strongest-effect steps inherit a stronger declared flow effect.
           // Preparatory writes keep their own class; every payment gate requires evidence.
@@ -1237,6 +1313,29 @@ export function createExecutor(options: ExecutorOptions): Executor {
           if (evidence && authorizedMoney.amount !== undefined)
             assertFactsCap(claims, { amount: authorizedMoney.amount, currency: evidence.currency });
           const gateInputs = authorizationInputs(inputs, resolved, i, flow);
+          // A witness is evidence rather than a wire field. Bind its canonical first
+          // identity as well as the full set, independent of grid response ordering.
+          if (flow && selection)
+            selectionWitnesses(op).forEach((witness, n) => {
+              const source = selectionSources(flow, i, steps)[n];
+              if (source)
+                gateInputs[witness.name] =
+                  progress.stepItems[source.step]
+                    ?.flatMap((item) => item.values.get(source.property) ?? [])
+                    .sort()[0] ?? "";
+            });
+          const state = sessionFingerprint();
+          const credentials = sessionFingerprint(false);
+          const session = {
+            state,
+            credentials,
+            binding:
+              resumingSession &&
+              pending?.session?.credentials === credentials &&
+              !ctx.persistRejected
+                ? pending.session.binding
+                : state,
+          };
           const digest = approvalDigest({
             site: origin,
             modelVersion: model.version,
@@ -1253,14 +1352,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
               headers: compiled.headers,
               body: compiled.body,
               ...(evidence ? { evidence } : {}),
-              session: approvalDigest({
-                site: origin,
-                modelVersion: model.version,
-                target,
-                effect,
-                inputs: {},
-                binding: { cookies: ctx.jar, headers: ctx.headers, revision: ctx.revision },
-              }),
+              ...(selection ? { selection } : {}),
+              session: session.binding,
             },
           });
           const approvalId =
@@ -1271,7 +1364,21 @@ export function createExecutor(options: ExecutorOptions): Executor {
             effect,
             inputs: gateInputs,
             ...authorizedMoney,
-            summary: summarise(request, target, origin, authorizedMoney, redactWith(ctx)),
+            summary: summarise(request, target, origin, authorizedMoney, redactWith(ctx), {
+              inputs: resolved,
+              operation: op,
+              selection: Boolean(selection),
+              names:
+                selection?.names ??
+                (flow
+                  ? Object.values(flow.steps[i]?.bind ?? {}).flatMap((spec) => {
+                      const ref = STEP_REF.exec(spec);
+                      const item = ref ? progress.stepItems[Number(ref[1])]?.[0] : undefined;
+                      const name = item ? itemName(item) : undefined;
+                      return name ? [name] : [];
+                    })
+                  : []),
+            }),
             digest,
             ...(approvalId !== undefined ? { approvalId } : {}),
           };
@@ -1314,7 +1421,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
               key,
               digest,
               progress,
+              session,
               ...(evidence ? { evidence } : {}),
+              ...(selection ? { selection } : {}),
             });
             const approval: ApprovalRequest = {
               id: decision.approval.id,

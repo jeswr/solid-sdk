@@ -158,6 +158,20 @@ For product administration, a quantity input describes inventoryLevel, not purch
 A demonstrated destructive grid search remains a required dynamic input, including when the
 site submits no explicit selected IDs. Never drop or fix that selector to a demonstration SKU.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Such a filter-selected write gets a dedicated two-step Flow: the matching grid read, then
+the write. Dispatch selectors (`namespace`, `resource`, `collection`, `dataset`) or the
+endpoint family must agree. Search and nested filter inputs share their original Flow
+bindings. A required empty-path identity Parameter, omitted from the write's explicit
+body template, binds to a trusted resolver identity (`identifier`, `sku`, `productID` or
+`orderNumber`). This marks the selection structurally without changing the contract or
+adding a wire field. Direct execution of the write has no path. If no unique identity read
+is available, the write stays flow-only and a warning explains the missing resolver.
+Demonstration flows retain the matching read and identity binding too. Explicit selected
+IDs keep their ordinary identity inputs. The executor re-resolves these filter selections
+for approval and refuses ambiguous, empty, partial or changed selections; an all-items
+request requires `sab:all true` with no `schema:object`.
+
 A saved search returning no rows can teach its row shape through at most eight deduplicated,
 read-only probes with the ordinary search cleared, page reset to 1 and size capped at 25.
 Dispatch/session values and observed XHR headers are preserved; preferences are never saved.

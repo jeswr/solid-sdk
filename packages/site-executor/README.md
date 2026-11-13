@@ -161,6 +161,40 @@ excluded. The remaining observations retain their original step order and untrus
    `datatype: "iri"` are WHATWG-normalized before storage, binding and fingerprinting, even
    when bound into an `xsd:string` parameter. Literal text stays verbatim.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Filter selections and target summaries
+
+A learned filter-selected write is available through a resolve/read → write Flow. Its
+required, empty-path identity parameter is absent from the explicit body template and
+bound to a trusted identity property of the resolver. Both steps bind each search/filter
+to the same flow input. These existing Parameter/Flow structures survive RDF round trips;
+parameter names and descriptions do not activate this behavior. The underlying write
+cannot be invoked directly from an ActionRequest.
+
+Before approval, the executor checks the resolver's complete result and the concrete filter
+fields of both requests. Zero matches, partial/truncated results, missing identities and
+multiple matches return `refused` with `errorKind: "ambiguous-target"`. To deliberately
+select every matching item, omit `schema:object` and put `sab:all true` on the action
+(`sab:` is `https://jeswr.org/ns/site-action#`; exactly one lexical `true` is required).
+This does not permit partial or empty selections or bypass payment checks.
+
+Approvals show up to five resolved names/identifiers, followed by `and N more`. Their
+digest includes the full identity set. Approval retries authorize and repeat the resolver
+in the current session, using the same filters; a changed identity set refuses the write.
+Response ordering does not change the identity set. Completed writes remain single-use.
+The exact vault session is checked before revalidation. The executor's own reads may renew
+expiry metadata and storage revisions with unchanged credentials; external revision changes
+or changed cookie/header credentials require fresh consent. Resolver and write remain separate
+HTTP requests, so sites without atomic selection semantics retain a read/write race.
+The resolver uses the ordinary origin, session, read gate, extraction and redaction paths;
+the write retains Rule W, repeat protection and Uncertain handling.
+
+Every write summary prefers the request's object name, then a bound item's trusted name
+or identifier, then the operation label and concrete identifying inputs. Filter selection
+summaries also show the resolved targets when a request name was supplied. Display strings
+are quoted, controls and bidi characters escaped, and capped with `(truncated)`, after
+redacting the complete value.
+
 ## Security invariants
 
 - **Site-model trust.** A site model is trusted input on a par with code. It comes from the
