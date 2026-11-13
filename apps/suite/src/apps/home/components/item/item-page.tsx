@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
@@ -23,7 +24,7 @@ import { decodeRef } from "../../../../lib/refs";
 import { classificationForType } from "../../lib/model/classify";
 import { DOMAINS, UNCATEGORISED } from "../../lib/model/domains";
 import { identitiesIn, provenanceOf } from "../../lib/model/provenance";
-import { inStorage } from "../../lib/model/rdf";
+import { inStorage, primarySubject } from "../../lib/model/rdf";
 import { asOfTime, itemActions, itemHref, itemTitle, relativeTime } from "../../state/presentation";
 import { domainStore } from "../../state/use-domain-items";
 import { useHomeSession } from "../home-app";
@@ -94,9 +95,17 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
       }
       try {
         const snapshot = domainStore(session).getSnapshot();
-        const cached = snapshot.items.find(
-          (item) => item.url === url && (!subject || item.subject.value === subject),
-        );
+        const candidates = snapshot.items.filter((item) => item.url === url);
+        // A link without `s` means the document's primary subject online and offline.
+        // Card order is by title/date and does not determine the resource's primary record.
+        const cachedSubject =
+          subject ??
+          (external
+            ? session.webId
+            : candidates[0]?.dataType?.id === "files"
+              ? candidates[0].subject.value
+              : candidates[0] && primarySubject(candidates[0].dataset, url)?.value);
+        const cached = candidates.find((item) => item.subject.value === cachedSubject);
         let read: ItemRead;
         const offline = !navigator.onLine;
         if (offline && cached)

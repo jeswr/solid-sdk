@@ -71,7 +71,13 @@ const isCalendarDate = (term: Term) =>
 export async function typedViewData(
   dataset: DatasetCore,
   subject: string | Term,
-  options: { locale?: string; timeZone?: string; storage?: string } = {},
+  options: {
+    locale?: string;
+    timeZone?: string;
+    storage?: string;
+    /** Cards need only the selected subject's properties, not a copy of the entire document. */
+    includeRawData?: boolean;
+  } = {},
 ): Promise<TypedViewData> {
   const node = subjectOf(dataset, subject);
   const predicates = [
@@ -196,6 +202,6 @@ export async function typedViewData(
     ...(source
       ? { source: { label: connectorForUrl(source)?.label ?? "source", url: source } }
       : {}),
-    rawData: await serializeTurtle(dataset),
+    ...(options.includeRawData === false ? {} : { rawData: await serializeTurtle(dataset) }),
   };
 }

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { Store } from "n3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -50,6 +51,115 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
+it("refuses individual deletion in a shared history, including stale cards, and preserves siblings", async () => {
+  const { session, controller, pod, fetch } = await setup();
+  const target = `${root}integrations/netflix/media/viewing-history.ttl`;
+  const history = `@prefix s: <https://schema.org/>.
+    <#garden> a s:WatchAction; s:name "The Garden".
+    <#weekend> a s:WatchAction; s:name "A Quiet Weekend".`;
+  await pod.fetch(target, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: history,
+  });
+  try {
+    for (const subject of ["garden", "weekend"]) {
+      const { item } = await readItem(session, target, `${target}#${subject}`);
+      expect(await controller.remove(item, vi.fn())).toBe(false);
+      // A stale card must also be refused after the controller reads the current document.
+      expect(await controller.remove({ ...item, dataset: new Store() }, vi.fn())).toBe(false);
+      expect(itemActions(item, root).map((action) => action.id)).not.toContain("delete");
+    }
+    expect(controller.getSnapshot().size).toBe(0);
+    expect(controller.pendingDeletes()).toEqual([]);
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    expect(await (await pod.fetch(target)).text()).toBe(history);
+  } finally {
+    controller.dispose();
+  }
+});
+
+// Deleting an imported book used to delete the blank-node note sharing its document.
+it("protects a named imported record beside a blank-node primary record", async () => {
+  const { session, controller, pod, fetch } = await setup();
+  const target = `${root}notes/reading.ttl`;
+  const notes = `@prefix s: <https://schema.org/>. @prefix prov: <http://www.w3.org/ns/prov#>.
+    [] a s:NoteDigitalDocument; s:name "Reading notes"; s:text "Chapter one"; s:dateCreated "2026-11-01".
+    <#book> a s:Book; s:name "A book"; prov:wasGeneratedBy <runs.ttl#run>.`;
+  await pod.fetch(target, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: notes,
+  });
+  try {
+    const { item } = await readItem(session, target, `${target}#book`);
+    expect(itemActions(item, root).map((action) => action.id)).not.toContain("delete");
+    expect(await controller.remove(item, vi.fn())).toBe(false);
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    expect(await (await pod.fetch(target)).text()).toBe(notes);
+  } finally {
+    controller.dispose();
+  }
+});
+
+it("protects every record when shared document subjects use URL aliases", async () => {
+  const { session, controller, pod, fetch } = await setup();
+  const target = `${root}integrations/netflix/media/viewing-history.ttl`;
+  const alias = "https://POD.example:443/alice/integrations/netflix/media/viewing-history.ttl";
+  const history = `@prefix s: <https://schema.org/>.
+    <${alias}#garden> a s:WatchAction; s:name "The Garden".
+    <${alias}#weekend> a s:WatchAction; s:name "A Quiet Weekend".`;
+  await pod.fetch(target, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: history,
+  });
+  try {
+    for (const subject of ["garden", "weekend"]) {
+      const { item } = await readItem(session, target, `${alias}#${subject}`);
+      expect(itemActions(item, root).map((action) => action.id)).not.toContain("delete");
+      // Protection is also checked against a fresh read when the card has no saved RDF.
+      expect(await controller.remove({ ...item, dataset: new Store() }, vi.fn())).toBe(false);
+    }
+    expect(controller.pendingDeletes()).toEqual([]);
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    expect(await (await pod.fetch(target)).text()).toBe(history);
+  } finally {
+    controller.dispose();
+  }
+});
+
+it("refuses an old queued document deletion when a shared history is resumed", async () => {
+  const { session, controller, pod, fetch, refresh } = await setup();
+  controller.dispose();
+  const target = `${root}integrations/netflix/media/viewing-history.ttl`;
+  const history = `@prefix s: <https://schema.org/>.
+    <#garden> a s:WatchAction; s:name "The Garden".
+    <#weekend> a s:WatchAction; s:name "A Quiet Weekend".`;
+  await pod.fetch(target, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: history,
+  });
+  const { item } = await readItem(session, target);
+  saved.set(
+    `suite.home.pending-deletes:${session.webId}\u0000${root}`,
+    JSON.stringify([{ url: target, etag: item.etag, deleteAt: Date.now() + UNDO_MS }]),
+  );
+  const failed = vi.fn();
+  const resumed = createDeleteController({ ...session }, refresh, failed);
+  try {
+    expect(resumed.getSnapshot().has(target)).toBe(true);
+    resumed.release(target);
+    await vi.waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    expect(resumed.pendingDeletes()).toEqual([]);
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    expect(await (await pod.fetch(target)).text()).toBe(history);
+  } finally {
+    resumed.dispose();
+  }
+});
+
 const profileBody =
   '<#me> a <http://xmlns.com/foaf/0.1/Person>; <http://xmlns.com/foaf/0.1/name> "Alice"; <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://issuer.example/>; <http://www.w3.org/ns/pim/space#storage> <../>.';
 it.each([

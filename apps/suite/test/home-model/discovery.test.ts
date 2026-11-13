@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   type DomainItem,
   discoverDomainItems,
+  domainItemKey,
   nameFromUrl,
   sortItems,
 } from "../../src/apps/home/lib/model/discovery";
@@ -14,6 +15,88 @@ import { readTypeIndexes } from "../../src/apps/home/lib/model/type-index";
 import { fixtureFetch, rdf, STORAGE, WEB_ID } from "./fixtures";
 
 describe("domain discovery", () => {
+  it("keys blank-node primary subjects by document and type rather than parser labels", async () => {
+    const url = `${STORAGE}blank.ttl`;
+    const options = {
+      storage: STORAGE,
+      fetch: fixtureFetch({ [url]: '[] a schema:Movie; schema:name "A film".' }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}Movie`, instance: url }],
+    };
+    const first = await discoverDomainItems("media", options);
+    const second = await discoverDomainItems("media", options);
+    expect(first.items).toHaveLength(1);
+    expect(second.items).toHaveLength(1);
+    expect(first.items[0]?.subject.value).not.toBe(second.items[0]?.subject.value);
+    expect(first.items.map(domainItemKey)).toEqual(second.items.map(domainItemKey));
+  });
+
+  it("caps records across documents at 1,000 and marks the refresh as truncated", async () => {
+    const urls = Array.from({ length: 6 }, (_, index) => `${STORAGE}history-${index}.ttl`);
+    const fetch = fixtureFetch(
+      Object.fromEntries(
+        urls.map((url) => [
+          url,
+          Array.from(
+            { length: 201 },
+            (_, index) =>
+              `<#record-${index}> a schema:WatchAction; schema:name "Film ${index}";
+                prov:wasGeneratedBy <runs.ttl#run>.`,
+          ).join("\n"),
+        ]),
+      ),
+    );
+    const result = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      typeIndex: urls.map((instance) => ({ forClass: `${NS.SCHEMA}WatchAction`, instance })),
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.items).toHaveLength(1_000);
+    expect(result.truncated).toBe(true);
+    expect(new Set(result.items.map(domainItemKey)).size).toBe(1_000);
+    expect(urls.map((url) => result.items.filter((item) => item.url === url).length)).toEqual([
+      200, 200, 200, 200, 200, 0,
+    ]);
+  });
+
+  it.each([
+    "A Quiet Weekend",
+    "The Garden",
+  ])("discovers separate imported subjects even when the second title is %s", async (secondTitle) => {
+    const url = `${STORAGE}integrations/netflix/media/viewing-history.ttl`;
+    const fetch = fixtureFetch({
+      [`${STORAGE}integrations/`]: "<> ldp:contains <netflix/> .",
+      [`${STORAGE}integrations/netflix/`]: "<> ldp:contains <media/> .",
+      [`${STORAGE}integrations/netflix/media/`]: "<> ldp:contains <viewing-history.ttl> .",
+      [url]: `<> prov:wasGeneratedBy <../runs.ttl#run> .
+          <#first> a schema:WatchAction, schema:Movie ; schema:name "The Garden" ;
+            prov:wasGeneratedBy <../runs.ttl#run> .
+          <#second> a schema:WatchAction ; schema:name "${secondTitle}" ;
+            prov:wasGeneratedBy <../runs.ttl#run>, <../runs.ttl#previous> .
+          <#helper> a schema:Movie ; schema:name "Mapped helper" .
+          <#source> a prov:Activity ; prov:wasGeneratedBy <../runs.ttl#run> .
+          [] a schema:Movie ; prov:wasGeneratedBy <../runs.ttl#run> .
+          <https://foreign.example/movie> a schema:Movie ; schema:name "Linked movie" ;
+            prov:wasGeneratedBy <../runs.ttl#run> .`,
+    });
+    const result = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      // Both routes must fetch the document only once and keep both records.
+      typeIndex: [{ forClass: `${NS.SCHEMA}WatchAction`, instance: `${url}#second` }],
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.items).toHaveLength(2);
+    expect(result.items.map((item) => item.title).sort()).toEqual(
+      ["The Garden", secondTitle].sort(),
+    );
+    expect(new Set(result.items.map((item) => item.subject.value))).toEqual(
+      new Set([`${url}#first`, `${url}#second`]),
+    );
+    expect(result.items.every((item) => item.url === url)).toBe(true);
+    expect(fetch.mock.calls.filter(([input]) => String(input) === url)).toHaveLength(1);
+  });
+
   it.each([
     "http",
     "https",
@@ -236,6 +319,43 @@ describe("domain discovery", () => {
     expect(fetch.mock.calls.some(([input]) => String(input).includes("unrelated"))).toBe(false);
   });
 
+  // An imported reference inside a note used to hide the note's own card.
+  it("keeps a document's primary record when it also holds imported records", async () => {
+    const url = `${STORAGE}notes/reading.ttl`;
+    const result = await discoverDomainItems("all", {
+      storage: STORAGE,
+      fetch: fixtureFetch({
+        [url]: `<#it> a schema:NoteDigitalDocument; schema:name "Reading notes".
+          <#book> a schema:Book; schema:name "A book"; prov:wasGeneratedBy <runs.ttl#run>.`,
+      }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}NoteDigitalDocument`, instance: url }],
+    });
+    expect(result.items.map((item) => item.title).sort()).toEqual(["A book", "Reading notes"]);
+  });
+
+  // An untyped primary note used to vanish from Other once an imported record was found.
+  it("keeps an uncategorised primary record beside imported records, but not provenance runs", async () => {
+    const url = `${STORAGE}misc/reading.ttl`;
+    const result = await discoverDomainItems("all", {
+      storage: STORAGE,
+      fetch: fixtureFetch({
+        [url]: `<#it> schema:name "Untitled note"; schema:text "Some thoughts".
+          <#book> a schema:Book; schema:name "A book"; prov:wasGeneratedBy <#run>.`,
+      }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}Book`, instance: url }],
+    });
+    expect(result.items.map((item) => item.title).sort()).toEqual(["A book", "Untitled note"]);
+    const scaffolded = await discoverDomainItems("all", {
+      storage: STORAGE,
+      fetch: fixtureFetch({
+        [url]: `<#run> a prov:Activity; schema:name "Import run"; schema:startTime "2026-11-01T00:00:00Z"; schema:endTime "2026-11-01T00:01:00Z".
+          <#book> a schema:Book; schema:name "A book"; prov:wasGeneratedBy <#run>.`,
+      }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}Book`, instance: url }],
+    });
+    expect(scaffolded.items.map((item) => item.title)).toEqual(["A book"]);
+  });
+
   it("uses only the primary subject for connector collections independently of the WebID", async () => {
     const fetch = fixtureFetch({
       [`${STORAGE}collection.ttl`]:
@@ -378,6 +498,24 @@ describe("domain discovery", () => {
         })
       ).items,
     ).toHaveLength(2);
+  });
+
+  it("drops the contact-details card when the profile identity fills the refresh budget", async () => {
+    const body =
+      '<#me> a vcard:Individual ; vcard:fn "Alice Example" ; vcard:hasEmail [ vcard:hasValue <mailto:alice@example.com> ] .';
+    const fetch = fixtureFetch({ [`${STORAGE}profile/card`]: body });
+    // 999 cards already discovered this refresh leave room for exactly one more.
+    const filler = { items: Array.from({ length: 999 }) } as unknown as Parameters<
+      NonNullable<Parameters<typeof discoverDomainItems>[1]["documentCache"]>["set"]
+    >[1];
+    const result = await discoverDomainItems("personal", {
+      storage: STORAGE,
+      fetch,
+      webId: WEB_ID,
+      documentCache: new Map([[`${STORAGE}filler.ttl`, filler]]),
+    });
+    expect(result.items.map((item) => item.dataType?.id)).toEqual(["identity"]);
+    expect(result.truncated).toBe(true);
   });
 
   it.each([
