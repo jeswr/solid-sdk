@@ -1,9 +1,11 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // HTML and JSON reading helpers: htmlparser2 + css-select for HTML, RFC 6901 for JSON.
 
-import { selectAll, selectOne } from "css-select";
-import type { AnyNode, Document, Element } from "domhandler";
-import { findOne, getAttributeValue, textContent } from "domutils";
+import { _compileUnsafe, prepareContext, selectOne } from "css-select";
+import { type AnyNode, type Document, type Element, isTag } from "domhandler";
+import * as DomUtils from "domutils";
+import { find, findOne, getAttributeValue, textContent } from "domutils";
 import { parseDocument } from "htmlparser2";
 
 export function parseHtml(html: string): Document {
@@ -16,8 +18,14 @@ export function elementText(el: AnyNode): string {
 }
 
 /** Every element matching `selector` under `root` (the root itself excluded). */
-export function selectElements(selector: string, root: AnyNode | AnyNode[]): Element[] {
-  return selectAll<AnyNode, Element>(selector, root);
+export function selectElements(
+  selector: string,
+  root: AnyNode | AnyNode[],
+  limit = Number.POSITIVE_INFINITY,
+): Element[] {
+  const match = _compileUnsafe<AnyNode, Element>(selector, undefined, root);
+  const nodes = prepareContext(root, { ...DomUtils, isTag }, match.shouldTestNextSiblings);
+  return find((node) => isTag(node) && match(node), nodes, true, limit) as Element[];
 }
 
 export function selectElement(selector: string, root: AnyNode | AnyNode[]): Element | null {

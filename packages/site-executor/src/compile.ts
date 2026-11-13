@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Compiling one operation plus resolved parameter values into a concrete HTTP
 // request: URL template expansion, JSON / form bodies, static headers. Values are
 // inserted structurally (URL encoding, JSON values, form fields), never spliced
@@ -9,6 +10,7 @@ import { guardUrl } from "./origin.js";
 import {
   encodeValue,
   expandTemplate,
+  parseTemplate,
   templateVariables,
   UriTemplateError,
 } from "./uri-template.js";
@@ -179,6 +181,47 @@ function appendQuery(url: URL, name: string, value: string): void {
   url.search = url.search.length > 1 ? `${url.search}&${pair}` : `?${pair}`;
 }
 
+/** Expand an endpoint without allowing values to change its modeled route. */
+export function endpointUrl(
+  template: string,
+  values: Readonly<Record<string, string>>,
+  origin: string,
+): URL {
+  const expanded = expandTemplate(template, values);
+  const url = guardUrl(expanded, origin);
+  // Check values used before the template's query/fragment. A reserved expansion
+  // may not inject route separators, and even encoded dot segments are refused.
+  for (const part of parseTemplate(template)) {
+    if (typeof part === "string") {
+      if (/[?#]/.test(part)) break;
+      continue;
+    }
+    if (["?", "&", "#"].includes(part.operator)) break;
+    for (const spec of part.vars) {
+      const value = values[spec.name];
+      if (value === undefined) continue;
+      let decoded =
+        spec.prefix === undefined ? value : Array.from(value).slice(0, spec.prefix).join("");
+      for (let i = 0; i < 32; i++) {
+        const next = decoded.replace(/%([0-9a-f]{2})/gi, (_m, h: string) =>
+          String.fromCharCode(Number.parseInt(h, 16)),
+        );
+        if (next === decoded) break;
+        if (i === 31) throw new BindingError("endpoint parameter is excessively encoded");
+        decoded = next;
+      }
+      if (decoded.split(/[\\/]/).some((segment) => segment === "." || segment === ".."))
+        throw new BindingError("endpoint parameter contains a dot segment");
+      if (part.operator === "+" && /[/?#\\]/.test(decoded))
+        throw new BindingError("endpoint parameter changes the modeled route structure");
+    }
+  }
+  const rawPath = /^(?:https?:\/\/[^/?#]+)?([^?#]*)/.exec(expanded)?.[1] || "/";
+  if (rawPath !== url.pathname)
+    throw new BindingError("URL normalization changes the modeled route");
+  return url;
+}
+
 /** Compile an operation with resolved values. Throws BindingError / OriginError. */
 export function compileOperation(
   operation: Operation,
@@ -199,16 +242,14 @@ export function compileOperation(
     present[param.name] = v;
   }
   const { request } = operation;
-  let urlText: string;
   let templateVars: string[];
   try {
-    urlText = expandTemplate(request.urlTemplate, present);
     templateVars = templateVariables(request.urlTemplate);
   } catch (e) {
     if (e instanceof UriTemplateError) throw new BindingError(`invalid URL template: ${e.message}`);
     throw e;
   }
-  const url = guardUrl(urlText, origin);
+  const url = endpointUrl(request.urlTemplate, present, origin);
   for (const param of operation.inputs) {
     if (
       param.location === "query" &&

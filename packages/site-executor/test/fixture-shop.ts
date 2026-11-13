@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // A tiny fictional shop on 127.0.0.1 (JSON API + HTML pages + cookie session +
 // CSRF) and the site model describing it. Self-contained for this package's tests.
 
@@ -127,6 +128,12 @@ export async function startShop(): Promise<Shop> {
       if (!sid) return send(res, 302, "", "text/html", { location: "/login" });
       const form = new URLSearchParams(req.body);
       if (form.get("csrf_token") !== state.csrf.get(sid)) return send(res, 403, "bad csrf");
+      const total = (state.carts.get(sid) ?? []).reduce(
+        (sum, item) => sum + (PRODUCTS.find((p) => p.sku === item.sku)?.price ?? 0) * item.qty,
+        0,
+      );
+      if (Number(form.get("amount")) !== total || form.get("currency") !== "GBP")
+        return send(res, 400, "wrong total");
       const order = {
         id: 1000 + state.orders.length,
         sid,
@@ -327,6 +334,20 @@ export function shopModel(origin: string): SiteModel {
             options: ["standard", "express"],
             default: "standard",
           },
+          {
+            name: "amount",
+            path: [`${S}amount`, `${S}value`],
+            range: `${XSD}decimal`,
+            required: true,
+            location: "form",
+          },
+          {
+            name: "currency",
+            path: [`${S}amount`, `${S}currency`],
+            range: `${XSD}string`,
+            required: true,
+            location: "form",
+          },
         ],
         request: {
           method: "POST",
@@ -453,7 +474,14 @@ export function shopModel(origin: string): SiteModel {
         steps: [
           { operation: "urn:op:search", bind: { q: "$input.name" } },
           { operation: "urn:op:add-to-cart", bind: { sku: `$step0.${S}sku`, qty: "1" } },
-          { operation: "urn:op:checkout", bind: { delivery: "$input.delivery" } },
+          {
+            operation: "urn:op:checkout",
+            bind: {
+              delivery: "$input.delivery",
+              amount: `$step0.${S}price`,
+              currency: `$step0.${S}priceCurrency`,
+            },
+          },
         ],
         effect: "payment",
         provenance,

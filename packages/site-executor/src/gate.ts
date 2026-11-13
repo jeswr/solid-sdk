@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // The approval gate seam. The executor asks the host's Gate before it sends any
 // request; the gate allows, asks the user (an ApprovalRequest) or denies. An
 // approval is bound to a digest of exactly what will run (site, target, effect,
@@ -9,14 +10,15 @@ import { createHash, randomUUID } from "node:crypto";
 import type { ActionRequest, EffectClass } from "@jeswr/site-model";
 import { SCHEMA } from "@jeswr/site-model";
 import type { Target } from "./match.js";
+import { BindingError } from "./values.js";
 
 export interface GateRequest {
   site: string;
   target: Target;
   effect: EffectClass;
-  /** Resolved input values, keyed by parameter name (flow inputs for a flow). */
+  /** Concrete operation inputs; flows also include $input.<name> and $step. */
   inputs: Record<string, string>;
-  /** Price or amount from the action request, when present (lexical decimal). */
+  /** Authorized monetary total from mapped operation inputs (lexical decimal). */
   amount?: string;
   currency?: string;
   /** Plain-English description, e.g. "Buy Trail Runner sneakers for GBP 20.00 on shop.test". */
@@ -74,24 +76,36 @@ const MONEY_CURRENCY_PATHS: readonly (readonly string[])[] = [
 
 const DECIMAL = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 
-/** Money fields from the action request (first path that yields a decimal amount / currency code). */
+function canonicalDecimal(value: string): string {
+  const [whole = "0", fraction = ""] = value.replace(/^\+/, "").split(".");
+  const negative = whole.startsWith("-");
+  const digits = (negative ? whole.slice(1) : whole).replace(/^0+/, "") || "0";
+  const tail = fraction.replace(/0+$/, "");
+  const normalized = digits + (tail ? `.${tail}` : "");
+  return negative && normalized !== "0" ? `-${normalized}` : normalized;
+}
+
+/** Planner monetary claims; reject conflicting amounts or currencies across all common paths. */
 export function moneyFields(request: ActionRequest): { amount?: string; currency?: string } {
   let amount: string | undefined;
   for (const path of MONEY_AMOUNT_PATHS) {
-    const v = request.values(path.map((p) => SCHEMA + p)).find((x) => DECIMAL.test(x.trim()));
-    if (v !== undefined) {
+    for (const v of request
+      .values(path.map((p) => SCHEMA + p))
+      .filter((x) => DECIMAL.test(x.trim()))) {
+      if (amount !== undefined && canonicalDecimal(amount) !== canonicalDecimal(v.trim()))
+        throw new BindingError("conflicting planner monetary amounts");
       amount = v.trim();
-      break;
     }
   }
   let currency: string | undefined;
   for (const path of MONEY_CURRENCY_PATHS) {
-    const v = request
+    for (const v of request
       .values(path.map((p) => SCHEMA + p))
-      .find((x) => /^[A-Za-z]{3}$/.test(x.trim()));
-    if (v !== undefined) {
-      currency = v.trim().toUpperCase();
-      break;
+      .filter((x) => /^[A-Za-z]{3}$/.test(x.trim()))) {
+      const next = v.trim().toUpperCase();
+      if (currency !== undefined && currency !== next)
+        throw new BindingError("conflicting planner currencies");
+      currency = next;
     }
   }
   return {
@@ -121,6 +135,8 @@ export function approvalDigest(fields: {
   amount?: string;
   currency?: string;
   persona?: string;
+  /** Concrete request, execution position and session fingerprint (executor supplied). */
+  binding?: unknown;
 }): string {
   return createHash("sha256").update(canonical(fields)).digest("hex");
 }

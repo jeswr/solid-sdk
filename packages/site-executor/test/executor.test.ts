@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { Parser, Store } from "n3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { InMemorySessions } from "../src/cookies.js";
@@ -117,11 +118,11 @@ describe("approval gate", () => {
     expect(shop.requests).toHaveLength(0);
     const approval = first.approval;
     expect(approval?.summary).toBe(
-      `Add to cart Trail Runner sneakers for GBP 20.00 on 127.0.0.1:${new URL(shop.url).port}`,
+      `Add to cart Trail Runner sneakers on 127.0.0.1:${new URL(shop.url).port}`,
     );
     expect(approval?.effect).toBe("reversible-write");
-    expect(approval?.amount).toBe("20.00");
-    expect(approval?.currency).toBe("GBP");
+    expect(approval?.amount).toBeUndefined();
+    expect(approval?.currency).toBeUndefined();
     expect(approval?.inputs).toEqual({ sku: "TR-20", qty: "1" });
     noSecrets(first);
 
@@ -383,7 +384,11 @@ describe("CSRF sources", () => {
         attribute: "value",
       };
     const executor = createExecutor({ model, sessions, gate: allow });
-    const r = await executor.execute(actionRequest(`[] a schema:PayAction .`));
+    const r = await executor.execute(
+      actionRequest(
+        `[] a schema:PayAction; schema:amount [ schema:value 20; schema:currency "GBP" ] .`,
+      ),
+    );
     expect(r).toMatchObject({ status: "error", errorKind: "csrf" });
     expect(shop.state.orders).toHaveLength(0);
   });
@@ -402,9 +407,13 @@ describe("flows", () => {
     expect(ask.status).toBe("needs-approval");
     expect(ask.target).toMatchObject({ kind: "flow", id: "urn:flow:buy" });
     expect(ask.approval?.effect).toBe("payment");
-    expect(ask.approval?.summary).toMatch(/^Buy Trail Runner for GBP 20\.00 on 127\.0\.0\.1:\d+$/);
+    expect(ask.approval?.summary).toMatch(/^Buy Trail Runner on 127\.0\.0\.1:\d+$/);
     gate.approve(ask.approval?.id as string);
-    const r = await executor.execute(buy(), { approvalId: ask.approval?.id as string });
+    const checkout = await executor.execute(buy(), { approvalId: ask.approval?.id as string });
+    expect(checkout.status).toBe("needs-approval");
+    expect(checkout.approval).toMatchObject({ amount: "20", currency: "GBP" });
+    gate.approve(checkout.approval?.id as string);
+    const r = await executor.execute(buy(), { approvalId: checkout.approval?.id as string });
     expect(r.status).toBe("done");
     expect(r.observations.map((o) => o.operation)).toEqual([
       "urn:op:search",
@@ -424,7 +433,9 @@ describe("flows", () => {
       "GET /orders/1000",
     ]);
     expect(shop.requests[4]?.body).toBe("");
-    expect(shop.requests[3]?.body).toBe(`delivery=express&csrf_token=${CSRF}`);
+    expect(shop.requests[3]?.body).toBe(
+      `delivery=express&amount=20&currency=GBP&csrf_token=${CSRF}`,
+    );
     const order = new Store(new Parser().parse(r.observations[2]?.turtle ?? ""));
     expect(order.getQuads(null, `${S}orderNumber`, null, null)[0]?.object.value).toBe("1000");
     noSecrets(r);
@@ -452,7 +463,7 @@ describe("flows", () => {
     });
     const r = await executor.execute(buy("Trail", "drone"));
     expect(r.status).toBe("error");
-    expect(r.error).toContain("step 2 (Place order) failed");
+    expect(r.requests).toBe(0);
     expect(r.error).toContain("allowed options");
     expect(shop.state.orders).toHaveLength(0);
   });
@@ -473,8 +484,9 @@ describe("flows", () => {
     const r = await executor.execute(
       actionRequest(`[] a schema:SearchAction ; schema:query "x" .`),
     );
-    expect(r.status).toBe("needs-approval");
-    expect(r.approval?.effect).toBe("payment");
+    expect(r.status).toBe("error");
+    expect(r.errorKind).toBe("binding");
+    expect(r.requests).toBe(0);
   });
 
   it("refuses forward step references and unknown step operations", async () => {
@@ -482,14 +494,12 @@ describe("flows", () => {
     const model = shopModel(shop.url);
     const flow = model.flows[0];
     if (flow?.steps[1]) flow.steps[1].bind.sku = `$step1.${S}sku`;
-    const r = await createExecutor({ model, sessions, gate: allow }).execute(buy());
-    expect(r).toMatchObject({ status: "error", errorKind: "binding" });
-    expect(r.error).toContain("has not run yet");
-
+    expect(() => createExecutor({ model, sessions, gate: allow })).toThrow("has not run yet");
     const model2 = shopModel(shop.url);
     if (model2.flows[0]?.steps[0]) model2.flows[0].steps[0].operation = "urn:op:missing";
-    const r2 = await createExecutor({ model: model2, sessions, gate: allow }).execute(buy());
-    expect(r2).toMatchObject({ status: "error", errorKind: "binding", requests: 0 });
+    expect(() => createExecutor({ model: model2, sessions, gate: allow })).toThrow(
+      "unknown operation",
+    );
   });
 });
 
@@ -529,7 +539,9 @@ describe("dry run", () => {
     expect(plan.requests[1]?.body).toBe(`{"sku":"$step0.${S}sku","qty":1}`);
     expect(plan.requests[1]?.session).toBe(true);
     expect(plan.requests[1]?.csrf).toEqual(["header X-CSRF-Token <- cookie csrf"]);
-    expect(plan.requests[2]?.body).toBe("delivery=standard");
+    expect(plan.requests[2]?.body).toBe(
+      `delivery=standard&amount=%24step0.https%3A%2F%2Fschema.org%2Fprice&currency=%24step0.https%3A%2F%2Fschema.org%2FpriceCurrency`,
+    );
     noSecrets(plan, true);
   });
 

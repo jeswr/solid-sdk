@@ -1,9 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
-// Lifting an HTTP response into RDF with an Extraction rule. Third-party free text
-// (FieldRule.untrusted) is never emitted as a plain literal: it becomes
-// `[ a sab:UntrustedText ; rdf:value "..." ]`, so the planner can tell site data
-// written by strangers (reviews, descriptions) apart from facts.
-
+// AUTHORED-BY Codex GPT-6
+// Bounded, structured extraction. Render only with the complete secret set;
+// keep original lexical values so redaction always precedes truncation.
 import type { Extraction, FieldRule } from "@jeswr/site-model";
 import { SAB, SCHEMA } from "@jeswr/site-model";
 import type { AnyNode, Element } from "domhandler";
@@ -12,63 +10,58 @@ import { attribute, elementText, jsonPointer, parseHtml, selectElements } from "
 import { expandIri, RDF, XSD } from "./values.js";
 
 const { namedNode, literal, blankNode } = DataFactory;
-
 export class ExtractionError extends Error {
   override name = "ExtractionError";
 }
-
-/** One extracted item, kept structured so flow steps can bind `$stepN.<property>`. */
 export interface ExtractedItem {
-  /** IRI of the item, when the extraction names one. */
   iri?: string;
   values: Map<string, string[]>;
 }
-
 interface RawValue {
   lexical: string;
-  /** Inferred datatype for JSON numbers/booleans when the rule names none. */
   inferred?: string;
 }
-
 export interface ExtractOptions {
-  /** Absolute URL the response came from (base for relative IRIs). */
   baseUrl: string;
-  /** Replace secrets in emitted text. */
   redact: (text: string) => string;
   maxItems?: number;
   maxValueLength?: number;
+  maxValuesPerField?: number;
+  maxTotalValues?: number;
+  maxQuads?: number;
+  maxOutputBytes?: number;
 }
-
 export interface ExtractOutput {
   items: ExtractedItem[];
   turtle: string;
+  /** Re-render retained structured values with newly discovered secrets. */
+  render: (redact: (text: string) => string) => Promise<string>;
 }
-
 export const PREFIXES = { schema: SCHEMA, sab: SAB, rdf: RDF, xsd: XSD } as const;
-
-function jsonRaw(value: unknown): RawValue[] {
-  if (value === null || value === undefined) return [];
-  if (Array.isArray(value)) return value.flatMap((v) => (Array.isArray(v) ? [] : jsonRaw(v)));
-  if (typeof value === "string") return [{ lexical: value }];
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) return [];
-    return [
-      {
-        lexical: String(value),
-        inferred: Number.isInteger(value) ? `${XSD}integer` : `${XSD}decimal`,
-      },
-    ];
-  }
-  if (typeof value === "boolean") return [{ lexical: String(value), inferred: `${XSD}boolean` }];
-  return [];
+function jsonRaw(value: unknown, max: number): RawValue[] {
+  const out: RawValue[] = [];
+  const add = (v: unknown): void => {
+    if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") return;
+    if (typeof v === "number" && !Number.isFinite(v)) return;
+    if (out.length >= max) throw new ExtractionError("per-field value limit exceeded");
+    out.push({
+      lexical: String(v),
+      ...(typeof v === "number"
+        ? { inferred: XSD + (Number.isInteger(v) ? "integer" : "decimal") }
+        : typeof v === "boolean"
+          ? { inferred: `${XSD}boolean` }
+          : {}),
+    });
+  };
+  if (Array.isArray(value)) {
+    for (const v of value) add(v);
+  } else add(value);
+  return out;
 }
-
-const SELF_SELECTORS = new Set(["", ".", ":scope"]);
-
-function htmlRaw(item: AnyNode, rule: FieldRule): RawValue[] {
-  const els: AnyNode[] = SELF_SELECTORS.has(rule.path.trim())
-    ? [item]
-    : selectElements(rule.path, item);
+const SELF = new Set(["", ".", ":scope"]);
+function htmlRaw(item: AnyNode, rule: FieldRule, max: number): RawValue[] {
+  const els = SELF.has(rule.path.trim()) ? [item] : selectElements(rule.path, item, max + 1);
+  if (els.length > max) throw new ExtractionError("per-field value limit exceeded");
   const out: RawValue[] = [];
   for (const el of els) {
     const v = rule.attribute ? attribute(el as Element, rule.attribute) : elementText(el);
@@ -76,30 +69,30 @@ function htmlRaw(item: AnyNode, rule: FieldRule): RawValue[] {
   }
   return out;
 }
-
 function resolveIri(value: string, base: string): string | undefined {
   try {
     const url = new URL(value, base);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+    return /^https?:$/.test(url.protocol) ? url.href : undefined;
   } catch {
     return undefined;
   }
 }
-
 function findIdRule(extraction: Extraction): FieldRule | undefined {
   if (!extraction.idField) return undefined;
   const wanted = expandIri(extraction.idField);
-  return (
+  const rule =
     extraction.fields.find((f) => expandIri(f.property) === wanted) ??
-    extraction.fields.find((f) => f.path === extraction.idField)
-  );
+    extraction.fields.find((f) => f.path === extraction.idField);
+  return rule?.untrusted ? undefined : rule;
 }
-
-/** Items of a response as (rule -> raw values) lookups. */
 function rawItems(
   extraction: Extraction,
   body: string,
-): { read: (rule: FieldRule) => RawValue[] }[] {
+  maxItems: number,
+  maxField: number,
+  account: (rule: FieldRule | undefined, count: number) => void,
+): Map<FieldRule, RawValue[]>[] {
+  let roots: unknown[];
   if (extraction.format === "json") {
     let doc: unknown;
     try {
@@ -108,30 +101,44 @@ function rawItems(
       throw new ExtractionError("response is not valid JSON");
     }
     const root = extraction.itemPath ? jsonPointer(doc, extraction.itemPath) : doc;
-    if (root === undefined) return [];
-    const items = Array.isArray(root) ? root : [root];
-    return items.map((item) => ({
-      read: (rule: FieldRule) => {
-        try {
-          return jsonRaw(jsonPointer(item, rule.path));
-        } catch {
-          return [];
-        }
-      },
-    }));
+    roots =
+      root === undefined
+        ? []
+        : Array.isArray(root)
+          ? root.slice(0, maxItems)
+          : [root].slice(0, maxItems);
+  } else {
+    const doc = parseHtml(body);
+    roots = extraction.itemPath
+      ? selectElements(extraction.itemPath, doc, maxItems)
+      : [doc].slice(0, maxItems);
   }
-  const doc = parseHtml(body);
-  const items: AnyNode[] = extraction.itemPath ? selectElements(extraction.itemPath, doc) : [doc];
-  return items.map((item) => ({ read: (rule: FieldRule) => htmlRaw(item, rule) }));
-}
-
-function writeTurtle(writer: Writer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  return roots.map((item) => {
+    account(undefined, 1);
+    return new Map(
+      extraction.fields.map((rule) => {
+        let values: RawValue[];
+        if (extraction.format === "html") values = htmlRaw(item as AnyNode, rule, maxField);
+        else {
+          let value: unknown;
+          try {
+            value = jsonPointer(item, rule.path);
+          } catch {
+            value = undefined;
+          }
+          values = jsonRaw(value, maxField);
+        }
+        account(rule, values.length);
+        return [rule, values];
+      }),
+    );
   });
 }
-
-/** Turtle for an empty graph (prefixes only), used for operations without an Extraction. */
+function writeTurtle(writer: Writer): Promise<string> {
+  return new Promise((resolve, reject) =>
+    writer.end((error, result) => (error ? reject(error) : resolve(result))),
+  );
+}
 export function emptyTurtle(): Promise<string> {
   return writeTurtle(new Writer({ prefixes: { ...PREFIXES } }));
 }
@@ -141,65 +148,109 @@ export async function extract(
   body: string,
   options: ExtractOptions,
 ): Promise<ExtractOutput> {
-  const maxItems = options.maxItems ?? 200;
-  const maxLen = options.maxValueLength ?? 4000;
-  const cap = (s: string) => (s.length > maxLen ? `${s.slice(0, maxLen)}…` : s);
-  const redact = (s: string) => options.redact(cap(s));
-  const writer = new Writer({ prefixes: { ...PREFIXES } });
-  const idRule = findIdRule(extraction);
-  const itemType = namedNode(expandIri(extraction.itemType));
-  const items: ExtractedItem[] = [];
-  const raws = rawItems(extraction, body).slice(0, maxItems);
-  raws.forEach((raw, index) => {
-    const item: ExtractedItem = { values: new Map() };
-    let subject: ReturnType<typeof namedNode> | ReturnType<typeof blankNode> = blankNode(
-      `item${index}`,
-    );
-    if (idRule) {
-      const idValue = raw.read(idRule)[0];
-      const iri = idValue ? resolveIri(idValue.lexical, options.baseUrl) : undefined;
-      if (iri !== undefined && options.redact(iri) === iri) {
-        item.iri = iri;
-        subject = namedNode(iri);
-      }
+  const maxItems = options.maxItems ?? 200,
+    maxLen = options.maxValueLength ?? 4000;
+  const maxField = options.maxValuesPerField ?? 100,
+    maxValues = options.maxTotalValues ?? 1000;
+  const maxQuads = options.maxQuads ?? 3000,
+    maxBytes = options.maxOutputBytes ?? 1024 * 1024;
+  for (const limit of [maxItems, maxLen, maxField, maxValues, maxQuads, maxBytes]) {
+    if (!Number.isSafeInteger(limit) || limit < 0)
+      throw new ExtractionError("invalid extraction limit");
+  }
+  // Account while reading fields, rather than building all field arrays first.
+  let valueCount = 0,
+    quadCount = 0;
+  const retained = rawItems(extraction, body, maxItems, maxField, (rule, count) => {
+    if (!rule) quadCount += count;
+    else {
+      valueCount += count;
+      quadCount += count * (rule.untrusted ? 3 : 1);
     }
-    writer.addQuad(subject, namedNode(`${RDF}type`), itemType);
-    for (const rule of extraction.fields) {
-      const property = expandIri(rule.property);
-      const values = raw.read(rule);
-      if (values.length === 0) continue;
-      const list = item.values.get(property) ?? [];
-      for (const v of values) {
-        list.push(v.lexical);
-        let object: Quad_Object;
-        if (rule.datatype === "iri") {
-          const iri = resolveIri(v.lexical, options.baseUrl);
-          if (iri === undefined) continue;
-          object = options.redact(iri) === iri ? namedNode(iri) : literal(redact(iri));
-        } else {
-          const datatype = rule.datatype ?? v.inferred;
-          const text = redact(v.lexical);
-          object =
-            datatype && !rule.untrusted
-              ? literal(text, namedNode(expandIri(datatype)))
-              : literal(text);
-        }
-        if (rule.untrusted && object.termType === "Literal") {
-          writer.addQuad(
-            subject,
-            namedNode(property),
-            writer.blank([
-              { predicate: namedNode(`${RDF}type`), object: namedNode(`${SAB}UntrustedText`) },
-              { predicate: namedNode(`${RDF}value`), object },
-            ]),
-          );
-        } else {
-          writer.addQuad(subject, namedNode(property), object);
-        }
-      }
-      item.values.set(property, list);
-    }
-    items.push(item);
+    if (valueCount > maxValues) throw new ExtractionError("total value limit exceeded");
+    if (quadCount > maxQuads) throw new ExtractionError("quad limit exceeded");
   });
-  return { items, turtle: await writeTurtle(writer) };
+  const idRule = findIdRule(extraction);
+  const items = retained.map((raw) => {
+    const item: ExtractedItem = { values: new Map() };
+    const id = idRule ? raw.get(idRule)?.[0]?.lexical : undefined;
+    const iri = id === undefined ? undefined : resolveIri(id, options.baseUrl);
+    if (iri && options.redact(iri) === iri) item.iri = iri;
+    for (const [rule, values] of raw) {
+      // Untrusted prose is never a fact source for a subsequent operation.
+      if (rule.untrusted || values.length === 0) continue;
+      const prop = expandIri(rule.property);
+      item.values.set(prop, [...(item.values.get(prop) ?? []), ...values.map((v) => v.lexical)]);
+    }
+    return item;
+  });
+  const render = async (redactor: (text: string) => string): Promise<string> => {
+    const redact = (value: string): string => {
+      const s = redactor(value);
+      return s.length > maxLen ? `${s.slice(0, maxLen)}…` : s;
+    };
+    // n3 writes incrementally into this bounded sink. Do not first allocate an
+    // unbounded Turtle string and only then check its length.
+    const chunks: string[] = [];
+    let bytes = 0;
+    const writer = new Writer(
+      {
+        write(chunk: string, _encoding?: unknown, callback?: () => void) {
+          bytes += Buffer.byteLength(chunk);
+          if (bytes <= maxBytes) chunks.push(chunk);
+          callback?.();
+          return bytes <= maxBytes;
+        },
+        end(callback?: () => void) {
+          callback?.();
+        },
+      },
+      { prefixes: { ...PREFIXES } },
+    );
+    const addQuad = (
+      subject: ReturnType<typeof namedNode> | ReturnType<typeof blankNode>,
+      predicate: ReturnType<typeof namedNode>,
+      object: Quad_Object,
+    ): void => {
+      writer.addQuad(subject, predicate, object);
+      if (bytes > maxBytes) throw new ExtractionError("output byte limit exceeded");
+    };
+    retained.forEach((raw, index) => {
+      const id = idRule ? raw.get(idRule)?.[0]?.lexical : undefined;
+      const iri = id === undefined ? undefined : resolveIri(id, options.baseUrl);
+      const subject = iri && redactor(iri) === iri ? namedNode(iri) : blankNode(`item${index}`);
+      addQuad(subject, namedNode(`${RDF}type`), namedNode(expandIri(extraction.itemType)));
+      for (const [rule, values] of raw) {
+        for (const v of values) {
+          let object: Quad_Object;
+          if (rule.untrusted) object = literal(redact(v.lexical));
+          else if (rule.datatype === "iri") {
+            const value = resolveIri(v.lexical, options.baseUrl);
+            if (!value) continue;
+            object =
+              redactor(value) === value && value.length <= maxLen
+                ? namedNode(value)
+                : literal(redact(value));
+          } else
+            object =
+              rule.datatype || v.inferred
+                ? literal(
+                    redact(v.lexical),
+                    namedNode(expandIri(rule.datatype ?? v.inferred ?? "")),
+                  )
+                : literal(redact(v.lexical));
+          if (rule.untrusted) {
+            const node = blankNode();
+            addQuad(subject, namedNode(expandIri(rule.property)), node);
+            addQuad(node, namedNode(`${RDF}type`), namedNode(`${SAB}UntrustedText`));
+            addQuad(node, namedNode(`${RDF}value`), object);
+          } else addQuad(subject, namedNode(expandIri(rule.property)), object);
+        }
+      }
+    });
+    await writeTurtle(writer);
+    if (bytes > maxBytes) throw new ExtractionError("output byte limit exceeded");
+    return chunks.join("");
+  };
+  return { items, turtle: await render(options.redact), render };
 }

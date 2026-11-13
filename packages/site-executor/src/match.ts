@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Matching an ActionRequest to a flow (preferred) or an operation of the site model.
 
 import type {
@@ -9,7 +10,7 @@ import type {
   Parameter,
   SiteModel,
 } from "@jeswr/site-model";
-import { normaliseIri, resolveParameter } from "./values.js";
+import { normaliseIri, resolveParameter, validateValue } from "./values.js";
 
 export interface Target {
   kind: "flow" | "operation";
@@ -53,6 +54,7 @@ export function resolveInputs(
       if (param.required) return undefined;
       continue;
     }
+    validateValue(param, value);
     inputs[param.name] = value;
     if (fromRequest) matched++;
   }
@@ -143,11 +145,12 @@ export function effectiveEffect(
   model: SiteModel,
   flow: Flow | undefined,
   operation: Operation | undefined,
+  operations: readonly Operation[] = model.operations,
 ): EffectClass {
   if (operation) return normaliseEffect(operation.effect);
   let effect = normaliseEffect((flow as Flow).effect);
   for (const step of (flow as Flow).steps) {
-    const op = model.operations.find((o) => o.id === step.operation);
+    const op = operations.find((o) => o.id === step.operation);
     effect = maxEffect(effect, op ? op.effect : "payment");
   }
   return effect;
