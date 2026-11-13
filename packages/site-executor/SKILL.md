@@ -4,6 +4,7 @@ description: Use when working on @jeswr/site-executor, the semantic agent browse
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/site-executor
 
@@ -86,8 +87,10 @@ Security review hardening:
   changes caused by URL normalization. CSRF tokens cannot overwrite approved inputs.
 - Untrusted marking overrides datatype, including `iri`, and untrusted fields cannot supply item
   subjects or flow facts.
-- Register every nonempty cookie/header/token. Normalize mixed/nested percent encoding for
-  redaction, redact before truncating, and re-render every observation with the final secret set
+- Register source and final transmitted cookie/header/token values after decoration, using the
+  compiled wire inventory and final Fetch headers rather than duplicating normalization rules.
+  Redact forms of at least eight characters, including trimmed, mixed/nested percent, form `+`,
+  JSON and HTML entity encodings; keep empty and shorter forms. Redact before truncating, and re-render every observation with the final secret set
   on done, error, denial and approval returns. Retain structured values, never re-redact Turtle.
 - Bound extraction before materializing items: 200 items, 100 values per field, 1000 total values,
   3000 quads, 1 MiB output, 4000 emitted characters per value. Value/quad/byte overflow fails closed.

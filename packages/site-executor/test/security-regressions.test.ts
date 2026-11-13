@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { Flow, Operation, Parameter, SiteModel } from "@jeswr/site-model";
 import { Parser, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -293,20 +294,20 @@ describe("security review regressions", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("F7 redacts short, mixed percent-encoded and boundary-spanning secrets", async () => {
+  it("F7 redacts minimum-length, mixed percent-encoded and boundary-spanning secrets", async () => {
     const vault = sessions();
     const secret = "cookie-SECRET-long-token";
     vault.set(O, undefined, {
       cookies: [
         { name: "sid", value: secret, domain: "shop.test", path: "/" },
-        { name: "small", value: "xyz", domain: "shop.test", path: "/" },
+        { name: "small", value: "xyz12345", domain: "shop.test", path: "/" },
       ],
     });
     const fetch: typeof globalThis.fetch = async () =>
       json({
         url: "/%63ookie-SECRET-long-token",
         text: "a".repeat(3995) + secret,
-        short: "xyz",
+        short: "xyz12345",
         nested: "%2563ookie-SECRET-long-token",
       });
     const ex = createExecutor({
@@ -331,7 +332,7 @@ describe("security review regressions", () => {
     const turtle = r.observations[0]?.turtle ?? "";
     expect(turtle).not.toContain("cookie");
     expect(decodeURIComponent(decodeURIComponent(turtle))).not.toContain(secret);
-    expect(turtle).not.toContain("xyz");
+    expect(turtle).not.toContain("xyz12345");
     expect(turtle).not.toContain("cooki");
     expect(turtle).toContain("[redacted]");
   });

@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/site-executor
 
@@ -184,8 +185,13 @@ excluded. The remaining observations retain their original step order and untrus
   and retains an immutable model snapshot.
 - **No secrets out.** Results, errors and extracted RDF never carry cookies, session headers or
   CSRF tokens. Errors name only the origin and path, never the query string or the response
-  body. Every nonempty secret is registered. Raw, mixed percent-encoded and nested encoded echoes
-  are redacted before truncation. Every complete summary display value, including unmapped object
+  body. Both source secrets and their effective transmitted values are registered after request
+  decoration, using the compiled wire inventory and final Fetch headers. This includes multipart
+  CRLF normalization, USVString conversion, header trimming and percent-encoded path slots.
+  Redaction matches only forms of at least **8 characters**; empty and shorter forms stay unchanged
+  to avoid erasing ordinary text. Raw, trimmed, mixed/nested percent-encoded (including form `+`
+  spaces), JSON-escaped and HTML-entity-escaped echoes are redacted before truncation.
+  Every complete summary display value, including unmapped object
   names and model labels, is redacted before whitespace normalization, formatting or truncation. Every return path renders all observations against the final
   secret set, including secrets discovered by later steps.
 - **Money.** A site that displays one price and charges another cannot be stopped by any client;
@@ -342,3 +348,9 @@ headers through all three routes, static/direct-buy/header-parameter Accept and 
 derived extraction Accept, actual serialized form inventories, multipart newline mismatches,
 and path tokens on payment, total, both, and direct buys with collision refusals. Shared validation
 also tests the one unbound whole-segment CSRF slot and every other undeclared-variable refusal.
+
+Review r8 regressions are in `test/review-r8.test.ts`: source and serialized token echoes across
+header, form/multipart, JSON, query and path targets; trusted and untrusted RDF; approval summaries,
+results and errors; observations retained across approval pauses; vault headers; common echo
+encodings and the eight-character redaction threshold. Transports inspect serialized `Request`
+objects to verify the effective token values.
