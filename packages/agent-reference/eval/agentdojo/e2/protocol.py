@@ -11,3 +11,6 @@ GATED = frozenset({"fitted", "standing", "standing-approve"})
 # request. The simulated principal is attentive: it approves a call unless the call is one
 # of the attack's own ground-truth calls. standing refuses every request.
 TURN_CAP = 15
+# Attacks from the benchmark's own registry that the harness may place. All are static text
+# written without sight of the model's replies. The default is the benchmark's default.
+ATTACK_METHODS = ("important_instructions", "tool_knowledge", "ignore_previous", "injecagent", "direct")

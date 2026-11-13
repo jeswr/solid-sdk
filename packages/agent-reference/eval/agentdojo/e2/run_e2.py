@@ -19,7 +19,7 @@ import time
 
 from .common import AUTHOR, E1_ROOT, ROOT, atomic_json, canonical, digest, file_hash, verify_lock
 from .sample import load_suites, verify_sample
-from .protocol import CONDITIONS, GATED, TURN_CAP
+from .protocol import ATTACK_METHODS, CONDITIONS, GATED, TURN_CAP
 
 
 def row_key(row):
@@ -83,7 +83,7 @@ def base_row(task, condition, config):
     return {"authored_by": AUTHOR, "version": "v1", "agentdojo_version": "0.1.35", **task,
             "condition": condition, "model": config["model"], "effort": config["effort"],
             "run_fingerprint": config["fingerprint"], "sample_sha256": config["sample_sha256"],
-            "attack_method": "important_instructions", "turn_cap": TURN_CAP,
+            "attack_method": config["attack"], "turn_cap": TURN_CAP,
             "utility": {"success": None, "error": "not-run"},
             "security": {"success": None, "error": "not-run"} if task["attack"] else None,
             "calls": [], "asks": 0, "asks_approved": 0, "errors": [], "model_turns": 0,
@@ -118,7 +118,7 @@ def worker(task, condition, config):
         mandate = policy_data if condition in GATED else {"tools": policy_data["tools"]}
         row["mandate_sha256"] = file_hash(mandate_path) if condition in GATED else None
         row["content_header"] = CONTENT_HEADER if condition != "none" else None
-        injections = injections_for(suite, user, attack, config["model"]) if attack else {}
+        injections = injections_for(suite, user, attack, config["model"], config["attack"]) if attack else {}
         row["injection_vectors"] = sorted(injections)
         llm = CodexLLM(**{key: config[key] for key in ("model", "effort", "command", "timeout", "process_retries", "backoff", "cache_dir")})
         # Bridge journals must be disjoint across workers. Keep this task's durable
@@ -158,6 +158,8 @@ def main(argv=None):
     parser.add_argument("--model", default=os.environ.get("E2_MODEL", "gpt-6.1-sol"))
     parser.add_argument("--effort", default=os.environ.get("E2_EFFORT", "low"))
     parser.add_argument("--conditions", default="none,fitted,standing")
+    parser.add_argument("--attack", default="important_instructions", choices=ATTACK_METHODS,
+                        help="Attack from the benchmark's registry to place in attacked rows.")
     parser.add_argument("--pilot", action="store_true")
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--only-suite", choices=["banking", "slack", "travel", "workspace"])
@@ -189,7 +191,7 @@ def main(argv=None):
                      "process_retries": args.process_retries, "backoff": args.backoff,
                      "command_sha256": digest(args.command), "sample_sha256": lock["sha256"],
                      "implementation_sha256": implementation_hash(), "turn_cap": TURN_CAP,
-                     "agentdojo_version": "0.1.35", "attack": "important_instructions"}
+                     "agentdojo_version": "0.1.35", "attack": args.attack}
     config = {**configuration, "command": args.command, "fingerprint": digest(configuration),
               "sample_lock": str(args.sample_lock.resolve()), "cache_dir": str(args.cache_dir.resolve())}
     label = re.sub(r"[^A-Za-z0-9_.-]", "_", f"{args.model}-{args.effort}")

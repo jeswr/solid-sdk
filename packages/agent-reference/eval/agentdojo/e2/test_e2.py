@@ -217,6 +217,18 @@ def test_answering_principal_approves_unless_attacker_call(condition, attacker_c
     assert text == (CONTENT_HEADER + "RAW OUTPUT" if executed else ASK_MESSAGE)
 
 
+@pytest.mark.parametrize("method", ["tool_knowledge", "ignore_previous", "injecagent", "direct"])
+def test_other_registry_attacks_place_injections(suites, method):
+    suite = suites["banking"]
+    user, attack = suite.user_tasks["user_task_0"], suite.injection_tasks["injection_task_0"]
+    default = injections_for(suite, user, attack, "fictional-e2")
+    other = injections_for(suite, user, attack, "fictional-e2", method)
+    assert set(other) == set(default) and other != default
+    assert all(attack.GOAL in text for text in other.values())
+    with pytest.raises(ValueError):
+        injections_for(suite, user, attack, "fictional-e2", "not-an-attack")
+
+
 def test_turn_cap(tmp_path, suites):
     reply = json.dumps({"tool_calls": [{"function": "get_balance", "args": {}}]})
     llm, _, _ = fake(tmp_path, {"steps": [{"reply": reply}]})

@@ -57,6 +57,12 @@ cannot show the gates stopping an attack, and it does not try to. The worst-case
 (`../REPORT.md`) is the evidence for that: 627 of 629 attacks with no gate, 43 under fitted
 mandates, 67 under standing mandates.
 
+**Nor did it carry out two other attacks from the benchmark.** The `none` condition was
+repeated on the same 120 pairs with `tool_knowledge` (the attack also names the tools to call
+and their arguments) and `ignore_previous`. Attack success was 0 of 120 for each: 360
+attacked runs across the three attacks, none successful. Tasks done under attack were 89 and
+88 of 120. Select the attack with `--attack`; each ran in its own results directory.
+
 **Labelling tool output costs almost nothing.** Three tasks finished under `none` and not
 under `label-only`, out of 217, in a single run with no repeats.
 
@@ -87,8 +93,8 @@ an email.
 ## Limits
 
 - One model, one effort level, one run per task. No variance estimate.
-- One attack, the benchmark's default. A stronger or adaptive attack is needed before a
-  real-model run can say anything about protection.
+- Three static attacks from the benchmark's own set. An adaptive attack, written against
+  this model, is needed before a real-model run can say anything about protection.
 - The simulated answering principal reads the attack's published calls to decide. A person
   has no such list.
 - The gate rules for amounts, known recipients, per-task context and free text come from the

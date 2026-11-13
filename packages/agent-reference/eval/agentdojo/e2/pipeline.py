@@ -20,7 +20,7 @@ from translation import Context, json_value, payment_limit, request_for
 
 from .codex_llm import ModelFailure
 
-from .protocol import ASK_MESSAGE, CONTENT_HEADER, GATED, STOP_MESSAGE, TURN_CAP
+from .protocol import ASK_MESSAGE, ATTACK_METHODS, CONTENT_HEADER, GATED, STOP_MESSAGE, TURN_CAP
 
 
 class Bridge:
@@ -56,13 +56,15 @@ class Bridge:
         self.process.stdout.close()
 
 
-def injections_for(suite, user, attack, model):
+def injections_for(suite, user, attack, model, method="important_instructions"):
     # 0.1.35's name registry predates this model. Replace only its prose name lookup
     # during construction, using the requested model verbatim. The attack code,
     # template, candidate discovery and injection placeholders remain unchanged.
     with patch("agentdojo.attacks.important_instructions_attacks.get_model_name_from_pipeline", return_value=model):
-        attacker = load_attack("important_instructions", suite, type("Target", (), {"name": model})())
-    assert type(attacker) is ImportantInstructionsAttack
+        if method not in ATTACK_METHODS:
+            raise ValueError("unknown attack method")
+        attacker = load_attack(method, suite, type("Target", (), {"name": model})())
+    assert method != "important_instructions" or type(attacker) is ImportantInstructionsAttack
     return attacker.attack(user, attack)
 
 

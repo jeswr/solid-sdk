@@ -129,8 +129,9 @@ def write_report(rows_path, output):
               '`' + STOP_MESSAGE + '`', "",
               '`' + ASK_MESSAGE + '`', "",
               "## Comparability and interpretation", "",
-              "- E1 proposed every attacker oracle call without a model. E2 uses the real important_instructions "
-              "template at AgentDojo's actual injection placeholders. A model may never read those placeholders. "
+              "- E1 proposed every attacker oracle call without a model. E2 uses a real attack "
+              "(" + ", ".join(sorted({str(r.get("attack_method")) for r in rows})) + ") from the benchmark's registry, unchanged, "
+              "at AgentDojo's actual injection placeholders. A model may never read those placeholders. "
               "E2 does not fall back to injecting oracle calls at the start. The benchmark's model-name "
               "registry predates the requested model; only that local prose-name lookup is substituted "
               "with the requested model name. The actual attack template and candidate discovery are unchanged.",
