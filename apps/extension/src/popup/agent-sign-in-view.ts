@@ -47,12 +47,15 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
   // This synchronous snapshot is updated only by worker pushes; no await can precede
   // the gesture-bound request. An armed lease must match both the latest push and view.
   let validated: CaptureView | undefined;
+  let expiryTimer: ReturnType<typeof setTimeout> | undefined;
   const armed = () =>
     !closed &&
     !view.warning &&
     view.phase === 'permission' &&
     view.lease !== undefined &&
     validated?.phase === 'permission' &&
+    view.expiresAt !== undefined &&
+    Date.now() < view.expiresAt &&
     validated.armedLease === view.lease &&
     validated.lease === view.lease;
   const render = (next: CaptureView) => {
@@ -62,6 +65,19 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
       next = { ...view, warning: next.warning, cleanupFailed: next.cleanupFailed };
     }
     view = next;
+    clearTimeout(expiryTimer);
+    if (view.phase === 'permission' && view.expiresAt !== undefined) {
+      expiryTimer = setTimeout(
+        () => {
+          render({
+            ...view,
+            phase: 'failed',
+            message: 'Sharing expired. Review sign-in sharing again.',
+          });
+        },
+        Math.max(0, view.expiresAt - Date.now()),
+      );
+    }
     status.textContent = view.message;
     warning.hidden = !view.warning;
     warningMessage.textContent = view.cleanupFailed
@@ -98,6 +114,7 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
   port.onDisconnect.addListener(() => {
     void browser.runtime.lastError;
     closed = true;
+    clearTimeout(expiryTimer);
     if (!terminalCapturePhase(view.phase))
       render({
         ...view,

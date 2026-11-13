@@ -174,6 +174,7 @@ export function captureHarness() {
       allow: async () => {
         const lease = states.at(-1)!.lease!;
         client.postMessage({ type: 'requesting', lease });
+        if (states.at(-1)?.phase !== 'permission' || states.at(-1)?.armedLease !== lease) return;
         try {
           client.postMessage({
             type: 'permission',

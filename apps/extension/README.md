@@ -414,7 +414,10 @@ lease invalid, even if the original tab or access is restored. Every pending ste
 latch when it resumes, and dispatch checks it immediately before sending. Nothing is sent to the page.
 
 Cookie access lasts only for this exclusive review/confirmation lease, which expires after
-two minutes. Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
+two minutes. The popup checks the worker-issued deadline locally, even if a disarm push is
+delayed. An expired click is refused. Only one permission prompt may be outstanding: another
+popup's click shows **Finishing the previous sharing** and cannot replace or cancel that prompt.
+Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
 cleanup: remove only `cookies`, verify absence, then release the lease. Host grants never
 change. Cancel marks the lease cancelled immediately; permission removal, absence verification
 and marker writes retain the lease and mutex until they finish. Other
@@ -426,9 +429,13 @@ prompt is unsettled, the worker takes over in an orphaned cleanup state: it imme
 Every cookie grant arriving during this window is removed immediately, bypassing the mutex;
 these idempotent removals cannot read cookies, send native messages or request host access.
 A second popup shows **Finishing the previous sharing**, with the warning and enabled
-**Remove cookie access** retry button if removal fails. After the window, all pending removals
-must finish and absence must be verified before the lease ends; a failed verification keeps
-the fence until cleanup succeeds. Settlement reports after abandonment are ignored. Grants
+**Remove cookie access** retry button if removal fails. Cleanup is tracked in one collection
+keyed by lease ID. After the window, all pending removals must finish and absence must be
+verified before admission. Every cleanup or fence completion drains all expired fences.
+The final removal-and-verification attempt is bounded to one attempt per expiry; failure shows
+the removal warning and enabled retry button instead of **Finishing the previous sharing**.
+The failed entry blocks admission until cleanup succeeds. New captures require an empty
+cleanup collection and verified absence. Settlement reports after abandonment are ignored. Grants
 arriving after the window are removed by the global startup/onAdded rule.
 Cleanup results belong to each lease: a failed earlier removal never skips a newer lease's
 cleanup. Cancellation can interrupt non-mutating checks; mutating work completes before the
@@ -436,7 +443,7 @@ lease is released, including any concurrent orphaned revocations.
 Only a small display marker (`agentCaptureCleanup: true`) is stored in `chrome.storage.local`
 while removal is in progress or has failed; it is cleared after verified absence. No ownership
 metadata or session-storage fallback is needed. The marker contains no cookie values and never
-controls whether cleanup runs. A delayed armed click can still show Chrome's permission prompt
+controls whether cleanup runs. An already dispatched Chrome prompt can still grant access
 after its lease expires; its grant is removed because there is no current acquiring lease.
 A replacement worker removes any surviving grant at start, even if session storage was cleared
 or no marker exists.

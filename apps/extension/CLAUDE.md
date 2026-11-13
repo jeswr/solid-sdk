@@ -111,8 +111,15 @@ state never reads cookies, sends native messages or requests host access. A seco
 access" retry button on removal failure. At the end of the window, join every pending
 revocation and verify absence before releasing the fence; failure retains the fence until
 cleanup succeeds. Ignore abandoned/late settlement reports. The stateless onAdded/startup
-rule removes grants arriving later. A delayed armed click after expiry may still request permission in
-Chrome, but its grant is removed without a current acquiring lease. A replacement worker also
+rule removes grants arriving later. The popup checks the worker-issued lease deadline locally,
+so expired clicks are refused even with delayed worker pushes. Prompt ingress refuses another
+popup's click with "Finishing the previous sharing" without replacing or cancelling the pending
+prompt. All outstanding cleanups live in one collection keyed by lease id; any cleanup or fence
+completion drains all expired fences after joining revocations and verifying absence. A new
+capture requires the collection to be empty and cookies verified absent. Each expiry gets one
+final removal-and-verification attempt; failure shows the warning with an enabled "Remove cookie
+access" button instead of "Finishing the previous sharing" until a retry succeeds. An already
+dispatched Chrome prompt's late grant is removed without a current acquiring lease. A replacement worker also
 removes it at start, even with cleared session storage and no marker.
 Required `<all_urls>` stays in place and host grants never change; temporary cookie access
 is extension-wide, so exact-origin filtering and explicit confirmation still apply.

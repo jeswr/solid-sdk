@@ -547,7 +547,7 @@ describe('worker capture lease', () => {
     expect(h.browser.action.setBadgeText).toHaveBeenCalledWith({ text: '!' });
     const b = h.popup();
     b.load();
-    await phase(b, 'failed');
+    await phase(b, 'busy');
     expect(b.view.warning).toBe(true);
     b.send({ type: 'removeCookieAccess' });
     await phase(b, 'ready');
@@ -652,7 +652,7 @@ describe('worker capture lease', () => {
   });
 });
 
-it('quarantines a stale armed click after its lease ended while another lease is confirming', async () => {
+it('refuses a stale armed click without cancelling another lease that is confirming', async () => {
   const h = captureHarness();
   const a = await reviewing(h);
   const oldLease = a.view.lease!;
@@ -662,16 +662,13 @@ it('quarantines a stale armed click after its lease ended while another lease is
   h.native.mockClear();
   // The worker revoked A, but its view's terminal update was still in transit.
   a.send({ type: 'requesting', lease: oldLease });
-  h.state.cookies = true;
-  h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
   a.send({ type: 'permission', lease: oldLease, granted: true });
-  await phase(b, 'cancelled');
-  await vi.waitFor(() => expect(h.state.cookies).toBe(false));
+  expect(a.view.message).toBe('Finishing the previous sharing.');
+  expect(b.view.phase).toBe('confirming');
+  expect(h.state.cookies).toBe(true);
   b.confirm();
-  expect(h.native).not.toHaveBeenCalled();
-  const c = await confirming(h);
-  c.confirm();
-  await phase(c, 'shared');
+  await phase(b, 'shared');
+  expect(types(h).filter((type) => type !== 'list')).toEqual(['capture']);
   restored(h);
 });
 it('consumes a permission result once and cannot repeat beginLogin', async () => {

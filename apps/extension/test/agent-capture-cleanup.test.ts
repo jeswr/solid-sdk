@@ -82,7 +82,7 @@ it.each([
   verified(h);
 });
 
-it('settles a delayed armed request arriving during cleanup before releasing its lease', async () => {
+it('refuses a delayed armed request arriving during cleanup without waiting for its report', async () => {
   vi.useFakeTimers();
   const h = captureHarness();
   const b = h.popup();
@@ -103,9 +103,8 @@ it('settles a delayed armed request arriving during cleanup before releasing its
   clear.resolve();
   b.load();
   await vi.advanceTimersByTimeAsync(0);
-  expect(b.view.phase).toBe('busy');
-  expect(b.view.message).toBe('Finishing the previous sharing.');
-  expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+  expect(h.browser.permissions.request).not.toHaveBeenCalled();
+  await phase(b, 'ready');
   prompt.resolve(true);
   await allowed;
   await phase(b, 'ready');
