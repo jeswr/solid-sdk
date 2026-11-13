@@ -147,6 +147,11 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .nav a:hover { background: var(--surface-2); text-decoration: none; color: var(--ink); }
 .nav a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
 .top-actions { display: flex; align-items: center; gap: 8px; }
+/* Ten views and the tour button fit one row on a 1280px screen. */
+@media (min-width: 1081px) and (max-width: 1400px) {
+  .topbar-inner { gap: 12px; }
+  .nav a { padding-inline: 8px; }
+}
 .btn {
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px;
   border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-weight: 600; white-space: nowrap;

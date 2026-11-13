@@ -1,7 +1,84 @@
 {
-  "updated": "2026-11-13T15:45Z",
-  "note": "Everything to build, in the order it will be done. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
+  "updated": "2026-11-13T18:20Z",
+  "note": "Everything to build, in the order it will be done. On 13 Nov 2026 Jesse reviewed the demo and put three things first: RDF throughout, payment as a contract, and real runs behind every selector option; and paused benchmarking. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
   "phases": [
+    {
+      "id": "P9",
+      "title": "RDF throughout, and every option a real run",
+      "goal": "From Jesse's review on 13 Nov 2026, now first in the order: meaning explicit at every gate, payment treated as a contract, and every option on every selector backed by a real run you can switch to on the mortgage journey. Of 38 alternative options, 13 have a real run somewhere in the use cases and 25 have none. On the mortgage journey none can be switched to as a real run today: the email trace shown there is a development fixture and is labelled as one. Done means: the journey runs under the baseline with that one option changed, between separately keyed agents, and one failure only that option can have also runs.",
+      "items": [
+        {
+          "id": "P9.1",
+          "title": "RDF through the pipeline: model, wire and gates",
+          "detail": "One ontology with SHACL shapes and a JSON-LD context. Messages travel as JSON-LD under pinned contexts, every gate reads RDF through typed wrappers, statements and mandates become W3C Verifiable Credentials, terms stay ODRL. The baseline keeps a plain signature over the document; the Data Integrity option signs the canonical graph. Being built since 18:04 UTC on 13 Nov.",
+          "status": "doing",
+          "owner": "Fable (design), Codex (build)"
+        },
+        {
+          "id": "P9.2",
+          "title": "RDF in the stores, the record and the explorer",
+          "detail": "Policies, memory, trust store and record held as RDF. Profiles and scenario files as JSON-LD. The inspector shows JSON-LD with the context folded away, and Turtle beside it.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.3",
+          "title": "Payment as a contract, with a selector at the point of payment",
+          "detail": "A payment settles an agreement: the agent may pay only what a signed, accepted offer says is due, to the party it names, once. A paid valuation step is added to the mortgage journey. Options at the point of payment: a plain RDF description, x402, the Machine Payments Protocol, AP2 mandates and the Agentic Commerce Protocol, each lifted to the same RDF terms so the same checks run. Four failures: the amount differs, the payee differs, there is no offer behind it, and asked to look but not to buy. Designed (specification 18 updated); the build follows the RDF build.",
+          "status": "doing",
+          "owner": "Fable (design), Codex (build)"
+        },
+        {
+          "id": "P9.4",
+          "title": "Transport options",
+          "detail": "A2A 1.0, MCP (revision 2026-07-28) and email as real runs of the mortgage journey, with a test that changing the transport changes no verdict. Each has a failure of its own, for example a readable copy of an email that says something different from the signed part. Designed; built with the configuration matrix right after the RDF build. Solid inbox comes with the Solid options.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.5",
+          "title": "Solid options",
+          "detail": "One in-process storage that speaks the Solid Protocol, then: messages through an inbox, data by reference with a grant no wider than the terms, terms translated into access rules, the record mirrored to the person's own storage, and WebID. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.6",
+          "title": "Identity and authority options",
+          "detail": "Decentralized identifier, email address as an endpoint, no identifier, mandate as a credential with a status list, grant from an authorization server, agent registry. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.7",
+          "title": "Authenticity and trust options",
+          "detail": "Data Integrity proof (built with P9.1), served from the source's domain, selective disclosure, own list only, federation membership, trusted index with receipts, reputation. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.8",
+          "title": "Meaning and reliance options",
+          "detail": "Registry lookup, negotiated meaning, plain language then upgrade, stated confidence, two sources must agree, certified quality. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.9",
+          "title": "Usage control, commitments and accountability options",
+          "detail": "A model that may tighten the rules, human approval, agreement credential, claim to a regulator, fault passed to the vendor, public reputation, reputation score. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.10",
+          "title": "Proof of a query, and joint computation",
+          "detail": "Zero-knowledge proofs use Noir circuits, not a virtual machine (Jesse, 13 Nov). The seam is built and tested with stand-in verifiers. The engine project's joint-computation package has arrived and is being wired in for six paths now. Six proof paths wait on its Noir package; three more wait on new circuits for absence and totals (targets: circuits 23 Nov, package 4 Dec). The queries it asked for were sent on 13 Nov.",
+          "status": "doing",
+          "owner": "Engine project, Codex"
+        }
+      ]
+    },
     {
       "id": "P1",
       "title": "The reference agent and this explorer",
@@ -24,7 +101,7 @@
         {
           "id": "P1.3",
           "title": "Explorer site",
-          "detail": "Step-through and play modes, a selector per layer, message inspector, guided tour, use cases, evaluation. Public copy live; the address answerableagents.org follows once its DNS is set.",
+          "detail": "Step-through and play modes, a selector per layer, message inspector, guided tour, use cases, evaluation. Public copy live at answerableagents.org.",
           "status": "done",
           "owner": "Fable (design), Opus (plumbing)"
         },
@@ -45,7 +122,7 @@
         {
           "id": "P1.6",
           "title": "Swap the transport",
-          "detail": "Direct transport and plain email both run through the same gates. MCP and A2A transports are not built yet.",
+          "detail": "Direct transport and plain email both run through the same gates. The other transports are in the first section of this roadmap.",
           "status": "doing",
           "owner": "Opus (to Fable's brief)"
         },
@@ -213,7 +290,7 @@
         {
           "id": "P6.5",
           "title": "Evaluation without a model",
-          "detail": "Worst-case core, one-change and injected-fault runs: being built now.",
+          "detail": "Worst-case core, one-change and injected-fault runs: being built now. Paused on 13 Nov: benchmarking waits until the development above is done.",
           "status": "doing",
           "owner": "Fable (design and review), Codex (build)"
         },
