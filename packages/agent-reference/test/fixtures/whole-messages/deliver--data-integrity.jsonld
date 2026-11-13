@@ -1,0 +1,323 @@
+{
+  "@context": "https://w3id.org/jeswr/awp/context/v1",
+  "id": "urn:awp:engine-mortgage-core-main:north-agent:0005",
+  "type": ["Message", "Deliver"],
+  "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+  "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+  "kind": "deliver",
+  "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
+  "from": {
+    "id": "urn:awp:n:hOWsS9gIfnIFrsFafggm-vLe-zcYcCdRVRcCx6eR35Y"
+  },
+  "to": {
+    "id": "urn:awp:n:EUASokJ3L2LJrXsnmOzg8kjsN5NEnC5Z2SFGAxfLtvY"
+  },
+  "createdAt": "2026-11-13T09:02:00.000Z",
+  "expiresAt": "2026-11-13T15:02:00.000Z",
+  "body": {
+    "id": "urn:awp:n:E8pKcdyfeQcFUJcnee0C92bvWPIU3LFDFU9HqFh7_k8"
+  },
+  "evidence": {
+    "id": "urn:awp:n:9csBPHuqmd2H0lUIURMmqDBW9NPGg6FdIR2nzF-nhms"
+  },
+  "@included": [
+    {
+      "id": "urn:awp:n:hOWsS9gIfnIFrsFafggm-vLe-zcYcCdRVRcCx6eR35Y",
+      "type": "ParticipantRef",
+      "actor": "https://northbank.example/agents/intake#agent",
+      "onBehalfOf": "https://northbank.example/#org",
+      "operator": "https://northbank.example/#org"
+    },
+    {
+      "id": "urn:awp:n:EUASokJ3L2LJrXsnmOzg8kjsN5NEnC5Z2SFGAxfLtvY",
+      "type": "AudienceRef",
+      "actor": "https://agents.hostco.example/sam#agent",
+      "party": "https://sam.example/#me"
+    },
+    {
+      "id": "urn:awp:n:E8pKcdyfeQcFUJcnee0C92bvWPIU3LFDFU9HqFh7_k8",
+      "type": "DeliverBody",
+      "basis": {
+        "id": "urn:awp:n:ZykkA-pnjk1QOd_Y73w6eSlhA3-ZdAgQBjNDSXOa6GY"
+      },
+      "operation": {
+        "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
+      },
+      "output": {
+        "id": "urn:awp:n:BARSJeVer9Etpo09A2Ox0zKp6wwgeikJn8dN_l3bNhI"
+      },
+      "ref": "urn:awp:engine-mortgage-core-main:sam-agent:0006"
+    },
+    {
+      "id": "urn:awp:n:9csBPHuqmd2H0lUIURMmqDBW9NPGg6FdIR2nzF-nhms",
+      "type": "EvidenceItem",
+      "embeddedCredential": {
+        "id": "urn:awp:n:FYkwwBRhRw3NYRLBNLF9uFupQLe8TrjSQG3qAKWmq-k"
+      },
+      "format": "jws-compact",
+      "position": "0",
+      "role": "credential"
+    },
+    {
+      "id": "urn:awp:n:ZykkA-pnjk1QOd_Y73w6eSlhA3-ZdAgQBjNDSXOa6GY",
+      "type": "RequestBasis",
+      "agreement": "urn:awp:agreement:de901e3ece07605afb2d4c18c7f9404e",
+      "basisKind": "agreement"
+    },
+    {
+      "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+      "type": "OperationRef",
+      "version": "0.1"
+    },
+    {
+      "id": "urn:awp:n:BARSJeVer9Etpo09A2Ox0zKp6wwgeikJn8dN_l3bNhI",
+      "type": "NamedValueCollection",
+      "itemListElement": [
+        {
+          "id": "urn:awp:n:jmfA-W3BizghhD9DF8PTrOAhT2CWXVdsmTOQpXwyd8M"
+        }
+      ]
+    },
+    {
+      "id": "urn:awp:n:jmfA-W3BizghhD9DF8PTrOAhT2CWXVdsmTOQpXwyd8M",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "urn:awp:engine-mortgage-core-main:north-agent:0004"
+      },
+      "name": "statement",
+      "position": "0",
+      "propertyID": "urn:awp:legacy-field:statement"
+    },
+    {
+      "id": "urn:awp:n:FYkwwBRhRw3NYRLBNLF9uFupQLe8TrjSQG3qAKWmq-k",
+      "type": "VerifiableCredential",
+      "credentialSubject": "urn:awp:n:ObCkyaSmyeYET-cQH_d6fh1YFUIobSFX3ljhsoYF0Bw",
+      "issuedAt": "2026-11-13T09:02:00.000Z",
+      "issuer": "https://northbank.example/#org",
+      "proofGraph": "urn:awp:n:SjsAp-PPf59H9suMA8i0RNy02AHKrxaj-Z3Au8gtfEk",
+      "validUntil": "2027-02-13T09:02:00.000Z"
+    },
+    {
+      "id": "urn:awp:n:ObCkyaSmyeYET-cQH_d6fh1YFUIobSFX3ljhsoYF0Bw",
+      "type": "LegacyCredentialSubject",
+      "statementPayload": {
+        "id": "urn:awp:n:8KkeZIFETQg8PyOK0DxupvPNmFYCvtjC0bP6_SCOzzc"
+      }
+    },
+    {
+      "id": "urn:awp:n:8KkeZIFETQg8PyOK0DxupvPNmFYCvtjC0bP6_SCOzzc",
+      "type": "NamedValueCollection",
+      "itemListElement": [
+        {
+          "id": "urn:awp:n:TB6Ct0XnCtGJ7i2igBK1zdmhc3fdd_w5oRn4scw5Ff4"
+        },
+        {
+          "id": "urn:awp:n:Xx6L932fCTXTtQigK-yGpU4eKPs85wQalztDqvS67_o"
+        },
+        {
+          "id": "urn:awp:n:Dz6KC_bdRK4-V8W4_aigizBoAwJbKfYPwDoWsh156hM"
+        },
+        {
+          "id": "urn:awp:n:0KHolQrraElwoQTkqbft8GQoirrAwHYI8AzVw9capFE"
+        },
+        {
+          "id": "urn:awp:n:xCx-AAQHplddrnT6HIJtQG7NRczqtFWoqflfRlu0CKE"
+        },
+        {
+          "id": "urn:awp:n:7U_G6kOH3pYdkuIkqmaQqe3mNHou91rViurCI-ISPHE"
+        },
+        {
+          "id": "urn:awp:n:s_vvTmf2Bfd2jk459nPCXdfdT_gTW7X1OiQzmimmBYg"
+        },
+        {
+          "id": "urn:awp:n:o_G1d9kslv9D2OQC5dpP0eDgI6fvSmsS83h02XqWCtg"
+        },
+        {
+          "id": "urn:awp:n:91Pf8N8SyUtVlJzMu_HazY2jYz9cdxgw9t9c2XcXkkM"
+        },
+        {
+          "id": "urn:awp:n:Om5M1gQwLfF9031_uD5ccBxeI1leK3iRTrsVOptBiME"
+        }
+      ]
+    },
+    {
+      "id": "urn:awp:n:TB6Ct0XnCtGJ7i2igBK1zdmhc3fdd_w5oRn4scw5Ff4",
+      "type": "PropertyValue",
+      "domainValue": "DecisionInPrinciple",
+      "name": "type",
+      "position": "0",
+      "propertyID": "urn:awp:legacy-field:type"
+    },
+    {
+      "id": "urn:awp:n:Xx6L932fCTXTtQigK-yGpU4eKPs85wQalztDqvS67_o",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "urn:awp:engine-mortgage-core-main:north-agent:0004"
+      },
+      "name": "id",
+      "position": "1",
+      "propertyID": "urn:awp:legacy-field:id"
+    },
+    {
+      "id": "urn:awp:n:Dz6KC_bdRK4-V8W4_aigizBoAwJbKfYPwDoWsh156hM",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://northbank.example/#org"
+      },
+      "name": "issuer",
+      "position": "2",
+      "propertyID": "urn:awp:legacy-field:issuer"
+    },
+    {
+      "id": "urn:awp:n:0KHolQrraElwoQTkqbft8GQoirrAwHYI8AzVw9capFE",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://sam.example/#me"
+      },
+      "name": "subject",
+      "position": "3",
+      "propertyID": "urn:awp:legacy-field:subject"
+    },
+    {
+      "id": "urn:awp:n:xCx-AAQHplddrnT6HIJtQG7NRczqtFWoqflfRlu0CKE",
+      "type": "PropertyValue",
+      "domainValue": "mortgage.decision-in-principle",
+      "name": "claimType",
+      "position": "4",
+      "propertyID": "urn:awp:legacy-field:claimType"
+    },
+    {
+      "id": "urn:awp:n:7U_G6kOH3pYdkuIkqmaQqe3mNHou91rViurCI-ISPHE",
+      "type": "PropertyValue",
+      "domainValue": "decided-by-authority",
+      "name": "method",
+      "position": "5",
+      "propertyID": "urn:awp:legacy-field:method"
+    },
+    {
+      "id": "urn:awp:n:s_vvTmf2Bfd2jk459nPCXdfdT_gTW7X1OiQzmimmBYg",
+      "type": "PropertyValue",
+      "domainValue": "2026-11-13T09:02:00.000Z",
+      "name": "issuedAt",
+      "position": "6",
+      "propertyID": "urn:awp:legacy-field:issuedAt"
+    },
+    {
+      "id": "urn:awp:n:o_G1d9kslv9D2OQC5dpP0eDgI6fvSmsS83h02XqWCtg",
+      "type": "PropertyValue",
+      "domainValue": "2027-02-13T09:02:00.000Z",
+      "name": "validUntil",
+      "position": "7",
+      "propertyID": "urn:awp:legacy-field:validUntil"
+    },
+    {
+      "id": "urn:awp:n:91Pf8N8SyUtVlJzMu_HazY2jYz9cdxgw9t9c2XcXkkM",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "urn:awp:n:Bn-sFl1Fi5fdwQ8mXT6F2qMi4FyUNlsVz8q6_YLLdzI"
+      },
+      "name": "decision",
+      "position": "8",
+      "propertyID": "urn:awp:legacy-field:decision"
+    },
+    {
+      "id": "urn:awp:n:Om5M1gQwLfF9031_uD5ccBxeI1leK3iRTrsVOptBiME",
+      "type": "PropertyValue",
+      "domainValue": {
+        "type": "http://www.w3.org/2001/XMLSchema#boolean",
+        "@value": "true"
+      },
+      "name": "synthetic",
+      "position": "9",
+      "propertyID": "urn:awp:legacy-field:synthetic"
+    },
+    {
+      "id": "urn:awp:n:Bn-sFl1Fi5fdwQ8mXT6F2qMi4FyUNlsVz8q6_YLLdzI",
+      "type": "NamedValueCollection",
+      "itemListElement": [
+        {
+          "id": "urn:awp:n:n-y1o6_CekcvaHfI2TJyZnEQJLudO23zU8KXGaf3XGE"
+        },
+        {
+          "id": "urn:awp:n:DauPRwav7fr4-zc-4hD4TQgko7WRPB5B-g61ZzSpIzU"
+        },
+        {
+          "id": "urn:awp:n:afFYDymIUN4vOpZBPVtc_24zgvEKs-ZStEX2Fwki8dE"
+        },
+        {
+          "id": "urn:awp:n:Sy6vCVpwSz5hit351kh59luTWmQ54LB2-OBErLIuRJI"
+        },
+        {
+          "id": "urn:awp:n:edspj9b2vQ7SkS_rBmnmfEA5calTd_2PVAsSh6m39Lc"
+        }
+      ]
+    },
+    {
+      "id": "urn:awp:n:n-y1o6_CekcvaHfI2TJyZnEQJLudO23zU8KXGaf3XGE",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
+      },
+      "name": "operation",
+      "position": "0",
+      "propertyID": "urn:awp:legacy-field:operation"
+    },
+    {
+      "id": "urn:awp:n:DauPRwav7fr4-zc-4hD4TQgko7WRPB5B-g61ZzSpIzU",
+      "type": "PropertyValue",
+      "domainValue": {
+        "type": "http://www.w3.org/2001/XMLSchema#integer",
+        "@value": "380000"
+      },
+      "name": "amount",
+      "position": "1",
+      "propertyID": "urn:awp:legacy-field:amount"
+    },
+    {
+      "id": "urn:awp:n:afFYDymIUN4vOpZBPVtc_24zgvEKs-ZStEX2Fwki8dE",
+      "type": "PropertyValue",
+      "domainValue": "USD",
+      "name": "currency",
+      "position": "2",
+      "propertyID": "urn:awp:legacy-field:currency"
+    },
+    {
+      "id": "urn:awp:n:Sy6vCVpwSz5hit351kh59luTWmQ54LB2-OBErLIuRJI",
+      "type": "PropertyValue",
+      "domainValue": {
+        "type": "http://www.w3.org/2001/XMLSchema#boolean",
+        "@value": "false"
+      },
+      "name": "binding",
+      "position": "3",
+      "propertyID": "urn:awp:legacy-field:binding"
+    },
+    {
+      "id": "urn:awp:n:edspj9b2vQ7SkS_rBmnmfEA5calTd_2PVAsSh6m39Lc",
+      "type": "PropertyValue",
+      "domainValue": "a decision in principle, not an offer; synthetic and indicative only",
+      "name": "note",
+      "position": "4",
+      "propertyID": "urn:awp:legacy-field:note"
+    },
+    {
+      "id": "urn:awp:n:SjsAp-PPf59H9suMA8i0RNy02AHKrxaj-Z3Au8gtfEk",
+      "@graph": [
+        {
+          "id": "urn:awp:n:azjaxv3PH4vrJeskJ0c61DRxlHAtz2qhGmKay9IgRXQ",
+          "type": "CompactJwsProof",
+          "jws": "eyJhbGciOiJFZERTQSIsImtpZCI6IkM4MldVTEVZejJieVRnQkRJLTZBY3g3eU9wcWJleWh4Umx1T2tIWTdQam8iLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ0eXBlIjoiRGVjaXNpb25JblByaW5jaXBsZSIsImlkIjoidXJuOmF3cDplbmdpbmUtbW9ydGdhZ2UtY29yZS1tYWluOm5vcnRoLWFnZW50OjAwMDQiLCJpc3N1ZXIiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJzdWJqZWN0IjoiaHR0cHM6Ly9zYW0uZXhhbXBsZS8jbWUiLCJjbGFpbVR5cGUiOiJtb3J0Z2FnZS5kZWNpc2lvbi1pbi1wcmluY2lwbGUiLCJtZXRob2QiOiJkZWNpZGVkLWJ5LWF1dGhvcml0eSIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMjowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDItMTNUMDk6MDI6MDAuMDAwWiIsImRlY2lzaW9uIjp7Im9wZXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI29wL21vcnRnYWdlLXByZXF1YWxpZmljYXRpb24iLCJhbW91bnQiOjM4MDAwMCwiY3VycmVuY3kiOiJVU0QiLCJiaW5kaW5nIjpmYWxzZSwibm90ZSI6ImEgZGVjaXNpb24gaW4gcHJpbmNpcGxlLCBub3QgYW4gb2ZmZXI7IHN5bnRoZXRpYyBhbmQgaW5kaWNhdGl2ZSBvbmx5In0sInN5bnRoZXRpYyI6dHJ1ZX0.Y-O7Y-39oO3STCMYoxW2ayVqWuDMAL0UopEM0mj3WWXO6HHsQzJFznkn0KvRCfa8s63sKapls5p-uyhdbUPRBQ"
+        }
+      ]
+    }
+  ],
+  "presentFields": "https://w3id.org/jeswr/awp#evidence",
+  "proof": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "eddsa-rdfc-2022",
+    "verificationMethod": "urn:awp:verification-method:ifAsMvFydwVNnIbzlBPc6pPmgujO5o-h2owLw_CzdqQ",
+    "proofPurpose": "assertionMethod",
+    "created": "2026-11-13T09:02:00.000Z",
+    "proofValue": "z2umw6kujcGvJKVWKMsA6W57nshdnQgxDRyNismme9pVoRTi3NrfB55rx7YGc1XJWADUP4DGuaqKT1fAzkmgDhpaD"
+  }
+}

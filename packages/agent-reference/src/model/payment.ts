@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex GPT-6
 /** Live RDF views. Protocol adapters construct these; gates never inspect protocol JSON. */
+
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { RequiredAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { digestOf } from "../core/canonical.js";
 import type { ActionIntent, Agreement } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
+import { NamedValuesNode } from "./named-values.js";
 import { OperationNode, ParticipantNode, RdfNode } from "./nodes.js";
 export const SCHEMA = "https://schema.org/";
 export const ODRL = "http://www.w3.org/ns/odrl/2/";
@@ -249,7 +251,9 @@ export class PaymentAgreementNode extends PaymentNode {
     node.setNode(AWP + "operation", operation);
     node.setIri(AWP + "offer", record.offer);
     node.setIri(AWP + "acceptance", record.acceptance);
-    const termsNode = new PaymentNode(node.id + ":terms", node.dataset);
+    // The agreement's terms as the complete message model writes them (brief 22c), so the
+    // node satisfies AgreementShape: named values, never an empty placeholder.
+    const termsNode = NamedValuesNode.from(record.terms, node.id + ":terms", node.dataset);
     node.setNode(AWP + "terms", termsNode);
     for (const [field, value] of [
       ["offeror", record.offeror],

@@ -1,0 +1,213 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-message-model-capacity/0.1",
+  "note": "Diagnostic inventory, not an admission allow-list. These objects round-trip exactly as RDF; their expanded documents exceed the unchanged default carriage capacity. Larger limits below are test-only.",
+  "paths": 165,
+  "packetOccurrences": 1345,
+  "distinctMessages": 664,
+  "distinctIntents": 650,
+  "distinctAgreements": 32,
+  "defaultMaxEnvelopeBytes": 65536,
+  "testOnlyLimits": {
+    "maxEnvelopeBytes": 1048576,
+    "maxJsonDepth": 16,
+    "maxJsonNodes": 50000,
+    "maxStringLength": 262144,
+    "maxArrayLength": 8192,
+    "maxEvidenceItems": 16,
+    "maxClockSkewMs": 300000,
+    "maxMessageLifetimeMs": 86400000,
+    "maxMessagesPerConversation": 32,
+    "maxProposalRounds": 3,
+    "maxOpenConversations": 256,
+    "conversationTtlMs": 604800000,
+    "maxSeenMessages": 10000,
+    "maxOutboundPerStep": 6,
+    "maxWorkflowSteps": 200
+  },
+  "capacity": [
+    {
+      "type": "Message/invoke",
+      "field": "cohort-count/urn:awp:engine-cohort-count-main:computer-agent:0025",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:480f55a0e5e7e6c9401d5073d29e9f116d27f5d1f78b8388eae913db55a30153",
+      "bytes": 318717
+    },
+    {
+      "type": "Message/invoke",
+      "field": "cohort-count/urn:awp:engine-cohort-count-branch-1:computer-agent:0024",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:4dd259a79beeb49f605ead3f37cd9acea43724b3f21b5182761a6bca299688ee",
+      "bytes": 143907
+    },
+    {
+      "type": "Message/deliver",
+      "field": "mortgage-core/urn:awp:engine-mortgage-core-main:sam-agent:0005",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:1a5a4d6e667f3f1a5ab4bca6171d2806e9c9ac8b4a026ab04c8311e5c0181195",
+      "bytes": 65993
+    },
+    {
+      "type": "Message/deliver",
+      "field": "mortgage-injected-fee/urn:awp:engine-mortgage-injected-fee-main:sam-agent:0005",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:c501b041f042b2d6ad2832981be9e92f41b70d5625771bc7e7bfdbd8cc6763a2",
+      "bytes": 66009
+    },
+    {
+      "type": "Message/deliver",
+      "field": "mortgage-main/urn:awp:engine-mortgage-main-main:sam-agent:0011",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:2925035695ae53e01f1356722e4cb5f5ce05b475858ddb46c7672f5e9414b716",
+      "bytes": 65993
+    },
+    {
+      "type": "Message/deliver",
+      "field": "mortgage-main/urn:awp:engine-mortgage-main-main:sam-agent:0011",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:1a87964144098cde70744cbe47bfdb279464bedde748cbfe63a141d7c13eb180",
+      "bytes": 65994
+    },
+    {
+      "type": "Message/deliver",
+      "field": "mortgage-main/urn:awp:engine-mortgage-main-main:sam-agent:0011",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:e764ae01726fde5ec94cd5a0eee88f089bd9341acee3658a9a90bd37e04e56f7",
+      "bytes": 65992
+    },
+    {
+      "type": "Message/deliver",
+      "field": "mortgage-main/urn:awp:engine-mortgage-main-a2a-text-part-instruction:sam-agent:0011",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:7e00815f8a37cc82f044e998a9e242a020d11deb6478701533aacda4b34c5436",
+      "bytes": 66034
+    },
+    {
+      "type": "Message/deliver",
+      "field": "mortgage-main/urn:awp:engine-mortgage-main-main:sam-agent:0011",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:344c50d309e0d5007557796cae7de1b528d8c9021817f4fcb1e23e877db096a2",
+      "bytes": 65992
+    },
+    {
+      "type": "Message/deliver",
+      "field": "mortgage-main/urn:awp:engine-mortgage-main-mcp-tool-description-poisoned:sam-agent:0011",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:28e2582d71af27cb204b73af1acae3bfdd642400bec4b72a0a04cf5f8fcbafdb",
+      "bytes": 66042
+    },
+    {
+      "type": "Message/invoke",
+      "field": "platform-income/urn:awp:engine-platform-income-main:computer-agent:0021",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:98b3dd8c93b40e60ed6864b70b0aac8f740ec3bfbe80cefb5edc21dd9b53d505",
+      "bytes": 289420
+    },
+    {
+      "type": "Message/invoke",
+      "field": "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0004",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:de9fa009641f578daf08fa50774d8945ca41cf9a5eb992bdaf07749b1081b040",
+      "bytes": 68122
+    },
+    {
+      "type": "Message/invoke",
+      "field": "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0008",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:29623bb4d01abd11f251b3dbcf40e60eef8a410acd9294b30f731feda7976dde",
+      "bytes": 68122
+    },
+    {
+      "type": "Message/invoke",
+      "field": "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0012",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:dad0dc4af9340bcee83a434c968a0717fa077672b322d13d380f2cbfc815410e",
+      "bytes": 68122
+    },
+    {
+      "type": "Message/invoke",
+      "field": "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0016",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:bf0e5c98b278cc7fe05d7237efa822f6d954b132feb395049c69d7ed69b65b8f",
+      "bytes": 68122
+    },
+    {
+      "type": "Message/invoke",
+      "field": "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0020",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:7c8d8a861e096b4420473b8d6edd5879d341b155070624a03708923175abed7a",
+      "bytes": 68122
+    },
+    {
+      "type": "Message/invoke",
+      "field": "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0024",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:e6bb464d155869e09d3574acc43f915a1f6970aefd56a9bcc17384fd2ad95459",
+      "bytes": 68122
+    },
+    {
+      "type": "Message/invoke",
+      "field": "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0028",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:611118b965a36338eea6feba79e6208fc2b6e552a8035d330dcd1506869c91c5",
+      "bytes": 68112
+    },
+    {
+      "type": "Message/invoke",
+      "field": "salary-benchmark/urn:awp:engine-salary-benchmark-main:computer-agent:0029",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:19e99ee8fe85609233cef296ab45dbe9aa5fcac4d94c51d6d07ede683a83e35e",
+      "bytes": 477212
+    },
+    {
+      "type": "Message/invoke",
+      "field": "salary-benchmark/urn:awp:engine-salary-benchmark-branch-1:computer-agent:0013",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:2ad42951d6dbbb5f7a588b0d2dc5b39a2a0e39d7a2515dd70d2c7a89a10689ab",
+      "bytes": 155407
+    },
+    {
+      "type": "ActionIntent",
+      "field": "urn:op:forum-claim",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:015f4e59867a20c7dcd04cb662a252c5ae60a48d6caed707afe2c228d87855b1",
+      "bytes": 110386
+    },
+    {
+      "type": "ActionIntent",
+      "field": "urn:op:forum-answer",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:b61a905adb2d69edb030cd52dcd744d84d01b2d0ffa2285e417ff479abbb7163",
+      "bytes": 107484
+    },
+    {
+      "type": "ActionIntent",
+      "field": "urn:op:forum-claim",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:7edd254c23f830b813a4d8d18c96017ca1fa8da4b06b638045c3a48fce9b771b",
+      "bytes": 110635
+    },
+    {
+      "type": "ActionIntent",
+      "field": "urn:op:forum-answer",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:5c647e2a83dceaf94286972fbdc1e08379538faa42a88b0c4363e73b36ad4eb8",
+      "bytes": 104918
+    },
+    {
+      "type": "ActionIntent",
+      "field": "urn:op:forum-claim",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:af6d4d4f4912f3df753f04b10ec29e94ead8595454b5698bd88c9a00f84487c1",
+      "bytes": 150827
+    },
+    {
+      "type": "ActionIntent",
+      "field": "urn:op:forum-answer",
+      "reason": "too-large",
+      "sourceDigest": "sha-256:1da92f1a9280371551d3d3f2dce4bb68920d7aec229d770ca5da185316e52318",
+      "bytes": 121692
+    }
+  ],
+  "modelRoundTripFailures": []
+}

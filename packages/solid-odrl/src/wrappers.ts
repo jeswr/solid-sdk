@@ -337,10 +337,10 @@ export class GraphBuilder {
    * match a legitimate one (fail-closed) rather than laundering an injection
    * through the serialiser. (Explicit http(s)-contract fields — target/
    * assignee/assigner/profile — get an ADDITIONAL, stricter guard upstream in
-   * policy.ts: `requireHttpIri` refuses to serialise rather than silently drop
+   * policy.ts: `requirePolicyIri` refuses to serialise rather than silently drop
    * an unsafe EXPLICIT value, since dropping would widen the policy to a
    * wildcard match — a privilege escalation. Escaping here is the universal
-   * breakout guard; `requireHttpIri` is the additional fail-closed reject for
+   * breakout guard; `requirePolicyIri` is the additional fail-closed reject for
    * evaluation-critical fields.)
    */
   private iriTerm(value: string): Term {

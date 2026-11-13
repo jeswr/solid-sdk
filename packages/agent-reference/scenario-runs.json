@@ -8,7 +8,7 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+      "reason": "Blocked: needs a hidden date comparison, due in sparq’s next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
     },
     {
       "scenario": "age-check",
@@ -303,7 +303,7 @@
       },
       "consequences": [],
       "trace": "cohort-count--baseline.json",
-      "traceSha256": "b200cbbad61550487de130bca77cf54483884a63153ee85cc9e10df9b8f59059",
+      "traceSha256": "ae48e2ddb913fbe4af6a404e90d7c5983ba2163d6650d880b33cba2bbb26d71e",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -341,7 +341,7 @@
         }
       ],
       "trace": "cohort-count--branch-1--baseline.json",
-      "traceSha256": "31c60cec27152496552ff65f9569aaacaa97af9ca5e5c72de5e229b4982284c7",
+      "traceSha256": "b3307ba399b5e0679fb5ac54dd786d54bb7752dcfe905d4e79fe5bf9d43daa7b",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -368,7 +368,7 @@
       },
       "consequences": [],
       "trace": "cohort-count--branch-2--baseline.json",
-      "traceSha256": "9efd88df390bb65917acd0a8f41e6f83fa4cc0d9ab8275b00a67961913e90534",
+      "traceSha256": "0c8feeb3f1e0ed5258b36080ef879d088683064cae5a08392c01b625c72df414",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -555,7 +555,7 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+      "reason": "Blocked: needs issuer-scoped GRAPH and the unchanged BSc-or-MSc membership rule; this result-proof build rejects GRAPH and FILTER IN. Selecting only BSc would narrow the rule; releasing the degree would change disclosure."
     },
     {
       "scenario": "degree-recognition",
@@ -1456,7 +1456,7 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+      "reason": "Blocked: needs an issuer-scoped GRAPH query; this result-proof build rejects GRAPH with \"operator outside positive BGP/JOIN/FILTER\"."
     },
     {
       "scenario": "introduction",
@@ -3489,7 +3489,7 @@
       },
       "consequences": [],
       "trace": "platform-income--baseline.json",
-      "traceSha256": "c66695f8d208b0b28597e441451d5794b1f59bd7ec9ecfa98f275af2431c05c6",
+      "traceSha256": "8428bf035257b46be59c3e9e69429b0d22137b6a314bd2bbc6d6ff43ff459dcf",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -4222,7 +4222,7 @@
       "settlement": "rdf-order",
       "what": "Show valid until at least a date while hiding the actual date",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+      "reason": "Blocked: needs a hidden date comparison, due in sparq’s next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
     },
     {
       "scenario": "salary-account-change",
@@ -4308,7 +4308,7 @@
       },
       "consequences": [],
       "trace": "salary-benchmark--baseline.json",
-      "traceSha256": "01a68de4d27dbf749b20c300f5541eb89b17aebb381a95a0cfa93aac3f43a805",
+      "traceSha256": "511b19de01aee99726d671377dd2757be26dcc2dd8ff00ff9228ec2d0592b400",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -4336,7 +4336,7 @@
       "consequences": [],
       "note": "branch does not diverge from the main path",
       "trace": "salary-benchmark--branch-1--baseline.json",
-      "traceSha256": "18f15def44a4b7aa1ed132c73daa34968f0a620d4359e8d6d01813ff45857223",
+      "traceSha256": "d14797fff5db8aacbc0c5cd879b06516210644f6a79a875bbc489ad2ccc26054",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -4719,7 +4719,7 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+      "reason": "Blocked: needs a hidden integer comparison, due in sparq’s next result-proof build. Projecting income would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
     },
     {
       "scenario": "tenancy-application",
@@ -4861,7 +4861,7 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
+      "reason": "Blocked: needs a hidden integer comparison, due in sparq’s next result-proof build. Projecting the balance would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
     },
     {
       "scenario": "visa-application",

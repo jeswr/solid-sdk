@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // Regression tests for the n3.Writer IRI-injection class. `n3.Writer` emits a
@@ -28,10 +29,10 @@ import { ODRL_RIGHT_OPERAND } from "../src/vocab.js";
 const INJECTION = "https://evil/x> . <https://evil/s2> <https://evil/p2> <https://evil/o2";
 
 const AGENT = "https://bob.example/profile/card#me";
-// Non-http (yet syntactically valid) IRIs in http-contract fields: `safeHttpIri`
+// Other-scheme (yet syntactically valid) IRIs in policy-contract fields: the guard
 // rejects them, so they must never be silently dropped-to-wildcard.
-const BAD_TARGET = "urn:evil:any-resource";
-const BAD_ASSIGNEE = "urn:evil:any-agent";
+const BAD_TARGET = "did:evil:any-resource";
+const BAD_ASSIGNEE = "did:evil:any-agent";
 
 describe("IRI-injection hardening (n3.Writer breakout)", () => {
   it("REFUSES a hostile assignee or rule.target (exact-match field, reject-if-would-mutate)", () => {

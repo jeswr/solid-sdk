@@ -265,7 +265,7 @@ awp:role a rdf:Property;
     rdfs:label "Role";
     rdfs:comment "The role in which an evidence document is offered.";
     rdfs:domain awp:EvidenceItem;
-    rdfs:range xsd:string.
+    rdfs:range awp:EvidenceRole.
 awp:format a rdf:Property;
     rdfs:label "Format";
     rdfs:comment "The protection format used by the evidence document.";
@@ -280,7 +280,7 @@ awp:want a rdf:Property;
     rdfs:label "Want";
     rdfs:comment "The want recorded for this resource.";
     rdfs:domain awp:DescribeBody;
-    rdfs:range xsd:string.
+    rdfs:range rdfs:Resource.
 awp:description a rdf:Property;
     rdfs:label "Description";
     rdfs:comment "The description recorded for this resource.";
@@ -290,7 +290,7 @@ awp:operation a rdf:Property;
     rdfs:label "Operation";
     rdfs:comment "A versioned reference to the operation being proposed or invoked.";
     rdfs:domain rdfs:Resource;
-    rdfs:range awp:OperationRef.
+    rdfs:range rdfs:Resource.
 awp:terms a rdf:Property;
     rdfs:label "Terms";
     rdfs:comment "The terms of this offer or the policy restricting use of this data.";
@@ -349,7 +349,7 @@ awp:needs a rdf:Property;
 awp:nonce a rdf:Property;
     rdfs:label "Nonce";
     rdfs:comment "The one-time challenge value binding the retry to this request.";
-    rdfs:domain awp:InvokeBodyChallenge;
+    rdfs:domain rdfs:Resource;
     rdfs:range rdfs:Resource.
 awp:challenge a rdf:Property;
     rdfs:label "Challenge";
@@ -449,7 +449,7 @@ awp:createdAt a rdf:Property;
 awp:expiresAt a rdf:Property;
     rdfs:label "Expires At";
     rdfs:comment "The time after which the message must not be accepted.";
-    rdfs:domain awp:Message;
+    rdfs:domain rdfs:Resource;
     rdfs:range xsd:dateTime.
 awp:inReplyTo a rdf:Property;
     rdfs:label "In Reply To";
@@ -589,7 +589,7 @@ awp:policy a rdf:Property;
 awp:approval a rdf:Property;
     rdfs:label "Approval";
     rdfs:comment "The approval level requested by an authority challenge.";
-    rdfs:domain awp:AuthorisationDecision;
+    rdfs:domain rdfs:Resource;
     rdfs:range rdfs:Resource.
 awp:matchedRule a rdf:Property;
     rdfs:label "Matched Rule";
@@ -775,7 +775,7 @@ awp:basisKind a rdf:Property;
     rdfs:label "Basis Kind";
     rdfs:comment "Whether the request relies on an agreement, public request, representation, grant or invocation.";
     rdfs:domain rdfs:Resource;
-    rdfs:range awp:RequestBasis.
+    rdfs:range awp:BasisKind.
 <https://www.w3.org/2018/credentials#verifiableCredential> a rdf:Property;
     rdfs:label "Credential";
     rdfs:comment "The embedded source credential or presentation offered as evidence.";
@@ -1266,19 +1266,19 @@ awp:jws a rdf:Property;
 <https://w3id.org/jeswr/awp#result/no-personal-data> a awp:CheckResultCode;
     rdfs:label "No personal data";
     rdfs:comment "No personal data: the check result code identified by the stable code “no-personal-data”.".
-<https://w3id.org/jeswr/awp#basis/agreement> a awp:RequestBasis;
+<https://w3id.org/jeswr/awp#basis/agreement> a awp:BasisKind;
     rdfs:label "Agreement";
     rdfs:comment "Agreement: the request basis identified by the stable code “agreement”.".
-<https://w3id.org/jeswr/awp#basis/public> a awp:RequestBasis;
+<https://w3id.org/jeswr/awp#basis/public> a awp:BasisKind;
     rdfs:label "Public";
     rdfs:comment "Public: the request basis identified by the stable code “public”.".
-<https://w3id.org/jeswr/awp#basis/represented> a awp:RequestBasis;
+<https://w3id.org/jeswr/awp#basis/represented> a awp:BasisKind;
     rdfs:label "Represented";
     rdfs:comment "Represented: the request basis identified by the stable code “represented”.".
-<https://w3id.org/jeswr/awp#basis/grant> a awp:RequestBasis;
+<https://w3id.org/jeswr/awp#basis/grant> a awp:BasisKind;
     rdfs:label "Grant";
     rdfs:comment "Grant: the request basis identified by the stable code “grant”.".
-<https://w3id.org/jeswr/awp#basis/invocation> a awp:RequestBasis;
+<https://w3id.org/jeswr/awp#basis/invocation> a awp:BasisKind;
     rdfs:label "Invocation";
     rdfs:comment "Invocation: the request basis identified by the stable code “invocation”.".
 <https://w3id.org/jeswr/awp#evidence-role/representation> a awp:EvidenceRole;
@@ -1641,3 +1641,37 @@ awp:GrantKind a <http://www.w3.org/2002/07/owl#Class>;
 <https://w3id.org/jeswr/awp#check/P8> a awp:CheckName; rdfs:label "Payment protocol scope"; rdfs:comment "The payment protocol scope check at settlement.".
 
 <https://w3id.org/jeswr/awp#check/receipt> a awp:CheckName; rdfs:label "Payment receipt match"; rdfs:comment "The payment receipt match check at settlement.".
+
+# ---- Brief 22c: complete message model (AUTHORED-BY Codex GPT-6) ----
+awp:NamedValueCollection a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Named values"; rdfs:comment "A list of named domain values. Each entry identifies its parameter or claim by IRI; nested lists and typed values remain queryable RDF.".
+awp:NullValue a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Explicit null"; rdfs:comment "An explicit absent domain value, distinct from a missing parameter. RDF has no null literal.".
+awp:ChallengeNeeds a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Challenge requirement"; rdfs:comment "The nonce-bound, expiring approval or claim requested before admission.".
+awp:CompactJwsProof a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Original compact JWS proof"; rdfs:comment "The original enveloping compact JWS bytes. It signs its original payload, not the translated credential graph; verification must check both signature and exact graph projection.".
+awp:LegacyCredentialSubject a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Legacy credential subject"; rdfs:comment "Named claims projected from the original JWS payload without asserting that the translated RDF was signed.".
+awp:presentFields a rdf:Property; rdfs:label "Present optional collections"; rdfs:comment "Identifies an optional collection explicitly present even when empty; preserves the distinction from omission."; rdfs:domain rdfs:Resource; rdfs:range rdfs:Resource.
+awp:credentialDigest a rdf:Property; rdfs:label "Previously sent credential digest"; rdfs:comment "SHA-256 of the exact compact JWS previously sent, used to resolve evidence without accepting a substitute credential."; rdfs:domain awp:EvidenceItem; rdfs:range xsd:string.
+awp:statementPayload a rdf:Property; rdfs:label "Signed statement fields"; rdfs:comment "The named fields of the original JWS payload, retained as typed RDF values. These are unverified until the original signature and projection are checked."; rdfs:domain <https://schema.org/CreativeWork>; rdfs:range awp:NamedValueCollection.
+<https://schema.org/ItemList> a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "ItemList"; rdfs:comment "An ordered list of items.".
+<https://schema.org/ListItem> a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "ListItem"; rdfs:comment "An entry at an explicit list position.".
+<https://schema.org/PropertyValue> a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "PropertyValue"; rdfs:comment "A value identified by a property IRI.".
+<https://schema.org/CreativeWork> a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "CreativeWork"; rdfs:comment "An authored work.".
+<https://schema.org/itemListElement> a rdf:Property; rdfs:label "List entry"; rdfs:comment "An entry in an ordered list."; rdfs:domain <https://schema.org/ItemList>; rdfs:range <https://schema.org/ListItem>.
+<https://schema.org/position> a rdf:Property; rdfs:label "Position"; rdfs:comment "The zero-based position of an item in this binding."; rdfs:domain rdfs:Resource; rdfs:range xsd:integer.
+<https://schema.org/propertyID> a rdf:Property; rdfs:label "Property identifier"; rdfs:comment "The IRI identifying the parameter or claim whose value is stated."; rdfs:domain <https://schema.org/PropertyValue>; rdfs:range rdfs:Resource.
+<https://schema.org/value> a rdf:Property; rdfs:label "Domain value"; rdfs:comment "A typed literal, an IRI or a structured value for a named parameter or claim."; rdfs:domain <https://schema.org/PropertyValue>; rdfs:range rdfs:Resource.
+awp:NamedValueCollection rdfs:subClassOf <https://schema.org/ItemList>.
+
+# Brief 22c: legacy evidence presentations (AUTHORED-BY Codex GPT-6)
+awp:envelopeBytes a rdf:Property; rdfs:label "Original evidence envelope bytes";
+    rdfs:comment "The byte-exact legacy presentation envelope. It carries no signature of its own; signatures belong to the embedded credentials.";
+    rdfs:domain <https://www.w3.org/2018/credentials#VerifiablePresentation>; rdfs:range xsd:string.
+
+# Brief 22c: runtime disclosure references (AUTHORED-BY Codex GPT-6)
+awp:IntentEvidenceRef a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Intended evidence disclosure";
+    rdfs:comment "An action's reference to a disclosed statement and its claim type, distinct from the protected credential carried by a message.".
+<http://purl.org/dc/terms/references> a rdf:Property; rdfs:label "Referenced statement";
+    rdfs:comment "A related resource referenced by this resource."; rdfs:domain rdfs:Resource; rdfs:range rdfs:Resource.
+
+# Brief 22c: separate a request basis from its discriminant (AUTHORED-BY Codex GPT-6)
+awp:BasisKind a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Kind of request basis";
+    rdfs:comment "The agreement, public, represented, grant or invocation discriminant. A kind individual is distinct from a request's basis node and its particular reference.".

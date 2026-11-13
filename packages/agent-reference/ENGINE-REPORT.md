@@ -1880,3 +1880,389 @@ The existing snapshot script would have included transport rows, captured 162 ke
 | Final scope audit and `git diff --check` | Passed: 38 changed/new files, all in agent-reference; protected payment/runtime/suite/scenario paths, dependency manifests, lockfile and RDF guard inventories unchanged. Work remains uncommitted. |
 
 Logs are `/tmp/brief28-{all-tests,absent-tests,absent-typecheck,absent-compile,final-target-tests,final-typecheck,final-compile,final-lint,final-layers,final-pipeline,final-proof-discovery}.log`. The three diagnostic observations are `/tmp/brief28-diagnostic-times.json`; original oracle/manifest/index copies and the scope inventory are retained under `/tmp/brief28-*` for comparison.
+
+## Brief 22c
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Offline implementation, no commits. Runtime, gates, engine, settlement, suites, profiles,
+scenarios and trace sources are outside this lane. The runtime continues to use legacy objects.
+`types.ts` defines **eleven** message kinds/bodies (not twelve); all eleven are in scope.
+The fifteen retained core declarations are intentionally untouched.
+
+**Part 1 — done.** `solid-odrl`'s `requirePolicyIri` accepts exact lexical HTTP(S) IRIs
+and RFC 8141 URNs in targets (including duty targets), assignees, assigners and profiles.
+URN syntax checks NID length/endpoints, nonempty NSS, pchars, percent escapes and optional
+r/q/fragment components. Escaping may never change an evaluation-critical identifier.
+Invalid explicit values still throw; they never disappear into wildcards. README updated.
+The old IRI attack tests now use `did:` instead of valid `urn:` for their two unsupported-
+scheme specimens; their refusal assertions remain. No reference test or oracle was changed.
+
+`test/policy-urn.test.ts` crosses seven write sites with HTTP, HTTPS, case-preserving URNs,
+2/32-character NIDs, internal NID hyphens, NSS punctuation/slashes, encoded characters,
+r/q/fragment components and omission. Refusals cover relative/network-path references,
+blank nodes, javascript/data/file/did/ftp, empty values/NSS, 1/33-character NIDs, hyphen
+endpoints, invalid NID characters, malformed escapes/components, Unicode whitespace,
+every C0 byte plus space, and all nine IRIREF-forbidden symbols. Every serializer is
+asserted; accepted values are parsed back and their evaluation compared. **898 ODRL
+tests pass**, build and typecheck pass. Independent review before merge remains required.
+Part checkpoint: **583 reference tests + 17 evaluation-fixture tests pass**, unchanged
+oracle included. Required scenarios: **165 live paths; 154 runs, 11 disagree, 9 blocked**.
+Scenario-command generated trace/manifest rewrites are restored after the run because
+those paths are excluded from this lane.
+
+**Part 2 checkpoint — implemented.** Added a separated complete-message section to the
+ontology/shapes and added protected context definitions, with the SHA-256 pin updated.
+The full generator now reports **157 admission errors** (the complete reproducible list
+is `src/generated/full-admission.json`); GrantRecord remains unchanged; the final audit also generates the supported
+MessageAuthorship and InvokeBodyChallenge components. No generator or admission rule was weakened. Rejections include
+closed/ignored-properties constraints, linked node kinds/composite links, exclusive
+choices (`sh:xone`), list positions (`sh:minInclusive`), and kind constraints. Classes
+using them keep hand-written dataset wrappers, with SHACL enforced at the wire boundary.
+All existing **583 reference + 17 fixture tests** pass at this checkpoint.
+
+Every open object field uses `awp:NamedValueCollection`, a schema.org ItemList of
+PropertyValue entries: `schema:propertyID` identifies the claim/parameter,
+`schema:name` retains the legacy key, `schema:position` preserves order and
+`schema:value` holds a typed literal, IRI, or nested named collection. The open fields
+are DescriptionBody.description, ProposeBody.terms, AcceptBody.selection,
+InvokeBody.input, DeliverBody.output, ReceiptBody.observed, ActionIntent.parameters,
+Agreement.terms and Agreement.selection; credential claim values are in the same
+named-value structure under statementPayload. Arrays are ItemLists, explicit nulls are
+NullValue nodes, and empty containers retain their class. An absolute domain key is
+its own property IRI. An unqualified legacy key receives the explicit compatibility
+identifier `urn:awp:legacy-field:<percent-encoded-key>`; this identifies the original key,
+not an asserted mapping to a published domain vocabulary. A future profile mapping must
+be assessed explicitly rather than guessed. Nothing uses rdf:JSON or a serialized JSON
+literal. Original compact JWS bytes remain a proof string, not a claim-value blob.
+
+The field table below covers all eleven bodies, the envelope, action, agreement and
+supporting references. Cardinalities describe the object binding; ordered collections
+use position-bearing nodes and presentFields retains an explicitly empty optional list.
+Existing awp terms retain their established meanings. New awp terms are limited to
+protocol-specific structure without a published equivalent; named domain values use
+schema.org, authorship uses PROV, purposes use DPV and credentials use VC 2.0.
+
+| Type | Field | Term | Range | Cardinality | Reuse or reason |
+|---|---|---|---|---|---|
+| ParticipantRef | actor | `awp:actor` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| ParticipantRef | onBehalfOf | `prov:actedOnBehalfOf` | IRI | 0..1 | PROV |
+| ParticipantRef | operator | `awp:operator` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| AudienceRef | actor | `awp:actor` | IRI | 1 | Protocol-specific field (existing awp term) |
+| AudienceRef | party | `awp:party` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| OperationRef | id | `@id` | IRI identity | 1 | RDF node identity |
+| OperationRef | version | `awp:version` | xsd:string | 1 | Protocol-specific field (existing awp term) |
+| Basis | kind | `awp:basisKind` | named individual | 1 | Protocol-specific field (existing awp term) |
+| Basis | agreement | `awp:agreement` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| Basis | grant | `awp:grant` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| Basis | invocation | `awp:invocation` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| InvokeChallenge | id | `@id` | IRI identity | 1 | RDF node identity |
+| InvokeChallenge | nonce | `awp:nonce` | IRI | 1 | Protocol-specific field (existing awp term) |
+| ChallengeNeeds | id | `@id` | IRI identity | 1 | RDF node identity |
+| ChallengeNeeds | nonce | `awp:nonce` | IRI | 1 | Protocol-specific field (existing awp term) |
+| ChallengeNeeds | expiresAt | `awp:expiresAt` | xsd:dateTime | 1 | Protocol-specific field (existing awp term) |
+| ChallengeNeeds | approval | `awp:approval` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| ChallengeNeeds | label | `http://www.w3.org/2000/01/rdf-schema#label` | xsd:string | 0..1 | Protocol-specific field (existing awp term) |
+| ChallengeNeeds | claim | `awp:claimType` | xsd:string | 0..1 | Protocol-specific field (existing awp term) |
+| MessageAuthorship | method | `awp:method` | xsd:string | 1 | Protocol-specific field (existing awp term) |
+| MessageAuthorship | onBehalfOf | `prov:actedOnBehalfOf` | IRI | 1 | PROV |
+| ContentPart | id | `@id` | IRI identity | 1 | RDF node identity |
+| ContentPart | mediaType | `schema:encodingFormat` | xsd:string | 1 | schema.org |
+| ContentPart | digest | `awp:digest` | xsd:string | 1 | Protocol-specific field (existing awp term) |
+| ContentPart | bytes | `awp:bytes` | string or ItemList of bytes | 1 | Protocol-specific field (existing awp term) |
+| DescribeBody | want | `awp:want` | ItemList of strings | 0..1 | Protocol-specific field (existing awp term) |
+| DescriptionBody | description | `awp:description` | NamedValueCollection | 1 | Protocol-specific field (existing awp term) |
+| ProposeBody | operation | `awp:operation` | OperationRef | 1 | Protocol-specific field (existing awp term) |
+| ProposeBody | terms | `awp:terms` | NamedValueCollection | 1 | Protocol-specific field (existing awp term) |
+| ProposeBody | termsDigest | `awp:termsDigest` | xsd:string | 1 | Protocol-specific field (existing awp term) |
+| ProposeBody | round | `awp:round` | xsd:integer | 1 | Protocol-specific field (existing awp term) |
+| ProposeBody | counters | `awp:counters` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| AcceptBody | proposal | `awp:proposal` | IRI | 1 | Protocol-specific field (existing awp term) |
+| AcceptBody | termsDigest | `awp:termsDigest` | xsd:string | 1 | Protocol-specific field (existing awp term) |
+| AcceptBody | selection | `awp:selection` | NamedValueCollection | 0..1 | Protocol-specific field (existing awp term) |
+| AcceptBody | agreement | `awp:agreement` | IRI | 1 | Protocol-specific field (existing awp term) |
+| ChallengeBody | ref | `awp:ref` | IRI | 1 | Protocol-specific field (existing awp term) |
+| ChallengeBody | reason | `awp:reason` | named individual | 1 | Protocol-specific field (existing awp term) |
+| ChallengeBody | detail | `awp:detail` | xsd:string | 0..1 | Protocol-specific field (existing awp term) |
+| ChallengeBody | needs | `awp:needs` | ChallengeNeeds | 1 | Protocol-specific field (existing awp term) |
+| InvokeBody | challenge | `awp:challenge` | InvokeChallenge | 0..1 | Protocol-specific field (existing awp term) |
+| InvokeBody | operation | `awp:operation` | OperationRef | 1 | Protocol-specific field (existing awp term) |
+| InvokeBody | input | `awp:input` | NamedValueCollection | 1 | Protocol-specific field (existing awp term) |
+| InvokeBody | basis | `awp:basis` | Basis | 1 | Protocol-specific field (existing awp term) |
+| InvokeBody | purpose | `dpv:hasPurpose` | IRI | 0..1 | DPV |
+| DeliverBody | ref | `awp:ref` | IRI | 1 | Protocol-specific field (existing awp term) |
+| DeliverBody | basis | `awp:basis` | Basis | 1 | Protocol-specific field (existing awp term) |
+| DeliverBody | operation | `awp:operation` | OperationRef | 1 | Protocol-specific field (existing awp term) |
+| DeliverBody | output | `awp:output` | NamedValueCollection | 1 | Protocol-specific field (existing awp term) |
+| ReceiptBody | ref | `awp:ref` | IRI | 1 | Protocol-specific field (existing awp term) |
+| ReceiptBody | activity | `awp:activity` | IRI | 1 | Protocol-specific field (existing awp term) |
+| ReceiptBody | outcome | `awp:outcome` | named individual | 1 | Protocol-specific field (existing awp term) |
+| ReceiptBody | observed | `awp:observed` | NamedValueCollection | 0..1 | Protocol-specific field (existing awp term) |
+| ReceiptBody | final | `awp:final` | xsd:boolean | 0..1 | Protocol-specific field (existing awp term) |
+| ActionIntent | operation | `awp:operation` | IRI | 1 | Protocol-specific field (existing awp term) |
+| ActionIntent | action | `odrl:action` | xsd:string | 1 | ODRL |
+| ActionIntent | target | `odrl:target` | IRI | 1 | ODRL |
+| ActionIntent | purpose | `dpv:hasPurpose` | IRI | 0..1 | DPV |
+| ActionIntent | recipient | `awp:recipient` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| ActionIntent | parameters | `awp:parameters` | NamedValueCollection | 1 | Protocol-specific field (existing awp term) |
+| ActionIntent | conversation | `awp:conversation` | IRI | 1 | Protocol-specific field (existing awp term) |
+| Agreement | type | `http://www.w3.org/1999/02/22-rdf-syntax-ns#type` | ODRL Agreement class | 1 | RDF class / ODRL |
+| Agreement | id | `@id` | IRI identity | 1 | RDF node identity |
+| Agreement | conversation | `awp:conversation` | IRI | 1 | Protocol-specific field (existing awp term) |
+| Agreement | operation | `awp:operation` | OperationRef | 1 | Protocol-specific field (existing awp term) |
+| Agreement | offer | `awp:offer` | IRI | 1 | Protocol-specific field (existing awp term) |
+| Agreement | acceptance | `awp:acceptance` | IRI | 1 | Protocol-specific field (existing awp term) |
+| Agreement | termsDigest | `awp:termsDigest` | xsd:string | 1 | Protocol-specific field (existing awp term) |
+| Agreement | terms | `awp:terms` | NamedValueCollection | 1 | Protocol-specific field (existing awp term) |
+| Agreement | selection | `awp:selection` | NamedValueCollection | 0..1 | Protocol-specific field (existing awp term) |
+| Agreement | offeror | `awp:offeror` | ParticipantRef | 1 | Protocol-specific field (existing awp term) |
+| Agreement | acceptor | `awp:acceptor` | ParticipantRef | 1 | Protocol-specific field (existing awp term) |
+| Agreement | formedAt | `awp:formedAt` | xsd:dateTime | 1 | Protocol-specific field (existing awp term) |
+| Message | profile | `awp:profile` | IRI | 1 | Protocol-specific field (existing awp term) |
+| Message | configuration | `awp:configuration` | IRI | 1 | Protocol-specific field (existing awp term) |
+| Message | id | `@id` | IRI identity | 1 | RDF node identity |
+| Message | conversation | `awp:conversation` | IRI | 1 | Protocol-specific field (existing awp term) |
+| Message | kind | `awp:kind` | named individual | 1 | Protocol-specific field (existing awp term) |
+| Message | from | `awp:from` | ParticipantRef | 1 | Protocol-specific field (existing awp term) |
+| Message | to | `awp:to` | AudienceRef | 0..1 | Protocol-specific field (existing awp term) |
+| Message | createdAt | `awp:createdAt` | xsd:dateTime | 1 | Protocol-specific field (existing awp term) |
+| Message | expiresAt | `awp:expiresAt` | xsd:dateTime | 1 | Protocol-specific field (existing awp term) |
+| Message | inReplyTo | `awp:inReplyTo` | IRI | 0..1 | Protocol-specific field (existing awp term) |
+| Message | authorship | `awp:authorship` | MessageAuthorship | 0..1 | Protocol-specific field (existing awp term) |
+| Message | body | `awp:body` | $body | 1 | Protocol-specific field (existing awp term) |
+| Message | evidence | `awp:evidence` | EvidenceItem | 0..n (ordered) | Protocol-specific field (existing awp term) |
+| Message | content | `awp:content` | ContentPart | 0..n (ordered) | Protocol-specific field (existing awp term) |
+| RefuseBody | ref | `awp:ref` | IRI | 1 | Protocol-specific field (existing awp term) |
+| RefuseBody | reason | `awp:reason` | named individual | 1 | Protocol-specific field (existing awp term) |
+| RefuseBody | detail | `awp:detail` | xsd:string | 0..1 | Protocol-specific field (existing awp term) |
+| UnsupportedBody | ref | `awp:ref` | IRI | 1 | Protocol-specific field (existing awp term) |
+| UnsupportedBody | reason | `awp:reason` | named individual | 1 | Protocol-specific field (existing awp term) |
+| UnsupportedBody | detail | `awp:detail` | xsd:string | 0..1 | Protocol-specific field (existing awp term) |
+| IndeterminateBody | ref | `awp:ref` | IRI | 1 | Protocol-specific field (existing awp term) |
+| IndeterminateBody | reason | `awp:reason` | named individual | 1 | Protocol-specific field (existing awp term) |
+| IndeterminateBody | detail | `awp:detail` | xsd:string | 0..1 | Protocol-specific field (existing awp term) |
+| EvidenceItem | role | awp:role | EvidenceRole individual | 1 | Protocol evidence role |
+| EvidenceItem | format | awp:format | xsd:string | 1 | Mechanism profile identifier |
+| EvidenceItem | value | vc:verifiableCredential | embedded VC | 1, exclusive with digest | VC 2.0 |
+| EvidenceItem | digest reference | awp:credentialDigest | xsd:string (SHA-256) | 1, exclusive with value | Content-addressed prior evidence, no VC property has this meaning |
+| NamedValue | name | schema:name | xsd:string | 1 | schema.org |
+| NamedValue | claim/parameter IRI | schema:propertyID | IRI | 1 | schema.org |
+| NamedValue | typed value | schema:value | IRI or typed literal | 1 | schema.org |
+| NamedValue | position | schema:position | xsd:integer | 1 | schema.org |
+| NamedValueCollection / ItemList | entries | schema:itemListElement | PropertyValue nodes | 0..n | schema.org |
+| Message / DescribeBody | optional collection presence | awp:presentFields | field IRI | 0..n | Distinguishes empty and absent; no published protocol equivalent |
+| Embedded credential | issuer / subject | vc:issuer / vc:credentialSubject | IRI / subject node | 1 each | VC 2.0 |
+| Embedded credential subject | signed claim fields | awp:statementPayload | NamedValueCollection | 1 | Explicit projection of legacy signed fields, no VC equivalent |
+| Embedded credential | proof | sec:proof | named graph containing CompactJwsProof | 1 | Data Integrity proof graph relationship |
+| CompactJwsProof | original bytes | awp:jws | xsd:string | 1 | Existing byte-exact enveloping JWS field |
+| ActionIntent (runtime extension) | evidence | `awp:evidence` | ordered IntentEvidenceRef nodes | 0..n | References to disclosed items, distinct from message credentials |
+| IntentEvidenceRef | itemId | `dct:references` | IRI | 1 | DCT resource reference |
+| IntentEvidenceRef | claimType | `awp:claimType` | xsd:string | 1 | Existing profile claim identifier field |
+| EvidenceItem / ContentPart / IntentEvidenceRef | collection position | `schema:position` | nonnegative xsd:integer | 0..1 | schema.org; the enclosing wrapper checks ordered positions |
+| Legacy evidence presentation | original envelope | `awp:envelopeBytes` | xsd:string | 1 | Exact unsigned legacy envelope bytes, distinct from a credential's proof |
+| Legacy evidence presentation | credentials | `vc:verifiableCredential` | embedded VC nodes | 1..n | VC 2.0 presentation relationship |
+
+**Part 3 checkpoint — complete object model; default wire capacity remains partial.**
+`src/model/message-nodes.ts` contains live wrappers and `toNode`/`fromNode` static
+converters for all eleven bodies, Message, ActionIntent, Agreement, ContentPart,
+ParticipantRef, AudienceRef, OperationRef, Basis, invocation challenge, challenge needs,
+authorship and the runtime's additional intent evidence references. `evidence-item.ts`
+provides the EvidenceItem converters. `CoreNode` is shared typed-field infrastructure;
+`NamedValuesNode`/`NamedValueNode` implement the named-value/list model. No original core
+declaration or runtime reader was changed. The public model export now exposes the
+complete MessageNode; `MessageNode.create` preserves the earlier envelope-only builder
+for compatibility, while **`MessageNode.toNode` constructs the complete graph**. Existing
+MessageEnvelopeNode and IntentScopeNode remain projections and are not complete graphs.
+
+The test-only hooks in `test/helpers/model-corpus.ts` wrap packetView, authorise and the
+memory ledger append method, then restore them. They run all scenarios and declared
+configurations without editing runtime/engine/gate code. The corpus contains **1,345
+packet occurrences, 664 distinct full messages, 650 distinct ActionIntents and 32 distinct
+Agreements across 165 executable paths**. All **1,346 distinct objects** round-trip with
+strict equality, including optional/empty fields, lexical times, arrays and evidence.
+Writing and reading each graph gives the identical RDFC-1.0 canonical N-Quads and passes
+its SHACL shape. There are **zero value/model round-trip failures** in this corpus.
+
+**Capacity qualification, not a runtime limit change.** Twenty-six expanded documents
+exceed the unchanged default 65,536-byte wire envelope. Three large joint-computation
+messages also need more than 512 flat included nodes. Six forum intents already contain
+literal `parameters.request` strings of 103,480–149,099 characters; these are existing
+byte-bound action parameters, not a new JSON encoding of the parameters object. The
+object builder retains them, with a separate bounded construction cap. The corpus test
+first exercises the default writer and records every refusal, then uses explicit
+**test-only** bounds of 1 MiB per document, 262,144 characters per string, 50,000 JSON
+nodes and 8,192 array members for those cases. Depth stays 16. No default bound in
+`core/limits.ts`, no running configuration and no gate decision changes. The precise
+(type, document/operation, source digest, refusal and expanded size) inventory is retained
+in `test/fixtures/message-model-capacity.json`. These 26 documents **cannot round-trip
+through the default wire limits**; 22d must address their carriage capacity before a
+blanket runtime switch. The larger test bounds are not claimed as baseline admission.
+
+The final codegen attempt has **182 errors and 23 advisory warnings** in
+`src/generated/full-admission.json` (205 diagnostics in total), superseding the 157-error
+Part 2 checkpoint. No generator code/admission was weakened. Exact rejected constructs
+include `sh:closed`, `sh:ignoredProperties`, `sh:hasValue`, `sh:or`, `sh:xone`, `sh:class`,
+shape-level `sh:node`, inline/unprojected composite links, `BlankNodeOrIRI` / `IRIOrLiteral`
+node kinds, the digest pattern and byte-list numeric bounds. GrantRecord, InvokeBodyChallenge and MessageAuthorship
+are generated from their complete admitted shapes, and complete inputs
+remain pinned in the lock.
+
+Hand-written class accounting: ParticipantRefNode, AudienceRefNode and OperationRefNode
+correspond to their closed/ignored-properties reference shapes; the eleven `*BodyNode`
+classes and MessageNode correspond to their closed, kind-constrained/composite shapes.
+BasisNode corresponds to RequestBasisShape's exclusive reference choices; InvokeChallengeNode
+and MessageAuthorshipNode are thin facades over generated component accessors, rather
+than rejected classes; ChallengeNeedsNode corresponds to its
+closed exclusive choices; ContentPartNode to its string/byte-list union. ActionIntentNode
+and AgreementNode correspond to their open-value and composite links. IntentEvidenceRefNode
+uses its closed reference shape. EvidenceItemNode uses the exclusive embedded/reference
+shape. EmbeddedCredentialNode and its private EmbeddedSubjectNode use the rejected
+credential/subject/proof links (CredentialNode itself is reused from solid-vc).
+NamedValuesNode and NamedValueNode use NamedValueCollectionShape, ItemListShape and
+NamedValueShape, rejected for closed/composite/union constraints. CoreNode and the older
+RdfNode are infrastructure, not generated domain classes. Exact subjects and messages,
+including normalized property-shape identifiers, are in the admission artifact.
+
+**Part 4 — done for today's evidence and its legacy presentations.** A compact JWS is
+projected to a VC 2.0 credential graph, viewed through solid-vc's CredentialNode. Its
+issuer (or representation party), validity and issue metadata are explicit; its subject
+holds the original signed fields as named domain values. The credential links through
+`sec:proof` to a **named proof graph**, containing an `awp:CompactJwsProof` and the
+**unchanged original compact JWS** under `awp:jws`. The named proof type explicitly says
+that the issuer signed the original JWS payload, **not the translated RDF graph**.
+`EmbeddedCredentialNode.verifyOriginal` verifies the original protected header/payload
+bytes with pinned material and the caller's required typ, then compares the entire
+credential/subject/value/proof closure to its deterministic projection. Thus a graph
+claim cannot drift while borrowing the original signature. Parsing the payload alone
+establishes no integrity, authority, authorization or truth.
+
+EvidenceItemNode holds either that credential/presentation or a `credentialDigest`,
+exclusively. The reference digest is `sha-256:<hex>` of the exact previously sent compact
+JWS bytes. Resolution is injected, never fetched; missing/substituted bytes fail. The
+legacy fromNode converter can take that resolver. RDF/JS reserves `.value` for the node
+identifier, so the original evidence string is exposed as `.statement` (and through the
+object converter), not by overriding the RDF term's value getter.
+
+The corpus also contains selective-disclosure and mandate-chain strings, which are JSON
+envelopes rather than compact JWS statements. These become VC presentations with their
+actual signed credentials embedded; their original envelope bytes and named envelope
+fields are retained. No envelope signature is invented. Verifying a presentation as an
+individual compact credential fails; its nested credentials retain real proofs. 22d must
+continue dispatching the original selective/chain mechanisms, including disclosure and
+chain checks, on the retained bytes; verifying only a nested signature establishes less.
+
+**Part 5 — done.** Six fixtures are in `test/fixtures/whole-messages/`: propose, deliver
+with a credential, and invoke, each as JWS/JCS and eddsa-rdfc-2022. Their main-path source
+ids are respectively `...sam-agent:0003`, `...north-agent:0005`, and `...sam-agent:0006`
+under `urn:awp:engine-mortgage-core-main:`. The deliver carries the lender's signed
+statement, not merely representation evidence. Each fixture fits default bounds. The
+manifest retains the exact original object and public key; no private keys are stored.
+Tests rerun mortgage-core to check the sources, reproduce the deterministic signatures,
+read/validate/verify the fixtures, reject tampering and unknown keys, and verify the DI
+versions again after lossless TriG reserialization. These are fixture documents, not a
+claim that the running carriage uses RDF. No commit was made despite the brief's word
+“commit” for fixtures: its explicit no-commit instruction is preserved.
+
+`writeDocument` uses a flat `@included` layout for complete named values/proof graphs to
+avoid artificial nesting growth; it still checks graph equality. DI verification now
+reads the outer proof's exact six fields from its RDF proof graph and removes **only that
+outer proof** from the signature input. Embedded credential proof graphs remain covered.
+JWS continues to verify its exact JCS document. Tests cover unknown/extra/missing proof
+options, ambiguous fields, wrong datatypes, suite/purpose/method errors and embedded-proof
+tampering. Verification-method IRIs with a second fragment are refused: WHATWG URL
+acceptance alone let JSON-LD drop such a method. Open legacy domain strings with those
+old malformed identifiers remain strings, preserving their original bytes rather than
+silently losing triples or repairing identifiers.
+
+**22d integration notes.** AgentRuntime.emit must build/sign the exact complete node with
+MessageNode.toNode, retain that dataset for release/replay, and bind approvals to the
+selected suite's full-document digest. Do not send the compatibility create/envelope
+projection. receiveInner and InboundGate.verifyIntegrity must call the selected wire
+verify/readDocument boundary and pass MessageNode over that **same admitted dataset**;
+read scalar and linked operands through the wrappers. Require Message plus exactly one
+matching kind type at message ingress: the general document reader also admits the
+credential, intent, agreement and supporting document classes. The outbound gate must inspect
+that same complete graph, including named parameters, credentials and original content,
+before signing/releasing it. Keep the issuer's original JWS verification/projection check,
+role/typ and pinned-key resolution; a sender's outer signature does not establish source
+authority. Cache and resolve prior credential digests explicitly. Preserve selective/chain
+verification and their narrower conclusions. Resolve the 26 default-capacity refusals
+before switching all traffic, keep named proof graphs in a lossless RDF format, and keep
+the immutable decision oracle while replacing the 15 retained declarations. Native
+RDF wrappers, not fromNode legacy object snapshots, must become gate operands. Current
+ActionIntent action strings remain the existing literal ODRL-level labels in this model;
+no action class or payment interpretation has been remapped in this lane.
+
+No dependencies, lockfile, generator implementation, payment terms, gate/runtime/engine/
+settlement/suite sources, profiles, scenarios or maintained outlines were changed.
+Required build/scenario commands regenerate trace/manifest artifacts; those generated
+rewrites are restored to HEAD after checking the command result. The RDF allow-list is
+unchanged: **15 hard core declarations plus 213 bounded exceptions**, with no new finding.
+Final command results follow after the last validation pass.
+
+**Final vocabulary review.** Shared expiry, approval and nonce properties have resource
+rather than single-owner domains, and operation has a resource range: body operation
+fields constrain a versioned reference, while ActionIntent carries an operation IRI.
+The owning shapes retain those distinctions. Basis kind individuals now have the separate
+BasisKind class; they are not themselves request-basis nodes needing another kind/reference.
+This changes no value or decision. The outer proof graph must have exactly one proof
+owner; a shared graph is refused so excluding the outer proof cannot also exclude an
+embedded credential's proof. Its adversarial test checks verification and digest refusal.
+
+**Final status and results.** Parts 1, 2, 4 and 5 are implemented. Part 3's complete model,
+converters and exhaustive actual-corpus round trips are implemented; its **default wire
+capacity condition remains partial for the 26 explicitly listed documents**. Runtime
+migration is intentionally not attempted in this brief. Those capacity cases are **12
+invokes, 8 deliveries and 6 intents**, with expanded documents of **65,992–477,212 bytes**.
+They pass object/graph equality and shape checks under the explicit test-only capacity;
+none is silently admitted under the unchanged defaults. All three selected whole-message
+fixtures fit the defaults under both suites.
+
+Final reference tests: **624 tests in 63 files**, plus **17 unchanged evaluation-fixture
+tests in one file** (641 total). Starting counts were 583 + 17. The complete corpus has
+zero model/value round-trip failures. The immutable 157-path decision oracle passes,
+with its original SHA-256 still
+`5352929414096fbaeaf0958d95338c2a4192f7fb7ae0c491d867c34a5a6d0b8e`.
+Required scenarios still report **165 live paths: 154 runs, 11 disagreements, 9 blocked**.
+The final ODRL suite passes **912 tests in 13 files**, superseding the 898-test Part 1
+checkpoint; the extra cases cover an empty query component following an r-component
+and HTTP Unicode whitespace. Independent security review remains required before merge.
+
+Commands run last, with `/opt/node24/bin` first on PATH:
+
+- `pnpm --filter @jeswr/solid-odrl run lint`, `run build`, `run typecheck`, `test` — PASS;
+  912 tests. Logs: `/tmp/brief22c-odrl-{lint,build,typecheck,test}.log`.
+- `pnpm --filter @jeswr/agent-reference run codegen` — PASS; 182 full-model admission
+  errors and 23 advisory warnings retained; GrantRecord, InvokeBodyChallenge and
+  MessageAuthorship generated. No generated file was hand-edited.
+- `pnpm --filter @jeswr/agent-reference run build` — PASS; TypeScript, generated copy,
+  schema drift check, trace generation and all 165 scenario paths.
+- `pnpm --filter @jeswr/agent-reference run lint` — PASS; zero errors (40 warnings and
+  238 informational diagnostics). `run typecheck` — PASS.
+- `BRIEF22C_MODEL_REPORT=/tmp/brief22c-model-report.json pnpm --filter
+  @jeswr/agent-reference test` — PASS; 624 + 17 tests, including the unchanged oracle,
+  every actual-corpus conversion, proof refusals, fixtures and generated-byte drift.
+- `pnpm --filter @jeswr/agent-reference run scenarios` — PASS after the final tests;
+  165 live paths, with the counts above. Generated trace/manifest rewrites restored.
+- `pnpm run check:codegen` — PASS, eight generated projects.
+- `pnpm run check:agent-layers` — PASS.
+- `pnpm --filter @jeswr/agent-reference run check:rdf-pipeline` — expected FAIL/exit 1;
+  exactly the retained **15 core declarations and 213 bounded exceptions**, no new
+  finding and no allow-list/status-baseline change.
+- `git diff --check` — PASS. Final scope check shows no retained diff in forbidden source,
+  scenario/profile/trace/outline paths, the oracle, or the RDF allow-list.
+
+Remaining logs use `/tmp/brief22c-{codegen,build,lint,typecheck,tests,scenarios,
+check-codegen,layers,pipeline}.log`. No commit, network request, dependency install,
+personal-agent suite, coverage, `eval:e0` command, full-workspace gate or publication ran.
+
+
+**Generated-component audit completed.** The supported standalone MessageAuthorship and
+InvokeBodyChallenge components are now included in codegen.config.json. Their facades
+read/write through the generated SDK accessors; they are not claimed as rejected classes.
+The aggregate Message/body graph still has the recorded admission failures. Full tests
+were rerun after this change: **624 + 17 passed**, including byte-identical reproduction
+of all six fixture graphs/signatures, the 165-path corpus and the unchanged oracle.
+Codegen drift, typecheck, lint, build, scenarios and both guards retain the final results
+above. The capacity inventory was refreshed from that final run; source digests for
+fresh joint-protocol ciphertext can differ between runs without changing any decision.

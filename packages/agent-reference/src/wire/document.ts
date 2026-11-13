@@ -232,7 +232,10 @@ function stable(value: unknown): unknown {
 }
 
 /** Compact the exact graph, retaining all nodes. Refuse a projection that loses triples. */
-export async function writeDocument(node: DocumentNode): Promise<JsonLdDocument> {
+export async function writeDocument(
+  node: DocumentNode,
+  options: { limits?: PilotLimits } = {},
+): Promise<JsonLdDocument> {
   const id = node.id ?? node.value;
   if (
     typeof id !== "string" ||
@@ -257,10 +260,29 @@ export async function writeDocument(node: DocumentNode): Promise<JsonLdDocument>
     "@embed": "@always",
     ...(hasProof ? { proof: { "@graph": {} } } : {}),
   };
-  const framed = await jsonld.frame(compacted, frame, frameOptions);
+  // Complete domain values and embedded proof graphs may exceed the nesting bound
+  // when recursively framed. Keep their named nodes flat in one JSON-LD document.
+  // @included retains every node and named graph without inventing a second graph.
+  const flatModel =
+    ["NamedValueCollection", "EvidenceItem"].some(
+      (type) => dataset.countQuads(null, namedNode(RDF_TYPE), namedNode(AWP + type), null) > 0,
+    ) ||
+    dataset.countQuads(null, namedNode(RDF_TYPE), namedNode("https://schema.org/ItemList"), null) >
+      0;
+  let framed: unknown;
+  if (flatModel) {
+    const nodes = (compacted["@graph"] ?? [compacted]) as JsonLdDocument[];
+    const root = nodes.find((entry) => (entry.id ?? entry["@id"]) === id);
+    if (!root) throw new DocumentError("missing-root-on-write");
+    framed = {
+      "@context": ANSWERABLE_CONTEXT,
+      ...root,
+      "@included": nodes.filter((entry) => entry !== root),
+    };
+  } else framed = await jsonld.frame(compacted, frame, frameOptions);
   const document = stable(framed) as JsonLdDocument;
   checkDocumentTerms(document);
-  const roundTrip = await documentDataset(document);
+  const roundTrip = await documentDataset(document, options.limits);
   assertBlankNodeLimit(dataset);
   assertBlankNodeLimit(roundTrip);
   if ((await digestQuads([...dataset])) !== (await digestQuads([...roundTrip])))

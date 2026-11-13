@@ -87,8 +87,7 @@ _:b1_b1_b0_n3-17 sh:name "value";
     sh:severity sh:Violation;
     sh:maxCount 1;
     sh:nodeKind sh:BlankNodeOrIRI;
-    sh:minCount 1;
-    sh:node awp:VerifiableCredentialShape.
+    sh:node awp:EmbeddedEvidenceShape.
 _:b1_b1_b0_n3-10 rdf:first <https://w3id.org/jeswr/awp#evidence-role/representation>;
     rdf:rest _:b1_b1_b0_n3-11.
 awp:VerifiableCredentialShape a sh:NodeShape;
@@ -150,7 +149,7 @@ _:b1_b1_b0_n3-18 rdf:first rdf:type;
 _:b1_b1_b0_n3-19 sh:name "want";
     sh:path awp:want;
     sh:severity sh:Violation;
-    sh:datatype xsd:string.
+    sh:or ( [ sh:datatype xsd:string ] [ sh:nodeKind sh:IRI; sh:node awp:ItemListShape ] ).
 awp:DescriptionBodyShape a sh:NodeShape;
     sh:targetClass awp:DescriptionBody;
     sh:name "DescriptionBody";
@@ -165,7 +164,7 @@ _:b1_b1_b0_n3-21 sh:name "description";
     sh:severity sh:Violation;
     sh:maxCount 1;
     sh:nodeKind sh:BlankNodeOrIRI;
-    sh:minCount 1.
+    sh:minCount 1; sh:node awp:NamedValueCollectionShape.
 awp:ProposeBodyShape a sh:NodeShape;
     sh:targetClass awp:ProposeBody;
     sh:name "ProposeBody";
@@ -187,7 +186,7 @@ _:b1_b1_b0_n3-24 sh:name "terms";
     sh:severity sh:Violation;
     sh:maxCount 1;
     sh:nodeKind sh:BlankNodeOrIRI;
-    sh:minCount 1.
+    sh:minCount 1; sh:or ( [ sh:node awp:NamedValueCollectionShape ] [ sh:property [ sh:path <https://schema.org/price>; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:decimal ] ] ).
 _:b1_b1_b0_n3-25 sh:name "termsDigest";
     sh:path awp:termsDigest;
     sh:severity sh:Violation;
@@ -230,7 +229,7 @@ _:b1_b1_b0_n3-31 sh:name "selection";
     sh:path awp:selection;
     sh:severity sh:Violation;
     sh:maxCount 1;
-    sh:nodeKind sh:BlankNodeOrIRI.
+    sh:nodeKind sh:BlankNodeOrIRI; sh:node awp:NamedValueCollectionShape.
 _:b1_b1_b0_n3-32 sh:name "agreement";
     sh:path awp:agreement;
     sh:severity sh:Violation;
@@ -627,7 +626,7 @@ _:b1_b1_b0_n3-197 sh:name "input";
     sh:severity sh:Violation;
     sh:maxCount 1;
     sh:nodeKind sh:BlankNodeOrIRI;
-    sh:minCount 1.
+    sh:minCount 1; sh:node awp:NamedValueCollectionShape.
 _:b1_b1_b0_n3-198 sh:name "basis";
     sh:path awp:basis;
     sh:severity sh:Violation;
@@ -711,7 +710,7 @@ _:b1_b1_b0_n3-205 sh:name "output";
     sh:severity sh:Violation;
     sh:maxCount 1;
     sh:nodeKind sh:BlankNodeOrIRI;
-    sh:minCount 1.
+    sh:minCount 1; sh:node awp:NamedValueCollectionShape.
 awp:ReceiptBodyShape a sh:NodeShape;
     sh:targetClass awp:ReceiptBody;
     sh:name "ReceiptBody";
@@ -744,7 +743,7 @@ _:b1_b1_b0_n3-213 sh:name "observed";
     sh:path awp:observed;
     sh:severity sh:Violation;
     sh:maxCount 1;
-    sh:nodeKind sh:BlankNodeOrIRI.
+    sh:nodeKind sh:BlankNodeOrIRI; sh:node awp:NamedValueCollectionShape.
 _:b1_b1_b0_n3-214 sh:name "final";
     sh:path awp:final;
     sh:severity sh:Violation;
@@ -1611,7 +1610,7 @@ _:b1_b1_b0_n3-506 sh:name "parameters";
     sh:severity sh:Violation;
     sh:maxCount 1;
     sh:nodeKind sh:BlankNodeOrIRI;
-    sh:minCount 1.
+    sh:minCount 1; sh:node awp:NamedValueCollectionShape.
 _:b1_b1_b0_n3-507 sh:name "conversation";
     sh:path awp:conversation;
     sh:severity sh:Violation;
@@ -1744,12 +1743,12 @@ _:b1_b1_b0_n3-527 sh:name "terms";
     sh:severity sh:Violation;
     sh:maxCount 1;
     sh:nodeKind sh:BlankNodeOrIRI;
-    sh:minCount 1.
+    sh:minCount 1; sh:or ( [ sh:node awp:NamedValueCollectionShape ] [ sh:property [ sh:path <https://schema.org/price>; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:decimal ] ] ).
 _:b1_b1_b0_n3-528 sh:name "selection";
     sh:path awp:selection;
     sh:severity sh:Violation;
     sh:maxCount 1;
-    sh:nodeKind sh:BlankNodeOrIRI.
+    sh:nodeKind sh:BlankNodeOrIRI; sh:node awp:NamedValueCollectionShape.
 _:b1_b1_b0_n3-529 sh:name "offeror";
     sh:path awp:offeror;
     sh:severity sh:Violation;
@@ -2363,3 +2362,79 @@ awp:CompensationConstraintShape a sh:NodeShape; sh:targetClass <http://www.w3.or
 awp:ServicePermissionShape a sh:NodeShape; sh:targetClass <http://www.w3.org/ns/odrl/2/Permission>; sh:name "ServicePermission"; sh:closed true; sh:ignoredProperties (rdf:type);
   sh:property [ sh:path <http://www.w3.org/ns/odrl/2/action>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1; sh:hasValue <http://www.w3.org/ns/odrl/2/use> ];
   sh:property [ sh:path <http://www.w3.org/ns/odrl/2/target>; sh:maxCount 1; sh:nodeKind sh:IRI; sh:minCount 1 ] .
+
+# ---- Brief 22c: complete message model (AUTHORED-BY Codex GPT-6) ----
+awp:EvidenceItemShape sh:xone (
+    [ sh:property [ sh:path <https://www.w3.org/2018/credentials#verifiableCredential>; sh:minCount 1 ]; sh:property [ sh:path awp:credentialDigest; sh:maxCount 0 ] ]
+    [ sh:property [ sh:path awp:credentialDigest; sh:minCount 1 ]; sh:property [ sh:path <https://www.w3.org/2018/credentials#verifiableCredential>; sh:maxCount 0 ] ]
+); sh:property [ sh:path awp:credentialDigest; sh:maxCount 1; sh:datatype xsd:string; sh:pattern "^sha-256:[a-f0-9]{64}$" ], [ sh:path <https://schema.org/position>; sh:maxCount 1; sh:datatype xsd:integer; sh:minInclusive 0 ].
+awp:MessageShape sh:property [ sh:path awp:presentFields; sh:nodeKind sh:IRI ].
+awp:DescribeBodyShape sh:property [ sh:path awp:presentFields; sh:nodeKind sh:IRI ].
+awp:ContentPartShape sh:property [ sh:path <https://schema.org/position>; sh:maxCount 1; sh:datatype xsd:integer; sh:minInclusive 0 ].
+awp:NamedValueCollectionShape a sh:NodeShape; sh:targetClass awp:NamedValueCollection;
+    sh:class awp:NamedValueCollection; sh:node awp:ItemListShape.
+awp:ItemListShape a sh:NodeShape; sh:targetClass <https://schema.org/ItemList>;
+    sh:closed true; sh:ignoredProperties (rdf:type);
+    sh:property [ sh:path <https://schema.org/itemListElement>; sh:node awp:NamedValueShape ].
+awp:NamedValueShape a sh:NodeShape; sh:targetClass <https://schema.org/PropertyValue>;
+    sh:class <https://schema.org/PropertyValue>; sh:closed true; sh:ignoredProperties (rdf:type);
+    sh:property [ sh:path <https://schema.org/propertyID>; sh:minCount 1; sh:maxCount 1; sh:nodeKind sh:IRI ],
+      [ sh:path <https://schema.org/name>; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string ],
+      [ sh:path <https://schema.org/position>; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:integer; sh:minInclusive 0 ],
+      [ sh:path <https://schema.org/value>; sh:minCount 1; sh:maxCount 1; sh:nodeKind sh:IRIOrLiteral ].
+awp:ListItemShape a sh:NodeShape; sh:targetClass <https://schema.org/ListItem>; sh:node awp:NamedValueShape.
+awp:NullValueShape a sh:NodeShape; sh:targetClass awp:NullValue; sh:closed true; sh:ignoredProperties (rdf:type).
+awp:ChallengeNeedsShape a sh:NodeShape; sh:targetClass awp:ChallengeNeeds;
+    sh:closed true; sh:ignoredProperties (rdf:type);
+    sh:property [ sh:path awp:nonce; sh:minCount 1; sh:maxCount 1; sh:nodeKind sh:IRI ],
+      [ sh:path awp:expiresAt; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:dateTime ],
+      [ sh:path awp:approval; sh:maxCount 1; sh:nodeKind sh:IRI ],
+      [ sh:path rdfs:label; sh:maxCount 1; sh:datatype xsd:string ],
+      [ sh:path awp:claimType; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:xone (
+      [ sh:property [ sh:path awp:approval; sh:minCount 1; sh:maxCount 1; sh:nodeKind sh:IRI ], [ sh:path rdfs:label; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string ], [ sh:path awp:claimType; sh:maxCount 0 ] ]
+      [ sh:property [ sh:path awp:claimType; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string ], [ sh:path awp:approval; sh:maxCount 0 ], [ sh:path rdfs:label; sh:maxCount 0 ] ]
+    ).
+_:b1_b1_b0_n3-113 sh:node awp:ChallengeNeedsShape.
+awp:LegacyCredentialSubjectShape a sh:NodeShape; sh:targetClass awp:LegacyCredentialSubject;
+    sh:property [ sh:path awp:statementPayload; sh:minCount 1; sh:maxCount 1; sh:node awp:NamedValueCollectionShape ].
+awp:CreativeWorkShape a sh:NodeShape; sh:targetClass <https://schema.org/CreativeWork>.
+awp:CompactJwsProofShape a sh:NodeShape; sh:targetClass awp:CompactJwsProof;
+    sh:property [ sh:path awp:jws; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string ].
+awp:RequestBasisShape sh:xone (
+ [ sh:property [ sh:path awp:basisKind; sh:hasValue <https://w3id.org/jeswr/awp#basis/agreement> ]; sh:property [ sh:path awp:agreement; sh:minCount 1; sh:maxCount 1 ]; sh:property [ sh:path awp:grant; sh:maxCount 0 ]; sh:property [ sh:path awp:invocation; sh:maxCount 0 ] ]
+ [ sh:property [ sh:path awp:basisKind; sh:hasValue <https://w3id.org/jeswr/awp#basis/public> ]; sh:property [ sh:path awp:agreement; sh:maxCount 0 ]; sh:property [ sh:path awp:grant; sh:maxCount 0 ]; sh:property [ sh:path awp:invocation; sh:maxCount 0 ] ]
+ [ sh:property [ sh:path awp:basisKind; sh:hasValue <https://w3id.org/jeswr/awp#basis/represented> ]; sh:property [ sh:path awp:agreement; sh:maxCount 0 ]; sh:property [ sh:path awp:grant; sh:maxCount 0 ]; sh:property [ sh:path awp:invocation; sh:maxCount 0 ] ]
+ [ sh:property [ sh:path awp:basisKind; sh:hasValue <https://w3id.org/jeswr/awp#basis/grant> ]; sh:property [ sh:path awp:agreement; sh:maxCount 0 ]; sh:property [ sh:path awp:grant; sh:minCount 1; sh:maxCount 1 ]; sh:property [ sh:path awp:invocation; sh:maxCount 0 ] ]
+ [ sh:property [ sh:path awp:basisKind; sh:hasValue <https://w3id.org/jeswr/awp#basis/invocation> ]; sh:property [ sh:path awp:agreement; sh:maxCount 0 ]; sh:property [ sh:path awp:grant; sh:maxCount 0 ]; sh:property [ sh:path awp:invocation; sh:minCount 1; sh:maxCount 1 ] ]
+).
+
+# Brief 22c: evidence envelope and ordered request fields (AUTHORED-BY Codex GPT-6)
+awp:EmbeddedEvidenceShape a sh:NodeShape;
+    sh:or (
+      [ sh:class <https://www.w3.org/2018/credentials#VerifiableCredential>; sh:node awp:VerifiableCredentialShape ]
+      [ sh:class <https://www.w3.org/2018/credentials#VerifiablePresentation>; sh:node awp:VerifiablePresentationShape ]
+    ).
+awp:VerifiablePresentationShape sh:property
+    [ sh:path <https://www.w3.org/2018/credentials#verifiableCredential>; sh:minCount 1; sh:node awp:VerifiableCredentialShape ],
+    [ sh:path awp:envelopeBytes; sh:maxCount 1; sh:datatype xsd:string ],
+    [ sh:path awp:statementPayload; sh:maxCount 1; sh:nodeKind sh:IRI ].
+
+# Brief 22c: evidence present on runtime intent instances (AUTHORED-BY Codex GPT-6)
+awp:ActionIntentShape sh:property [ sh:path awp:evidence; sh:node awp:IntentEvidenceRefShape ], [ sh:path awp:presentFields; sh:nodeKind sh:IRI ].
+
+awp:IntentEvidenceRefShape a sh:NodeShape; sh:targetClass awp:IntentEvidenceRef;
+    sh:closed true; sh:ignoredProperties (rdf:type);
+    sh:property [ sh:path <http://purl.org/dc/terms/references>; sh:minCount 1; sh:maxCount 1; sh:nodeKind sh:IRI ],
+      [ sh:path awp:claimType; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string ],
+      [ sh:path <https://schema.org/position>; sh:maxCount 1; sh:datatype xsd:integer; sh:minInclusive 0 ].
+
+# Brief 22c: content byte-list range (AUTHORED-BY Codex GPT-6)
+_:b1_b1_b0_n3-377 sh:or ( [ sh:datatype xsd:string ] [ sh:nodeKind sh:IRI; sh:node awp:ByteListShape ] ).
+awp:ByteListShape a sh:NodeShape; sh:node awp:ItemListShape;
+    sh:property [ sh:path <https://schema.org/itemListElement>; sh:node [
+        sh:property [ sh:path <https://schema.org/value>; sh:datatype xsd:integer; sh:minInclusive 0; sh:maxInclusive 255 ]
+    ] ].
+
+# Brief 22c: basis kind individuals (AUTHORED-BY Codex GPT-6)
+awp:BasisKindShape a sh:NodeShape; sh:targetClass awp:BasisKind.

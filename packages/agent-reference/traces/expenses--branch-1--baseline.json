@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "5933bfbb5dd133e9a82cc25ef4e5ad4feed6fb8f",
+    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
     "core": "scripted"
   },
   "standIns": [
@@ -449,9 +449,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -518,9 +516,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -583,9 +579,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -657,9 +651,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -714,9 +706,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -762,7 +752,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:70f7f36dfded043c867cee43aec8f7462e99872873a51f4081cac15697139b4f"
+            "digest": "sha-256:824e927537f7bcd990cd2eb8b55f08a7c159268af89302bf6a780031ac81ef2b"
           },
           "authority": {
             "present": true,
@@ -838,15 +828,13 @@
                       "name": "Reimburse the merchant receipt"
                     }
                   },
-                  "purpose": {
-                    "id": "urn:purpose:expenses"
-                  }
+                  "purpose": "urn:purpose:expenses"
                 }
               },
-              "termsDigest": "sha-256:cf33a2c6f58cf609d29a73fb8f11326112733f8885a2ef01e1b4e518d0007958",
+              "termsDigest": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7",
               "round": 1
             },
-            "digest": "sha-256:f038ec090b8130fb7782fa72822eb471d2d3db56d025bbeadec694a2261ff07a"
+            "digest": "sha-256:d8123b54add83a63a840d74caf4f51452e7490d15465514fdec9260368d2fe92"
           },
           "evidence": {
             "present": true,
@@ -943,12 +931,10 @@
                     "name": "Reimburse the merchant receipt"
                   }
                 },
-                "purpose": {
-                  "id": "urn:purpose:expenses"
-                }
+                "purpose": "urn:purpose:expenses"
               }
             },
-            "digest": "sha-256:cf33a2c6f58cf609d29a73fb8f11326112733f8885a2ef01e1b4e518d0007958"
+            "digest": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7"
           },
           "provenance": {
             "present": true,
@@ -1023,9 +1009,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -1242,7 +1226,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:70f7f36dfded043c867cee43aec8f7462e99872873a51f4081cac15697139b4f"
+            "digest": "sha-256:824e927537f7bcd990cd2eb8b55f08a7c159268af89302bf6a780031ac81ef2b"
           },
           "authority": {
             "present": true,
@@ -1318,15 +1302,13 @@
                       "name": "Reimburse the merchant receipt"
                     }
                   },
-                  "purpose": {
-                    "id": "urn:purpose:expenses"
-                  }
+                  "purpose": "urn:purpose:expenses"
                 }
               },
-              "termsDigest": "sha-256:cf33a2c6f58cf609d29a73fb8f11326112733f8885a2ef01e1b4e518d0007958",
+              "termsDigest": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7",
               "round": 1
             },
-            "digest": "sha-256:f038ec090b8130fb7782fa72822eb471d2d3db56d025bbeadec694a2261ff07a",
+            "digest": "sha-256:d8123b54add83a63a840d74caf4f51452e7490d15465514fdec9260368d2fe92",
             "untrusted": [
               {
                 "path": "operation.id",
@@ -1437,12 +1419,12 @@
                 "text": "Reimburse the merchant receipt"
               },
               {
-                "path": "terms.payment.purpose.id",
+                "path": "terms.payment.purpose",
                 "text": "urn:purpose:expenses"
               },
               {
                 "path": "termsDigest",
-                "text": "sha-256:cf33a2c6f58cf609d29a73fb8f11326112733f8885a2ef01e1b4e518d0007958"
+                "text": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7"
               }
             ]
           },
@@ -1541,12 +1523,10 @@
                     "name": "Reimburse the merchant receipt"
                   }
                 },
-                "purpose": {
-                  "id": "urn:purpose:expenses"
-                }
+                "purpose": "urn:purpose:expenses"
               }
             },
-            "digest": "sha-256:cf33a2c6f58cf609d29a73fb8f11326112733f8885a2ef01e1b4e518d0007958"
+            "digest": "sha-256:f3dac5ccdbf3be151cb41173023b9150f629e08e848f44d5cf1d2e85168dc3c7"
           },
           "provenance": {
             "present": true,
@@ -1621,9 +1601,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -1695,9 +1673,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -1780,9 +1756,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -1849,9 +1823,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -1923,9 +1895,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -1997,9 +1967,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
@@ -2054,9 +2022,7 @@
               "name": "Reimburse the merchant receipt"
             }
           },
-          "purpose": {
-            "id": "urn:purpose:expenses"
-          }
+          "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
