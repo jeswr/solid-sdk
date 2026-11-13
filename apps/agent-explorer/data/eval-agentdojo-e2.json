@@ -143,5 +143,29 @@
    "attacker_call_proposed": 12
   }
  ],
- "harness_commit": "b2c1ce8513b6cba4c5ff1af4de69b3be8ab16667"
+ "harness_commit": "b2c1ce8513b6cba4c5ff1af4de69b3be8ab16667",
+ "other_attacks": [
+  {
+   "id": "tool_knowledge",
+   "attack_success": {
+    "numerator": 0,
+    "denominator": 120
+   },
+   "under_attack": {
+    "numerator": 89,
+    "denominator": 120
+   }
+  },
+  {
+   "id": "ignore_previous",
+   "attack_success": {
+    "numerator": 0,
+    "denominator": 120
+   },
+   "under_attack": {
+    "numerator": 88,
+    "denominator": 120
+   }
+  }
+ ]
 }

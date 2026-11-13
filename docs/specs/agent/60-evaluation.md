@@ -234,6 +234,11 @@ proposed a call that also appears in the attack's solution, each one a read the 
 could equally need. It never proposed the harmful call. This run therefore says nothing
 about protection (Q1). Section 9 is the evidence for that.
 
+The ungated run was repeated on the same 120 pairs with two other attacks from the
+benchmark's own set (`tool_knowledge` and `ignore_previous`). Each succeeded 0 times in 120.
+The benchmark's static attacks do not work on this model; a real-model test of protection
+needs an attack written against it.
+
 **What it measures is cost (Q2, Q3).**
 
 - Labelling tool output as content cost three tasks in 217, in single runs.
