@@ -1,0 +1,64 @@
+// AUTHORED-BY Claude Opus 5.5
+// @jeswr/site-executor: run a planner's RDF action request against a site's own
+// HTTP calls, as described by a @jeswr/site-model SiteModel.
+
+export {
+  applyCsrfToken,
+  type CompiledBody,
+  type CompiledRequest,
+  compileOperation,
+  fillJsonTemplate,
+} from "./compile.js";
+export {
+  applySetCookies,
+  type Cookie,
+  cookieHeader,
+  cookiesFor,
+  domainMatches,
+  InMemorySessions,
+  parseSetCookie,
+  pathMatches,
+  type SessionBundle,
+  type SessionProvider,
+} from "./cookies.js";
+export { jsonPointer } from "./dom.js";
+export {
+  createExecutor,
+  type ErrorKind,
+  type ExecutionResult,
+  type ExecutionStatus,
+  type Executor,
+  type ExecutorOptions,
+  type Plan,
+  type PlannedRequest,
+  planToRequests,
+} from "./executor.js";
+export { type ExtractedItem, ExtractionError, extract } from "./extract.js";
+export {
+  type ApprovalGate,
+  type ApprovalRequest,
+  approvalDigest,
+  approvalFor,
+  createApprovalGate,
+  type Gate,
+  type GateDecision,
+  type GateRequest,
+  moneyFields,
+  summarise,
+} from "./gate.js";
+export {
+  effectiveEffect,
+  type MatchResult,
+  matchRequest,
+  maxEffect,
+  resolveInputs,
+  type Target,
+} from "./match.js";
+export { describeUrl, guardUrl, isLoopbackHost, OriginError, siteOrigin } from "./origin.js";
+export {
+  expandTemplate,
+  parseTemplate,
+  templateVariables,
+  UriTemplateError,
+} from "./uri-template.js";
+export { BindingError, idFromIri, resolveParameter, validateValue } from "./values.js";

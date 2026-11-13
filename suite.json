@@ -101,7 +101,8 @@
     "@jeswr/solid-listening",
     "@jeswr/solid-scheduling",
     "@jeswr/solid-sheets",
-    "@jeswr/solid-environment"
+    "@jeswr/solid-environment",
+    "@jeswr/site-executor"
   ],
   "applications": [
     {
