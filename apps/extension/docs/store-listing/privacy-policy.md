@@ -45,15 +45,22 @@ for access decisions and cached data are used to provide the connection you appr
 
 ## What is sent and who receives it
 
-If you choose **Share this sign-in with my agent**, the popup first checks Chrome's existing
-site access. If access is withheld, it sends nothing to the native host and tells you to
+If you choose **Share this sign-in with my agent**, the popup first checks for existing cookie
+access on every load, even if the page cannot be used or its site access is withheld.
+If cookie access is already granted or cannot be checked, sharing is blocked without a
+permission request or native message. Click **Remove cookie access** to remove it and verify
+absence before sharing. If that fails, sharing stays blocked and the warning asks you to
+remove it from Chrome's extension settings. Each capture must start without cookie access.
+The popup also checks Chrome's existing site access. If access is withheld, it sends nothing to the native host and tells you to
 allow the extension on this site from Chrome's extension menu first, then try again.
 Capture never requests or removes a host origin. With site access already granted, clicking
 review requests only temporary optional cookie access, then reads only cookies matching
 that page. Cookie access is removed and checked absent after the snapshot is prepared,
 including errors, permission denial, cancellation and popup closure. Host access stays as
 it was before sharing. If cleanup fails or absence cannot be confirmed, a visible warning
-appears alongside the actual capture outcome (a toolbar `!` if the popup is closed).
+appears alongside the actual outcome and further sharing is blocked (a toolbar `!` if the
+popup is closed). Confirmation checks cookie absence again: unexpected access, including a
+late permission grant, refuses sharing and triggers cleanup. Review again after cleanup to retry.
 The popup displays the site, cookie count, vault
 profile and persona before a separate confirmation sends that snapshot to your local
 encrypted agent vault through Chrome native messaging. These cookies give your agent
