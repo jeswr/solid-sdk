@@ -1,0 +1,757 @@
+{
+  "authored_by": "Codex GPT-6",
+  "source": "AgentDojo 0.1.35 v1 tool definitions only",
+  "suites": {
+    "banking": {
+      "get_balance": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/banking_client.py:154",
+        "definition_sha256": "1eab4053c77550372ee050b462d383db4efe5eac9d7036a9fe1f2b71d82bd8f0",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "get_iban": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/banking_client.py:50",
+        "definition_sha256": "3e618fee9838946a0995af208596ae9f0a52df987273b5b9d7316e67a4ff86a1",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "get_most_recent_transactions": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/banking_client.py:161",
+        "definition_sha256": "0c829c9bfaff624fd44493c0b29ec7249be4b0ea0ce8e722db5ae0e2967668fb",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "get_scheduled_transactions": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/banking_client.py:172",
+        "definition_sha256": "f74ce502abaaa1335c1397dcc817e8625f3ca6e84d6be4a99af3918fe48eac0e",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "get_user_info": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/user_account.py:20",
+        "definition_sha256": "b9834b62b4b79ca57adf8e6d9b6a50016680fbbf3aaf659722b1d931d1c233c9",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "read_file": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/file_reader.py:12",
+        "definition_sha256": "fadbc06d60bfa399255fa423a9c2a77379468ccefe591ee520fb46fa55922392",
+        "output": "content",
+        "recipient_args": []
+      },
+      "schedule_transaction": {
+        "amount_args": [
+          "amount"
+        ],
+        "class": "send",
+        "content_args": [
+          "subject"
+        ],
+        "definition": "v1/tools/banking_client.py:82",
+        "definition_sha256": "cf5388c8b24a56e1214c46ccf454949504d91b014b89bee87b7d7f2bfd8cad22",
+        "output": "content",
+        "recipient_args": [
+          "recipient"
+        ]
+      },
+      "send_money": {
+        "amount_args": [
+          "amount"
+        ],
+        "class": "send",
+        "content_args": [
+          "subject"
+        ],
+        "definition": "v1/tools/banking_client.py:55",
+        "definition_sha256": "80139ac878e224b5e0a8d43f4951b3bcd1e63329f3eefcc0b81f689fb91b65ec",
+        "output": "content",
+        "recipient_args": [
+          "recipient"
+        ]
+      },
+      "update_password": {
+        "amount_args": [],
+        "class": "change-own-sensitive",
+        "content_args": [],
+        "definition": "v1/tools/user_account.py:34",
+        "definition_sha256": "49e4ec8ec8bbbfefcea44c22be051586ac4e45b7fa7823d2dcafb4ed0dafe033",
+        "output": "content",
+        "recipient_args": []
+      },
+      "update_scheduled_transaction": {
+        "amount_args": [
+          "amount"
+        ],
+        "class": "send",
+        "content_args": [
+          "subject"
+        ],
+        "definition": "v1/tools/banking_client.py:115",
+        "definition_sha256": "886a9f11c8ab48e5e1b099e3fe575cdd46848d1109da75132af2f7549b3bf1d8",
+        "implicit_defaults": "bank_account.scheduled_transactions[id]: recipient, amount, subject",
+        "output": "content",
+        "recipient_args": [
+          "recipient"
+        ]
+      },
+      "update_user_info": {
+        "amount_args": [],
+        "class": "change-own-sensitive",
+        "content_args": [],
+        "definition": "v1/tools/user_account.py:46",
+        "definition_sha256": "faa34a7da8570f024b5f305ab8c403a7f1c952e88299524113f47b79005decb6",
+        "output": "content",
+        "recipient_args": []
+      }
+    },
+    "slack": {
+      "add_user_to_channel": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/slack.py:30",
+        "definition_sha256": "a82e2807bfc0921a3cb01e94d749575cb2c846431ec2d54993c66257c4c84c77",
+        "output": "content",
+        "recipient_args": [
+          "user",
+          "channel"
+        ]
+      },
+      "get_channels": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/slack.py:25",
+        "definition_sha256": "23363b2345540e234341f2ba02ea8b27d135991fbfa98a5a9c24423da45ee2b9",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "get_users_in_channel": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/slack.py:118",
+        "definition_sha256": "69c10136b700250c2ba85b70a349395e0c86cef2e9b763ceff77d41a208c538c",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "get_webpage": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/web.py:35",
+        "definition_sha256": "cff8165d85bd17204237f07006d79894ff6b4485e705b027c74ab5e51143e177",
+        "output": "content",
+        "recipient_args": []
+      },
+      "invite_user_to_slack": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/slack.py:93",
+        "definition_sha256": "37e760920e4e22572a9b2fafc71fc0ce25bff134753175462772a57eedab434d",
+        "output": "content",
+        "recipient_args": [
+          "user_email"
+        ]
+      },
+      "post_webpage": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [
+          "content"
+        ],
+        "definition": "v1/tools/web.py:24",
+        "definition_sha256": "0ab2594c9b9a00ac06a29f133b6bbbd4c5f54844cc8d294a46a577b53716f9fe",
+        "output": "content",
+        "recipient_args": [
+          "url"
+        ]
+      },
+      "read_channel_messages": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/slack.py:43",
+        "definition_sha256": "1ce8ccd99fe3792f23d735462f5f5cc2fc1cf75b7074105d6544dc31c90aa919",
+        "output": "content",
+        "recipient_args": []
+      },
+      "read_inbox": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/slack.py:53",
+        "definition_sha256": "38a815d52d333fb5f14cb14ec89430eb1da9d9423e003189d6b57e314db13479",
+        "output": "content",
+        "recipient_args": []
+      },
+      "remove_user_from_slack": {
+        "amount_args": [],
+        "class": "change-own-sensitive",
+        "content_args": [],
+        "definition": "v1/tools/slack.py:106",
+        "definition_sha256": "baf57ec06b305f30cbaef3441bc7481522f619d06fd49f8b234a377df21847bd",
+        "output": "content",
+        "recipient_args": []
+      },
+      "send_channel_message": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [
+          "body"
+        ],
+        "definition": "v1/tools/slack.py:78",
+        "definition_sha256": "2f09532c047412147524ce5711bec14d300555c37b13d5ac037478eb8f8452c5",
+        "output": "content",
+        "recipient_args": [
+          "channel"
+        ]
+      },
+      "send_direct_message": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [
+          "body"
+        ],
+        "definition": "v1/tools/slack.py:63",
+        "definition_sha256": "8c08718958dbdb5965bbbc55473a5de074917560c7018711dce3ce2e638843ba",
+        "output": "content",
+        "recipient_args": [
+          "recipient"
+        ]
+      }
+    },
+    "travel": {
+      "cancel_calendar_event": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/calendar_client.py:200",
+        "definition_sha256": "5c3b0e09f0b1871c792006ed48c71978950531e09c0cfdd3241b1e1416d2cbc8",
+        "implicit_recipients": "calendar.events[event_id].participants (excluding account_email)",
+        "output": "content",
+        "recipient_args": []
+      },
+      "check_restaurant_opening_hours": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:262",
+        "definition_sha256": "8855a807d3b455a48722e8b2158cb129a5c6a4cc296cb1ad9441f40c5624071e",
+        "output": "content",
+        "recipient_args": []
+      },
+      "create_calendar_event": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [
+          "title",
+          "description",
+          "location"
+        ],
+        "definition": "v1/tools/calendar_client.py:137",
+        "definition_sha256": "2d6e93975bd80d8d5a06a02c4a0357aa972b96fe01b99e87252506c68299850c",
+        "output": "content",
+        "recipient_args": [
+          "participants"
+        ],
+        "self_recipient": "calendar.account_email excluded from other parties"
+      },
+      "get_all_car_rental_companies_in_city": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:279",
+        "definition_sha256": "8aa0e0639bbdbb01788b4cea841aa5c1de5da63ea2594d80fea1b7cda212bc29",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_all_hotels_in_city": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:122",
+        "definition_sha256": "5377a4a4670d117dc9a65910bf0c18ee693f470fff21b71880564181a45de67c",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_all_restaurants_in_city": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:166",
+        "definition_sha256": "d764bdd29266a17162d47b8dbfe802db9760f4fdc12431b03b73350ba6baac2b",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_car_fuel_options": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:321",
+        "definition_sha256": "92be25297ee698e7066ad4014abb51dcf83fbd62d693d9f5b3523766787f8b8f",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_car_price_per_day": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:330",
+        "definition_sha256": "4fd14b87e959c980ed648837643f1b16011b0c0f599ff6e7c816fb6bf34fa63d",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_car_rental_address": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:312",
+        "definition_sha256": "fb934c34f7795f49bd7e6e4275542b9fc5ff777108852a3a5918bc2e26f31932",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_car_types_available": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:288",
+        "definition_sha256": "8863382b35f4c0f49046592e0adf45961846cde4d887de2922ecba5fa1e2ff9f",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_contact_information_for_restaurants": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:234",
+        "definition_sha256": "2ab8bd5543bcec872621ceea2017586520425f0c68c29c6b7b73ccfae0563abf",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_cuisine_type_for_restaurants": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:205",
+        "definition_sha256": "d7ee98c8f79bcaca42180a274140c3625eb01d2f96f2043b54010b7ac7fb33b5",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_day_calendar_events": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/calendar_client.py:128",
+        "definition_sha256": "1495871eb3b660972b702363a90bec4e24b7011eb19abed7488bc91c0c364f86",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_dietary_restrictions_for_all_restaurants": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:219",
+        "definition_sha256": "5533c3f8005276b9d9a2304e3947ba3689b148e74d41546bc445f5ce9fe0297f",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_flight_information": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:403",
+        "definition_sha256": "afba3ef3cfb04112bc63d3f8ffd8bfa00cd4e472d2271c7faabc700ed01c33c1",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_hotels_address": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:142",
+        "definition_sha256": "a37ee0d807baa0b8a0db2b5f503b5dc965817e29e3eecf8120a1425dddceb077",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_hotels_prices": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:131",
+        "definition_sha256": "2ec9a05247769f43b179a161d54b2681a3a01281bc85f3e8c3d49e0bff0914b4",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_price_for_restaurants": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:248",
+        "definition_sha256": "2d8b60a573d2e56c824e94c00424dbcc066869d0c7c94a521c0153ba5a5b837a",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_rating_reviews_for_car_rental": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:299",
+        "definition_sha256": "3959fd333ffceb656d73380e7f6b6e0bbaa4fcbb8f85187a07198c8c2015ff27",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_rating_reviews_for_hotels": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:149",
+        "definition_sha256": "3a2c8cf2ef8b7a094c59ece6a1fb98d6d504a71cf0a51a553ed460e981b3326a",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_rating_reviews_for_restaurants": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:191",
+        "definition_sha256": "e50ffa925aeb44874bdd96876c82fe36596a7db7ec4ef6e5e87dd5e8dfd5ccf5",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_restaurants_address": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:175",
+        "definition_sha256": "a251b175a306884ab0c7aa27ba6efea466ce52e2a494e57ee4f452d1198fb04d",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_user_information": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:104",
+        "definition_sha256": "877d09fd8a003d0c72254b19fb7c33d57d993daf2f4c36d5b7270c0f22b697d4",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "reserve_car_rental": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:382",
+        "definition_sha256": "2724b5be62f97f053d4e66800439e330538cca0b3d604374f1c254047d65f252",
+        "output": "content",
+        "recipient_args": [
+          "company"
+        ]
+      },
+      "reserve_hotel": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:339",
+        "definition_sha256": "697e7948acb4c42d38319d3ae557b2cc3fae4f21839a5ec8436934f79ab58f5f",
+        "output": "content",
+        "recipient_args": [
+          "hotel"
+        ]
+      },
+      "reserve_restaurant": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/travel_booking_client.py:359",
+        "definition_sha256": "d4cacbeee46adf2b5802646ecc9306d033c97cc167ab1dad52bf243f2db6ca57",
+        "output": "content",
+        "recipient_args": [
+          "restaurant"
+        ]
+      },
+      "search_calendar_events": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/calendar_client.py:171",
+        "definition_sha256": "47876223a9f6d42b23f0fa3beb6d1dce2312267f6a9970ab570396ea767a4d16",
+        "output": "content",
+        "recipient_args": []
+      },
+      "send_email": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [
+          "subject",
+          "body"
+        ],
+        "definition": "v1/tools/email_client.py:154",
+        "definition_sha256": "b5f62ef371c34c99ba730b86daffdc56ff05e690d20bd851a007b6f70cb3929a",
+        "output": "content",
+        "recipient_args": [
+          "recipients",
+          "cc",
+          "bcc"
+        ]
+      }
+    },
+    "workspace": {
+      "add_calendar_event_participants": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/calendar_client.py:242",
+        "definition_sha256": "49061ab611c6299ccc83015ea22536a4a0c5058b6754f1f6486c645ee3fe6e08",
+        "output": "content",
+        "recipient_args": [
+          "participants"
+        ]
+      },
+      "append_to_file": {
+        "amount_args": [],
+        "class": "change-own",
+        "content_args": [],
+        "definition": "v1/tools/cloud_drive_client.py:134",
+        "definition_sha256": "9cbbaf9989008502ab776ff4b22ddf2f4d0c0f3b7565c711deae80919d4086c2",
+        "output": "content",
+        "recipient_args": []
+      },
+      "cancel_calendar_event": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/calendar_client.py:200",
+        "definition_sha256": "5c3b0e09f0b1871c792006ed48c71978950531e09c0cfdd3241b1e1416d2cbc8",
+        "implicit_recipients": "calendar.events[event_id].participants (excluding account_email)",
+        "output": "content",
+        "recipient_args": []
+      },
+      "create_calendar_event": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [
+          "title",
+          "description",
+          "location"
+        ],
+        "definition": "v1/tools/calendar_client.py:137",
+        "definition_sha256": "2d6e93975bd80d8d5a06a02c4a0357aa972b96fe01b99e87252506c68299850c",
+        "output": "content",
+        "recipient_args": [
+          "participants"
+        ],
+        "self_recipient": "calendar.account_email excluded from other parties"
+      },
+      "create_file": {
+        "amount_args": [],
+        "class": "change-own",
+        "content_args": [],
+        "definition": "v1/tools/cloud_drive_client.py:80",
+        "definition_sha256": "4e857e7e902e543b89a5aac8a33a413eb6f5c646737e7622c3d684784323dd2b",
+        "output": "content",
+        "recipient_args": []
+      },
+      "delete_email": {
+        "amount_args": [],
+        "class": "change-own-sensitive",
+        "content_args": [],
+        "definition": "v1/tools/email_client.py:214",
+        "definition_sha256": "330f573225db4c721725236be60902500c0a7cde9ea0467f5d27af70a065db65",
+        "output": "content",
+        "recipient_args": []
+      },
+      "delete_file": {
+        "amount_args": [],
+        "class": "change-own-sensitive",
+        "content_args": [],
+        "definition": "v1/tools/cloud_drive_client.py:93",
+        "definition_sha256": "abb0dfd827521f5a93f4b863f8539c9e5e32a1d54717a0cbbaa1afb1f320cb74",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_current_day": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/calendar_client.py:191",
+        "definition_sha256": "dec7682bae7ef1e8f967211532f20b45861136cf488efbbc8cc47b2742fb4b11",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "get_day_calendar_events": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/calendar_client.py:128",
+        "definition_sha256": "1495871eb3b660972b702363a90bec4e24b7011eb19abed7488bc91c0c364f86",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_draft_emails": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/email_client.py:233",
+        "definition_sha256": "1a36936a0327066034035676729f0a7d6445c629fbf1b65f5e31caac5870a585",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "get_file_by_id": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/cloud_drive_client.py:102",
+        "definition_sha256": "6f1a9877bf613b653cbb929ba592867bbcc58b94cbc312408b08cb23af754887",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_received_emails": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/email_client.py:228",
+        "definition_sha256": "08946ecc66627763070cde02dcffd43a0f29bae76c8636545c69a9943e689fc7",
+        "output": "content",
+        "recipient_args": []
+      },
+      "get_sent_emails": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/email_client.py:223",
+        "definition_sha256": "99661f08b82ae271b4f993c6c58c976df7d35f794e2f940bd321cb134b4e3701",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "get_unread_emails": {
+        "amount_args": [],
+        "class": "change-own",
+        "content_args": [],
+        "definition": "v1/tools/email_client.py:148",
+        "definition_sha256": "40cde17408b56b763d323b43c199570bfa155a94f1d4f3c822377469a06a8e34",
+        "output": "content",
+        "recipient_args": []
+      },
+      "list_files": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/cloud_drive_client.py:110",
+        "definition_sha256": "a816f34708789df7f3bcde48c6831cb95019e2a2f44d43b67b15b3ba7e000f73",
+        "output": "content",
+        "recipient_args": []
+      },
+      "reschedule_calendar_event": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/calendar_client.py:214",
+        "definition_sha256": "59e0987e3e4af6f2ef6e07d440fde5fc9a848eadc8f8a06fec52287b5f6dabf6",
+        "implicit_recipients": "calendar.events[event_id].participants (excluding account_email)",
+        "output": "content",
+        "recipient_args": []
+      },
+      "search_calendar_events": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/calendar_client.py:171",
+        "definition_sha256": "47876223a9f6d42b23f0fa3beb6d1dce2312267f6a9970ab570396ea767a4d16",
+        "output": "content",
+        "recipient_args": []
+      },
+      "search_contacts_by_email": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/email_client.py:247",
+        "definition_sha256": "49e78a3c4a0c8f548afe356fdba36854e4ea0e78f0243e3d50e59eb520a5da51",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "search_contacts_by_name": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/email_client.py:238",
+        "definition_sha256": "f033dad7b53aff12be7295b5a87ebd0d460815277fb9b3a5dc791d4f0b38bb03",
+        "output": "own-record",
+        "recipient_args": []
+      },
+      "search_emails": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/email_client.py:196",
+        "definition_sha256": "635cf15cac2029f9c21bc64ae2db20b85bf070c81438400a11209b4f3b214c6a",
+        "output": "content",
+        "recipient_args": []
+      },
+      "search_files": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/cloud_drive_client.py:147",
+        "definition_sha256": "490e3c09bceb368fd9dc82d06e3e8922717d77b530527117c96f72fd61b225d3",
+        "output": "content",
+        "recipient_args": []
+      },
+      "search_files_by_filename": {
+        "amount_args": [],
+        "class": "read",
+        "content_args": [],
+        "definition": "v1/tools/cloud_drive_client.py:69",
+        "definition_sha256": "4586daf2aea63bacee16d0c5f746fb1ed318ed1ad4808db52725b89db798ae07",
+        "output": "content",
+        "recipient_args": []
+      },
+      "send_email": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [
+          "subject",
+          "body"
+        ],
+        "definition": "v1/tools/email_client.py:154",
+        "definition_sha256": "b5f62ef371c34c99ba730b86daffdc56ff05e690d20bd851a007b6f70cb3929a",
+        "output": "content",
+        "recipient_args": [
+          "recipients",
+          "cc",
+          "bcc"
+        ]
+      },
+      "share_file": {
+        "amount_args": [],
+        "class": "send",
+        "content_args": [],
+        "definition": "v1/tools/cloud_drive_client.py:117",
+        "definition_sha256": "ad115bbd74c3cf82d4bc759c55dc971c0bfd60e87d517da0538f2880ddda3f9a",
+        "output": "content",
+        "recipient_args": [
+          "email"
+        ]
+      }
+    }
+  }
+}

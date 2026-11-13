@@ -1,0 +1,8 @@
+# AUTHORED-BY Codex GPT-6
+.venv/
+__pycache__/
+.pytest_cache/
+agentdojo/cache/
+agentdojo/results/v1/
+agentdojo/results/v1.2/
+agentdojo/results/summary.json
