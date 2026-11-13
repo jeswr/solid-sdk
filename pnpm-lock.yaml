@@ -4149,6 +4149,9 @@ importers:
 
   packages/pod-type-index:
     dependencies:
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../storage-capabilities
@@ -4168,6 +4171,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
       '@types/n3':
         specifier: ^1.16.0
         version: 1.26.1
