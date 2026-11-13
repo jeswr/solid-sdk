@@ -249,11 +249,10 @@ function describeRequest(
   return { op: 'create', url, container, name, kind };
 }
 
+/** Read only the fields describeRequest uses; never enumerate a stored item. */
 function recordOperation(record: StoredItem): OutboxOperation {
-  return {
-    ...record.item,
-    createOptions: record.createOptions,
-  };
+  const { op, url, container } = record.item;
+  return { op, url, container, createOptions: record.createOptions };
 }
 
 function storedRequest(record: StoredItem, storage?: StorageClient): RequestDescription {
@@ -316,10 +315,77 @@ function errorMessage(error: unknown): string {
   }
 }
 
+function validTag(tag: unknown): tag is string {
+  // Defence in depth: the anchored pattern already stops by character 65, but a length
+  // check rejects a corrupted stored tag without running the pattern at all.
+  return typeof tag === 'string' && tag.length <= 64 && /^[a-z][a-z0-9.-]{0,63}$/.test(tag);
+}
+
 function validateTag(tag: unknown): asserts tag is string {
-  if (typeof tag !== 'string' || !/^[a-z][a-z0-9.-]{0,63}$/.test(tag)) {
-    throw new TypeError('[solid-offline] invalid guard tag');
+  if (!validTag(tag)) throw new TypeError('[solid-offline] invalid guard tag');
+}
+
+type FieldCheck = (value: unknown) => boolean;
+/** A public field: its name, its value check, and whether the record is invalid without it. */
+type Field<T> = [key: keyof T, valid: FieldCheck, required?: true];
+const string: FieldCheck = (value) => typeof value === 'string';
+const optionalString: FieldCheck = (value) => value === undefined || typeof value === 'string';
+const nullableString: FieldCheck = (value) => value === null || typeof value === 'string';
+const count: FieldCheck = (value) =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+const oneOf =
+  (...values: unknown[]): FieldCheck =>
+  (value) =>
+    values.includes(value);
+
+/** Public item fields in creation order; `guard` and `blocked` are derived separately. */
+const itemFields: Field<OutboxItem>[] = [
+  ['id', string, true],
+  ['op', oneOf('write', 'create', 'delete'), true],
+  ['url', string, true],
+  ['container', optionalString],
+  ['name', optionalString],
+  ['contentType', optionalString],
+  ['label', optionalString],
+  ['size', count, true],
+  ['createdAt', count, true],
+  ['status', oneOf('waiting', 'replaying', 'failed', 'conflict'), true],
+  ['error', optionalString],
+];
+
+/** Conflict fields in creation order; every one is required. */
+const conflictFields: Field<ConflictRecord>[] = [
+  ['id', string, true],
+  ['itemId', string, true],
+  ['url', string, true],
+  ['kind', oneOf('rdf', 'binary'), true],
+  ['localEtag', nullableString, true],
+  ['remoteEtag', nullableString, true],
+  ['contentType', string, true],
+];
+
+/**
+ * Copy a stored record's public fields by name, keeping only values of the expected
+ * type. A corrupted record's other keys are never enumerated or exposed, and an
+ * unexpected optional value (such as an object label) is omitted rather than returned
+ * by reference. Returns undefined when a required field is missing or invalid.
+ */
+function pickFields<T>(source: unknown, fields: Field<T>[]): T | undefined {
+  if (typeof source !== 'object' || source === null) return undefined;
+  const copy: Partial<T> = {};
+  for (const [key, valid, required] of fields) {
+    const present = Object.hasOwn(source, key);
+    const value = present ? (source as T)[key] : undefined;
+    if (present && valid(value)) copy[key] = value;
+    else if (required) return undefined;
   }
+  return copy as T;
+}
+
+/** Fail a stored item whose public fields cannot be shown, so it is never replayed unseen. */
+function assertStoredItem(record: StoredItem): void {
+  if (!pickFields(record.item, itemFields))
+    throw new InvalidRequestError('[solid-offline] invalid stored item');
 }
 
 /**
@@ -677,6 +743,7 @@ export function createOutbox(options: {
       request.onsuccess = () => {
         for (const record of request.result as StoredItem[]) {
           try {
+            assertStoredItem(record);
             const storage = clients.get(outbox);
             const description = storedRequest(record, storage);
             const guard = storedGuard(record);
@@ -795,6 +862,7 @@ export function createOutbox(options: {
     signal?: AbortSignal,
   ): Promise<void> {
     const { item } = record;
+    assertStoredItem(record);
     const request = storedRequest(record, storage);
     const guard = storedGuard(record);
     const keepalive = record.keepalive ?? record.createOptions?.keepalive;
@@ -928,21 +996,34 @@ export function createOutbox(options: {
     webId: options.webId,
     ready,
     pending: () =>
-      records.map((r) => {
-        const { guard: _guard, blocked: _blocked, ...item } = r.item;
-        return {
-          ...item,
-          ...(r.guard && typeof r.guard.tag === 'string' ? { guard: { tag: r.guard.tag } } : {}),
-          ...(r.item.status === 'waiting'
-            ? guardRequired(policies, storedRequest(r), r.guard)
-              ? { blocked: 'guard-required' as const }
-              : r.guard && !delegates.has(r.guard.tag)
-                ? { blocked: 'no-delegate' as const }
-                : {}
-            : {}),
-        };
+      records.flatMap((r) => {
+        // Hydration fails records whose public fields are invalid; never show one with a
+        // required field missing, nor an invalid stored tag.
+        const item = pickFields(r.item, itemFields);
+        if (!item) return [];
+        const tag = r.guard?.tag;
+        return [
+          {
+            ...item,
+            ...(validTag(tag) ? { guard: { tag } } : {}),
+            ...(r.item.status === 'waiting'
+              ? guardRequired(policies, storedRequest(r), r.guard)
+                ? { blocked: 'guard-required' as const }
+                : r.guard && !delegates.has(r.guard.tag)
+                  ? { blocked: 'no-delegate' as const }
+                  : {}
+              : {}),
+          },
+        ];
       }),
-    conflicts: () => records.flatMap((r) => (r.conflict ? [{ ...r.conflict }] : [])),
+    conflicts: () =>
+      records.flatMap((r) => {
+        // A conflict missing any field, or whose item is invalid (and so withheld from
+        // pending()), is withheld rather than shown partially.
+        const conflict =
+          r.conflict && pickFields(r.item, itemFields) && pickFields(r.conflict, conflictFields);
+        return conflict ? [conflict] : [];
+      }),
     async enqueue(operation) {
       const guard = snapshotGuard(operation.guard);
       const persistedGuard = guard && {
@@ -1053,6 +1134,9 @@ export function createOutbox(options: {
           await drop(record);
           return;
         }
+        // Deliver nothing for an item whose public fields are invalid; the refresh that
+        // exclusive() ran has already marked it failed.
+        assertStoredItem(record);
         const storage = client();
         const request = storedRequest(record, storage);
         const guard = storedGuard(record);
