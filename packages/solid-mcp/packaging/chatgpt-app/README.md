@@ -5,8 +5,9 @@
 `app.json` is **our own descriptor, not an OpenAI schema or submission format**.
 It records the intended display metadata, operator-hosted Streamable HTTP endpoint,
 OAuth DCR + mandatory PKCE S256, and actual server tools with read-only flags.
-`solid_write` is the write alias of `pod_write`. Health/personal reads can require
-a verified private audit append even when their tool annotation is read-only.
+`solid_write` is the write alias of `pod_write`. `memory_recall`, `address_get` and
+`health_query` can append a private audit entry, so they are not marked read-only and
+ChatGPT asks before running them.
 
 Replace `{host}` and the deliberately invalid privacy-policy placeholder only after
 Jesse supplies them. Use the remote OAuth mode of `apps/mcp-server`, not its
