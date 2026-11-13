@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Notes / Docs shared JSON profile
 
@@ -52,5 +53,8 @@ the account’s `notes/media/` and Docs `docs/<document>/assets/` (including leg
 `pod-docs/`) URLs. JSON conversion requires an absolute HTTP(S) source and explicit
 `alt` (empty means decorative), and preserves nullable title, positive integer
 width/height and an optional validated link. It does not grant access to a URL.
-Notes’ Open in Docs action keeps these URLs readable; permanent deletion checks
-Notes and Docs snapshots and revisions before removing any Notes-owned media.
+Notes’ Copy to Docs and Move to Docs actions copy referenced Notes media into the
+destination document’s assets before publishing its HTML. Copy keeps the note;
+move sends it to Trash after the document is ready. Retries reuse the document
+reservation and copied images. Foreign images and existing Docs assets retain
+their URLs. A failed image copy leaves the note untouched and publishes no document.
