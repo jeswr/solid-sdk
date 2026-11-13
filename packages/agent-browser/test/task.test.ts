@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { approvalFor, type ExecutionResult, type Executor } from "@jeswr/site-executor";
 import { describe, expect, it, vi } from "vitest";
 import { runTask, scriptedPlanner, type TaskExecutor } from "../src/index.js";
@@ -107,6 +108,78 @@ describe("runTask", () => {
     expect(execute).toHaveBeenCalledTimes(1);
     expect(executor.reject).toHaveBeenCalledWith("approval-1");
     expect(trace.steps[0]?.status).toBe("denied");
+  });
+
+  it("asks again for each write or changed price while retaining the same action", async () => {
+    const revised: ExecutionResult = {
+      ...pending,
+      approval: {
+        ...(pending.approval as NonNullable<ExecutionResult["approval"]>),
+        id: "approval-2",
+        digest: "revised",
+        amount: "21",
+        summary: "Buy Trail Runner sneakers for GBP 21.00 on shop.test",
+      },
+    };
+    const execute = vi
+      .fn<Executor["execute"]>()
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValueOnce(revised)
+      .mockResolvedValueOnce(done);
+    const executor = executorFor(execute);
+    const approver = vi.fn(() => "approve" as const);
+    const trace = await runTask({
+      goal: "Buy",
+      model,
+      executor,
+      approver,
+      planner: scriptedPlanner([{ kind: "act", turtle: buy }]),
+      maxSteps: 1,
+    });
+    expect(approver).toHaveBeenCalledTimes(2);
+    expect(executor.approve).toHaveBeenNthCalledWith(2, "approval-2");
+    expect(execute.mock.calls[1]?.[0]).toBe(execute.mock.calls[0]?.[0]);
+    expect(execute.mock.calls[2]?.[0]).toBe(execute.mock.calls[0]?.[0]);
+    expect(execute.mock.calls[2]?.[1]).toEqual({ approvalId: "approval-2" });
+    expect(trace.steps[0]?.statuses).toEqual(["needs-approval", "needs-approval", "done"]);
+    expect(trace.steps[0]?.approvals?.map((a) => a.summary)).toEqual([
+      pending.approval?.summary,
+      revised.approval?.summary,
+    ]);
+  });
+
+  it("bounds repeated approval requests and never asks on a refused payment", async () => {
+    const execute = vi.fn<Executor["execute"]>().mockResolvedValue(pending);
+    const approver = vi.fn(() => "approve" as const);
+    const trace = await runTask({
+      goal: "Buy",
+      model,
+      executor: executorFor(execute),
+      approver,
+      planner: scriptedPlanner([{ kind: "act", turtle: buy }]),
+      maxSteps: 1,
+      maxApprovals: 2,
+    });
+    expect(approver).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(trace.steps[0]?.error).toContain("Approval limit reached");
+    approver.mockClear();
+    execute.mockResolvedValue({
+      status: "refused",
+      error: "The site's real price is GBP 21.00",
+      observations: [],
+      requests: 1,
+    });
+    const refused = await runTask({
+      goal: "Buy",
+      model,
+      executor: executorFor(execute),
+      approver,
+      planner: scriptedPlanner([{ kind: "act", turtle: buy }]),
+      maxSteps: 1,
+    });
+    expect(refused.steps[0]?.status).toBe("refused");
+    expect(approver).not.toHaveBeenCalled();
   });
 
   it("allows an inclusive per-action cap and feeds the final result to the planner", async () => {

@@ -32,7 +32,8 @@ while (result.status === "needs-approval") {
 - `createExecutor({ model, sessions, gate?, fetch?, now?, persona?, maxRequests?, maxRedirects?, maxResponseBytes?, maxExecutionMs? })`
 - `execute(request, { approvalId? })` returns `{ status, target?, observations, approval?, error?,
   errorKind?, candidates?, requests }`. `status` is one of `done`, `needs-approval`, `denied`,
-  `no-path` (the host should use the fallback browser), `ambiguous` (see `candidates`) or `error`.
+  `refused` (unsafe or unverifiable money; see `error`), `no-path` (the host should use the
+  fallback browser), `ambiguous` (see `candidates`) or `error`.
 - `planToRequests(request)` (a method, and a standalone `planToRequests(model, request)`) is a dry
   run. It returns the compiled requests and sends nothing. Flow step references show up as
   placeholders, and a plan never contains credentials.
@@ -42,7 +43,7 @@ while (result.status === "needs-approval") {
   implementation.
 - `Gate` is `{ authorize(GateRequest) }`. It returns `allow`, `ask` with an `ApprovalRequest`, or
   `deny`. A `GateRequest` carries the target, the effect class, the resolved inputs, any money
-  fields (`amount` and `currency`, derived from the operation's mapped inputs), a plain-English
+  fields (`amount` and `currency`, derived from wire mappings or trusted site facts), a plain-English
   summary and the binding digest. Flow write approvals include concrete operation inputs, the
   original flow inputs under `$input.<name>`, and `$step` (the zero-based step index). A host can
   build standing spending limits by returning `allow` without asking. For payment steps, `amount`
@@ -97,7 +98,8 @@ while (result.status === "needs-approval") {
    Steps are numbered from 0, and a step can only refer to an earlier one. `schema:`, `sab:`,
    `xsd:` and `rdf:` CURIEs are accepted. Approval pauses retain structured observations and the
    completed step position. Retrying the same request with its approval resumes that snapshot;
-   completed reads and writes are not replayed. Each later write may require another approval.
+   completed writes are not replayed. Reads supplying money evidence are revalidated on approval
+   retry; other completed reads retain their snapshot. Each later write may require another approval.
    A changed request starts a fresh execution. The run stops at the first failing step, with an
    error that names the step. Untrusted fields cannot supply subsequent operation bindings.
 8. **Extract.** JSON uses RFC 6901 pointers. HTML uses CSS selectors through `css-select` and
@@ -117,7 +119,7 @@ while (result.status === "needs-approval") {
   The model's origin must be https; http is allowed only on loopback.
 - **Approval binding.** An approval is bound to a SHA-256 digest over the site, model version,
   target, effect, resolved inputs, concrete request, execution position, session fingerprint,
-  money fields and persona. A retry is accepted only when its
+  money fields, the source item of any site-fact money evidence, and persona. A retry is accepted only when its
   `approvalId` was issued by this executor for the same digest. The executor claims the approval
   synchronously, so it is single-use even when two retries run concurrently. It also overwrites
   the binding fields of the gate's `ApprovalRequest` with its own values. The executor validates
@@ -128,16 +130,31 @@ while (result.status === "needs-approval") {
   body. Every nonempty secret is registered. Raw, mixed percent-encoded and nested encoded echoes
   are redacted before truncation. Every return path renders all observations against the final
   secret set, including secrets discovered by later steps.
-- **Money.** Payment operations require explicitly mapped amount and currency inputs. Map
+- **Money.** Establish a payment's amount and currency from wire mappings or trusted facts from
+  an earlier read in the same flow. For wire mappings, map
   `Parameter.path` to `schema:price`, `schema:amount/schema:value`, `schema:totalPaymentDue/schema:value`
   (or `schema:amount`), and `schema:priceCurrency` or `schema:currency`. A flow may instead supply
-  those semantic mappings through `$input` paths or trusted `$stepN` properties. Planner claims
-  are cross-checks: a disagreement refuses execution. A mapped unit price is multiplied by mapped
-  `schema:orderQuantity` using exact decimal arithmetic. Mixed currencies in a payment flow are
-  refused. Monetary mappings must reach the wire once as whole values; unused, duplicated or
+  those semantic mappings through `$input` paths or trusted `$stepN` properties. These mappings
+  take precedence; disagreement with trusted site facts refuses execution. Monetary mappings must
+  reach the wire once as whole values; unused, duplicated or
   transformed mappings and numeric amounts that round during JSON conversion are refused.
-  Unmapped planner prices never appear as authorized amounts; payments whose actual
-  amount/currency cannot be established are refused even by an allow-all gate.
+  Facts come only from extracted fields whose `FieldRule` is not `untrusted`, on the site origin
+  (off-origin item IRIs are ignored too). They pair `schema:price`, `schema:totalPaymentDue` or
+  `schema:value` with `schema:priceCurrency` or `schema:currency` on the same item. Prefer the first
+  basket/checkout total (an `Order`, `Invoice`, or item with `totalPaymentDue`) read after the last
+  reversible write before payment. Otherwise take the first product price matching the write's
+  bound SKU/id or item IRI, multiplied by its bound quantity. `schema:orderQuantity` and the
+  profiler's `sab:quantity` mapping use exact decimal arithmetic. Mixed payment currencies fail closed.
+  Preparatory reads run as separately authorized reads before any write approval, so even an
+  add-to-basket approval in a payment flow displays the site's real amount, such as
+  "Buy Trail Runner sneakers for GBP 20.00 on shop.test". Approvals bind the facts' amount,
+  currency and source item. Retrying re-reads that source and recompiles the next write; a change
+  invalidates the approval and asks again, without replaying completed writes.
+  Planner money is a cap and cross-check, never evidence: site facts above its cap or in a
+  different currency return `refused` with a safe reason stating the site's real price, without
+  offering approval. An omitted planner price is allowed when site evidence establishes money.
+  Existing wire-only planner cross-checks remain strict. Payments without either source are
+  `refused` even by an allow-all gate. Observations from a separate action cannot authorize money.
 - **Limits.** `maxRequests` (default 25, cumulative across an approved flow), `maxRedirects`
   (default 5), `maxResponseBytes` (default 5 MiB), `maxExecutionMs` (default 30,000 per execute call).
   The absolute deadline covers fetch, redirects, CSRF reads and body consumption, aborts requests
@@ -159,4 +176,5 @@ When sandbox socket binding is prohibited, the same fixture handlers run through
 Fetch transport. The security regressions use injected in-memory transports throughout. They
 cover RFC 6570 vectors, origin escapes, each CSRF source, approval binding (changed inputs,
 single use, concurrent retries, forged ids), flow binding, untrusted marking and secret
-redaction.
+redaction. Money regressions also cover caps, currencies, trusted/on-origin fact selection,
+total preference, exact quantity multiplication and price/item changes during approval.

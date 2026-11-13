@@ -33,12 +33,22 @@ Security review hardening:
   inputs after earlier steps resolve. Bind the request, step index, session fingerprint, flow
   inputs and resolved write inputs. Approval retries resume a stored snapshot; never replay
   completed writes. Flow gate inputs expose `$step` and `$input.<name>` alongside concrete values.
-- Derive money from mapped operation inputs (Parameter.path), flow input paths, or trusted step
-  property bindings. Recognize schema price/amount/value/totalPaymentDue and currency mappings.
-  A payment without mapped amount AND currency fails closed. Cross-check all planner money claims;
-  any disagreement refuses execution. Unit price times orderQuantity and cumulative flow payments
-  use exact decimals; the gate sees the cumulative total. Verify each monetary input reaches the
-  wire once as a whole value; refuse unused/transformed/duplicate bindings and JSON number rounding.
+- Derive money from wire-mapped operation/flow inputs or trusted extracted facts from earlier
+  reads in the same flow. Recognize schema price/amount/value/totalPaymentDue and currency mappings.
+  Prefer a same-origin Order/Invoice/totalPaymentDue total read after the last reversible write;
+  otherwise match a product's SKU/id or IRI to concrete write inputs and multiply its unit price
+  by the bound quantity. Ignore untrusted fields and off-origin items/read provenance. Never use
+  observations from another action. Wire money wins; disagreement with facts refuses execution.
+  Planner money is only a cap/cross-check: fact totals above the cap or currency mismatches return
+  `refused` with the site's real price and no approval. Missing planner money is allowed when the
+  site establishes it; missing both evidence sources fails closed. Keep strict wire-only checks.
+  Run preparatory reads before write approval so each summary shows the real price. Bind facts'
+  amount/currency/source item in the digest and re-read that source on approval retry. A change
+  voids approval and re-asks; never replay completed writes. Other reads retain their snapshot.
+  Unit price times schema:orderQuantity (or profiler sab:quantity) and cumulative flow payments
+  use exact decimals; the gate sees the cumulative total. Verify each wire monetary input reaches
+  the request once as a whole value; refuse unused/transformed/duplicate bindings and JSON number
+  rounding. Facts need not be sent as price fields: real checkouts derive prices from the basket.
   Never authorize from moneyFields alone.
 - Reject endpoint dot segments, including encoded values, route separator injection and route
   changes caused by URL normalization. CSRF tokens cannot overwrite approved inputs.
@@ -53,7 +63,7 @@ Security review hardening:
   redirects and bodies, with AbortSignal and reader cancellation, and returns a limit error.
   Keep deadline tests on injected transports; never depend on external idle timeouts.
 
-The execute/approval API remains the same, but callers must handle multiple approvals per flow
-and model payment inputs explicitly. README documents the intentional stricter refusals and the
-additive deadline and extraction budget options. Tests use the in-memory fixture fallback when
+The execute/approval methods remain unchanged; callers must handle `refused`, multiple approvals
+per flow, and supply payment wire mappings or trusted flow reads. README documents the intentional
+refusals and the additive deadline and extraction budget options. Tests use the in-memory fixture fallback when
 127.0.0.1 socket binding is unavailable.

@@ -3,12 +3,45 @@
 // never an unrelated planner price. Keep arithmetic exact, including totals.
 import { randomUUID } from "node:crypto";
 import type { ActionRequest, Operation, Parameter } from "@jeswr/site-model";
-import { SCHEMA } from "@jeswr/site-model";
+import { SAB, SCHEMA } from "@jeswr/site-model";
 import { type CompiledRequest, fillJsonTemplate } from "./compile.js";
+import type { ExtractedItem } from "./extract.js";
 import { moneyFields } from "./gate.js";
 import { normaliseEffect } from "./match.js";
 import { expandTemplate, templateVariables } from "./uri-template.js";
-import { BindingError, expandIri, jsonValue } from "./values.js";
+import { BindingError, expandIri, ID_PROPERTIES, idFromIri, jsonValue, RDF } from "./values.js";
+
+export class MoneyRefusal extends BindingError {}
+
+export interface MoneyEvidence {
+  amount: string;
+  currency: string;
+  binding: {
+    step: number;
+    operation: string;
+    url: string;
+    item: number;
+    iri?: string;
+    property: string;
+    currencyProperty: string;
+    quantity: string;
+    write?: number;
+    identity: [string, string[]][];
+  };
+}
+export interface MoneyRead {
+  step: number;
+  operation: Operation;
+  url: string;
+  items: ExtractedItem[];
+}
+export interface MoneyWrite {
+  step: number;
+  operation: Operation;
+  values: Record<string, string>;
+  sources: Record<string, string[]>;
+  compiled: CompiledRequest;
+}
 
 interface Decimal {
   units: bigint;
@@ -37,6 +70,16 @@ export function addAmounts(a: string, b: string): string {
 function equal(a: string, b: string): boolean {
   return text(decimal(a)) === text(decimal(b));
 }
+function greater(a: string, b: string): boolean {
+  const x = decimal(a),
+    y = decimal(b);
+  return x.units * 10n ** BigInt(y.scale) > y.units * 10n ** BigInt(x.scale);
+}
+function multiply(a: string, b: string): string {
+  const x = decimal(a),
+    y = decimal(b);
+  return text({ units: x.units * y.units, scale: x.scale + y.scale });
+}
 function kind(path: string[]): "amount" | "price" | "currency" | "quantity" | undefined {
   const terms = path.map(expandIri);
   const last = terms.at(-1);
@@ -49,7 +92,7 @@ function kind(path: string[]): "amount" | "price" | "currency" | "quantity" | un
   )
     return "amount";
   if (last === `${SCHEMA}priceCurrency` || last === `${SCHEMA}currency`) return "currency";
-  if (last === `${SCHEMA}orderQuantity`) return "quantity";
+  if (last === `${SCHEMA}orderQuantity` || last === `${SAB}quantity`) return "quantity";
   return undefined;
 }
 
@@ -113,12 +156,151 @@ function assertSent(
     throw new BindingError("monetary input must be sent exactly once as a whole value");
 }
 
+/** Only structured, trusted values from earlier on-origin reads can supply money. */
+export function factsMoney(
+  origin: string,
+  reads: MoneyRead[],
+  writes: MoneyWrite[],
+  lastReversible: number,
+): MoneyEvidence | undefined {
+  const onOrigin = (iri: string): boolean => {
+    try {
+      return new URL(iri).origin === origin;
+    } catch {
+      return false;
+    }
+  };
+  // Select by priority before parsing amounts; an irrelevant unit price must
+  // not override (or invalidate) a fresh checkout total.
+  for (const wantTotal of [true, false]) {
+    for (const read of reads) {
+      if (!onOrigin(read.url)) continue;
+      for (const [index, item] of read.items.entries()) {
+        if (item.iri && !onOrigin(item.iri)) continue;
+        const property = ["totalPaymentDue", "price", "value"]
+          .map((p) => SCHEMA + p)
+          .find((p) => item.values.get(p)?.length);
+        const currencyProperty = ["priceCurrency", "currency"]
+          .map((p) => SCHEMA + p)
+          .find((p) => item.values.get(p)?.length);
+        if (!property || !currencyProperty) continue;
+        const amount = item.values.get(property)?.[0] as string;
+        const currency = (item.values.get(currencyProperty)?.[0] ?? "").toUpperCase();
+        const types = [
+          read.operation.extraction?.itemType ?? "",
+          ...(item.values.get(`${RDF}type`) ?? []),
+        ].map(expandIri);
+        const total =
+          ["Order", "Invoice"].some((t) => types.includes(SCHEMA + t)) ||
+          item.values.has(`${SCHEMA}totalPaymentDue`);
+        if (total !== wantTotal) continue;
+        let write: MoneyWrite | undefined;
+        let quantity: string | undefined;
+        if (total) {
+          if (read.step <= lastReversible) continue;
+        } else {
+          const ids = ID_PROPERTIES.flatMap((key) => item.values.get(key) ?? []);
+          if (item.iri) ids.push(item.iri, idFromIri(item.iri));
+          const identified = writes
+            .map((w) => ({
+              write: w,
+              parameters: w.operation.inputs.filter((p) => {
+                const path = (p.path.length ? p.path : (w.sources[p.name] ?? [])).map(expandIri);
+                return (
+                  (w.values[p.name] ?? p.default) !== undefined &&
+                  (ID_PROPERTIES.includes(path.at(-1) ?? "") ||
+                    expandIri(p.range) === `${SCHEMA}Product` ||
+                    path.at(-1) === `${SCHEMA}object` ||
+                    path.at(-1) === "@id")
+                );
+              }),
+            }))
+            .filter(({ parameters }) => parameters.length);
+          // A unit price cannot explain a multi-product basket or conflicting
+          // identifiers. Such a flow needs a site total (or wire money).
+          if (
+            !identified.length ||
+            identified.some(({ write: w, parameters }) =>
+              parameters.some((p) => !ids.includes(w.values[p.name] ?? p.default ?? "")),
+            )
+          )
+            continue;
+          if (
+            identified.filter(
+              ({ write: w }) => normaliseEffect(w.operation.effect) === "reversible-write",
+            ).length > 1
+          )
+            continue;
+          write = identified[0]?.write;
+          for (const { write: w, parameters } of identified) {
+            for (const p of parameters) assertSent(w.operation, p, w.values, w.compiled);
+            for (const p of w.operation.inputs) {
+              if ((kind(p.path) ?? kind(w.sources[p.name] ?? [])) !== "quantity") continue;
+              const value = w.values[p.name] ?? p.default;
+              if (value === undefined) continue;
+              assertSent(w.operation, p, w.values, w.compiled);
+              decimal(value);
+              const wire = jsonValue(p, value);
+              if (
+                typeof wire === "number" &&
+                (!/^\d+(?:\.\d*)?$/.test(String(wire)) || !equal(value, String(wire)))
+              )
+                throw new BindingError(
+                  "monetary quantity cannot be represented exactly on the wire",
+                );
+              if (quantity !== undefined && !equal(quantity, value))
+                throw new BindingError("conflicting mapped quantities");
+              quantity = value;
+            }
+          }
+        }
+        decimal(amount);
+        if (!/^[A-Z]{3}$/.test(currency)) throw new BindingError("invalid site currency");
+        const evidence: MoneyEvidence = {
+          amount: total ? amount : multiply(amount, quantity ?? "1"),
+          currency,
+          binding: {
+            step: read.step,
+            operation: read.operation.id,
+            url: read.url,
+            item: index,
+            ...(item.iri ? { iri: item.iri } : {}),
+            property,
+            currencyProperty,
+            quantity: quantity ?? "1",
+            identity: [...item.values].filter(([p]) =>
+              [...ID_PROPERTIES, `${SCHEMA}orderNumber`, `${SCHEMA}url`].includes(p),
+            ),
+            ...(write ? { write: write.step } : {}),
+          },
+        };
+        return evidence;
+      }
+    }
+  }
+  return undefined;
+}
+
+export function assertFactsCap(
+  claims: { amount?: string; currency?: string },
+  facts: { amount: string; currency: string },
+): void {
+  if (
+    (claims.amount !== undefined && greater(facts.amount, claims.amount)) ||
+    (claims.currency !== undefined && claims.currency !== facts.currency)
+  )
+    throw new MoneyRefusal(
+      `the site's real price is ${facts.currency} ${facts.amount}; it exceeds the planner's cap or uses a different currency`,
+    );
+}
+
 export function resolvedMoney(
   request: ActionRequest,
   operation: Operation,
   values: Record<string, string>,
   sources: Record<string, string[]> = {},
   compiled?: CompiledRequest,
+  facts?: MoneyEvidence,
 ): { amount?: string; currency?: string } {
   // This also rejects contradictory planner claims, even if neither is sent.
   const claims = moneyFields(request);
@@ -151,28 +333,52 @@ export function resolvedMoney(
         throw new BindingError("conflicting mapped currencies");
       currency = next;
     } else if (mapping === "quantity") {
-      if (!/^\+?\d+$/.test(value)) throw new BindingError("invalid monetary quantity");
+      decimal(value);
+      const wireValue = jsonValue(param, value);
+      if (
+        typeof wireValue === "number" &&
+        (!/^\d+(?:\.\d*)?$/.test(String(wireValue)) || !equal(value, String(wireValue)))
+      )
+        throw new BindingError("monetary quantity cannot be represented exactly on the wire");
       if (quantity !== undefined && !equal(quantity, value))
         throw new BindingError("conflicting mapped quantities");
       quantity = value;
     }
   }
   if (price !== undefined) {
-    const d = decimal(price);
-    const total = text({ units: d.units * decimal(quantity ?? "1").units, scale: d.scale });
+    const total = multiply(price, quantity ?? "1");
     if (amount !== undefined && !equal(amount, total))
       throw new BindingError("mapped total disagrees with price and quantity");
     amount ??= total;
   }
-  if (amount !== undefined && claims.amount !== undefined && !equal(claims.amount, price ?? amount))
-    throw new BindingError("planner monetary amount disagrees with the resolved payment");
-  if (currency !== undefined && claims.currency !== undefined && claims.currency !== currency)
-    throw new BindingError("planner currency disagrees with the resolved payment");
+  if (facts) {
+    if (
+      (amount !== undefined && !equal(amount, facts.amount)) ||
+      (currency !== undefined && currency !== facts.currency)
+    )
+      throw new MoneyRefusal(
+        `mapped payment disagrees with the site's real price: ${facts.currency} ${facts.amount}`,
+      );
+    amount ??= facts.amount;
+    currency ??= facts.currency;
+    assertFactsCap(claims, facts);
+  } else {
+    if (
+      amount !== undefined &&
+      claims.amount !== undefined &&
+      !equal(claims.amount, price ?? amount)
+    )
+      throw new MoneyRefusal("planner monetary amount disagrees with the resolved payment");
+    if (currency !== undefined && claims.currency !== undefined && claims.currency !== currency)
+      throw new MoneyRefusal("planner currency disagrees with the resolved payment");
+  }
   if (
     normaliseEffect(operation.effect) === "payment" &&
     (amount === undefined || currency === undefined)
   )
-    throw new BindingError("payment requires explicitly mapped amount and currency inputs");
+    throw new MoneyRefusal(
+      "payment requires wire-mapped amount and currency or trusted site facts",
+    );
   return {
     ...(amount !== undefined ? { amount } : {}),
     ...(currency !== undefined ? { currency } : {}),

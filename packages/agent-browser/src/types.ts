@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ApprovalRequest, ExecutionStatus, Executor } from "@jeswr/site-executor";
 import type { SiteModel } from "@jeswr/site-model";
 
@@ -43,6 +44,8 @@ export interface RunTaskOptions {
   planner: Planner;
   approver: Approver;
   maxSteps?: number;
+  /** Maximum host approval prompts per action, including price revalidation. Default 25. */
+  maxApprovals?: number;
   persona?: string;
   /** Total observation characters across planner history, newest first. */
   observationBudget?: number;
@@ -60,6 +63,8 @@ export interface TraceStep {
     decision: ApprovalDecision;
     outcome: "approved" | "denied";
   };
+  /** Every approval in execution order; approval retains the latest for compatibility. */
+  approvals?: NonNullable<TraceStep["approval"]>[];
   observations: string;
   error?: string;
   elapsedMs: number;

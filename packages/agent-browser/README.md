@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/agent-browser
 
 Private, experimental Node 24 package composing `site-profiler`, `site-model` and
@@ -24,9 +25,23 @@ const trace = await runTask({ goal, model, executor, planner, persona,
 `createTaskExecutor` wraps the existing executor and exposes its gate's `approve` and
 `reject` methods. An ordinary `Executor` also works when the approver updates that
 executor's gate itself. An approval never bypasses the executor: the identical parsed
-action is retried with its issued, single-use approval id. A numeric limit approves
+action is retried with its issued, single-use approval id. `runTask` handles each approval in a
+flow, including reapproval when the price changes; it asks the host again for every write.
+`maxApprovals` bounds prompts per action (default 25). A numeric limit approves
 only this action, in the displayed currency, when its declared amount is nonnegative,
 finite and within the cap. It is not standing consent or independent price verification.
+
+Payment amounts come from executor-verified wire mappings or trusted on-origin reads in the
+same Buy flow. Real checkout requests can omit price: the executor prefers a fresh basket/order
+total, otherwise the matching product's unit price times bound quantity, with exact decimals.
+Untrusted fields, off-origin items and observations from separate actions cannot supply money.
+The planner's price is a cap/cross-check. A higher site price or different currency returns
+`refused`, without offering approval; omitting planner price still lets the person approve the
+site's real amount. Wire/fact disagreement and missing money evidence fail closed.
+Preparatory reads run before the gate, so approval shows, for example,
+"Buy Trail Runner sneakers for GBP 20.00 on shop.test". The executor binds the amount,
+currency and source item, re-reads on approval retry, and asks again if they change.
+Completed writes are never replayed.
 
 `loginWithPassword(model, executorFetch, { username, password })` compiles the model's
 password operation, obtains its CSRF token, submits it and checks its session cookie
@@ -75,6 +90,8 @@ approval summary/decision, observations, elapsed milliseconds and prompt token e
 (`ceil(chars / 4)`). It excludes transport headers, credentials and raw HTTP responses.
 The executor owns extraction redaction; the task adapter also redacts known login and
 session values. Custom executors must uphold the same no-secrets result contract.
+Each step's `approvals` array records all prompts in order; `approval` retains the latest
+for compatibility. Refused payments are recorded as `refused` in trace and planner history.
 
 ```sh
 pnpm --filter @jeswr/agent-browser run build

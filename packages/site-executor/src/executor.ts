@@ -53,7 +53,15 @@ import {
   summarise,
 } from "./gate.js";
 import { effectiveEffect, matchRequest, maxEffect, normaliseEffect, type Target } from "./match.js";
-import { addAmounts, resolvedMoney } from "./money.js";
+import {
+  addAmounts,
+  assertFactsCap,
+  factsMoney,
+  type MoneyEvidence,
+  MoneyRefusal,
+  type MoneyWrite,
+  resolvedMoney,
+} from "./money.js";
 import { describeUrl, guardUrl, OriginError, siteOrigin } from "./origin.js";
 import { secretRedactor } from "./secrets.js";
 import { UriTemplateError } from "./uri-template.js";
@@ -63,6 +71,7 @@ export type ExecutionStatus =
   | "done"
   | "needs-approval"
   | "denied"
+  | "refused"
   | "no-path"
   | "ambiguous"
   | "error";
@@ -246,6 +255,7 @@ function validatedModel(source: SiteModel): SiteModel {
 interface ObservationRecord {
   operation: string;
   status: number;
+  url: string;
   output?: ExtractOutput;
 }
 interface Progress {
@@ -255,12 +265,14 @@ interface Progress {
   secrets: Set<string>;
   requests: number;
   spent: string;
+  writes: MoneyWrite[];
   currency?: string;
 }
 interface Pending {
   key: string;
   digest: string;
   progress: Progress;
+  evidence?: MoneyEvidence;
 }
 
 export function createExecutor(options: ExecutorOptions): Executor {
@@ -522,6 +534,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         observation: {
           operation: operation.id,
           status: res.status,
+          url: res.url.href,
         },
         items: [],
       };
@@ -534,6 +547,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       observation: {
         operation: operation.id,
         status: res.status,
+        url: res.url.href,
         output: out,
       },
       items: out.items,
@@ -597,6 +611,47 @@ export function createExecutor(options: ExecutorOptions): Executor {
     });
   }
 
+  function stepSources(flow: Flow | undefined, index: number): Record<string, string[]> {
+    const sources: Record<string, string[]> = {};
+    if (flow)
+      for (const [name, spec] of Object.entries(flow.steps[index]?.bind ?? {})) {
+        if (spec.startsWith("$input."))
+          sources[name] = flow.inputs.find((p) => p.name === spec.slice(7))?.path ?? [];
+        else {
+          const ref = STEP_REF.exec(spec);
+          if (ref) sources[name] = [expandIri(ref[2] ?? "")];
+        }
+      }
+    return sources;
+  }
+
+  function operationValues(op: Operation, values: Record<string, string>): Record<string, string> {
+    return Object.fromEntries(
+      op.inputs.flatMap((p) => {
+        const v = values[p.name] ?? p.default;
+        return v === undefined ? [] : [[p.name, v]];
+      }),
+    );
+  }
+
+  function authorizationInputs(
+    inputs: Record<string, string>,
+    resolved: Record<string, string>,
+    index: number,
+    flow?: Flow,
+  ): Record<string, string> {
+    return flow
+      ? {
+          ...inputs,
+          ...Object.fromEntries(
+            Object.entries(inputs).map(([name, value]) => [`$input.${name}`, value]),
+          ),
+          ...resolved,
+          [STEP_INDEX_KEY]: String(index),
+        }
+      : { ...resolved };
+  }
+
   async function execute(
     request: ActionRequest,
     opts: { approvalId?: string } = {},
@@ -629,6 +684,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       secrets: ctx.secrets,
       requests: 0,
       spent: "0",
+      writes: [],
     };
     const observations = async (): Promise<Observation[]> =>
       Promise.all(
@@ -663,7 +719,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     };
     const fail = (error: unknown, prefix = ""): Promise<ExecutionResult> =>
       finish({
-        status: "error",
+        status: error instanceof MoneyRefusal ? "refused" : "error",
         error: prefix + (error instanceof Error ? error.message : "unexpected failure"),
         errorKind: errorKind(error),
       });
@@ -713,35 +769,162 @@ export function createExecutor(options: ExecutorOptions): Executor {
       const signedIn = ctx.jar.length > 0 || Object.keys(ctx.headers).length > 0;
       if (!signedIn && steps.some((op) => op.session === "signed-in"))
         throw new SessionError(`not signed in to ${new URL(origin).host}`);
+      // Revalidate the fact source, never replay a completed write. Recompiling
+      // below binds any changed money, item identity or concrete inputs anew.
+      if (flow && pending?.evidence) {
+        const n = pending.evidence.binding.step;
+        const read = steps[n] as Operation;
+        const values = operationValues(read, stepValues(flow, n, read, inputs, progress.stepItems));
+        const compiled = compileOperation(read, values, origin);
+        const gateInputs = authorizationInputs(inputs, values, n, flow);
+        const readRequest: GateRequest = {
+          site: origin,
+          target,
+          effect: "read",
+          inputs: gateInputs,
+          summary: summarise(request, target, origin, {}),
+          digest: approvalDigest({
+            site: origin,
+            modelVersion: model.version,
+            target,
+            effect: "read",
+            inputs: gateInputs,
+            ...(persona !== undefined ? { persona } : {}),
+            binding: {
+              key,
+              index: n,
+              operation: read,
+              url: compiled.url.href,
+              headers: compiled.headers,
+              body: compiled.body,
+              session: approvalDigest({
+                site: origin,
+                modelVersion: model.version,
+                target,
+                effect: "read",
+                inputs: {},
+                binding: { cookies: ctx.jar, headers: ctx.headers },
+              }),
+            },
+          }),
+        };
+        let decision: Awaited<ReturnType<Gate["authorize"]>>;
+        try {
+          decision = await budget(ctx, gate.authorize(structuredClone(readRequest)));
+        } catch (error) {
+          if (claimed) issued.set(claimed, pending);
+          if (error instanceof LimitError) throw error;
+          return await finish({
+            status: "error",
+            error: "the approval gate failed",
+            errorKind: "gate",
+          });
+        }
+        if (decision.kind !== "allow")
+          return await finish({
+            status: "denied",
+            error: "price revalidation read was not authorized",
+          });
+        const out = await runOperation(ctx, read, values, compiled);
+        progress.stepItems[n] = out.items;
+        progress.observations[n] = out.observation;
+        progress.requests = ctx.requests;
+      }
       for (let i = progress.index; i < steps.length; i++) {
         const op = steps[i] as Operation;
         try {
           checkDeadline(ctx);
           const values = flow ? stepValues(flow, i, op, inputs, progress.stepItems) : inputs;
-          const resolved = Object.fromEntries(
-            op.inputs.flatMap((p) => {
-              const v = values[p.name] ?? p.default;
-              return v === undefined ? [] : [[p.name, v]];
-            }),
-          );
+          const resolved = operationValues(op, values);
           const compiled = compileOperation(op, resolved, origin);
-          const sources: Record<string, string[]> = {};
-          if (flow)
-            for (const [name, spec] of Object.entries(flow.steps[i]?.bind ?? {})) {
-              if (spec.startsWith("$input."))
-                sources[name] = flow.inputs.find((p) => p.name === spec.slice(7))?.path ?? [];
-              else {
-                const ref = STEP_REF.exec(spec);
-                if (ref) sources[name] = [expandIri(ref[2] ?? "")];
+          const sources = stepSources(flow, i);
+          let evidence: MoneyEvidence | undefined;
+          let paymentPreview: MoneyWrite | undefined;
+          const nextPayment = steps.findIndex(
+            (step, index) => index >= i && normaliseEffect(step.effect) === "payment",
+          );
+          if (flow && normaliseEffect(op.effect) !== "read" && nextPayment >= i) {
+            const writes = [...progress.writes];
+            for (let n = i; n <= nextPayment; n++) {
+              const write = steps[n] as Operation;
+              if (normaliseEffect(write.effect) === "read") continue;
+              let bound: Record<string, string>;
+              try {
+                bound =
+                  n === i
+                    ? resolved
+                    : operationValues(
+                        write,
+                        stepValues(flow, n, write, inputs, progress.stepItems),
+                      );
+              } catch (error) {
+                // Future write inputs may require an as-yet unexecuted step.
+                if (n === i || !(error instanceof BindingError)) throw error;
+                continue;
               }
+              const prepared = {
+                step: n,
+                operation: write,
+                values: bound,
+                sources: stepSources(flow, n),
+                compiled: n === i ? compiled : compileOperation(write, bound, origin),
+              };
+              writes.push(prepared);
+              if (n === nextPayment) paymentPreview = prepared;
             }
-          const money = resolvedMoney(request, op, resolved, sources, compiled);
+            const lastReversible = steps
+              .slice(0, nextPayment)
+              .findLastIndex((step) => normaliseEffect(step.effect) === "reversible-write");
+            evidence = factsMoney(
+              origin,
+              progress.observations.flatMap((record, n) => {
+                const read = steps[n] as Operation;
+                return normaliseEffect(read.effect) === "read"
+                  ? [
+                      {
+                        step: n,
+                        operation: read,
+                        url: record.url,
+                        items: progress.stepItems[n] ?? [],
+                      },
+                    ]
+                  : [];
+              }),
+              writes,
+              lastReversible,
+            );
+          }
+          let money = resolvedMoney(request, op, resolved, sources, compiled, evidence);
+          if (normaliseEffect(op.effect) !== "read" && nextPayment > i) {
+            if (paymentPreview)
+              money = resolvedMoney(
+                request,
+                paymentPreview.operation,
+                paymentPreview.values,
+                paymentPreview.sources,
+                paymentPreview.compiled,
+                evidence,
+              );
+            if (money.amount === undefined || money.currency === undefined)
+              throw new MoneyRefusal(
+                "payment flow requires wire-mapped amount and currency or trusted site facts before a write",
+              );
+          }
           // The host's spending limit sees the cumulative charge in this flow.
           const payment = normaliseEffect(op.effect) === "payment";
-          if (payment && progress.currency !== undefined && progress.currency !== money.currency)
+          if (
+            money.currency !== undefined &&
+            progress.currency !== undefined &&
+            progress.currency !== money.currency
+          )
             throw new BindingError("flow payments use different currencies");
-          const total = payment ? addAmounts(progress.spent, money.amount as string) : undefined;
+          const total =
+            money.amount !== undefined && (payment || nextPayment > i)
+              ? addAmounts(progress.spent, money.amount)
+              : undefined;
           const authorizedMoney = total !== undefined ? { ...money, amount: total } : money;
+          if (evidence && authorizedMoney.amount !== undefined)
+            assertFactsCap(claims, { amount: authorizedMoney.amount, currency: evidence.currency });
           const effect =
             normaliseEffect(op.effect) === "read"
               ? "read"
@@ -749,16 +932,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
                   op.effect,
                   flow ? effectiveEffect(model, flow, undefined, steps) : op.effect,
                 );
-          const gateInputs = flow
-            ? {
-                ...inputs,
-                ...Object.fromEntries(
-                  Object.entries(inputs).map(([name, value]) => [`$input.${name}`, value]),
-                ),
-                ...resolved,
-                [STEP_INDEX_KEY]: String(i),
-              }
-            : { ...resolved };
+          const gateInputs = authorizationInputs(inputs, resolved, i, flow);
           const digest = approvalDigest({
             site: origin,
             modelVersion: model.version,
@@ -774,6 +948,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
               url: compiled.url.href,
               headers: compiled.headers,
               body: compiled.body,
+              ...(evidence ? { evidence } : {}),
               session: approvalDigest({
                 site: origin,
                 modelVersion: model.version,
@@ -831,7 +1006,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
               throw new BindingError("secret value cannot be exposed for approval");
             progress.index = i;
             progress.requests = ctx.requests;
-            issued.set(decision.approval.id, { key, digest, progress });
+            issued.set(decision.approval.id, {
+              key,
+              digest,
+              progress,
+              ...(evidence ? { evidence } : {}),
+            });
             const approval: ApprovalRequest = {
               id: decision.approval.id,
               effect,
@@ -857,6 +1037,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
           progress.observations.push(out.observation);
           progress.stepItems.push(out.items);
           progress.index = i + 1;
+          if (normaliseEffect(op.effect) !== "read")
+            progress.writes.push({ step: i, operation: op, values: resolved, sources, compiled });
           if (payment) {
             progress.spent = total as string;
             progress.currency = money.currency;
