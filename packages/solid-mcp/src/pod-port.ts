@@ -16,7 +16,7 @@ import { fetchBoundedRdf } from "./bounded-rdf.js";
 import type { PodChild } from "./pod.js";
 import { hasPodFetchLimits, podOperationFetch } from "./pod-operation.js";
 import { handlesProfileRedirects } from "./profile-redirects.js";
-import { wacAclLink } from "./wac-link.js";
+import { auxiliaryLinks } from "./wac-link.js";
 
 /** Conditional mutation headers supported by a pod. */
 export interface PodConditions {
@@ -41,6 +41,8 @@ export interface PodReadOptions {
 export interface PodHeadResult {
   /** Absolute WAC ACL URL from a unique, unanchored server Link relation. */
   acl?: string;
+  /** Absolute targets of every unanchored server `rel="describedby"` Link. */
+  describedby?: string[];
 }
 
 /** Raw resource bytes, media type and optional ETag. */
@@ -69,7 +71,7 @@ export interface PodPort {
   readonly webId: string;
   /** Read raw bytes. The configured WebID may be read for discovery, even when off-pod. */
   read(url: string, options?: PodReadOptions): Promise<PodReadResult>;
-  /** Inspect without following redirects; retain WAC discovery links on HTTP 404. */
+  /** Inspect without redirects; retain auxiliary Links on 404, throw on invalid metadata/errors. */
   head?(url: string): Promise<PodHeadResult>;
   /** List a container's immediate children. */
   list(container: string): Promise<PodEntry[]>;
@@ -156,12 +158,13 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       void response.body?.cancel().catch(() => {});
       if ((!response.ok && response.status !== 404) || (response.url && response.url !== target))
         throw new Error("WAC ACL discovery failed");
-      try {
-        return { acl: new URL(wacAclLink(response.headers.get("link") ?? ""), target).href };
-      } catch {
-        // ACP, absent, malformed or ambiguous WAC links cannot protect audit data.
-        return {};
-      }
+      const links = auxiliaryLinks(response.headers.get("link") ?? "");
+      return {
+        ...(links.acl ? { acl: new URL(links.acl, target).href } : {}),
+        ...(links.describedby
+          ? { describedby: links.describedby.map((url) => new URL(url, target).href) }
+          : {}),
+      };
     },
     async read(url, options: PodReadOptions = {}) {
       // Only the operator-configured identity retains the legacy off-pod exception.

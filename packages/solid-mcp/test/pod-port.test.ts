@@ -27,16 +27,37 @@ describe("fetch PodPort", () => {
   });
 
   it.each([
-    "",
     '<policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
     '<a>; rel="acl", <b>; rel="acl"',
     '<a>; rel="acl"; anchor="other"',
-    '<a>; rel="alternate"; title="rel=acl"',
     '<a>; rel="acl"; rel="alternate"',
     '<a>; rel="acl", malformed',
-  ])("omits unusable WAC metadata: %s", async (link) => {
+  ])("rejects unusable WAC metadata: %s", async (link) => {
+    const pod = createFetchPodPort({ fetch: responding(200, { link }), podRoot: ROOT });
+    await expect(pod.head?.(FILE)).rejects.toThrow();
+  });
+
+  it.each([
+    "",
+    '<a>; rel="alternate"; title="rel=acl"',
+  ])("retains an empty association set for valid metadata without auxiliary links: %s", async (link) => {
     const pod = createFetchPodPort({ fetch: responding(200, { link }), podRoot: ROOT });
     expect(await pod.head?.(FILE)).toEqual({});
+  });
+
+  it.each([
+    200, 404,
+  ])("retains all relative describedby targets on HEAD HTTP %s", async (status) => {
+    const pod = createFetchPodPort({
+      fetch: responding(status, {
+        link: '<permissions>; rel="acl", <meta/one>; rel="describedby", <meta/two?ext=acr>; rel="DESCRIBEDBY alternate"',
+      }),
+      podRoot: ROOT,
+    });
+    expect(await pod.head?.(FILE)).toEqual({
+      acl: `${ROOT}permissions`,
+      describedby: [`${ROOT}meta/one`, `${ROOT}meta/two?ext=acr`],
+    });
   });
 
   it.each([
