@@ -109,8 +109,8 @@ export function ExportView() {
         <h2 id="hlt-fhir">FHIR R4 file</h2>
         <p className="hlt-muted">
           Readings from the dates you choose: steps, heart rate, weight and blood pressure. Every
-          medication and condition is included. Notes, workouts, immunisations and sleep aren't
-          included yet. Dates use your device's time zone ({zone}).
+          medication and condition is included. Diary entries, notes, workouts, immunisations and
+          sleep aren't included yet. Dates use your device's time zone ({zone}).
         </p>
         <div className="hlt-export-dates">
           <div>
