@@ -12,10 +12,11 @@
     { id: 'explore', label: 'Explore' },
     { id: 'architecture', label: 'Architecture' },
     { id: 'message', label: 'Message' },
-    { id: 'layers', label: 'Layers and suites' },
+    { id: 'layers', label: 'Layers' },
+    { id: 'usecases', label: 'Use cases', when: function () { return !!AX.data.useCases; } },
     { id: 'requirements', label: 'Requirements', when: function () { return !!AX.model.requirements; } },
     { id: 'specs', label: 'Specifications' },
-    { id: 'tests', label: 'Tests' },
+    { id: 'tests', label: 'Evaluation' },
     { id: 'roadmap', label: 'Roadmap', when: function () { return !!AX.data.roadmap; } },
   ].filter(function (v) { return !v.when || v.when(); });
   AX.views = VIEWS;

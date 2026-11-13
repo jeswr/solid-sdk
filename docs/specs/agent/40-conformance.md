@@ -37,7 +37,7 @@ Each event has:
 | `step` | The step of the scenario this event belongs to |
 | `agent` | The agent in which it happened |
 | `part` | `principal`, `transport`, `inbound-gate`, `core`, `memory`, `outbound-gate`, `record` |
-| `kind` | `message-in`, `message-out`, `check`, `decision`, `store`, `recall`, `propose`, `ask-principal`, `principal-reply`, `record` |
+| `kind` | `message-in`, `message-out`, `check`, `decision`, `store`, `recall`, `propose`, `ask-principal`, `principal-instruction`, `principal-reply`, `record` |
 | `check` | On a check: one of the five inbound or six outbound checks |
 | `verdict` | On a check or decision: `pass`, `fail`, `ask-more`, `ask-principal`, `indeterminate`, `not-applicable` |
 | `outcome` | On a decision: `admit`, `ask-more`, `refuse`, `go`, `ask-principal`, `stop` |

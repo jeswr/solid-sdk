@@ -67,6 +67,7 @@ they are what the explorer site replays.
 | [01 Core](01-core.md) | Terms, the verifiable message, the checks and their outcomes, the record, configurations. Normative. | A. Conceptual framework |
 | [02 Reference architecture](02-reference-architecture.md) | Two gates around a black-box core, and its variants. Not normative. | A (informative) |
 | [03 Derived data and inference](03-derived-data.md) | Answers, proofs and joint results as one thing: a rule applied to source statements, and how each check treats the result. Normative. | A. Conceptual framework |
+| [04 Content that does not fit](04-unstructured-content.md) | Words, pictures and judgement: what an agent may do with content no vocabulary carries, in both directions. Normative. | A. Conceptual framework |
 | [10 Transport](10-transport.md) | How a message gets there | E. Bindings |
 | [11 Data access](11-data-access.md) | How the content gets there | E. Bindings |
 | [12 Identity](12-identity.md) | What names a party, and how its key is found | C. Mechanism profiles |
@@ -80,8 +81,10 @@ they are what the explorer site replays.
 | [19 Accountability and redress](19-accountability.md) | What happens when something goes wrong | C. Mechanism profiles, F. Assurance |
 | [20 Baseline configuration](20-baseline.md) | The recommended default, one suite per layer, and the path up from plain email | D. Descriptions |
 | [30 Mortgage profile](30-profile-mortgage.md) | The worked example: claims, accepted sources, assurance levels | F. Domain profiles |
+| [35 Use cases](35-use-cases.md) | Seventy situations in fifteen sectors: what makes each hard, what goes wrong, and where messages in agreed terms stop working. Informative. | A. Use cases |
 | [40 Conformance](40-conformance.md) | The trace format, expected outlines, and what a claim of conformance means | G. Conformance |
 | [50 Requirements and alignment](50-requirements.md) | How the design answers known risks and lines up with existing standards | G. Governance |
+| [60 Evaluation](60-evaluation.md) | How the design is tested: the questions, the methods, the published benchmarks and how each is adapted. Informative. | G. Conformance |
 
 The first three layers (transport, data access, identity) are plumbing. Seven of the others
 are the seven gaps named in the paper "Letting Software Agents Act for Us": semantic

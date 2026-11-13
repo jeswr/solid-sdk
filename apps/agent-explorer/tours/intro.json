@@ -91,7 +91,7 @@
       "state": "scenario=mortgage-main&config=baseline&step=1&level=checks",
       "target": "nav",
       "title": "Where to read more",
-      "text": "Architecture explains the design, Message the layers of a verifiable message, and Layers and suites every option a selector can offer. Requirements, Specifications and Tests say how far each part has got."
+      "text": "Architecture explains the design, Message the layers of a verifiable message, and Layers every option a selector can offer. Requirements, Specifications and Tests say how far each part has got."
     }
   ]
 }

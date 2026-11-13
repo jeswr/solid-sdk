@@ -344,6 +344,11 @@ tool, changing who can read something, making a payment, accepting an offer.
 - **CORE-OUT-11.** A claim sent to another party MUST carry its quality information. A claim
   that was derived, estimated or reported by the principal MUST NOT be presented as a
   first-hand statement from an authority.
+- **CORE-OUT-12.** Sending a message is itself an action. The recipient, disclosure and
+  evidence checks MUST run on every message that leaves, whether or not it asks for
+  anything. The disclosure and data terms checks may give `not-applicable` only when the
+  gate itself has established that the message carries no data of the principal's, not
+  because the core says so. Free text written by the core is treated as in UNS-8 to UNS-13.
 
 ### 5.4 Status and freshness
 
@@ -479,14 +484,16 @@ profile MAY add codes.
 | Source | `source-accepted`, `source-not-authoritative`, `source-unknown`, `lookup-failed`, `status-withdrawn`, `rule-not-accepted`, `deriver-not-accepted` |
 | Authority | `representation-missing`, `representation-invalid`, `representation-expired`, `representation-out-of-scope`, `mandate-invalid`, `mandate-withdrawn`, `assurance-insufficient` |
 | Policy | `not-authorised`, `prohibited`, `purpose-not-permitted`, `insufficient-scope`, `missing-context`, `indeterminate-policy`, `terms-not-acceptable`, `no-agreement` |
-| Fitness | `stale-data`, `method-not-accepted`, `confidence-too-low`, `superseded-by-better-source`, `partial-result`, `completeness-not-established` |
-| Disclosure | `excessive-scope`, `minimal-disclosure`, `form-not-available`, `rule-unbounded` |
+| Fitness | `stale-data`, `method-not-accepted`, `confidence-too-low`, `superseded-by-better-source`, `partial-result`, `completeness-not-established`, `structured-form-required` |
+| Disclosure | `excessive-scope`, `minimal-disclosure`, `form-not-available`, `rule-unbounded`, `context-not-clear` |
 | Limits | `approval-required`, `approval-denied`, `limit-exceeded`, `budget-exceeded`, `stopped-by-principal` |
 | Evidence | `evidence-invalid`, `evidence-missing`, `record-unavailable`, `derivation-not-verified` |
 | Execution | `execution-failed`, `result-uncertain` |
+| Pass | `intact`, `source-accepted`, `authority-valid`, `terms-acceptable`, `fit-for-use`, `within-mandate`, `recipient-established`, `minimal-disclosure`, `terms-allow`, `within-limits`, `approval-given`, `evidence-complete`, `established-earlier` |
 | Not applicable | `no-action`, `no-claims`, `no-principal`, `no-data`, `no-personal-data` |
 
-The codes in the last group are the only ones a `not-applicable` verdict can carry
+A `pass` verdict carries a code from the Pass group, so that CORE-C-5 holds for every
+verdict. The codes in the last group are the only ones a `not-applicable` verdict can carry
 (CORE-C-4): the message proposes no action; it carries no claim to rely on; it is made on no
 one's behalf; it carries no data that needs terms; it carries no personal data. A check is
 never not applicable because of the configuration: every configuration answers every check.

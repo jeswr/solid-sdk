@@ -87,7 +87,8 @@ person and an agent. Structured terms are added when both sides can handle them.
 suite a message in prose alone can be read and answered, but it MUST NOT be relied on for
 anything the receiver's profile requires in structured form: prose can ask for a meeting;
 it cannot be the evidence of income. Each side advertises the structured vocabularies it
-supports, so the next message can use them. The baseline document describes how this suite,
+supports, so the next message can use them. What an agent may do with prose, pictures and
+its own free text under any suite is in [04 Content that does not fit](04-unstructured-content.md). The baseline document describes how this suite,
 with the email transport, lets people start with what they already have.
 
 ## Open questions
