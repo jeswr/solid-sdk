@@ -84,6 +84,7 @@
     "@jeswr/agent-model",
     "@jeswr/agent-channels",
     "@jeswr/agent-mandate",
+    "@jeswr/agent-reference",
     "@jeswr/agent-executor",
     "@jeswr/agent-audit",
     "@jeswr/agent-model-gateway",
