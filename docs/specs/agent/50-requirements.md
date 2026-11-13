@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Requirements and alignment
 
-Draft 0.4, 13 November 2026. Not normative. This document explains why the core says what
+Draft 0.5, 13 November 2026. Not normative. This document explains why the core says what
 it says: which known risks each requirement answers, and which existing standards each part
 reuses. Sources were checked on 13 November 2026. Internet-Drafts and community group
 reports are work in progress and are marked as such.

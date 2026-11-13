@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Delegated authority
 
-Draft 0.4, 13 November 2026. Layer 2 of the paper's seven gaps.
+Draft 0.5, 13 November 2026. Layer 2 of the paper's seven gaps.
 
 **Question: may this agent do this for this person?**
 

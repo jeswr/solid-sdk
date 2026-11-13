@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Reliance
 
-Draft 0.4, 13 November 2026. Layer 4b. Split out of the paper's fourth gap (trust
+Draft 0.5, 13 November 2026. Layer 4b. Split out of the paper's fourth gap (trust
 frameworks).
 
 **Question: how far should I rely on this, for this task?**
@@ -70,6 +70,14 @@ and the agent can ask for a fresh one. A statement by a method the task does not
 gives `fail` with `method-not-accepted`. When two statements about the same thing differ,
 the one from the kind of source higher in the order prevails; the other is kept and marked
 `superseded-by-better-source` for that purpose.
+
+A derived claim takes its quality from its inputs, weakest first (DER-20): the time of its
+oldest input, and the lowest-ranked method among them. Its method is `derived`, and the
+record of the derivation says what it rests on, so "derived from statements recorded by an
+authority" and "derived from the subject's own figures" are told apart. A rule that needs
+complete inputs and does not have a statement of completeness gives a `partial` result;
+the profile says, per kind of claim, whether a task accepts one. Otherwise the check gives
+`fail` with `completeness-not-established`.
 
 A principal marks their own facts with a rank and, if they wish, a rule:
 

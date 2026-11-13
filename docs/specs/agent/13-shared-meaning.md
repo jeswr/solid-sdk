@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Shared meaning
 
-Draft 0.4, 13 November 2026. Layer 1 of the paper's seven gaps (semantic interoperability).
+Draft 0.5, 13 November 2026. Layer 1 of the paper's seven gaps (semantic interoperability).
 
 **Question: do both sides read the terms the same way?**
 

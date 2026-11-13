@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Reference architecture
 
-Draft 0.4, 13 November 2026. Not normative, except where it cites a requirement of the
+Draft 0.5, 13 November 2026. Not normative, except where it cites a requirement of the
 core. This document describes one way to build an agent that meets the core, and the
 variants of it that fit different settings. An implementation may be built differently, as
 long as its traces conform.

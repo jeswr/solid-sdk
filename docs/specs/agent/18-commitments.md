@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Commitments
 
-Draft 0.4, 13 November 2026. Layer 6 of the paper's seven gaps.
+Draft 0.5, 13 November 2026. Layer 6 of the paper's seven gaps.
 
 **Question: what was agreed, and is it binding?**
 

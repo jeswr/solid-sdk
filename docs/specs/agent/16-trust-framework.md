@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Trust framework
 
-Draft 0.4, 13 November 2026. Layer 4 of the paper's seven gaps.
+Draft 0.5, 13 November 2026. Layer 4 of the paper's seven gaps.
 
 **Question: why should I accept this party or source at all?**
 
@@ -28,7 +28,9 @@ to attest face checks at this level".
 
 - **TF-1. The questions it answers.** The kinds of question that can be asked: is this party
   of this kind; is this source an authority for this kind of claim; is this service accepted
-  for this function.
+  for this function; is this party accepted to attest derivations under this rule (DER-15).
+  For a derived statement the "source" question is asked about the issuer of each input,
+  not about whoever worked out the result (DER-18).
 - **TF-2. The principal's own list.** How the principal's direct choices are held: each entry
   names a party, its key, what it is accepted for, and until when. An entry can also block
   (CORE-K-3).

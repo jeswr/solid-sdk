@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Core
 
-Draft 0.4, 13 November 2026. Normative unless a section says otherwise.
+Draft 0.5, 13 November 2026. Normative unless a section says otherwise.
 
 The core defines the terms, the verifiable message, the checks an agent runs and their
 outcomes, the record, and how layers, suites and configurations fit together. It chooses no
@@ -153,19 +153,27 @@ Every message has one kind. The kinds below are the core set. A profile MAY add 
 
 ### 4.3 How content can travel
 
-The content part can hold data in four ways. Which are available is set by the data access
-layer.
+Two things are chosen for each item of content. Which choices are available is set by the
+data access and authenticity layers.
+
+**What is conveyed.** Either original statements, signed by the party that makes the
+claims, or a **derived statement**: the result of applying a published rule to original
+statements. A total, a yes or no, a summary and the answer to a query are all derived
+statements. The derived data document defines them, the five ways a receiver can be assured
+of one (`by-source`, `recomputed`, `proved`, `joint`, `attested`), and how each check
+treats them.
+
+**How it is conveyed.**
 
 | Form | What the receiver gets |
 |---|---|
-| By value | The data itself |
+| By value | The statement itself, in the message |
 | By reference | A pointer and the right to read it, with terms; the data stays where it is |
-| As a proof | A proof that the data has some property, without the data |
-| As a joint result | An answer worked out by several holders together, without any of their inputs |
 
-- **CORE-M-9.** Whatever the form, the evidence, terms and provenance parts MUST describe the
-  thing actually conveyed. A proof that income is above a threshold states the threshold, the
-  period and the currency. A joint result states who contributed and what was computed.
+- **CORE-M-9.** Whatever is conveyed, the evidence, terms and provenance parts MUST describe
+  the thing actually conveyed. A derived statement that income is above a threshold states
+  the rule, the threshold, the period and the currency, who issued the inputs, and how the
+  derivation is assured (DER-7).
 - **CORE-M-10.** A message sent by an agent MUST say that it was sent by an automated agent,
   and for whom, in the signed header and in any copy meant for a person to read.
 
@@ -265,7 +273,8 @@ rules. Deciding to accept an issuer is validation, not verification.
   default set by the domain profile. When the profile sets none, the default is: use for the
   purpose of the current interaction only, no onward sharing, delete when that purpose ends.
 - **CORE-IN-12.** Terms admitted with data MUST stay attached to that data in memory and to
-  anything derived from it, under the propagation rules of the usage control suite in force.
+  anything derived from it, under the propagation rules of the usage control suite in force
+  (DER-22).
 
 **Fitness.**
 
@@ -312,8 +321,9 @@ tool, changing who can read something, making a payment, accepting an offer.
   trust framework states what a recipient is registered to ask for, the check MUST also
   establish that the data requested is within that registration.
 - **CORE-OUT-4.** The disclosure check MUST compare what is to be sent with what the purpose
-  needs, and MUST prefer, among the forms the configuration allows, the one that reveals
-  least: a proof or a joint result before a value, a summary before a document.
+  needs, and MUST prefer, among the ways the configuration allows and the recipient accepts,
+  the one that reveals least: a derived statement before the statements it came from, and
+  among derived statements the one that shows the fewest parties the least (DER-21).
 - **CORE-OUT-5.** The data terms check MUST evaluate the terms attached to each item to be
   sent, including items derived from data received from others, and MUST attach to the
   outgoing message terms at least as strict as those the sender is itself bound by.
@@ -466,13 +476,13 @@ profile MAY add codes.
 |---|---|
 | Integrity | `malformed`, `bounds-exceeded`, `unsigned-not-allowed`, `unknown-key`, `bad-signature`, `configuration-mismatch`, `sender-key-mismatch`, `wrong-audience`, `expired`, `not-yet-valid`, `lifetime-too-long`, `replay-conflict` |
 | Interaction | `unsupported-configuration`, `unsupported-operation`, `unsupported-kind`, `unsupported-term`, `protocol-violation`, `terms-digest-mismatch`, `round-limit`, `conversation-closed` |
-| Source | `source-accepted`, `source-not-authoritative`, `source-unknown`, `lookup-failed`, `status-withdrawn` |
+| Source | `source-accepted`, `source-not-authoritative`, `source-unknown`, `lookup-failed`, `status-withdrawn`, `rule-not-accepted`, `deriver-not-accepted` |
 | Authority | `representation-missing`, `representation-invalid`, `representation-expired`, `representation-out-of-scope`, `mandate-invalid`, `mandate-withdrawn`, `assurance-insufficient` |
 | Policy | `not-authorised`, `prohibited`, `purpose-not-permitted`, `insufficient-scope`, `missing-context`, `indeterminate-policy`, `terms-not-acceptable`, `no-agreement` |
-| Fitness | `stale-data`, `method-not-accepted`, `confidence-too-low`, `superseded-by-better-source` |
-| Disclosure | `excessive-scope`, `minimal-disclosure`, `form-not-available` |
+| Fitness | `stale-data`, `method-not-accepted`, `confidence-too-low`, `superseded-by-better-source`, `partial-result`, `completeness-not-established` |
+| Disclosure | `excessive-scope`, `minimal-disclosure`, `form-not-available`, `rule-unbounded` |
 | Limits | `approval-required`, `approval-denied`, `limit-exceeded`, `budget-exceeded`, `stopped-by-principal` |
-| Evidence | `evidence-invalid`, `evidence-missing`, `record-unavailable` |
+| Evidence | `evidence-invalid`, `evidence-missing`, `record-unavailable`, `derivation-not-verified` |
 | Execution | `execution-failed`, `result-uncertain` |
 | Not applicable | `no-action`, `no-claims`, `no-principal`, `no-data`, `no-personal-data` |
 

@@ -205,8 +205,8 @@
     carriage: 'Whatever carries the message: an HTTP request, an A2A or MCP call, an email, or a pointer to a resource in a pod. Nothing the gates decide depends on it, so the same message gets the same answers over any of them.',
     header: 'Who sent the message, to whom, in which conversation, what kind of message it is and when. It carries a one-time value and a time window. The sender\'s signature covers this layer and every layer below it. The integrity check reads it first, and nothing else runs if it fails.',
     authority: 'The mandate chain: the signed policy that says what this agent may do for its principal, and proof of how the principal approved it. The receiver follows it back to the person, and can ask for a stronger approval before it acts.',
-    content: 'The request, the offer or the data itself, in the terms both sides agreed. It can travel by value, by reference or as a proof.',
-    evidence: 'Statements signed by the authority for each claim, such as the bank\'s signature on a balance, or a proof about them. The source check reads this layer.',
+    content: 'The request, the offer or the data itself, in the terms both sides agreed. It can be the original statements or an answer derived from them, and it can travel by value or by reference.',
+    evidence: 'Statements signed by the authority for each claim, such as the bank\'s signature on a balance. For a derived answer it holds the record of the rule, the inputs and how the derivation is assured. The source check reads this layer.',
     terms: 'What the receiver may do with the content, for what purpose and for how long. The terms check reads them on the way in. They stay on the data as labels, and the outbound gate reads them before anything is passed on.',
     provenance: 'Where each part came from, which activity produced it, how fresh it is and how sure the source was. The fitness check uses it to decide whether the data is good enough, and the record keeps it.',
   };
@@ -228,11 +228,27 @@
     var h = '<div class="page">';
     h += '<header><p class="eyebrow">' + esc(M.message.name) + '</p><h1>One message, the same layers, any carrier</h1><p class="lede">' + esc(M.message.summary) + '</p></header>';
     h += '<div class="msg-big">' + stack + paras + '</div>';
-    h += '<h2>Three ways content can travel</h2><div class="cards">';
+    h += '<h2>How content can travel</h2><div class="cards">';
     h += '<div class="card"><h3>By value</h3>' + mini(300, 96, 'The data travels inside the message.', box(6, 26, 90, 44, 'Sender') + D.rect(118, 30, 64, 36, 'box accent-box', 6) + D.text(150, 52, 'data', 'elbl', 'middle') + box(204, 26, 90, 44, 'Receiver') + edge('M96 48 H116', '', 0, 0) + edge('M182 48 H202', '', 0, 0)) + '<p>The data travels inside the message, signed with everything else. Simple, and the receiver keeps a copy.</p></div>';
     h += '<div class="card"><h3>By reference</h3>' + mini(300, 96, 'A pointer travels; the receiver reads from the pod with a grant.', box(6, 8, 90, 40, 'Sender') + box(204, 8, 90, 40, 'Receiver') + box(105, 58, 90, 34, 'Pod', '', 'accent-box') + edge('M96 28 H202', 'pointer and grant', 150, 22) + edge('M249 48 C249 70 220 75 197 75', '', 0, 0, 'dash')) + '<p>The sender grants read access in a pod and sends a pointer. Withdrawing the grant ends the sharing.</p></div>';
-    h += '<div class="card"><h3>As a proof</h3>' + mini(300, 96, 'A proof travels instead of the data.', box(6, 26, 90, 44, 'Sender') + D.rect(110, 30, 80, 36, 'box accent-box', 6) + D.text(150, 52, 'income > 45k', 'elbl', 'middle') + box(204, 26, 90, 44, 'Receiver') + edge('M96 48 H108', '', 0, 0) + edge('M190 48 H202', '', 0, 0)) + '<p>A proof that something is true of signed data, such as income above a threshold, without showing the data itself.</p></div>';
-    h += '</div></div>';
+    h += '</div>';
+    var DV = M.derivation;
+    if (DV) {
+      h += '<h2 id="derived">An answer instead of the records</h2><p class="lede">' + esc(DV.summary) + '</p>';
+      h += '<div class="derive-fig">' + mini(640, 150, 'Source statements go through a rule and give a derived statement.',
+        box(8, 10, 150, 38, 'Bank statement', 'signed by the bank') + box(8, 56, 150, 38, 'Bank statement', 'signed by another bank') + box(8, 102, 150, 38, 'Completeness', 'signed: these are all') +
+        box(245, 50, 130, 50, 'Rule', 'a published query', 'accent-box') + box(462, 44, 170, 62, 'Derived statement', 'total deposit, with its record', 'accent-box') +
+        edge('M158 29 C200 29 205 66 243 68', '', 0, 0) + edge('M158 75 H243', '', 0, 0) + edge('M158 121 C200 121 205 86 243 84', '', 0, 0) + edge('M375 75 H460', 'assured how?', 418, 68, 'accent')) + '</div>';
+      h += '<p class="derive-idea">' + esc(DV.idea) + '</p>';
+      h += '<h3 class="sub">Five ways to be assured the rule was applied honestly</h3><div class="table-wrap"><table class="grid"><thead><tr><th>Assurance</th><th>Who runs the rule</th><th>The receiver sees</th><th>Relied on besides the sources and the rule</th><th>How</th></tr></thead><tbody>' +
+        DV.assurances.map(function (a) {
+          return '<tr><th scope="row">' + esc(a.name) + (a.baseline ? ' <span class="tag-base">Baseline</span>' : '') + '<div class="mono-id">' + esc(a.id) + '</div></th><td>' + esc(a.runs) + '</td><td>' + esc(a.sees) + '</td><td>' + esc(a.relies) + '</td><td>' + esc(a.mechanism) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+      h += '<div class="cards two"><div class="card"><h3>When a receiver accepts a derived claim</h3><ol class="plain">' + DV.acceptance.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol></div>' +
+        '<div class="card"><h3>What a derivation cannot show</h3><ul class="plain">' + DV.limits.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' +
+        '<p><a href="' + AX.buildHash('specs', { doc: DV.spec }) + '">Read the specification</a></p></div></div>';
+    }
+    h += '</div>';
     root.innerHTML = h;
   };
 

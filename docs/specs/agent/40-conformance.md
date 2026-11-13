@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Conformance
 
-Draft 0.4, 13 November 2026.
+Draft 0.5, 13 November 2026.
 
 ## What a claim of conformance means
 
@@ -120,6 +120,8 @@ it. For the suites defined so far:
 | `by-reference-solid` | `mortgage-main` with the balance read from Sam's pod under a time-limited grant |
 | `aggregate-mpc` | `mortgage-deposit`: two banks, one total, neither balance revealed; and `mortgage-deposit-missing-attestation` |
 | `regulator-claim` | `mortgage-claim`: the fee dispute, taken to the regulator with both records |
+| `by-query` | `mortgage-income-answer`: the payroll provider answers the rule `income-annual` over its own records and signs the result (`by-source`) |
+| `zk-query-proof` | `mortgage-deposit-proved`: `deposit-at-least` proved over two banks' statements; and `mortgage-deposit-omitted`, where a statement of completeness is missing and the result is refused as `partial` |
 
 ## 3. Levels of evidence
 

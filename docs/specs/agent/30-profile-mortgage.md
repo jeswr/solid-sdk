@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Mortgage profile
 
-Draft 0.4, 13 November 2026. The worked example. Everyone in it is fictional.
+Draft 0.5, 13 November 2026. The worked example. Everyone in it is fictional.
 
 ## What a domain profile is
 
@@ -44,13 +44,34 @@ states its currency, period and whose it is (SM-5).
 |---|---|---|---|---|
 | `income.gross.monthly-series` | Gross pay per month for the last twelve months | A registered payroll provider, or the tax authority | `recorded-by-authority` | 3 months since the last month covered |
 | `deposit.balance` | Cleared balance of a named account at a stated time | The registered bank that holds the account | `recorded-by-authority` | 1 month |
-| `deposit.total` | Total across named accounts | Each holding bank; or a joint result attested by each | `recorded-by-authority` or `derived` from such | 1 month |
+| `deposit.total` | Total across the subject's accounts | Derived under the rule `deposit-total` from `deposit.balance` statements by each holding bank | `derived` from `recorded-by-authority` | 1 month, counted from the oldest balance |
+| `income.gross.annual` | Gross pay over the last twelve months | Derived under the rule `income-annual` from `income.gross.monthly-series` | `derived` from `recorded-by-authority` | 3 months since the last month covered |
+| `accounts.complete` | These are all the accounts the subject holds with this bank, as of a stated time | The registered bank | `recorded-by-authority` | 1 month |
 | `product.record` | A lender's product: rate, term, fees, eligibility | The lender, as listed in the register | `recorded-by-authority` | As the record states |
 | `decision.in-principle` | The lender's view of what it would lend | The lender | `recorded-by-authority` | As the decision states |
 
 Order of precedence for income and balances: the authority above; then a document the
 subject holds from that authority; then the subject's own statement. Sam's own figure can
 start a conversation. It cannot support an application.
+
+## Rules
+
+Rules are queries in the rule language of DER-5, published with this profile and named by
+digest. A lender's request names the claim it needs and the assurances it accepts (DER-16).
+
+| Rule | Reads | Produces | Needs complete inputs | Assurances a lender accepts |
+|---|---|---|---|---|
+| `deposit-total` | `deposit.balance` for one subject, from one or more banks | `deposit.total`: the sum, with currency and the time of the oldest balance | Yes, per bank: `accounts.complete` | `recomputed`, `proved`, `joint` |
+| `deposit-at-least` | As `deposit-total`, and a threshold | True or false | Yes, per bank | `by-source` from a single bank, `proved`, `joint` |
+| `income-annual` | `income.gross.monthly-series` | `income.gross.annual`: the sum of twelve months | No: the series states its own period | `by-source`, `recomputed`, `proved` |
+
+A total without `accounts.complete` from each bank is `partial`. This profile accepts a
+partial total for `product-search` and not for `mortgage-application`: a search can start
+from an estimate, and an application cannot rest on one (DER-24, DER-25).
+
+`deposit-total` says nothing about banks the subject did not name. No party can state that
+a person has no accounts anywhere else, so the profile does not ask for it. The lender's
+own credit search is the check on undisclosed debts, and it is outside this profile.
 
 ## Purposes
 

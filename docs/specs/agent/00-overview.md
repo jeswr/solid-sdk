@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Answerable: overview and map
 
-Draft 0.4, 13 November 2026.
+Draft 0.5, 13 November 2026.
 
 **Answerable** is the name of this family of specifications. An agent that follows it answers
 for what it does, and answers to the person or organization it acts for. An implementation
@@ -48,6 +48,13 @@ agents can work together when they share a configuration they both accept. The *
 configuration** is the one every implementation is asked to support, so that two strangers'
 agents always have something in common.
 
+An agent often conveys an answer instead of the records behind it: a total, a yes or no,
+the rows that match a question. That answer is a **derived statement**: a published rule
+applied to source statements. A receiver that accepts the sources, accepts the rule, and can
+check how the rule was applied can treat the result as data. The answer to a query, a
+zero-knowledge proof and a joint computation are three ways of giving that last assurance,
+not three different things.
+
 A suite counts only when it has run. Every suite and every configuration is backed by a
 **trace**: the record of a real run of a named scenario. The traces are the test suite, and
 they are what the explorer site replays.
@@ -59,6 +66,7 @@ they are what the explorer site replays.
 | [00 Overview and map](00-overview.md) | This page | |
 | [01 Core](01-core.md) | Terms, the verifiable message, the checks and their outcomes, the record, configurations. Normative. | A. Conceptual framework |
 | [02 Reference architecture](02-reference-architecture.md) | Two gates around a black-box core, and its variants. Not normative. | A (informative) |
+| [03 Derived data and inference](03-derived-data.md) | Answers, proofs and joint results as one thing: a rule applied to source statements, and how each check treats the result. Normative. | A. Conceptual framework |
 | [10 Transport](10-transport.md) | How a message gets there | E. Bindings |
 | [11 Data access](11-data-access.md) | How the content gets there | E. Bindings |
 | [12 Identity](12-identity.md) | What names a party, and how its key is found | C. Mechanism profiles |

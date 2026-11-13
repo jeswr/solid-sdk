@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Baseline configuration
 
-Draft 0.4, 13 November 2026.
+Draft 0.5, 13 November 2026.
 
 ## Why there is a baseline
 
@@ -36,6 +36,11 @@ It was chosen by four rules.
 | Commitments | `signed-offer-acceptance` | Two signed messages, tied by a digest. |
 | Accountability | `local-ledger` | Each side keeps a signed chain of its own decisions. |
 
+The baseline supports derived statements with two kinds of assurance: `by-source`, where
+the source answers a question over its own records and signs the answer, and `recomputed`,
+where the inputs travel and the receiver runs the rule again. Neither needs anything beyond
+signed statements.
+
 Lookups against public services use the public read configuration, `public-read/0.1`: the
 same suites, with identity `anonymous` for the asker, data access `by-query`, and no
 mandate, because the request is made on no one's behalf (CORE-IN-9).
@@ -61,7 +66,8 @@ mandate, because the request is made on no one's behalf (CORE-IN-9).
 Stated plainly, so that nobody adopts it expecting more.
 
 - **No privacy beyond need-to-know.** Data is copied to the receiver. A whole signed
-  statement is shown or none of it. The whole mandate is shown.
+  statement is shown or none of it, unless its source will sign a narrower answer. The
+  whole mandate is shown.
 - **No unlinkability.** A party is named by a long-lived key, and receivers can compare
   notes.
 - **No enforcement inside the receiver.** Terms are known and each honest agent enforces
@@ -72,7 +78,7 @@ Stated plainly, so that nobody adopts it expecting more.
 
 Each of these has a suite that addresses it: `by-reference-solid`, `by-query` and
 `aggregate-mpc` for data access; `selective-disclosure` and `zk-query-proof` for
-authenticity; `mandate-credential` for authority; `regulator-claim` for accountability.
+authenticity, which give derived statements the `proved` assurance; `mandate-credential` for authority; `regulator-claim` for accountability.
 
 ## Starting from email
 

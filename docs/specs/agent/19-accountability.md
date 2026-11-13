@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Accountability and redress
 
-Draft 0.4, 13 November 2026. Layer 7 of the paper's seven gaps.
+Draft 0.5, 13 November 2026. Layer 7 of the paper's seven gaps.
 
 **Question: what happens when something goes wrong?**
 
@@ -75,6 +75,11 @@ key, which the core cannot use.
 Chaining makes a removed or altered entry detectable to anyone who holds a later digest.
 The agent therefore gives the latest digest of its record to the other party in each
 `receipt`, so that each side holds a commitment to the other's record as of that moment.
+
+When what was sent was a derived statement, the entry holds the derivation record, and the
+sender's own record also refers to the inputs. A party that relied on a proof or a joint
+result it could not see into can ask a forum to have the derivation opened (DER-29). The
+commitments in the record let the forum check that the inputs shown are the inputs used.
 
 **Redress under this suite** is between the two parties. Each can show its own signed
 messages and its own record. Because both hold the other's signed messages, neither can

@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Identity
 
-Draft 0.4, 13 November 2026. Layer: plumbing.
+Draft 0.5, 13 November 2026. Layer: plumbing.
 
 **Question: what names a party, and how is its key found?**
 

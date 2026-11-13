@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Usage control
 
-Draft 0.4, 13 November 2026. Layer 5 of the paper's seven gaps.
+Draft 0.5, 13 November 2026. Layer 5 of the paper's seven gaps.
 
 **Question: what may be done with the data, and who enforces it?**
 
@@ -32,7 +32,7 @@ accountability layer's question.
   by the message proof.
 - **UC-3. Staying attached.** How terms stay with data in memory, and how they apply to data
   derived from it (CORE-IN-12). A fact derived from several inputs carries the terms of all
-  of them.
+  of them, unless every input's terms grant the derivation lighter terms (DER-22).
 - **UC-4. Decision.** How a decision is reached, with at least three outcomes: permitted,
   prohibited, and not decided. Not decided is never treated as permitted (CORE-C-3).
 - **UC-5. Who decides.** Which parts of the decision are made by rules in code, which may
@@ -84,6 +84,12 @@ Evaluation is in code and gives one of three answers.
 
 Not decided leads to `ask-principal` at the outbound gate when the mandate allows asking, and
 otherwise to stop. At the inbound gate it leads to refusal with `terms-not-acceptable`.
+
+`derive` and `aggregate` are how a source lets less-restricted answers be made from its
+data (DER-22). A permission to `derive` names a rule or a class of rule, and MAY state the
+terms the output carries. A permission to `aggregate` MAY carry a count constraint: the
+smallest number of subjects or inputs the result must cover. Without such a permission, a
+derived statement carries the terms of every input.
 
 Purposes are terms from the vocabulary named by the shared meaning suite. A purpose is
 matched as written or through a stated narrower-than relation; it is never matched by

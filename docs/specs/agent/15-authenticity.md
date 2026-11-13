@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Authenticity
 
-Draft 0.4, 13 November 2026. Layer 3 of the paper's seven gaps.
+Draft 0.5, 13 November 2026. Layer 3 of the paper's seven gaps.
 
 **Question: is this statement really from its source?**
 
@@ -32,7 +32,8 @@ framework's question. How much weight the statement gets is the reliance layer's
 - **AY-5. Partial disclosure.** Whether a holder can show part of a signed statement, what
   the verifier can then conclude, and whether two showings can be linked.
 - **AY-6. Derived statements.** Whether a proof can establish a statement the issuer never
-  signed as such, like "above a threshold", and exactly what is then proved.
+  signed as such, like "above a threshold", for which rules, and exactly what is then
+  proved. Such a proof is the `proved` assurance of a derivation and MUST meet DER-13.
 - **AY-7. Failure.** The verdict and reason code for each way verification can fail. A suite
   that cannot verify MUST fail; it MUST NOT pass a statement through unverified.
 
@@ -95,7 +96,8 @@ The issuer signs a statement in a form that lets the holder show some claims and
 others. The agent's disclosure check picks the claims the purpose needs. The verifier learns
 those claims and that the issuer signed a statement containing them. With signature schemes
 that support it, two showings cannot be linked; with the others they can, and the suite
-parameter says which is in use. Sketch only.
+parameter says which is in use. In the terms of the derived data document this is a
+derivation whose rule is a projection, assured `proved`. Sketch only.
 
 ### `zk-query-proof`
 
@@ -103,9 +105,11 @@ The holder proves that a query over statements signed by named issuers has a sta
 without showing the statements: "the sum of the last twelve months of net pay, from payslips
 signed by this employer, is above this amount". AY-6 applies in full. The proof states the
 query, the issuers whose signatures were checked inside it, the period, the units and the
-assumptions. A verifier MUST NOT conclude anything the proof does not state. In particular,
+assumptions, as a derivation record (DER-7) with the assurance `proved`. The query is a
+rule in the language of DER-5. A verifier MUST NOT conclude anything the proof does not state. In particular,
 a proof about signed data says nothing about whether the issuer is accepted; the source
-check still runs on the issuers named. Sketch only; the existing zero-knowledge
+check still runs on the issuers named (DER-18), and a proof over the statements a holder
+chose to supply says nothing about statements it left out (DER-24). Sketch only; the existing zero-knowledge
 specifications will be brought in as this suite.
 
 ## Open questions
