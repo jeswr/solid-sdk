@@ -12,6 +12,7 @@ import { z } from "zod";
 import { digestOf } from "../../core/canonical.js";
 import { jointLimits, parseBoundedJson } from "../../core/limits.js";
 import type { JsonObject } from "../../core/types.js";
+import { decodeAdapterJson } from "../../wire/inspect.js";
 import type { JointOutcome, JointProtocol, SessionParams } from "../verifiers.js";
 
 export const SPARQ_AGGREGATE = {
@@ -128,7 +129,7 @@ export class SparqAggregate implements JointProtocol {
     } catch (error) {
       let parsed: unknown;
       try {
-        parsed = typeof error === "string" ? JSON.parse(error) : error;
+        parsed = typeof error === "string" ? decodeAdapterJson(error) : error;
       } catch {
         throw new AggregateFailure("derivation-not-verified", "invalid-package-error", null);
       }

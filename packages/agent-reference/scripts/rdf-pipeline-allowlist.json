@@ -1,1 +1,555 @@
-{}
+[
+  {
+    "file": "src/derive/adapters/sparq-aggregate.ts",
+    "function": "SparqAggregate.contributions",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The installed aggregate package still exchanges its validated native JSON session/contribution/result records. RDF codecs for those records are unfinished; the real adapter and its refusal behavior are preserved."
+  },
+  {
+    "file": "src/derive/adapters/sparq-aggregate.ts",
+    "function": "SparqAggregate.failure",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The installed aggregate package still exchanges its validated native JSON session/contribution/result records. RDF codecs for those records are unfinished; the real adapter and its refusal behavior are preserved."
+  },
+  {
+    "file": "src/derive/adapters/sparq-aggregate.ts",
+    "function": "SparqAggregate.normalize",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The installed aggregate package still exchanges its validated native JSON session/contribution/result records. RDF codecs for those records are unfinished; the real adapter and its refusal behavior are preserved."
+  },
+  {
+    "file": "src/derive/adapters/sparq-aggregate.ts",
+    "function": "SparqAggregate.session",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The installed aggregate package still exchanges its validated native JSON session/contribution/result records. RDF codecs for those records are unfinished; the real adapter and its refusal behavior are preserved."
+  },
+  {
+    "file": "src/derive/cache.ts",
+    "function": "ProofCache.read",
+    "rule": "json-signature",
+    "count": 6,
+    "reason": "The proof cache still persists native proof/request objects. A dataset-backed cache codec has not been implemented, so this legacy cache contract remains explicit."
+  },
+  {
+    "file": "src/derive/cache.ts",
+    "function": "ProofCache.write",
+    "rule": "json-signature",
+    "count": 3,
+    "reason": "The proof cache still persists native proof/request objects. A dataset-backed cache codec has not been implemented, so this legacy cache contract remains explicit."
+  },
+  {
+    "file": "src/derive/rules.ts",
+    "function": "DerivedResult",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "Derivation still reads admitted legacy statement values and emits legacy derived-claim records. Fitness metadata reads wrappers, but the claim-value and derivation graph codecs are unfinished."
+  },
+  {
+    "file": "src/derive/rules.ts",
+    "function": "evaluateRule",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Derivation still reads admitted legacy statement values and emits legacy derived-claim records. Fitness metadata reads wrappers, but the claim-value and derivation graph codecs are unfinished."
+  },
+  {
+    "file": "src/derive/rules.ts",
+    "function": "verifyDerivation",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "Derivation still reads admitted legacy statement values and emits legacy derived-claim records. Fitness metadata reads wrappers, but the claim-value and derivation graph codecs are unfinished."
+  },
+  {
+    "file": "src/derive/verification.ts",
+    "function": "opaqueDerivation",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Opaque/joint evidence verification still consumes the legacy signed statement and native backend records. The graph-native proof/session/assurance models are unfinished; verifier decisions remain oracle-stable."
+  },
+  {
+    "file": "src/derive/verification.ts",
+    "function": "proofPolicy",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Opaque/joint evidence verification still consumes the legacy signed statement and native backend records. The graph-native proof/session/assurance models are unfinished; verifier decisions remain oracle-stable."
+  },
+  {
+    "file": "src/derive/verification.ts",
+    "function": "verifyJointMessageOutcome",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Opaque/joint evidence verification still consumes the legacy signed statement and native backend records. The graph-native proof/session/assurance models are unfinished; verifier decisions remain oracle-stable."
+  },
+  {
+    "file": "src/derive/verification.ts",
+    "function": "verifyOpaqueDerivation",
+    "rule": "json-signature",
+    "count": 4,
+    "reason": "Opaque/joint evidence verification still consumes the legacy signed statement and native backend records. The graph-native proof/session/assurance models are unfinished; verifier decisions remain oracle-stable."
+  },
+  {
+    "file": "src/derive/verifiers.ts",
+    "function": "DerivedRequest",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "This native proof/joint protocol contract still uses JSON records for requests, sessions, contributions and outcomes. Complete graph wrappers and backend codecs are unfinished; changing only the type spelling would hide that debt."
+  },
+  {
+    "file": "src/derive/verifiers.ts",
+    "function": "FixedJointSession",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "This native proof/joint protocol contract still uses JSON records for requests, sessions, contributions and outcomes. Complete graph wrappers and backend codecs are unfinished; changing only the type spelling would hide that debt."
+  },
+  {
+    "file": "src/derive/verifiers.ts",
+    "function": "JointOutcome",
+    "rule": "json-signature",
+    "count": 5,
+    "reason": "This native proof/joint protocol contract still uses JSON records for requests, sessions, contributions and outcomes. Complete graph wrappers and backend codecs are unfinished; changing only the type spelling would hide that debt."
+  },
+  {
+    "file": "src/derive/verifiers.ts",
+    "function": "JointProtocol",
+    "rule": "json-signature",
+    "count": 33,
+    "reason": "This native proof/joint protocol contract still uses JSON records for requests, sessions, contributions and outcomes. Complete graph wrappers and backend codecs are unfinished; changing only the type spelling would hide that debt."
+  },
+  {
+    "file": "src/derive/verifiers.ts",
+    "function": "JsonValue",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "This native proof/joint protocol contract still uses JSON records for requests, sessions, contributions and outcomes. Complete graph wrappers and backend codecs are unfinished; changing only the type spelling would hide that debt."
+  },
+  {
+    "file": "src/derive/verifiers.ts",
+    "function": "ProofSystem",
+    "rule": "json-signature",
+    "count": 20,
+    "reason": "This native proof/joint protocol contract still uses JSON records for requests, sessions, contributions and outcomes. Complete graph wrappers and backend codecs are unfinished; changing only the type spelling would hide that debt."
+  },
+  {
+    "file": "src/derive/verifiers.ts",
+    "function": "SessionParams",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "This native proof/joint protocol contract still uses JSON records for requests, sessions, contributions and outcomes. Complete graph wrappers and backend codecs are unfinished; changing only the type spelling would hide that debt."
+  },
+  {
+    "file": "src/eval/faults.ts",
+    "function": "payload",
+    "rule": "foreign-json-parse",
+    "count": 1,
+    "reason": "This host fault injector decodes legacy outbound payloads to tamper with them. Brief 11 forbids edits under src/eval; it is retained as a named fixture exception, not gate admission."
+  },
+  {
+    "file": "src/gates/common.ts",
+    "function": "AdmittedFact",
+    "rule": "json-signature",
+    "count": 3,
+    "reason": "Admitted facts, reliance holds and gate/profile callbacks still carry legacy statement/terms objects. Complete credential, terms and context dataset storage are unfinished; these are visible migration exceptions."
+  },
+  {
+    "file": "src/gates/common.ts",
+    "function": "GateContext",
+    "rule": "json-signature",
+    "count": 8,
+    "reason": "Admitted facts, reliance holds and gate/profile callbacks still carry legacy statement/terms objects. Complete credential, terms and context dataset storage are unfinished; these are visible migration exceptions."
+  },
+  {
+    "file": "src/gates/common.ts",
+    "function": "RelianceHold",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Admitted facts, reliance holds and gate/profile callbacks still carry legacy statement/terms objects. Complete credential, terms and context dataset storage are unfinished; these are visible migration exceptions."
+  },
+  {
+    "file": "src/gates/inbound.ts",
+    "function": "InboundDeps",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "This boundary still exposes legacy agreement terms or claim/body records. Envelope and fitness operands read wrappers, but complete VC/body/terms admission and the core handoff are unfinished."
+  },
+  {
+    "file": "src/gates/inbound.ts",
+    "function": "InboundGate.checkJointBindings",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "This boundary still exposes legacy agreement terms or claim/body records. Envelope and fitness operands read wrappers, but complete VC/body/terms admission and the core handoff are unfinished."
+  },
+  {
+    "file": "src/gates/inbound.ts",
+    "function": "InboundGate.claimChecks.comparable",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "This boundary still exposes legacy agreement terms or claim/body records. Envelope and fitness operands read wrappers, but complete VC/body/terms admission and the core handoff are unfinished."
+  },
+  {
+    "file": "src/gates/outbound.ts",
+    "function": "OutboundDeps",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "This helper still consumes legacy claim values, evidence or native derivation records. Scalar action/envelope scope reads wrappers; complete disclosure/terms/proof graph codecs remain unfinished."
+  },
+  {
+    "file": "src/gates/outbound.ts",
+    "function": "OutboundGate.checkDerivationRelease",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "This helper still consumes legacy claim values, evidence or native derivation records. Scalar action/envelope scope reads wrappers; complete disclosure/terms/proof graph codecs remain unfinished."
+  },
+  {
+    "file": "src/gates/outbound.ts",
+    "function": "OutboundGate.checkEffect",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "This helper still consumes legacy claim values, evidence or native derivation records. Scalar action/envelope scope reads wrappers; complete disclosure/terms/proof graph codecs remain unfinished."
+  },
+  {
+    "file": "src/gates/outbound.ts",
+    "function": "OutboundGate.narrowerAnswer",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "This helper still consumes legacy claim values, evidence or native derivation records. Scalar action/envelope scope reads wrappers; complete disclosure/terms/proof graph codecs remain unfinished."
+  },
+  {
+    "file": "src/mechanisms/code-mapping.ts",
+    "function": "mapCodeClaim",
+    "rule": "json-signature",
+    "count": 3,
+    "reason": "Mapping still projects original and mapped legacy claim objects while preserving original-source standing. Credential-subject and mapping-provenance graph codecs are unfinished."
+  },
+  {
+    "file": "src/mechanisms/dataset-query.ts",
+    "function": "LocalDatasetHolder.query.enter",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The local query holder still evaluates its validated native dataset/query records and produces legacy signed answers. Graph-backed dataset/answer models are unfinished."
+  },
+  {
+    "file": "src/mechanisms/forum.ts",
+    "function": "LocalForum.decision",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The forum still validates legacy record-segment and dispute decision objects. Graph record/decision models and the existing record-signature bridge are unfinished."
+  },
+  {
+    "file": "src/mechanisms/forum.ts",
+    "function": "LocalForum.segment",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "The forum still validates legacy record-segment and dispute decision objects. Graph record/decision models and the existing record-signature bridge are unfinished."
+  },
+  {
+    "file": "src/mechanisms/joint.ts",
+    "function": "JointParty",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "Joint state and operations still hold native session/contribution/partial/outcome objects from the real aggregate protocol. RDF wrappers and durable dataset codecs are unfinished; private-state and refusal behavior are preserved."
+  },
+  {
+    "file": "src/mechanisms/joint.ts",
+    "function": "JointParty.receive",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Joint state and operations still hold native session/contribution/partial/outcome objects from the real aggregate protocol. RDF wrappers and durable dataset codecs are unfinished; private-state and refusal behavior are preserved."
+  },
+  {
+    "file": "src/mechanisms/joint.ts",
+    "function": "JointParty.release",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "Joint state and operations still hold native session/contribution/partial/outcome objects from the real aggregate protocol. RDF wrappers and durable dataset codecs are unfinished; private-state and refusal behavior are preserved."
+  },
+  {
+    "file": "src/mechanisms/joint.ts",
+    "function": "JointState",
+    "rule": "json-signature",
+    "count": 6,
+    "reason": "Joint state and operations still hold native session/contribution/partial/outcome objects from the real aggregate protocol. RDF wrappers and durable dataset codecs are unfinished; private-state and refusal behavior are preserved."
+  },
+  {
+    "file": "src/mechanisms/references.ts",
+    "function": "LocalResourceHolder",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "The holder still stores and relays legacy resource-grant and statement objects. A protected-reference credential/graph codec has not been implemented."
+  },
+  {
+    "file": "src/mechanisms/selective.ts",
+    "function": "unverifiedEvidenceClaim",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Selective disclosure still yields issuer-authenticated legacy claim objects after digest verification. The presentation/credential-subject RDF model and graph-based admission are unfinished; parsing itself moved to wire."
+  },
+  {
+    "file": "src/mechanisms/selective.ts",
+    "function": "verifySelectivePresentation",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Selective disclosure still yields issuer-authenticated legacy claim objects after digest verification. The presentation/credential-subject RDF model and graph-based admission are unfinished; parsing itself moved to wire."
+  },
+  {
+    "file": "src/mechanisms/single-use.ts",
+    "function": "SingleUseItem",
+    "rule": "json-signature",
+    "count": 3,
+    "reason": "The single-use register still stores legacy claim/capability records. Dataset-backed register records and their credential graph codec are unfinished."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.admittedStatements",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The core-facing admitted-statement accessor still returns legacy claim values. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.agreementId",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Agreement identity still hashes the legacy operation terms and selection. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.applyReply",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Core replies still carry legacy handler bodies and actions. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.callAdapter",
+    "rule": "json-signature",
+    "count": 3,
+    "reason": "External effect adapters still accept and return the legacy typed-by-operation payload. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.conclude",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Effect conclusions still persist operation-specific legacy observations. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.context",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Handler context still exposes legacy agreement terms and domain state. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.description",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The advertised implementation/operation description still uses the legacy profile object. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.domainState",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Local domain state still contains legacy protocol/application records. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.eraseRequested",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Erasure processing still consumes the legacy erasure request payload. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.getDomain",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Domain state reads still expose legacy application/protocol records. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.instruct",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Principal instruction context is still persisted with legacy structured item metadata. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.invokeUnderAgreement",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "Agreement invocation still reads legacy agreement terms and invocation inputs. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.jointResult",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Joint result construction still emits a legacy derived claim carrying native protocol evidence. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.park",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Exact-action holds still persist legacy continuations and proposal bodies. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.performReply",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Handler/model proposal construction still carries legacy bodies and actions. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.protocolStatement",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Protocol statements still sign the legacy claim/native-protocol payload. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.readContent",
+    "rule": "json-signature",
+    "count": 4,
+    "reason": "Content parts and their source-signed structured upgrades still use legacy claim/value records. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.readProtectedTerm",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Protected operation-model values still return a verified legacy statement payload. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.recordReading",
+    "rule": "json-signature",
+    "count": 4,
+    "reason": "Model readings still construct legacy source statements with original digest, terms and implementation binding. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.reject",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Local rejection extra metadata is still an open legacy object, beyond the narrowed integrity diagnostics. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.sendReceipt",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "Receipt observations still use operation-specific legacy values. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.setDomain",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Domain state writes still persist legacy application/protocol records. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.startInvocation",
+    "rule": "json-signature",
+    "count": 3,
+    "reason": "Invocation still accepts legacy operation-specific input/basis values. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntime.startNegotiation",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "Negotiation still accepts legacy operation-specific offer terms. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "AgentRuntimeOptions",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "Runtime description/profile options still use the legacy object contract. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "Continuation",
+    "rule": "json-signature",
+    "count": 5,
+    "reason": "Held continuations still persist complete legacy bodies and actions for exact-action review. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/agent.ts",
+    "function": "StartPlan",
+    "rule": "json-signature",
+    "count": 3,
+    "reason": "Opening plans still contain domain-specific offer terms and invocation inputs. Complete graph models/codecs at this boundary are unfinished; exact decisions and continuations are preserved."
+  },
+  {
+    "file": "src/runtime/operations.ts",
+    "function": "DisclosureCheck",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "The handler/core/effect contract still carries operation-specific JSON bodies, terms and parameters. Complete profile contexts and wrapper builders for scripted/model cores are unfinished."
+  },
+  {
+    "file": "src/runtime/operations.ts",
+    "function": "DisclosureCondition",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The handler/core/effect contract still carries operation-specific JSON bodies, terms and parameters. Complete profile contexts and wrapper builders for scripted/model cores are unfinished."
+  },
+  {
+    "file": "src/runtime/operations.ts",
+    "function": "EffectAdapter",
+    "rule": "json-signature",
+    "count": 4,
+    "reason": "The handler/core/effect contract still carries operation-specific JSON bodies, terms and parameters. Complete profile contexts and wrapper builders for scripted/model cores are unfinished."
+  },
+  {
+    "file": "src/runtime/operations.ts",
+    "function": "EffectPlan",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The handler/core/effect contract still carries operation-specific JSON bodies, terms and parameters. Complete profile contexts and wrapper builders for scripted/model cores are unfinished."
+  },
+  {
+    "file": "src/runtime/operations.ts",
+    "function": "EffectResult",
+    "rule": "json-signature",
+    "count": 2,
+    "reason": "The handler/core/effect contract still carries operation-specific JSON bodies, terms and parameters. Complete profile contexts and wrapper builders for scripted/model cores are unfinished."
+  },
+  {
+    "file": "src/runtime/operations.ts",
+    "function": "HandlerContext",
+    "rule": "json-signature",
+    "count": 3,
+    "reason": "The handler/core/effect contract still carries operation-specific JSON bodies, terms and parameters. Complete profile contexts and wrapper builders for scripted/model cores are unfinished."
+  },
+  {
+    "file": "src/runtime/operations.ts",
+    "function": "HandlerReply",
+    "rule": "json-signature",
+    "count": 5,
+    "reason": "The handler/core/effect contract still carries operation-specific JSON bodies, terms and parameters. Complete profile contexts and wrapper builders for scripted/model cores are unfinished."
+  },
+  {
+    "file": "src/runtime/operations.ts",
+    "function": "OperationHandler",
+    "rule": "json-signature",
+    "count": 12,
+    "reason": "The handler/core/effect contract still carries operation-specific JSON bodies, terms and parameters. Complete profile contexts and wrapper builders for scripted/model cores are unfinished."
+  },
+  {
+    "file": "src/runtime/operations.ts",
+    "function": "OutboundPlan",
+    "rule": "json-signature",
+    "count": 1,
+    "reason": "The handler/core/effect contract still carries operation-specific JSON bodies, terms and parameters. Complete profile contexts and wrapper builders for scripted/model cores are unfinished."
+  }
+]

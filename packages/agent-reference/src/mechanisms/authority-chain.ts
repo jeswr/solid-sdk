@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DEFAULT_LIMITS } from "../core/limits.js";
 import { id, iso } from "../core/schema.js";
 import type { ReasonCode, VerificationResult } from "../core/types.js";
+import { decodeAdapterJson } from "../wire/inspect.js";
 import type { DocumentResolver } from "./organizations.js";
 import { verifyStatement } from "./statements.js";
 import type { TrustStore } from "./trust.js";
@@ -121,7 +122,7 @@ export class AuthorityChainChecks {
         .array(z.array(z.string()).min(1).max(16))
         .min(1)
         .max(16)
-        .parse(JSON.parse(encoded));
+        .parse(decodeAdapterJson(encoded));
     } catch {
       return { ok: false, reason: "representation-invalid" };
     }

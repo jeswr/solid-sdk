@@ -975,3 +975,140 @@ The function-level mechanical inventory in `RDF-PIPELINE-STATUS.json` has **234 
 | `git diff --check` | PASS. |
 
 Logs are `/tmp/brief22-final-{codegen,build,typecheck,lint,tests,scenarios,check-codegen,rdf-pipeline,layers,dependencies}.log`. No commit was made, no full-workspace gate or personal-agent/coverage/evaluation suite was run, and no mirror or external publication was attempted.
+
+## Brief 22b
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+**Final status: partial; Brief 22b is not completed.** The unchanged oracle and all 322 package tests pass. Full JSON-LD carriage, complete proposal/credential graphs, packet fields and the two Data Integrity runs remain unfinished. The migration guard has 15 hard core-model failures and 213 reasoned function/signature exceptions (228 total findings). The final audit below supersedes the provisional green allow-list checkpoint.
+
+Offline implementation, no commits. Starting reference tests: **301 passed in 46 files**, including the immutable 157-path oracle. The checked-in inventory predates the merged joint work: it records 234 findings; a fresh check against the exact starting HEAD is recorded separately below. No oracle, maintained outline, optional `.sparq/` installation, binding, suite-registry or scenario-runner edit is made.
+
+**Part 1 checkpoint — partly done.** Foreign JWS decoding/verification now lives in `src/wire/jws-compact.ts`; `src/mechanisms/jws.ts` preserves the public exports. Bounded JSON parsing lives in `src/wire/bounded-json.ts`, with the existing limits-module export preserved. Untrusted diagnostic/JWS inspection lives in `src/wire/inspect.ts`; trace, gate, runtime, mechanism and hostile-fixture callers no longer call `JSON.parse` on those foreign bytes. Cryptographic checks, legacy bytes, schemas and decisions are preserved. This is boundary consolidation, **not completion of JSON-LD carriage**: `AgentRuntime.emit` still signs legacy messages, `InboundGate.verifyIntegrity` still admits legacy JWS payloads, and exact-document suite approval digests are unfinished. The existing evidence strings cannot satisfy `EvidenceItemShape`'s embedded-credential link, and unmodelled domain fields cannot pass strict context admission; switching these to the new wire reader at this checkpoint would change decisions. Reference tests: **301 passed / 46 files**, unchanged oracle included. Required scenarios passed (157 executable paths; 146 runs, 11 disagreements, 9 blocked). `check:rdf-pipeline`: **233 findings, no exemptions**, still failing. Subsequent checkpoints below supersede this provisional count/status.
+
+**Part 2 checkpoint — partly done.** `InboundGate.verifyIntegrity` now reads sender/key, declared configuration, organization key binding, audience, reply reference and time-window operands through `MessageEnvelopeNode`. This class is explicitly an envelope projection, not a complete wire Message graph. Legacy content/evidence checks and `IntegrityResult.message` remain object-based. `fitnessOf` and `claimTime` now require `StatementQualityNode`; inbound admission, derivation, outbound freshness and standing-access callers construct that view at their existing legacy boundaries. Methods, validity, issue/as-of times and calendar periods are live RDF reads. Four adversarial/live-view/round-trip tests were added. The ontology, context and shapes now cover issue time and temporal coverage; codegen was rerun, recording **123** full-model admission errors. `StatementQualityNode` projects rejected `StatementSubjectShape` (BlankNodeOrIRI value/terms/period links); `StatementPeriodNode` projects `StatementPeriodShape` (closed/ignored-properties constraints). These are adapters around legacy ingress, not a claim that messages/credentials/core now share one dataset.
+
+The attempted SDK ODRL graph migration was **stopped and reverted** when the unchanged oracle failed: `policyToRdf` rejects `rule.target = urn:scenario:age-check:document` because it requires an HTTP(S) target, whereas the existing evaluator accepts that target. No target, policy, scenario expectation or oracle was changed, and no second ODRL serializer was written. `solidOdrlEngine.evaluate`, `evaluateItemTerms`, mandate/representation/source admission, legacy credential verification and `admitStatements` therefore retain their old policy/body readings. They are not described as migrated. The final checkpoint package test command passes: **305 reference tests / 47 files plus 17 package evaluation-fixture tests / 1 file**; it does not run the `eval:e0` command. The 157-path oracle passes unchanged. Required scenarios passed: **146 runs / 11 disagreements / 9 blocked**. Pipeline check: **232 findings, zero allowances**, still failing. The one additional reduction from Part 1 excludes `.test.ts`/`.spec.ts` source files from the production-source guard; their local fixture/spec-file parsing is not a foreign-party runtime boundary.
+
+**Part 3 checkpoint — partly done.** `OutboundGate.release` (the actual name of the brief's action `check`), `describeAction`, `exceededLimit`, `approvalRequest`, `strongerApprovalRequest` and `checkEffect` read scalar operation/action/target/purpose/recipient/conversation operands through `IntentScopeNode`. `checkMessage`, `seal` and `unsignedAllowed` read envelope operands through `MessageEnvelopeNode`. These are explicitly partial projections of the rejected ActionIntent/Message shapes, not complete proposal graphs: parameters, disclosed claim values, mandate policies, evidence and full-document approval digests remain legacy. `src/engine/handlers.ts:installHandler`, scripted/model core proposal construction, `AgentRuntime.admitToCore` and the operation/core contracts have **not** been migrated. No scope projection is sent or attached to a packet as if it were the complete signed document. Integrity failure extras were narrowed to their real digest/binding fields, removing four generic-JSON signature findings without renaming JSON model types.
+
+After this part: **305 reference tests / 47 files + 17 fixture tests / 1 file pass**, including the unchanged oracle. Required scenarios pass: **157 executable; 146 runs / 11 disagreements / 9 blocked**. The checker now passes as a **bounded migration ratchet with 228 explicit remaining violations in 94 scopes**, not as evidence of a completed migration. Every allowance has an exact source file/scope/rule/count and an explanatory reason. `RDF-PIPELINE-STATUS.json` is the per-scope ceiling: neither a new scope nor an increased count can be allowed. Unused, oversized, duplicate, wildcard and reasonless allowances fail; `--write-status` only records a passing reduction. Direct triple construction cannot be exempted. Production scanning excludes test/spec files. Fixture tests cover growth, stale entries and invalid allowances. The fresh starting-HEAD inventory was **251**, versus **234** in the older checked-in inventory; consolidation, the test-source exclusion and narrowed diagnostics reduced the fresh count to **228**. The new ceiling was bootstrapped from that fresh reduced inventory, including the already-merged real aggregate adapter missing from the old inventory. The retained core interface exceptions mean the original Brief 22 model-type requirement remains unmet.
+
+**Final audit of the Part 3 guard — the earlier green checkpoint is superseded.** The first allow-list was too broad: it exempted 15 core model declarations. Brief 22 requires those declarations to become real wrapper types, and Brief 22b permits function exceptions, so type-level exemptions would hide an unmet requirement. They have been removed and the checker now rejects attempts to exempt `object-model` or `direct-quad`. The **final guard fails on 15 core declarations**, with **213 bounded exceptions in 79 other scopes**. There are **228 total remaining findings**, down from the fresh starting count of 251. This implementation **does not complete Brief 22b** or its required passing final pipeline check. The README states that prominently. The mechanical list is a lower bound on object reads; unchanged typed legacy bodies can also be read in functions without a `Json` signature.
+
+**Subsequent model/check refinements.** Source admission's ordinary issuer, subject, claim-type and method operands in `InboundGate.assessClaim` now read the credential/subject metadata views. Its non-IRI legacy identifier fallback is explicit; cryptographic claim values, status, derivations and the returned claim remain legacy. Validity and issue time belong to the credential; method, as-of time and period belong to its subject. Missing issuer metadata is not replaced with an invented issuer, and a partial graph fails full VC admission. Unknown subjects remain unidentified nodes. Calendar-period context is scoped to `StatementSubject`, avoiding a global meaning for unrelated `period` fields. The final new hand-written classes are `MessageEnvelopeNode` (rejected MessageShape), `IntentScopeNode` (rejected ActionIntentShape's BlankNodeOrIRI parameters), `StatementQualityNode` (rejected VC subject/proof BlankNodeOrIRI links), `QualitySubjectNode` (rejected StatementSubject value/terms/period links) and `StatementPeriodNode` (rejected closed/ignored-properties constraints). Exact admission messages remain reproducible in `src/generated/full-admission.json` (**123 errors**). No generator admission was weakened. Outbound `disclosure`, `dataTerms`, `checkEmailContext` and `commitmentShape` also read scalar action scope through wrappers; their values/terms/parameters still use legacy records. The oracle passes after these refinements.
+
+**Part 4 — not completed.** No `jsonld`, `context`, `turtle` or `trig` fields have been attached to the legacy packets: the runtime still has no complete message graph that all its gates read. Attaching a separately converted envelope/body would violate the same-graph rule. `packetView` preserves the existing layers; its untrusted decoding moved to `src/wire/inspect.ts`. A read-only probe of the current mortgage-core packet header/body projections, with the prescribed context/types added, admits the simple describe/accept bodies but refuses description, propose, deliver, receipt and invoke with `undefined-term`. This probe is diagnostic only: it is not signed-document admission and ignores the legacy evidence strings. Full operation-model contexts and embedded credential construction remain unfinished; this is not a claim that those parts cannot be built. The explorer and the prior exact-content chat behavior are unchanged. The final Part 4 checkpoint passes **305 reference tests + 17 fixture tests**, including the unchanged oracle, and all **157 executable paths**; the pipeline count remains **228 (15 hard failures + 213 exceptions)**.
+
+
+**Part 5 — stopped at the protected recording interface; not implemented.** The existing `scripts/run-scenarios.mjs` writes every trace/outline as `${stem}--baseline.json` and treats every non-main result as a declared branch. It has no configuration-result recording hook for the requested filenames. That file and `src/suites/` are owned by the other lane and were not edited. No engine-side writer was added outside that recording interface. The live legacy wire path also does not yet execute the new suite interface. No configuration entry, real-suite registration or `mortgage-{main,core}--authenticity-data-integrity.json` recording is claimed. The independent Data Integrity primitives remain tested, but are not represented as a real scenario run. The required final package tests pass (**305 reference + 17 fixture tests**); required scenarios pass (**157 executable paths, 146 runs / 11 disagreements / 9 blocked**); pipeline count is **228**, with **15 hard failures + 213 exceptions**.
+
+**What remains, beyond the mechanical signature inventory.** The full graph boundary is unfinished at `AgentRuntime.emit`, `receiveInner`, `outboundFromEntry`, `loadMandateInto`, `selfCheck`, `outboundVerifier`, `checkTransmission`, `admitStatements`, `onDescribe`, `onDescription`, `onPropose`, `onAccept`, `onClosed`, `onInvoke`, `onDeliver`, `onReceipt`, `admitToCore`, `applyReply`, `performReply`, `executeAgreementPlan`, `performPlanMessage`, `authorise`, `standingAccess`, `agreementDutyRules`, `installAgreementDuties`, `recordItemTransfer`, `erasureAuthorised` and `eraseRequested` in `src/runtime/agent.ts`. Some scalar/fitness operands moved, not their complete payloads. In `src/gates/inbound.ts`, `verifyIntegrity` still verifies the legacy payload and content/evidence objects; `assessClaim`, `assessRepresentation`, `checkRepresentation`, `claimChecks`, `admitStatements`, and `Admission.claims`, `need`, `source`, `authority`, `complete`, `messageTerms` retain legacy claim, authority, policy or body readings. In `src/gates/outbound.ts`, `release`, `checkMessage`, `seal`, disclosure/data-terms/approval/limit helpers still need complete proposal, mandate, terms and disclosed-value graphs after the scalar-scope migration. `src/mechanisms/statements.ts:verifyStatement`, `mandate.ts:loadMandate/evaluateIntent/evaluateGrantPolicy/verifyApproval` and the native protocol/credential helpers listed in the allow-list remain object-based. `src/engine/handlers.ts:installHandler` and `src/runtime/operations.ts` still construct/declare legacy core replies, plans and effects. State stores and admitted context do not yet persist complete message/statement/mandate/terms datasets as N-Quads. The old exact-content chat presentation issue from Brief 22 also remains. These are implementation gaps, not passing conformance claims.
+
+**Counts, invariants and scope.** Fresh starting production/compiler inventory: **251 = 216 JSON signatures + 20 foreign parses + 15 object-model declarations**. Final: **228 = 212 JSON signatures + 1 fixture foreign parse + 15 object-model declarations**. Eighteen foreign parses moved to wire; one local source test/spec parse left production scanning; four open integrity-diagnostic signatures were narrowed to their actual fields. The source/fitness/scope wrapper changes do not by themselves remove the retained core-type failures. All **74 scenario files** were loaded; the manifest remains **166 paths, 146 runs / 11 disagreements / 9 blocked**. The test suite grew from **301 reference tests in 46 files** to **305 in 47 files**, with **17 unchanged fixture tests** in the package's second Vitest invocation. `test/oracle/pre-rdf.json` is unchanged (SHA-256 `5352929414096fbaeaf0958d95338c2a4192f7fb7ae0c491d867c34a5a6d0b8e`); its test still compares every event in all **157 executable paths**. No dependency, lockfile, binding, suite, runner, explorer, evaluation source or optional `.sparq/` installation was changed. No commit, network request, personal-agent suite, coverage, `eval:e0` command, full-workspace gate or publication was performed.
+
+**Design/SDK findings.** The concrete ODRL serializer/evaluator target mismatch is recorded under Part 2, with the exact oracle failure and reverted attempt. The current operation-model contexts are incomplete, as the packet probe demonstrates; unknown terms were not silently dropped and no generic JSON-in-RDF encoding was introduced to hide them. The context and shapes for quality periods/issue time were completed through published DCT/schema/PROV terms, with validity retained on the VC. No original check result was bent to force a pass. The protected runner needs a configuration-aware recording interface before these additional runs can join its artifacts. None of these observations proves the overall design impossible; this lane leaves the integration incomplete.
+
+**Final allow-list.** The complete machine-readable list, including the reason for every entry, is [scripts/rdf-pipeline-allowlist.json](scripts/rdf-pipeline-allowlist.json). There are **79 exact scopes / 213 allowances**. Core model declarations and direct triple construction are never allowable. The following is the complete final scope/count index; `RDF-PIPELINE-STATUS.json` also records the 15 unexempted core declaration failures.
+
+| File | Scope | Rule | Count |
+|---|---|---|---:|
+| `src/derive/adapters/sparq-aggregate.ts` | `SparqAggregate.contributions` | `json-signature` | 1 |
+| `src/derive/adapters/sparq-aggregate.ts` | `SparqAggregate.failure` | `json-signature` | 1 |
+| `src/derive/adapters/sparq-aggregate.ts` | `SparqAggregate.normalize` | `json-signature` | 1 |
+| `src/derive/adapters/sparq-aggregate.ts` | `SparqAggregate.session` | `json-signature` | 1 |
+| `src/derive/cache.ts` | `ProofCache.read` | `json-signature` | 6 |
+| `src/derive/cache.ts` | `ProofCache.write` | `json-signature` | 3 |
+| `src/derive/rules.ts` | `DerivedResult` | `json-signature` | 2 |
+| `src/derive/rules.ts` | `evaluateRule` | `json-signature` | 1 |
+| `src/derive/rules.ts` | `verifyDerivation` | `json-signature` | 2 |
+| `src/derive/verification.ts` | `opaqueDerivation` | `json-signature` | 1 |
+| `src/derive/verification.ts` | `proofPolicy` | `json-signature` | 1 |
+| `src/derive/verification.ts` | `verifyJointMessageOutcome` | `json-signature` | 1 |
+| `src/derive/verification.ts` | `verifyOpaqueDerivation` | `json-signature` | 4 |
+| `src/derive/verifiers.ts` | `DerivedRequest` | `json-signature` | 1 |
+| `src/derive/verifiers.ts` | `FixedJointSession` | `json-signature` | 1 |
+| `src/derive/verifiers.ts` | `JointOutcome` | `json-signature` | 5 |
+| `src/derive/verifiers.ts` | `JointProtocol` | `json-signature` | 33 |
+| `src/derive/verifiers.ts` | `JsonValue` | `json-signature` | 1 |
+| `src/derive/verifiers.ts` | `ProofSystem` | `json-signature` | 20 |
+| `src/derive/verifiers.ts` | `SessionParams` | `json-signature` | 2 |
+| `src/eval/faults.ts` | `payload` | `foreign-json-parse` | 1 |
+| `src/gates/common.ts` | `AdmittedFact` | `json-signature` | 3 |
+| `src/gates/common.ts` | `GateContext` | `json-signature` | 8 |
+| `src/gates/common.ts` | `RelianceHold` | `json-signature` | 1 |
+| `src/gates/inbound.ts` | `InboundDeps` | `json-signature` | 2 |
+| `src/gates/inbound.ts` | `InboundGate.checkJointBindings` | `json-signature` | 1 |
+| `src/gates/inbound.ts` | `InboundGate.claimChecks.comparable` | `json-signature` | 1 |
+| `src/gates/outbound.ts` | `OutboundDeps` | `json-signature` | 2 |
+| `src/gates/outbound.ts` | `OutboundGate.checkDerivationRelease` | `json-signature` | 2 |
+| `src/gates/outbound.ts` | `OutboundGate.checkEffect` | `json-signature` | 1 |
+| `src/gates/outbound.ts` | `OutboundGate.narrowerAnswer` | `json-signature` | 1 |
+| `src/mechanisms/code-mapping.ts` | `mapCodeClaim` | `json-signature` | 3 |
+| `src/mechanisms/dataset-query.ts` | `LocalDatasetHolder.query.enter` | `json-signature` | 1 |
+| `src/mechanisms/forum.ts` | `LocalForum.decision` | `json-signature` | 1 |
+| `src/mechanisms/forum.ts` | `LocalForum.segment` | `json-signature` | 2 |
+| `src/mechanisms/joint.ts` | `JointParty` | `json-signature` | 2 |
+| `src/mechanisms/joint.ts` | `JointParty.receive` | `json-signature` | 1 |
+| `src/mechanisms/joint.ts` | `JointParty.release` | `json-signature` | 2 |
+| `src/mechanisms/joint.ts` | `JointState` | `json-signature` | 6 |
+| `src/mechanisms/references.ts` | `LocalResourceHolder` | `json-signature` | 2 |
+| `src/mechanisms/selective.ts` | `unverifiedEvidenceClaim` | `json-signature` | 1 |
+| `src/mechanisms/selective.ts` | `verifySelectivePresentation` | `json-signature` | 1 |
+| `src/mechanisms/single-use.ts` | `SingleUseItem` | `json-signature` | 3 |
+| `src/runtime/agent.ts` | `AgentRuntime.admittedStatements` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.agreementId` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.applyReply` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.callAdapter` | `json-signature` | 3 |
+| `src/runtime/agent.ts` | `AgentRuntime.conclude` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.context` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.description` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.domainState` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.eraseRequested` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.getDomain` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.instruct` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.invokeUnderAgreement` | `json-signature` | 2 |
+| `src/runtime/agent.ts` | `AgentRuntime.jointResult` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.park` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.performReply` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.protocolStatement` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.readContent` | `json-signature` | 4 |
+| `src/runtime/agent.ts` | `AgentRuntime.readProtectedTerm` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.recordReading` | `json-signature` | 4 |
+| `src/runtime/agent.ts` | `AgentRuntime.reject` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.sendReceipt` | `json-signature` | 2 |
+| `src/runtime/agent.ts` | `AgentRuntime.setDomain` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `AgentRuntime.startInvocation` | `json-signature` | 3 |
+| `src/runtime/agent.ts` | `AgentRuntime.startNegotiation` | `json-signature` | 2 |
+| `src/runtime/agent.ts` | `AgentRuntimeOptions` | `json-signature` | 1 |
+| `src/runtime/agent.ts` | `Continuation` | `json-signature` | 5 |
+| `src/runtime/agent.ts` | `StartPlan` | `json-signature` | 3 |
+| `src/runtime/operations.ts` | `DisclosureCheck` | `json-signature` | 2 |
+| `src/runtime/operations.ts` | `DisclosureCondition` | `json-signature` | 1 |
+| `src/runtime/operations.ts` | `EffectAdapter` | `json-signature` | 4 |
+| `src/runtime/operations.ts` | `EffectPlan` | `json-signature` | 1 |
+| `src/runtime/operations.ts` | `EffectResult` | `json-signature` | 2 |
+| `src/runtime/operations.ts` | `HandlerContext` | `json-signature` | 3 |
+| `src/runtime/operations.ts` | `HandlerReply` | `json-signature` | 5 |
+| `src/runtime/operations.ts` | `OperationHandler` | `json-signature` | 12 |
+| `src/runtime/operations.ts` | `OutboundPlan` | `json-signature` | 1 |
+
+
+**Unexempted core declarations.** `src/core/types.ts`: `EvidenceItem`, `DescribeBody`, `DescriptionBody`, `ProposeBody`, `AcceptBody`, `ChallengeBody`, `RefuseBody`, `InvokeBody`, `DeliverBody`, `ReceiptBody`, `UnsupportedBody`, `IndeterminateBody`, `Message`, `ActionIntent`, `Agreement`. Their interfaces must become actual wrappers; adding a type-level exception or renaming the object contract is not an acceptable completion.
+
+**Commands run last (Node 24 first on PATH).** Logs are `/tmp/brief22b-*.log`; the starting-HEAD and checkpoint inventories are `/tmp/brief22b-*-pipeline.json`. Failed intermediate typecheck/fixture runs were corrected before final validation; the attempted policy graph migration was reverted at its oracle failure. The closing pipeline failure is deliberately retained.
+
+| Command | Final result |
+|---|---|
+| `pnpm --filter @jeswr/agent-reference run codegen` | PASS; generated GrantRecord; 123 full-model admission errors recorded. |
+| `pnpm --filter @jeswr/agent-reference run build` | PASS; TypeScript, schema drift, five retained legacy drivers and 157 live data paths. |
+| `pnpm --filter @jeswr/agent-reference run typecheck` | PASS. |
+| `pnpm --filter @jeswr/agent-reference run lint` | PASS; zero errors, 6 warnings, 137 informational diagnostics. |
+| `pnpm --filter @jeswr/agent-reference test` | PASS; 305 reference tests / 47 files + 17 fixture tests / 1 file, including the unchanged oracle. |
+| `pnpm --filter @jeswr/agent-reference run scenarios` | PASS; 157 executable paths; 146 runs / 11 disagreements / 9 blocked. |
+| `pnpm run check:codegen` | PASS; eight generated projects. |
+| `node packages/agent-reference/scripts/check-rdf-pipeline.mjs --json` | **FAIL, exit 1**; 15 hard model failures, 213 bounded exceptions, 228 total findings. |
+| Final oracle/recording/quality/guard/codegen/vocabulary target tests after artifact restoration | PASS; 14 tests in 6 files; original recordings and immutable oracle retained. |
+| `git diff --check` and protected-path/artifact audit | PASS; validation-only trace/manifest/outline churn restored; only agent-reference implementation/report files changed. |
+
+Validation-generated trace, index, outline and recorded-hash/manifest churn was restored byte-for-byte to the starting artifacts; no decision/payload change is being recorded as a new trace. The immutable oracle, all maintained outlines, all pre-Brief-22b report bytes, the protected lane paths and both evaluation directories remain unchanged.

@@ -95,7 +95,18 @@
       },
       "OutcomeRecord": "https://w3id.org/jeswr/awp#OutcomeRecord",
       "RequestBasis": "https://w3id.org/jeswr/awp#RequestBasis",
-      "StatementSubject": "https://w3id.org/jeswr/awp#StatementSubject",
+      "StatementSubject": {
+        "@id": "https://w3id.org/jeswr/awp#StatementSubject",
+        "@context": {
+          "period": {
+            "@id": "http://purl.org/dc/terms/temporal",
+            "@context": {
+              "start": "https://schema.org/startDate",
+              "end": "https://schema.org/endDate"
+            }
+          }
+        }
+      },
       "Assurance": "https://w3id.org/jeswr/awp#Assurance",
       "ReasonCode": "https://w3id.org/jeswr/awp#ReasonCode",
       "MessageKind": "https://w3id.org/jeswr/awp#MessageKind",
@@ -1482,6 +1493,11 @@
           "fresh": "https://w3id.org/jeswr/awp#binding/fresh",
           "complete": "https://w3id.org/jeswr/awp#binding/complete"
         }
+      },
+      "ClaimPeriod": "http://purl.org/dc/terms/PeriodOfTime",
+      "issuedAt": {
+        "@id": "http://www.w3.org/ns/prov#generatedAtTime",
+        "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
       }
     }
   ]

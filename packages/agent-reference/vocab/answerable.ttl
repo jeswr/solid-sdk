@@ -1566,3 +1566,28 @@ awp:GrantKind a <http://www.w3.org/2002/07/owl#Class>;
 <https://w3id.org/jeswr/awp#grant-kind/delegation> a awp:GrantKind;
     rdfs:label "Delegation";
     rdfs:comment "A recorded delegation authorization artifact; the current verified grant and policy determine what it permits.".
+
+# AUTHORED-BY Codex GPT-6
+<http://purl.org/dc/terms/PeriodOfTime> a <http://www.w3.org/2002/07/owl#Class>;
+    rdfs:label "Time period";
+    rdfs:comment "An interval of time.".
+<http://purl.org/dc/terms/temporal> a rdf:Property;
+    rdfs:label "Period covered";
+    rdfs:comment "The temporal coverage of a resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range <http://purl.org/dc/terms/PeriodOfTime>.
+<https://schema.org/startDate> a rdf:Property;
+    rdfs:label "Start date";
+    rdfs:comment "The date or time at which an event or interval starts.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Literal.
+<https://schema.org/endDate> a rdf:Property;
+    rdfs:label "End date";
+    rdfs:comment "The date or time at which an event or interval ends.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Literal.
+<http://www.w3.org/ns/prov#generatedAtTime> a rdf:Property;
+    rdfs:label "Issued at";
+    rdfs:comment "The time at which an entity was generated; for a source statement, its issue time.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:dateTime.

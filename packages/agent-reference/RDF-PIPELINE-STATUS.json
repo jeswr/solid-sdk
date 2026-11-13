@@ -1,13 +1,6 @@
 {
   "findings": [
     {
-      "file": "src/core/limits.ts",
-      "function": "parseBoundedJson",
-      "line": 119,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
       "file": "src/core/types.ts",
       "function": "EvidenceItem",
       "line": 238,
@@ -113,6 +106,34 @@
       "detail": "Agreement must alias an RDF wrapper"
     },
     {
+      "file": "src/derive/adapters/sparq-aggregate.ts",
+      "function": "SparqAggregate.session",
+      "line": 187,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/adapters/sparq-aggregate.ts",
+      "function": "SparqAggregate.contributions",
+      "line": 247,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/adapters/sparq-aggregate.ts",
+      "function": "SparqAggregate.failure",
+      "line": 285,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/adapters/sparq-aggregate.ts",
+      "function": "SparqAggregate.normalize",
+      "line": 343,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
       "file": "src/derive/cache.ts",
       "function": "ProofCache.read",
       "line": 22,
@@ -178,77 +199,84 @@
     {
       "file": "src/derive/rules.ts",
       "function": "DerivedResult",
-      "line": 158,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/rules.ts",
-      "function": "DerivedResult",
       "line": 159,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/rules.ts",
+      "function": "DerivedResult",
+      "line": 160,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/rules.ts",
       "function": "evaluateRule",
-      "line": 176,
+      "line": 177,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/rules.ts",
       "function": "verifyDerivation",
-      "line": 469,
+      "line": 478,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/rules.ts",
       "function": "verifyDerivation",
-      "line": 470,
+      "line": 479,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verification.ts",
-      "function": "opaqueDerivation",
+      "function": "verifyJointMessageOutcome",
       "line": 15,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verification.ts",
+      "function": "opaqueDerivation",
+      "line": 73,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verification.ts",
       "function": "proofPolicy",
-      "line": 19,
+      "line": 77,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verification.ts",
       "function": "verifyOpaqueDerivation",
-      "line": 43,
+      "line": 101,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verification.ts",
       "function": "verifyOpaqueDerivation",
-      "line": 43,
+      "line": 101,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verification.ts",
       "function": "verifyOpaqueDerivation",
-      "line": 44,
+      "line": 102,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verification.ts",
       "function": "verifyOpaqueDerivation",
-      "line": 50,
+      "line": 108,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
@@ -409,98 +437,42 @@
     {
       "file": "src/derive/verifiers.ts",
       "function": "SessionParams",
-      "line": 52,
+      "line": 54,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointOutcome",
-      "line": 55,
+      "line": 60,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointOutcome",
-      "line": 56,
+      "line": 61,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointOutcome",
-      "line": 57,
+      "line": 62,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointOutcome",
-      "line": 58,
+      "line": 63,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointOutcome",
-      "line": 59,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
       "line": 64,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 64,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 64,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 65,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 65,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 66,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 66,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 67,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
@@ -514,7 +486,42 @@
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointProtocol",
-      "line": 72,
+      "line": 69,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 69,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 70,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 70,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 71,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 71,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
@@ -522,20 +529,6 @@
       "file": "src/derive/verifiers.ts",
       "function": "JointProtocol",
       "line": 72,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 73,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 73,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
@@ -549,21 +542,14 @@
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointProtocol",
-      "line": 76,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 77,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
       "line": 78,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 79,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
@@ -577,14 +563,14 @@
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointProtocol",
-      "line": 82,
+      "line": 81,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointProtocol",
-      "line": 82,
+      "line": 83,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
@@ -605,7 +591,7 @@
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointProtocol",
-      "line": 85,
+      "line": 86,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
@@ -633,42 +619,112 @@
     {
       "file": "src/derive/verifiers.ts",
       "function": "JointProtocol",
-      "line": 90,
+      "line": 91,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 91,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 94,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 94,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 95,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 96,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 97,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 99,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 100,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 102,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 103,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 104,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/derive/verifiers.ts",
+      "function": "JointProtocol",
+      "line": 105,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verifiers.ts",
       "function": "DerivedRequest",
-      "line": 148,
+      "line": 163,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/derive/verifiers.ts",
       "function": "FixedJointSession",
-      "line": 153,
+      "line": 170,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
-      "file": "src/engine/run.ts",
-      "function": "runPath",
-      "line": 1885,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/engine/run.ts",
-      "function": "runPath",
-      "line": 2484,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/engine/run.ts",
-      "function": "runPath",
-      "line": 2487,
+      "file": "src/eval/faults.ts",
+      "function": "payload",
+      "line": 83,
       "rule": "foreign-json-parse",
       "detail": "foreign bytes may be parsed only in src/wire"
     },
@@ -759,107 +815,72 @@
     {
       "file": "src/gates/inbound.ts",
       "function": "InboundDeps",
-      "line": 75,
+      "line": 81,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/gates/inbound.ts",
       "function": "InboundDeps",
-      "line": 75,
+      "line": 81,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/gates/inbound.ts",
-      "function": "IntegrityResult",
-      "line": 80,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "IntegrityResult",
-      "line": 91,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "InboundGate.verifyIntegrity",
-      "line": 187,
+      "function": "InboundGate.checkJointBindings",
+      "line": 903,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/gates/inbound.ts",
       "function": "InboundGate.claimChecks.comparable",
-      "line": 1131,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "Admission.passIntegrity",
-      "line": 1460,
+      "line": 1270,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/gates/outbound.ts",
       "function": "OutboundDeps",
-      "line": 81,
+      "line": 85,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/gates/outbound.ts",
       "function": "OutboundDeps",
-      "line": 81,
+      "line": 85,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/gates/outbound.ts",
       "function": "OutboundGate.narrowerAnswer",
-      "line": 213,
+      "line": 217,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/gates/outbound.ts",
       "function": "OutboundGate.checkDerivationRelease",
-      "line": 269,
+      "line": 273,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/gates/outbound.ts",
       "function": "OutboundGate.checkDerivationRelease",
-      "line": 279,
+      "line": 283,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/gates/outbound.ts",
       "function": "OutboundGate.checkEffect",
-      "line": 2160,
+      "line": 2181,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/outbound.ts",
-      "function": "OutboundGate.seal",
-      "line": 2224,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/mechanisms/authority-chain.ts",
-      "function": "AuthorityChainChecks.check",
-      "line": 124,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
     },
     {
       "file": "src/mechanisms/code-mapping.ts",
@@ -913,13 +934,6 @@
     {
       "file": "src/mechanisms/joint.ts",
       "function": "JointState",
-      "line": 38,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointState",
       "line": 39,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
@@ -947,45 +961,52 @@
     },
     {
       "file": "src/mechanisms/joint.ts",
-      "function": "JointParty",
-      "line": 46,
+      "function": "JointState",
+      "line": 43,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/mechanisms/joint.ts",
+      "function": "JointState",
+      "line": 44,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/mechanisms/joint.ts",
       "function": "JointParty",
-      "line": 50,
+      "line": 56,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/mechanisms/joint.ts",
+      "function": "JointParty",
+      "line": 60,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/mechanisms/joint.ts",
       "function": "JointParty.receive",
-      "line": 78,
+      "line": 88,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/mechanisms/joint.ts",
       "function": "JointParty.release",
-      "line": 144,
+      "line": 192,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/mechanisms/joint.ts",
       "function": "JointParty.release",
-      "line": 148,
+      "line": 196,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/jws.ts",
-      "function": "peekHeader",
-      "line": 239,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
     },
     {
       "file": "src/mechanisms/references.ts",
@@ -1004,28 +1025,14 @@
     {
       "file": "src/mechanisms/selective.ts",
       "function": "unverifiedEvidenceClaim",
-      "line": 82,
+      "line": 83,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/mechanisms/selective.ts",
-      "function": "unverifiedEvidenceClaim",
-      "line": 84,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/mechanisms/selective.ts",
-      "function": "unverifiedEvidenceClaim",
-      "line": 89,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/mechanisms/selective.ts",
       "function": "verifySelectivePresentation",
-      "line": 98,
+      "line": 94,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
@@ -1051,197 +1058,183 @@
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
-      "file": "src/mechanisms/sparq-policy.ts",
-      "function": "verdictFromResponse",
-      "line": 138,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntimeOptions",
-      "line": 209,
+      "line": 214,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "Continuation",
-      "line": 245,
+      "line": 250,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "Continuation",
-      "line": 246,
+      "line": 251,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "Continuation",
-      "line": 247,
+      "line": 252,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "Continuation",
-      "line": 248,
+      "line": 253,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "Continuation",
-      "line": 248,
+      "line": 253,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "StartPlan",
-      "line": 265,
+      "line": 270,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "StartPlan",
-      "line": 266,
+      "line": 271,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "StartPlan",
-      "line": 267,
+      "line": 272,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.description",
-      "line": 895,
+      "line": 900,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.domainState",
-      "line": 968,
+      "line": 973,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.readProtectedTerm",
-      "line": 989,
+      "line": 994,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.instruct",
-      "line": 1148,
+      "line": 1153,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.protocolStatement",
-      "line": 1439,
+      "line": 1444,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.jointResult",
-      "line": 1482,
+      "line": 1511,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.readContent",
-      "line": 1976,
+      "line": 2005,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.readContent",
-      "line": 1980,
+      "line": 2009,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.readContent",
-      "line": 1980,
+      "line": 2009,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.readContent",
-      "line": 1996,
+      "line": 2025,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.recordReading",
-      "line": 2033,
+      "line": 2062,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.recordReading",
-      "line": 2033,
+      "line": 2062,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.recordReading",
-      "line": 2038,
+      "line": 2067,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.recordReading",
-      "line": 2040,
+      "line": 2069,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.admittedStatements",
-      "line": 2119,
+      "line": 2148,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.startNegotiation",
-      "line": 2194,
+      "line": 2223,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.startNegotiation",
-      "line": 2197,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.startInvocation",
       "line": 2226,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
@@ -1249,154 +1242,140 @@
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.startInvocation",
-      "line": 2229,
+      "line": 2255,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.startInvocation",
-      "line": 2230,
+      "line": 2258,
+      "rule": "json-signature",
+      "detail": "signature contains Json/JsonObject (including aliases)"
+    },
+    {
+      "file": "src/runtime/agent.ts",
+      "function": "AgentRuntime.startInvocation",
+      "line": 2259,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.sendReceipt",
-      "line": 2278,
+      "line": 2307,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.sendReceipt",
-      "line": 2281,
+      "line": 2310,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.invokeUnderAgreement",
-      "line": 2477,
+      "line": 2506,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.invokeUnderAgreement",
-      "line": 2480,
+      "line": 2509,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.reject",
-      "line": 2548,
+      "line": 2577,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.applyReply",
-      "line": 3481,
+      "line": 3510,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.performReply",
-      "line": 3539,
+      "line": 3568,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.erasePayloads.contains",
-      "line": 3999,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.eraseRequested",
-      "line": 4044,
+      "line": 4070,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.callAdapter",
-      "line": 4349,
+      "line": 4375,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.callAdapter",
-      "line": 4349,
+      "line": 4375,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.callAdapter",
-      "line": 4349,
+      "line": 4375,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.conclude",
-      "line": 4566,
+      "line": 4592,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.park",
-      "line": 5273,
+      "line": 5299,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.emit",
-      "line": 5994,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.outboundFromEntry",
-      "line": 6177,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.context",
-      "line": 6428,
+      "line": 6458,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.agreementId",
-      "line": 6481,
+      "line": 6511,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.getDomain",
-      "line": 6538,
+      "line": 6568,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
     {
       "file": "src/runtime/agent.ts",
       "function": "AgentRuntime.setDomain",
-      "line": 6542,
+      "line": 6572,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
     },
@@ -1616,38 +1595,10 @@
       "line": 270,
       "rule": "json-signature",
       "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/trace/packet.ts",
-      "function": "decodeJws",
-      "line": 30,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/trace/packet.ts",
-      "function": "decodeJws",
-      "line": 31,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/trace/packet.ts",
-      "function": "peekWire",
-      "line": 48,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
     }
   ],
   "failures": [
     {
-      "file": "src/core/limits.ts",
-      "function": "parseBoundedJson",
-      "line": 119,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
       "file": "src/core/types.ts",
       "function": "EvidenceItem",
       "line": 238,
@@ -1751,1533 +1702,7 @@
       "line": 482,
       "rule": "object-model",
       "detail": "Agreement must alias an RDF wrapper"
-    },
-    {
-      "file": "src/derive/cache.ts",
-      "function": "ProofCache.read",
-      "line": 22,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/cache.ts",
-      "function": "ProofCache.read",
-      "line": 25,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/cache.ts",
-      "function": "ProofCache.read",
-      "line": 25,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/cache.ts",
-      "function": "ProofCache.read",
-      "line": 35,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/cache.ts",
-      "function": "ProofCache.read",
-      "line": 35,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/cache.ts",
-      "function": "ProofCache.read",
-      "line": 35,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/cache.ts",
-      "function": "ProofCache.write",
-      "line": 59,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/cache.ts",
-      "function": "ProofCache.write",
-      "line": 59,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/cache.ts",
-      "function": "ProofCache.write",
-      "line": 59,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/rules.ts",
-      "function": "DerivedResult",
-      "line": 158,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/rules.ts",
-      "function": "DerivedResult",
-      "line": 159,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/rules.ts",
-      "function": "evaluateRule",
-      "line": 176,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/rules.ts",
-      "function": "verifyDerivation",
-      "line": 469,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/rules.ts",
-      "function": "verifyDerivation",
-      "line": 470,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verification.ts",
-      "function": "opaqueDerivation",
-      "line": 15,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verification.ts",
-      "function": "proofPolicy",
-      "line": 19,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verification.ts",
-      "function": "verifyOpaqueDerivation",
-      "line": 43,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verification.ts",
-      "function": "verifyOpaqueDerivation",
-      "line": 43,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verification.ts",
-      "function": "verifyOpaqueDerivation",
-      "line": 44,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verification.ts",
-      "function": "verifyOpaqueDerivation",
-      "line": 50,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JsonValue",
-      "line": 12,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 18,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 18,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 19,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 21,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 22,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 24,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 24,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 24,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 25,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 25,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 27,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 28,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 30,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 30,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 31,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 31,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 33,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 34,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 39,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "ProofSystem",
-      "line": 41,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "SessionParams",
-      "line": 52,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "SessionParams",
-      "line": 52,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointOutcome",
-      "line": 55,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointOutcome",
-      "line": 56,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointOutcome",
-      "line": 57,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointOutcome",
-      "line": 58,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointOutcome",
-      "line": 59,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 64,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 64,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 64,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 65,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 65,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 66,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 66,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 67,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 69,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 72,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 72,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 73,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 73,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 74,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 76,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 77,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 78,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 80,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 82,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 82,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 83,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 84,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 85,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 87,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 88,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 89,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "JointProtocol",
-      "line": 90,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "DerivedRequest",
-      "line": 148,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/derive/verifiers.ts",
-      "function": "FixedJointSession",
-      "line": 153,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/engine/run.ts",
-      "function": "runPath",
-      "line": 1885,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/engine/run.ts",
-      "function": "runPath",
-      "line": 2484,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/engine/run.ts",
-      "function": "runPath",
-      "line": 2487,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "AdmittedFact",
-      "line": 105,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "AdmittedFact",
-      "line": 108,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "AdmittedFact",
-      "line": 124,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "RelianceHold",
-      "line": 162,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "GateContext",
-      "line": 206,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "GateContext",
-      "line": 207,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "GateContext",
-      "line": 226,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "GateContext",
-      "line": 228,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "GateContext",
-      "line": 231,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "GateContext",
-      "line": 288,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "GateContext",
-      "line": 289,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/common.ts",
-      "function": "GateContext",
-      "line": 295,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "InboundDeps",
-      "line": 75,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "InboundDeps",
-      "line": 75,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "IntegrityResult",
-      "line": 80,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "IntegrityResult",
-      "line": 91,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "InboundGate.verifyIntegrity",
-      "line": 187,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "InboundGate.claimChecks.comparable",
-      "line": 1131,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/inbound.ts",
-      "function": "Admission.passIntegrity",
-      "line": 1460,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/outbound.ts",
-      "function": "OutboundDeps",
-      "line": 81,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/outbound.ts",
-      "function": "OutboundDeps",
-      "line": 81,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/outbound.ts",
-      "function": "OutboundGate.narrowerAnswer",
-      "line": 213,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/outbound.ts",
-      "function": "OutboundGate.checkDerivationRelease",
-      "line": 269,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/outbound.ts",
-      "function": "OutboundGate.checkDerivationRelease",
-      "line": 279,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/outbound.ts",
-      "function": "OutboundGate.checkEffect",
-      "line": 2160,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/gates/outbound.ts",
-      "function": "OutboundGate.seal",
-      "line": 2224,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/mechanisms/authority-chain.ts",
-      "function": "AuthorityChainChecks.check",
-      "line": 124,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/mechanisms/code-mapping.ts",
-      "function": "mapCodeClaim",
-      "line": 41,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/code-mapping.ts",
-      "function": "mapCodeClaim",
-      "line": 42,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/code-mapping.ts",
-      "function": "mapCodeClaim",
-      "line": 54,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/dataset-query.ts",
-      "function": "LocalDatasetHolder.query.enter",
-      "line": 253,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/forum.ts",
-      "function": "LocalForum.decision",
-      "line": 147,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/forum.ts",
-      "function": "LocalForum.segment",
-      "line": 186,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/forum.ts",
-      "function": "LocalForum.segment",
-      "line": 190,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointState",
-      "line": 38,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointState",
-      "line": 39,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointState",
-      "line": 40,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointState",
-      "line": 41,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointState",
-      "line": 42,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointParty",
-      "line": 46,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointParty",
-      "line": 50,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointParty.receive",
-      "line": 78,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointParty.release",
-      "line": 144,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/joint.ts",
-      "function": "JointParty.release",
-      "line": 148,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/jws.ts",
-      "function": "peekHeader",
-      "line": 239,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/mechanisms/references.ts",
-      "function": "LocalResourceHolder",
-      "line": 115,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/references.ts",
-      "function": "LocalResourceHolder",
-      "line": 119,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/selective.ts",
-      "function": "unverifiedEvidenceClaim",
-      "line": 82,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/selective.ts",
-      "function": "unverifiedEvidenceClaim",
-      "line": 84,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/mechanisms/selective.ts",
-      "function": "unverifiedEvidenceClaim",
-      "line": 89,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/mechanisms/selective.ts",
-      "function": "verifySelectivePresentation",
-      "line": 98,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/single-use.ts",
-      "function": "SingleUseItem",
-      "line": 62,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/single-use.ts",
-      "function": "SingleUseItem",
-      "line": 65,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/single-use.ts",
-      "function": "SingleUseItem",
-      "line": 70,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/mechanisms/sparq-policy.ts",
-      "function": "verdictFromResponse",
-      "line": 138,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntimeOptions",
-      "line": 209,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "Continuation",
-      "line": 245,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "Continuation",
-      "line": 246,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "Continuation",
-      "line": 247,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "Continuation",
-      "line": 248,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "Continuation",
-      "line": 248,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "StartPlan",
-      "line": 265,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "StartPlan",
-      "line": 266,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "StartPlan",
-      "line": 267,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.description",
-      "line": 895,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.domainState",
-      "line": 968,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.readProtectedTerm",
-      "line": 989,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.instruct",
-      "line": 1148,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.protocolStatement",
-      "line": 1439,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.jointResult",
-      "line": 1482,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.readContent",
-      "line": 1976,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.readContent",
-      "line": 1980,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.readContent",
-      "line": 1980,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.readContent",
-      "line": 1996,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.recordReading",
-      "line": 2033,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.recordReading",
-      "line": 2033,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.recordReading",
-      "line": 2038,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.recordReading",
-      "line": 2040,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.admittedStatements",
-      "line": 2119,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.startNegotiation",
-      "line": 2194,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.startNegotiation",
-      "line": 2197,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.startInvocation",
-      "line": 2226,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.startInvocation",
-      "line": 2229,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.startInvocation",
-      "line": 2230,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.sendReceipt",
-      "line": 2278,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.sendReceipt",
-      "line": 2281,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.invokeUnderAgreement",
-      "line": 2477,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.invokeUnderAgreement",
-      "line": 2480,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.reject",
-      "line": 2548,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.applyReply",
-      "line": 3481,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.performReply",
-      "line": 3539,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.erasePayloads.contains",
-      "line": 3999,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.eraseRequested",
-      "line": 4044,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.callAdapter",
-      "line": 4349,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.callAdapter",
-      "line": 4349,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.callAdapter",
-      "line": 4349,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.conclude",
-      "line": 4566,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.park",
-      "line": 5273,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.emit",
-      "line": 5994,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.outboundFromEntry",
-      "line": 6177,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.context",
-      "line": 6428,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.agreementId",
-      "line": 6481,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.getDomain",
-      "line": 6538,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/agent.ts",
-      "function": "AgentRuntime.setDomain",
-      "line": 6542,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "DisclosureCondition",
-      "line": 49,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "DisclosureCheck",
-      "line": 56,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "DisclosureCheck",
-      "line": 57,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "HandlerReply",
-      "line": 61,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "HandlerReply",
-      "line": 64,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "HandlerReply",
-      "line": 68,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "HandlerReply",
-      "line": 76,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "HandlerReply",
-      "line": 86,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "EffectPlan",
-      "line": 96,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OutboundPlan",
-      "line": 106,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "HandlerContext",
-      "line": 152,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "HandlerContext",
-      "line": 154,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "HandlerContext",
-      "line": 158,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 183,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 184,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 204,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 206,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 207,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 209,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 209,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 215,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 220,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 225,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 237,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "OperationHandler",
-      "line": 240,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "EffectResult",
-      "line": 246,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "EffectResult",
-      "line": 247,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "EffectAdapter",
-      "line": 264,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "EffectAdapter",
-      "line": 264,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "EffectAdapter",
-      "line": 270,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/runtime/operations.ts",
-      "function": "EffectAdapter",
-      "line": 270,
-      "rule": "json-signature",
-      "detail": "signature contains Json/JsonObject (including aliases)"
-    },
-    {
-      "file": "src/trace/packet.ts",
-      "function": "decodeJws",
-      "line": 30,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/trace/packet.ts",
-      "function": "decodeJws",
-      "line": 31,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
-    },
-    {
-      "file": "src/trace/packet.ts",
-      "function": "peekWire",
-      "line": 48,
-      "rule": "foreign-json-parse",
-      "detail": "foreign bytes may be parsed only in src/wire"
     }
   ],
-  "exempted": 0
+  "exempted": 213
 }

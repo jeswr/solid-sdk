@@ -7,6 +7,7 @@ import { digestBytes, digestOf } from "../core/canonical.js";
 import { DEFAULT_LIMITS, parseBoundedJson } from "../core/limits.js";
 import { id, iso } from "../core/schema.js";
 import type { EvidenceItem, JsonObject } from "../core/types.js";
+import { decodeCompactPayload } from "../wire/inspect.js";
 import type { SigningKey } from "./jws.js";
 import { type StatementCheck, signStatement, verifyStatement } from "./statements.js";
 import type { TrustStore } from "./trust.js";
@@ -80,14 +81,9 @@ export function presentSelective(
 }
 /** Inspection only. Callers must separately verify the actual evidence before relying on it. */
 export function unverifiedEvidenceClaim(item: EvidenceItem): JsonObject {
-  if (item.format !== "selective-disclosure+jws")
-    return JSON.parse(
-      Buffer.from(item.value.split(".")[1] ?? "", "base64url").toString(),
-    ) as JsonObject;
+  if (item.format !== "selective-disclosure+jws") return decodeCompactPayload(item.value);
   const presentation = presentationSchema.parse(parseBoundedJson(item.value, DEFAULT_LIMITS));
-  const credential = credentialSchema.parse(
-    JSON.parse(Buffer.from(presentation.credential.split(".")[1] ?? "", "base64url").toString()),
-  );
+  const credential = credentialSchema.parse(decodeCompactPayload(presentation.credential));
   const { digests: _digests, type: _type, id: _id, ...metadata } = credential;
   return {
     ...metadata,

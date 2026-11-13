@@ -1,3 +1,4 @@
+import { decodeAdapterJson } from "../wire/inspect.js";
 /**
  * SPARQ policy engine: the pilot's ODRL policies decided by the Rust `sparq-policy`
  * evaluator (`decide`, three-valued) through its opt-in `sparq-policy-decide` binary.
@@ -135,7 +136,7 @@ export function verdictFromResponse(
   });
   let doc: DecideResponse;
   try {
-    doc = JSON.parse(stdout) as DecideResponse;
+    doc = decodeAdapterJson(stdout) as DecideResponse;
   } catch {
     return fail(`unparsable output (exit ${status})`);
   }

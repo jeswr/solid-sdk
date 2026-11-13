@@ -1,5 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
+import { MessageEnvelopeNode } from "../model/envelope.js";
+import { IntentScopeNode } from "../model/intent.js";
+import { StatementQualityNode } from "../model/quality.js";
+import { decodeJws } from "../wire/inspect.js";
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The outbound gate. Every action and disclosure the core proposes is checked before anything
@@ -383,22 +387,24 @@ export class OutboundGate {
   }
 
   private describeAction(intent: ActionIntent): string {
+    const scope = IntentScopeNode.fromIntent(intent);
     const p = intent.parameters;
-    const task = this.deps.gate.taskLabel?.(intent.target);
-    if (intent.action === "compensate")
-      return `pay ${String(p.amount ?? "?")} ${String(p.currency ?? "")} to ${this.name(intent.recipient)}`;
-    if (intent.action === "distribute") {
+    const task = this.deps.gate.taskLabel?.(scope.target);
+    if (scope.action === "compensate")
+      return `pay ${String(p.amount ?? "?")} ${String(p.currency ?? "")} to ${this.name(scope.recipient)}`;
+    if (scope.action === "distribute") {
       const labels = this.labels(intent);
-      return `share ${labels.length > 0 ? listWords(labels) : idWords(intent.target, this.name)} with ${this.name(intent.recipient)}`;
+      return `share ${labels.length > 0 ? listWords(labels) : idWords(scope.target, this.name)} with ${this.name(scope.recipient)}`;
     }
-    if (task && task !== intent.target)
-      return `take the next step in ${task} with ${this.name(intent.recipient)}`;
-    return `${intent.action} ${idWords(intent.target, this.name)} with ${this.name(intent.recipient)}`;
+    if (task && task !== scope.target)
+      return `take the next step in ${task} with ${this.name(scope.recipient)}`;
+    return `${scope.action} ${idWords(scope.target, this.name)} with ${this.name(scope.recipient)}`;
   }
 
   private exceededLimit(intent: ActionIntent): string | undefined {
+    const scope = IntentScopeNode.fromIntent(intent);
     const limits = this.deps.gate.principalLimits;
-    const commitment = limits?.commitments?.[intent.operation];
+    const commitment = limits?.commitments?.[scope.operation];
     if (commitment && Number(intent.parameters.amount) > commitment.maxAmount)
       return `This commitment exceeds the principal's ${commitment.currency} ${commitment.maxAmount} limit.`;
     const days = intent.parameters.retentionDays;
@@ -413,12 +419,13 @@ export class OutboundGate {
 
   /** The request the principal sees, built from the rule and the facts of the action. */
   approvalRequest(intent: ActionIntent, limitText: string | undefined): string {
+    const scope = IntentScopeNode.fromIntent(intent);
     const p = intent.parameters;
-    const who = this.name(intent.recipient);
-    if (intent.action === "distribute") {
+    const who = this.name(scope.recipient);
+    if (scope.action === "distribute") {
       const labels = this.labels(intent);
       const uses = [
-        intent.purpose ? `use them for ${idWords(intent.purpose, this.name)}` : "",
+        scope.purpose ? `use them for ${idWords(scope.purpose, this.name)}` : "",
         typeof p.retentionDays === "number" ? `keep them for ${p.retentionDays} days` : "",
         Array.isArray(p.onward) && p.onward.length > 0
           ? `pass them on only to ${listWords(p.onward.map((o) => this.name(String(o))))}`
@@ -429,7 +436,7 @@ export class OutboundGate {
       } May I share them?`;
     }
     return `${who} asks me to ${this.describeAction(intent)}${
-      intent.purpose ? ` for ${idWords(intent.purpose, this.name)}` : ""
+      scope.purpose ? ` for ${idWords(scope.purpose, this.name)}` : ""
     }.${limitText ? ` ${limitText}` : ""} May I go ahead?`;
   }
 
@@ -455,8 +462,9 @@ export class OutboundGate {
   }
 
   private unsignedAllowed(message: AnyMessage): boolean {
-    return (configurationById(message.configuration)?.unsignedRequestKinds ?? []).includes(
-      message.kind,
+    const envelope = MessageEnvelopeNode.fromMessage(message);
+    return (configurationById(envelope.configurationId)?.unsignedRequestKinds ?? []).includes(
+      envelope.messageKind,
     );
   }
 
@@ -481,9 +489,9 @@ export class OutboundGate {
 
   /** The request the principal sees when a recipient asked for a stronger approval. */
   strongerApprovalRequest(intent: ActionIntent, label: string): string {
-    const task =
-      this.deps.gate.taskLabel?.(intent.operation) ?? idWords(intent.operation, this.name);
-    return `Before ${this.name(intent.recipient)} will go ahead with ${task}, it asks you to approve with ${label}. May I ask you to do that now?`;
+    const scope = IntentScopeNode.fromIntent(intent);
+    const task = this.deps.gate.taskLabel?.(scope.operation) ?? idWords(scope.operation, this.name);
+    return `Before ${this.name(scope.recipient)} will go ahead with ${task}, it asks you to approve with ${label}. May I ask you to do that now?`;
   }
 
   /**
@@ -502,6 +510,7 @@ export class OutboundGate {
 
   /** Checks 1 to 5 for a proposed action, around the pilot's mandate decision. */
   release(intent: ActionIntent, decision: AuthorisationDecision): Release {
+    const scope = IntentScopeNode.fromIntent(intent);
     const subject = actionDigest(intent);
     const verdicts: CheckVerdict[] = [];
     const ctx = this.deps.gate;
@@ -535,7 +544,7 @@ export class OutboundGate {
           rule: {
             id: decision.policy.id,
             text: `No rule in ${this.owner}'s mandate lets the agent ${this.describeAction(intent)}${
-              intent.purpose ? ` for ${idWords(intent.purpose, this.name)}` : ""
+              scope.purpose ? ` for ${idWords(scope.purpose, this.name)}` : ""
             } (${decision.reason}).`,
           },
         },
@@ -559,15 +568,15 @@ export class OutboundGate {
         decision: { ...decision, outcome: "deny", reason: "malformed" },
       };
 
-    const taskItems = this.deps.memory.context(ctx.taskId ?? intent.conversation);
+    const taskItems = this.deps.memory.context(ctx.taskId ?? scope.conversation);
     const supportIds = [intent.parameters.support, intent.parameters.evidence].flatMap((v) =>
       Array.isArray(v) ? v.map(String) : [],
     );
     const requiredClaims =
-      ctx.actionClaims?.filter((r) => r.action === intent.action).flatMap((r) => r.claims) ?? [];
+      ctx.actionClaims?.filter((r) => r.action === scope.action).flatMap((r) => r.claims) ?? [];
     const reliance = Object.values(this.deps.memory.relianceHolds).filter(
       (held) =>
-        held.task === (ctx.taskId ?? intent.conversation) &&
+        held.task === (ctx.taskId ?? scope.conversation) &&
         ctx.personMayRelyOn?.includes(String(held.statement.claimType)) &&
         (supportIds.includes(String(held.statement.id)) ||
           (!supportIds.length && requiredClaims.includes(String(held.statement.claimType)))),
@@ -581,10 +590,10 @@ export class OutboundGate {
           taskItems.some((i) => i.id === f.id && i.accepted && i.digest === f.digest) &&
           !!f.statement &&
           fitnessOf(
-            {
+            StatementQualityNode.from({
               ...f.statement,
               method: f.method ?? f.statement.method,
-            } as unknown as import("./quality.js").QualityClaim,
+            } as unknown as import("./quality.js").QualityClaim),
             ctx.reliance,
             this.deps.now(),
           ).verdict === "pass" &&
@@ -593,7 +602,7 @@ export class OutboundGate {
             agent: this.deps.identity.actor,
             action: "use",
             target: f.id,
-            purpose: intent.purpose,
+            purpose: scope.purpose,
             at: this.deps.now(),
           }).verdict === "pass",
       );
@@ -607,7 +616,7 @@ export class OutboundGate {
       if (!admitted) {
         if (reliance.some((h) => h.statement.claimType === claimType)) continue;
         const refusal = Object.entries(this.deps.memory.refusals).find(([key]) =>
-          key.startsWith(`${ctx.taskId ?? intent.conversation}|${claimType}|`),
+          key.startsWith(`${ctx.taskId ?? scope.conversation}|${claimType}|`),
         )?.[1];
         if (refusal) {
           this.verdict(
@@ -699,14 +708,14 @@ export class OutboundGate {
       };
     }
 
-    if (intent.action === "pay") {
+    if (scope.action === "pay") {
       const reason = paymentBinding(
         intent,
         this.deps.memory,
-        ctx.taskId ?? intent.conversation,
+        ctx.taskId ?? scope.conversation,
         this.deps.now(),
         this.deps.identity.actor,
-        (label) => this.recipientAllows(intent.recipient, intent.operation, label),
+        (label) => this.recipientAllows(scope.recipient, scope.operation, label),
       );
       if (reason) {
         const missing = reason === "structured-form-required";
@@ -735,10 +744,10 @@ export class OutboundGate {
       !this.recipient(
         verdicts,
         subject,
-        intent.recipient,
-        intent.operation,
-        intent.conversation,
-        intent.purpose,
+        scope.recipient,
+        scope.operation,
+        scope.conversation,
+        scope.purpose,
       )
     ) {
       this.decide(
@@ -765,10 +774,10 @@ export class OutboundGate {
 
     if (reliance.length) {
       const unsafe =
-        intent.action === "pay" ||
-        ((intent.action === "distribute" ||
+        scope.action === "pay" ||
+        ((scope.action === "distribute" ||
           (Array.isArray(intent.parameters.evidence) && intent.parameters.evidence.length > 0)) &&
-          reliance.some((h) => intent.recipient !== h.statement.issuer));
+          reliance.some((h) => scope.recipient !== h.statement.issuer));
       const termsFailure = reliance
         .map((h) =>
           evaluateItemTerms(h.statement.terms as ItemTerms | undefined, {
@@ -776,7 +785,7 @@ export class OutboundGate {
             agent: this.deps.identity.actor,
             action: "use",
             target: String(h.statement.id),
-            purpose: intent.purpose,
+            purpose: scope.purpose,
             at: this.deps.now(),
           }),
         )
@@ -850,9 +859,9 @@ export class OutboundGate {
     // 5. Limits and approval. Profile judgement and role approvals cannot be overridden by
     // an autonomous mandate or by the principal substituting their own signature.
     const person =
-      ctx.personDecisions?.find((p) => p.action === intent.action) ??
-      (ctx.email && intent.operation === "urn:op:email"
-        ? { action: intent.action, decider: "principal" as const }
+      ctx.personDecisions?.find((p) => p.action === scope.action) ??
+      (ctx.email && scope.operation === "urn:op:email"
+        ? { action: scope.action, decider: "principal" as const }
         : undefined);
     const approvals = (
       matched?.rule as
@@ -929,7 +938,7 @@ export class OutboundGate {
       ?.limit;
     const amount = Number(intent.parameters.amount);
     const paymentExceeded =
-      intent.action === "pay" &&
+      scope.action === "pay" &&
       paymentLimit &&
       (intent.parameters.currency !== paymentLimit.currency ||
         amount * 100 > Math.round(paymentLimit.perAction * 100) ||
@@ -946,10 +955,10 @@ export class OutboundGate {
         m &&
         (this.deps.policyEngine ?? solidOdrlEngine).evaluate(m.withApproval, {
           agent: this.deps.identity.actor,
-          action: intent.action,
-          target: intent.target,
-          purpose: intent.purpose,
-          recipient: intent.recipient,
+          action: scope.action,
+          target: scope.target,
+          purpose: scope.purpose,
+          recipient: scope.recipient,
           at: this.deps.now(),
         }).effect === "permit";
       if (!mayAsk) {
@@ -978,7 +987,7 @@ export class OutboundGate {
     const demanded = this.deps.demandedApproval?.(intent);
     const demandText =
       demanded && !demanded.approvedBy
-        ? `${this.name(intent.recipient)} asked for ${demanded.label} before it will do this.`
+        ? `${this.name(scope.recipient)} asked for ${demanded.label} before it will do this.`
         : undefined;
     let effective =
       paymentExceeded && this.deps.personApproved?.(intent)
@@ -1041,7 +1050,7 @@ export class OutboundGate {
         subject,
         "limits-approval",
         "pass",
-        `${this.owner} approved this exact action with ${demanded.label}, as ${this.name(intent.recipient)} asked; the attestation goes with the request.`,
+        `${this.owner} approved this exact action with ${demanded.label}, as ${this.name(scope.recipient)} asked; the attestation goes with the request.`,
         {
           reason: "approval-given",
           rule: {
@@ -1060,7 +1069,7 @@ export class OutboundGate {
       "pass",
       effective.basis === "owner-approval"
         ? demanded
-          ? `${this.owner} approved this exact action with ${demanded.label}, as ${this.name(intent.recipient)} asked.`
+          ? `${this.owner} approved this exact action with ${demanded.label}, as ${this.name(scope.recipient)} asked.`
           : `${this.owner} approved this exact action.`
         : `Inside what the agent may do on its own, and within ${this.owner}'s limits.`,
       effective.basis === "owner-approval" && !decision.approval
@@ -1174,12 +1183,13 @@ export class OutboundGate {
     subject: string,
     intent: ActionIntent,
   ): string | undefined {
+    const scope = IntentScopeNode.fromIntent(intent);
     const p = intent.parameters;
-    if (intent.action === "distribute" && Array.isArray(p.evidence)) {
+    if (scope.action === "distribute" && Array.isArray(p.evidence)) {
       const offer =
         typeof p.termsDigest === "string" ? this.deps.offerTerms(p.termsDigest) : undefined;
       const requested = this.deps.recordRelease?.(intent)
-        ? this.deps.gate.purposes?.[intent.purpose ?? ""]
+        ? this.deps.gate.purposes?.[scope.purpose ?? ""]
         : Array.isArray(offer?.evidenceRequest)
           ? offer.evidenceRequest.map((r) => String((r as JsonObject).claimType))
           : undefined;
@@ -1256,11 +1266,10 @@ export class OutboundGate {
     subject: string,
     intent: ActionIntent,
   ): string | undefined {
+    const scope = IntentScopeNode.fromIntent(intent);
     const p = intent.parameters;
     // Issuer-authored text cannot hide unsupported machine terms on the actual items.
-    for (const id of intent.action === "distribute" && Array.isArray(p.evidence)
-      ? p.evidence
-      : []) {
+    for (const id of scope.action === "distribute" && Array.isArray(p.evidence) ? p.evidence : []) {
       const fact = this.deps.memory.facts.get(String(id));
       if (!fact?.terms) continue;
       const checked = evaluateItemTerms(fact.terms, {
@@ -1268,8 +1277,8 @@ export class OutboundGate {
         agent: this.deps.identity.actor,
         action: "distribute",
         target: fact.id,
-        purpose: intent.purpose,
-        recipient: intent.recipient,
+        purpose: scope.purpose,
+        recipient: scope.recipient,
         at: this.deps.now(),
       });
       if (checked.verdict === "indeterminate") {
@@ -1279,7 +1288,7 @@ export class OutboundGate {
         return checked.reason ?? "unsupported-term";
       }
     }
-    if (intent.action === "distribute" && typeof p.attachedTerms === "string") {
+    if (scope.action === "distribute" && typeof p.attachedTerms === "string") {
       // An issuer releasing its own statement: the terms it attaches travel with it.
       this.verdict(
         verdicts,
@@ -1293,7 +1302,7 @@ export class OutboundGate {
       );
       return undefined;
     }
-    if (intent.action !== "distribute" || !Array.isArray(p.evidence)) {
+    if (scope.action !== "distribute" || !Array.isArray(p.evidence)) {
       this.verdict(
         verdicts,
         subject,
@@ -1315,29 +1324,28 @@ export class OutboundGate {
         agent: this.deps.identity.actor,
         action: "distribute",
         target: String(id),
-        ...(intent.purpose ? { purpose: intent.purpose } : {}),
-        ...(intent.recipient ? { recipient: intent.recipient } : {}),
+        ...(scope.purpose ? { purpose: scope.purpose } : {}),
+        ...(scope.recipient ? { recipient: scope.recipient } : {}),
         ...(typeof p.retentionDays === "number" ? { retentionDays: p.retentionDays } : {}),
         at: this.deps.now(),
-        recipientAllowed: (label) =>
-          this.recipientAllows(intent.recipient, intent.operation, label),
+        recipientAllowed: (label) => this.recipientAllows(scope.recipient, scope.operation, label),
       });
       let verdict = t.verdict;
       let text = t.text;
       let reason = t.reason;
-      if (verdict === "pass" && terms?.recipientMustBe && intent.recipient) {
+      if (verdict === "pass" && terms?.recipientMustBe && scope.recipient) {
         const r = this.deps.gate.resolver?.resolveRecipient({
-          party: intent.recipient,
-          task: intent.operation,
+          party: scope.recipient,
+          task: scope.operation,
           taskLabel: terms.recipientMustBe.task,
           at: this.deps.now(),
         });
         if (r?.outcome !== "accepted") {
           verdict = "fail";
           reason = "not-authorised";
-          text = `Its terms allow sharing only with ${terms.recipientMustBe.label}; ${this.name(intent.recipient)} is not shown to be one.`;
+          text = `Its terms allow sharing only with ${terms.recipientMustBe.label}; ${this.name(scope.recipient)} is not shown to be one.`;
         } else {
-          text = `${text} ${this.name(intent.recipient)} is ${terms.recipientMustBe.label} (sector register).`;
+          text = `${text} ${this.name(scope.recipient)} is ${terms.recipientMustBe.label} (sector register).`;
         }
       }
       if (verdict !== "pass") blocked ??= reason ?? "indeterminate-policy";
@@ -1402,12 +1410,13 @@ export class OutboundGate {
     digest: string;
     intent: ActionIntent;
   } {
+    const envelope = MessageEnvelopeNode.fromMessage(message);
     const vocabulary = { ...this.deps.gate.vocabulary, ...opts.content?.vocabulary };
     const purposes = { ...opts.content?.purposes, ...this.deps.gate.purposes };
     const known = {
       identifiers: this.deps.memory.knownIdentifiers(
-        this.deps.gate.taskId ?? message.conversation,
-        message.conversation,
+        this.deps.gate.taskId ?? envelope.conversationId,
+        envelope.conversationId,
         { ...this.deps.gate, content: opts.content },
       ),
       terms: opts.knownTerms,
@@ -1416,19 +1425,19 @@ export class OutboundGate {
     const body = message.body as unknown as JsonObject;
     const purpose =
       opts.intent?.purpose ??
-      this.deps.conversationPurpose?.(message.conversation) ??
+      this.deps.conversationPurpose?.(envelope.conversationId) ??
       (typeof body.purpose === "string" ? body.purpose : undefined);
     const retentionDays =
       typeof opts.intent?.parameters.retentionDays === "number"
         ? opts.intent.parameters.retentionDays
-        : this.deps.conversationRetentionDays?.(message.conversation);
+        : this.deps.conversationRetentionDays?.(envelope.conversationId);
     const intent: ActionIntent = {
       action: "distribute",
       operation: opts.operation ?? "urn:awp:send-message",
       target: opts.intent?.target ?? opts.operation ?? "urn:awp:send-message",
-      recipient: message.to?.party ?? message.to?.actor,
+      recipient: envelope.to?.party ?? envelope.to?.actor,
       ...(purpose ? { purpose } : {}),
-      conversation: message.conversation,
+      conversation: envelope.conversationId,
       parameters: {
         messageDigest: digest,
         textDigest: digestOf(freeMessageStrings(message, vocabulary, known)),
@@ -1443,7 +1452,7 @@ export class OutboundGate {
     });
     if (
       opts.intent?.action === "pay" &&
-      (message.kind !== "invoke" ||
+      (envelope.messageKind !== "invoke" ||
         digestOf(body.input) !== digestOf(opts.intent.parameters) ||
         (body.operation as JsonObject | undefined)?.id !== opts.intent.operation)
     ) {
@@ -1459,7 +1468,7 @@ export class OutboundGate {
       return finish("stop", "not-authorised");
     }
     // A public read configuration removes requester authentication, never commitment authority.
-    if (!message.from.onBehalfOf && ["propose", "accept"].includes(message.kind)) {
+    if (!envelope.participant.onBehalfOf && ["propose", "accept"].includes(envelope.messageKind)) {
       this.verdict(verdicts, digest, "mandate", "fail", "A commitment must name its principal.", {
         reason: "representation-missing",
       });
@@ -1467,15 +1476,15 @@ export class OutboundGate {
       return finish("stop", "representation-missing");
     }
     const anonymous =
-      !message.from.actor &&
-      configurationById(message.configuration)?.requesterAuthentication === "not-applicable";
+      !envelope.participant.actor &&
+      configurationById(envelope.configurationId)?.requesterAuthentication === "not-applicable";
     if (
-      (message.to?.actor &&
+      (envelope.to?.actor &&
         this.deps.recipientBound &&
-        !this.deps.recipientBound(message.to.actor, message.to.party)) ||
+        !this.deps.recipientBound(envelope.to.actor, envelope.to.party)) ||
       (["pay", "distribute"].includes(opts.intent?.action ?? "") &&
         opts.intent?.recipient &&
-        opts.intent.recipient !== (message.to?.party ?? message.to?.actor))
+        opts.intent.recipient !== (envelope.to?.party ?? envelope.to?.actor))
     ) {
       this.verdict(
         [],
@@ -1494,8 +1503,9 @@ export class OutboundGate {
     }
     if (
       anonymous &&
-      (!known.identifiers.has(message.conversation) ||
-        (this.deps.anonymousConversation && !this.deps.anonymousConversation(message.conversation)))
+      (!known.identifiers.has(envelope.conversationId) ||
+        (this.deps.anonymousConversation &&
+          !this.deps.anonymousConversation(envelope.conversationId)))
     ) {
       this.verdict(
         [],
@@ -1510,11 +1520,11 @@ export class OutboundGate {
     }
     if (
       this.deps.recipientPinned &&
-      message.to &&
+      envelope.to &&
       !this.deps.recipientPinned(
-        message.to.party ?? message.to.actor ?? "",
+        envelope.to.party ?? envelope.to.actor ?? "",
         purpose,
-        message.to.actor,
+        envelope.to.actor,
       )
     ) {
       this.verdict(
@@ -1596,8 +1606,8 @@ export class OutboundGate {
     }
     if (
       !opts.intent &&
-      message.from.onBehalfOf &&
-      ["invoke", "propose", "accept"].includes(message.kind)
+      envelope.participant.onBehalfOf &&
+      ["invoke", "propose", "accept"].includes(envelope.messageKind)
     ) {
       this.verdict(
         verdicts,
@@ -1625,7 +1635,7 @@ export class OutboundGate {
           digest,
           intent.recipient,
           opts.operation,
-          message.conversation,
+          envelope.conversationId,
           purpose,
         )
       ) {
@@ -1641,7 +1651,7 @@ export class OutboundGate {
         digest,
         intent.recipient,
         opts.operation,
-        message.conversation,
+        envelope.conversationId,
         purpose,
       )
     ) {
@@ -1765,13 +1775,13 @@ export class OutboundGate {
     }
     let bodyHasPersonalData = false;
     const payloadKey =
-      message.kind === "propose"
+      envelope.messageKind === "propose"
         ? "terms"
-        : message.kind === "invoke"
+        : envelope.messageKind === "invoke"
           ? "input"
-          : message.kind === "deliver"
+          : envelope.messageKind === "deliver"
             ? "output"
-            : message.kind === "receipt"
+            : envelope.messageKind === "receipt"
               ? "observed"
               : undefined;
     if (payloadKey && body[payloadKey]) {
@@ -1812,7 +1822,9 @@ export class OutboundGate {
         this.decide("stop", "The untyped payload is held.", "missing-context");
         return finish("stop", "missing-context");
       }
-      for (const item of this.deps.memory.context(this.deps.gate.taskId ?? message.conversation)) {
+      for (const item of this.deps.memory.context(
+        this.deps.gate.taskId ?? envelope.conversationId,
+      )) {
         if (!payload.claims.includes(item.claimType)) continue;
         const terms = evaluateItemTerms(item.terms, {
           name: this.deps.gate.name,
@@ -1862,7 +1874,10 @@ export class OutboundGate {
         );
     }
     const free = freeMessageStrings(message, vocabulary, known);
-    if ((message.kind === "accept" || message.kind === "propose") && free.length > 0) {
+    if (
+      (envelope.messageKind === "accept" || envelope.messageKind === "propose") &&
+      free.length > 0
+    ) {
       this.verdict(
         verdicts,
         digest,
@@ -1874,7 +1889,7 @@ export class OutboundGate {
       this.decide("stop", "Free text never commits the principal.", "structured-form-required");
       return finish("stop", "structured-form-required");
     }
-    const context = this.deps.memory.context(this.deps.gate.taskId ?? message.conversation);
+    const context = this.deps.memory.context(this.deps.gate.taskId ?? envelope.conversationId);
     const needed = purpose ? purposes?.[purpose] : undefined;
     let contextClear = true;
     if (free.length > 0) {
@@ -2022,20 +2037,25 @@ export class OutboundGate {
         verdicts,
         digest,
         "disclosure",
-        message.kind === "description" ? "pass" : "not-applicable",
+        envelope.messageKind === "description" ? "pass" : "not-applicable",
         "The gate finds no personal data in this protocol message.",
         {
           reason:
-            message.kind === "description" ? "minimal-disclosure" : NOT_APPLICABLE.noPersonalData,
+            envelope.messageKind === "description"
+              ? "minimal-disclosure"
+              : NOT_APPLICABLE.noPersonalData,
         },
       );
       this.verdict(
         verdicts,
         digest,
         "data-terms",
-        message.kind === "description" ? "pass" : "not-applicable",
+        envelope.messageKind === "description" ? "pass" : "not-applicable",
         "The gate finds no data terms to apply.",
-        { reason: message.kind === "description" ? "terms-allow" : NOT_APPLICABLE.noPersonalData },
+        {
+          reason:
+            envelope.messageKind === "description" ? "terms-allow" : NOT_APPLICABLE.noPersonalData,
+        },
       );
     }
     if (!opts.intent)
@@ -2052,10 +2072,11 @@ export class OutboundGate {
 
   /** UNS-9/9a at an unsigned email boundary; the profile always requires exact-send approval. */
   checkEmailContext(intent: ActionIntent, text: string, approved = false): readonly CheckVerdict[] {
+    const scope = IntentScopeNode.fromIntent(intent);
     const verdicts: CheckVerdict[] = [],
       subject = actionDigest(intent),
-      needed = intent.purpose ? this.deps.gate.purposes?.[intent.purpose] : undefined;
-    for (const item of this.deps.memory.context(this.deps.gate.taskId ?? intent.conversation)) {
+      needed = scope.purpose ? this.deps.gate.purposes?.[scope.purpose] : undefined;
+    for (const item of this.deps.memory.context(this.deps.gate.taskId ?? scope.conversation)) {
       const minimal = item.accepted === true && !!needed?.includes(item.claimType);
       this.verdict(
         verdicts,
@@ -2076,8 +2097,8 @@ export class OutboundGate {
         agent: this.deps.identity.actor,
         action: "distribute",
         target: item.id,
-        purpose: intent.purpose,
-        recipient: intent.recipient,
+        purpose: scope.purpose,
+        recipient: scope.recipient,
         at: this.deps.now(),
       });
       const explicitlyProhibits = (source: ItemTerms | undefined, target: string): boolean => {
@@ -2093,8 +2114,8 @@ export class OutboundGate {
               agent: this.deps.identity.actor,
               action: "distribute",
               target,
-              purpose: intent.purpose,
-              recipient: intent.recipient,
+              purpose: scope.purpose,
+              recipient: scope.recipient,
               at: this.deps.now(),
             },
             this.deps.policyEngine ?? solidOdrlEngine,
@@ -2158,10 +2179,11 @@ export class OutboundGate {
     return verdicts;
   }
   checkEffect(intent: ActionIntent, parameters: JsonObject): boolean {
+    const scope = IntentScopeNode.fromIntent(intent);
     if (!this.commitmentShape(intent)) return false;
-    const bounded = !!this.deps.gate.principalLimits?.commitments?.[intent.operation];
+    const bounded = !!this.deps.gate.principalLimits?.commitments?.[scope.operation];
     if (
-      (!bounded && intent.action !== "pay") ||
+      (!bounded && scope.action !== "pay") ||
       digestOf(parameters) === digestOf(intent.parameters)
     )
       return true;
@@ -2179,7 +2201,8 @@ export class OutboundGate {
   }
 
   private commitmentShape(intent: ActionIntent): boolean {
-    const cap = this.deps.gate.principalLimits?.commitments?.[intent.operation];
+    const scope = IntentScopeNode.fromIntent(intent);
+    const cap = this.deps.gate.principalLimits?.commitments?.[scope.operation];
     if (!cap) return true;
     const amount = intent.parameters.amount;
     if (
@@ -2213,21 +2236,18 @@ export class OutboundGate {
       known?: KnownContent;
     },
   ): void {
+    const envelope = MessageEnvelopeNode.fromMessage(message);
     const verdicts: CheckVerdict[] = [];
     if (opts.intent) {
-      this.deps.reservePayment?.(opts.intent, message.id);
+      this.deps.reservePayment?.(opts.intent, envelope.id);
       this.deps.consumeApproval?.(opts.intent);
       this.pendingGo.delete(actionDigest(opts.intent));
     }
     const signed = wire.format === "awp-jws-compact/0.1";
-    const header = signed
-      ? (JSON.parse(
-          Buffer.from(wire.jws.split(".")[0] ?? "", "base64url").toString("utf8"),
-        ) as JsonObject)
-      : {};
+    const header = signed ? (decodeJws(wire.jws).header ?? {}) : {};
     this.verdict(
       verdicts,
-      message.id,
+      envelope.id,
       "evidence",
       signed || this.unsignedAllowed(message) ? "pass" : "fail",
       signed
@@ -2238,12 +2258,15 @@ export class OutboundGate {
       {
         ...(signed || this.unsignedAllowed(message) ? {} : { reason: "evidence-missing" }),
         rule: {
-          id: message.configuration,
+          id: envelope.configurationId,
           text: "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record.",
         },
       },
     );
-    this.decide("go", `The ${message.kind} message goes to ${this.name(message.to?.actor)}.`);
+    this.decide(
+      "go",
+      `The ${envelope.messageKind} message goes to ${this.name(envelope.to?.actor)}.`,
+    );
     this.emit({
       part: "transport",
       kind: "message-out",
@@ -2255,7 +2278,7 @@ export class OutboundGate {
         known: opts.known,
       }),
       ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
-      caption: `${this.name(message.from.actor)} sends ${article(message.kind)} ${message.kind} message to ${this.name(message.to?.actor)}.`,
+      caption: `${this.name(envelope.participant.actor)} sends ${article(envelope.messageKind)} ${envelope.messageKind} message to ${this.name(envelope.to?.actor)}.`,
     });
   }
 

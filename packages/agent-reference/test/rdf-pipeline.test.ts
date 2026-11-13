@@ -41,11 +41,32 @@ it("enforces RDF signatures and parsing boundaries through the TypeScript compil
       "src/runtime/agent.ts",
       'export function pending(value: import("../core/types.js").JsonObject) { return JSON.parse("{}"); }',
     );
-    put(
-      "scripts/rdf-pipeline-allowlist.json",
-      JSON.stringify({ pending: { "json-signature": 1, "foreign-json-parse": 1 } }),
+    const allowance = [
+      {
+        file: "src/runtime/agent.ts",
+        function: "pending",
+        rule: "json-signature",
+        count: 1,
+        reason: "Legacy message body still lacks its complete pinned context.",
+      },
+      {
+        file: "src/runtime/agent.ts",
+        function: "pending",
+        rule: "foreign-json-parse",
+        count: 1,
+        reason: "Legacy byte admission remains in this runtime function.",
+      },
+    ];
+    put("scripts/rdf-pipeline-allowlist.json", JSON.stringify(allowance));
+    expect(run(allowance).failures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rule: "invalid-allowance",
+          detail: "nonempty allowances require the recorded RDF-PIPELINE-STATUS.json ceiling",
+        }),
+      ]),
     );
-    const allowance = { pending: { "json-signature": 1, "foreign-json-parse": 1 } };
+    put("RDF-PIPELINE-STATUS.json", JSON.stringify({ findings: run().findings }));
     expect(run(allowance)).toMatchObject({ failures: [], exempted: 2 });
     put(
       "src/runtime/agent.ts",
@@ -54,7 +75,111 @@ it("enforces RDF signatures and parsing boundaries through the TypeScript compil
     expect(run(allowance).failures).toEqual([
       expect.objectContaining({ rule: "foreign-json-parse" }),
     ]);
+    put("src/runtime/agent.ts", "export function pending() { return true; }");
+    expect(run(allowance).failures).toEqual([
+      expect.objectContaining({ rule: "stale-allowance" }),
+      expect.objectContaining({ rule: "stale-allowance" }),
+    ]);
+    expect(run([{ ...allowance[0], reason: "" }]).failures).toEqual([
+      expect.objectContaining({ rule: "invalid-allowance" }),
+    ]);
+    expect(run([{ ...allowance[0], count: 0 }]).failures).toEqual([
+      expect.objectContaining({ rule: "invalid-allowance" }),
+    ]);
+    expect(run([allowance[0], allowance[0]]).failures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rule: "invalid-allowance",
+          detail: "duplicate allowance for this file/function/rule",
+        }),
+      ]),
+    );
+    put("src/gates/local.test.ts", "JSON.parse('{}');");
+    expect(run().failures).toEqual([]);
+
+    // A needed entry still cannot add a new scope or increase a recorded count.
+    put(
+      "src/runtime/agent.ts",
+      'export function pending(value: import("../core/types.js").JsonObject) { return value; }',
+    );
+    put(
+      "RDF-PIPELINE-STATUS.json",
+      JSON.stringify({
+        findings: [{ file: "src/runtime/agent.ts", function: "pending", rule: "json-signature" }],
+      }),
+    );
+    expect(run([allowance[0]])).toMatchObject({ failures: [], exempted: 1 });
+    put(
+      "src/runtime/agent.ts",
+      'export function pending(value: import("../core/types.js").JsonObject, extra: import("../core/types.js").JsonObject) { return value; }',
+    );
+    expect(run([{ ...allowance[0], count: 2 }]).failures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rule: "invalid-allowance",
+          detail: "allowance would grow beyond the recorded file/function/rule ceiling",
+        }),
+      ]),
+    );
+    put(
+      "src/runtime/agent.ts",
+      'export function another(value: import("../core/types.js").JsonObject) { return value; }',
+    );
+    expect(run([{ ...allowance[0], function: "another" }]).failures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rule: "invalid-allowance",
+          detail: "allowance would grow beyond the recorded file/function/rule ceiling",
+        }),
+      ]),
+    );
+    put("src/gates/check.ts", "export function triples() { return DataFactory.quad(); }");
+    put(
+      "RDF-PIPELINE-STATUS.json",
+      JSON.stringify({
+        findings: [{ file: "src/gates/check.ts", function: "triples", rule: "direct-quad" }],
+      }),
+    );
+    expect(
+      run([
+        {
+          file: "src/gates/check.ts",
+          function: "triples",
+          rule: "direct-quad",
+          count: 1,
+          reason: "This must never exempt direct triple construction.",
+        },
+      ]).failures,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rule: "invalid-allowance" }),
+        expect.objectContaining({ rule: "direct-quad" }),
+      ]),
+    );
+    put("src/core/types.ts", "export interface Message { body: unknown; }");
+    put(
+      "RDF-PIPELINE-STATUS.json",
+      JSON.stringify({
+        findings: [{ file: "src/core/types.ts", function: "Message", rule: "object-model" }],
+      }),
+    );
+    expect(
+      run([
+        {
+          file: "src/core/types.ts",
+          function: "Message",
+          rule: "object-model",
+          count: 1,
+          reason: "Core models must remain hard failures until converted to wrappers.",
+        },
+      ]).failures,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rule: "invalid-allowance" }),
+        expect.objectContaining({ rule: "object-model" }),
+      ]),
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-}, 30_000);
+}, 60_000);

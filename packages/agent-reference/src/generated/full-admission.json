@@ -714,6 +714,30 @@
     "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
   },
   {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#b42e1ccaaa0bec64d0a0011373d0d29239640fbba19dafc92d7c78b6ab689712-StatementSubject-temporal",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: only IRI and Literal node kinds are projected"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#b42e1ccaaa0bec64d0a0011373d0d29239640fbba19dafc92d7c78b6ab689712-StatementSubject-temporal",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#StatementPeriodShape",
+    "message": "http://www.w3.org/ns/shacl#closed: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#StatementPeriodShape",
+    "message": "http://www.w3.org/ns/shacl#ignoredProperties: no runtime projection"
+  },
+  {
     "code": "missing-cardinality",
     "severity": "warning",
     "subject": "http://www.w3.org/ns/odrl/2/duty",

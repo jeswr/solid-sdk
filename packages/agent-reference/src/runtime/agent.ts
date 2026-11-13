@@ -79,6 +79,7 @@ import {
 import { singleUseStatusSchema } from "../mechanisms/single-use.js";
 import { TYP, verifyStatement } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
+import { StatementQualityNode } from "../model/quality.js";
 import { CONFIGURATIONS, configurationById, POLICY_PROFILE } from "../profile/configurations.js";
 import {
   CORE_CONTENT_VOCABULARY,
@@ -116,6 +117,7 @@ import type {
 } from "../store/state.js";
 import { domainValue } from "../store/state.js";
 import { peekWire } from "../trace/packet.js";
+import { decodeAdapterJson, decodeCompactPayload } from "../wire/inspect.js";
 
 import { DutyExecutor, type DutyRule, deadlineMissed, dutyRuleSchema } from "./duties.js";
 import {
@@ -3844,10 +3846,10 @@ export class AgentRuntime {
     const current = (f: import("../gates/common.js").AdmittedFact) =>
       !!f.statement &&
       fitnessOf(
-        {
+        StatementQualityNode.from({
           ...f.statement,
           method: f.method ?? f.statement.method,
-        } as unknown as import("../gates/quality.js").QualityClaim,
+        } as unknown as import("../gates/quality.js").QualityClaim),
         this.options.gates?.reliance,
         this.now(),
       ).verdict === "pass" &&
@@ -4022,10 +4024,7 @@ export class AgentRuntime {
         const parts = value.split(".");
         if (parts.length === 3)
           try {
-            return contains(
-              JSON.parse(Buffer.from(parts[1] ?? "", "base64url").toString("utf8")),
-              depth + 1,
-            );
+            return contains(decodeCompactPayload(value), depth + 1);
           } catch {}
         return false;
       }
@@ -6024,11 +6023,7 @@ export class AgentRuntime {
         !binding ||
         !(message.evidence ?? []).some((e) => {
           try {
-            return (
-              digestOf(
-                JSON.parse(Buffer.from(e.value.split(".")[1] ?? "", "base64url").toString()),
-              ) === binding.digest
-            );
+            return digestOf(decodeCompactPayload(e.value)) === binding.digest;
           } catch {
             return false;
           }
@@ -6209,7 +6204,7 @@ export class AgentRuntime {
         entry.wire.format === "awp-unsigned-json/0.1"
           ? entry.wire.payload
           : Buffer.from(entry.wire.jws.split(".")[1] ?? "", "base64url").toString("utf8");
-      msg = JSON.parse(text) as AnyMessage;
+      msg = decodeAdapterJson(text) as AnyMessage;
     }
     return {
       id: entry.id,

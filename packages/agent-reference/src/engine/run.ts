@@ -1,3 +1,4 @@
+import { decodeCompactPayload } from "../wire/inspect.js";
 // AUTHORED-BY Codex GPT-6
 /** Data drives cores and the synthetic world. Only the real runtime/gates emit events. */
 
@@ -1936,11 +1937,11 @@ async function runPath(
       case "record-segment": {
         const segment = await runtime.exportRecord(template<string>(step.conversation));
         if (step.attack) {
-          const payload = JSON.parse(
-            Buffer.from(required(segment.jws.split(".")[1]), "base64url").toString("utf8"),
-          );
+          const payload = decodeCompactPayload(segment.jws) as unknown as {
+            entries: { entry: { record: { type: string } } }[];
+          };
           if (step.attack === "gap") payload.entries.splice(1, 1);
-          else payload.entries[1].entry.record.type = "tampered";
+          else required(payload.entries[1]).entry.record.type = "tampered";
           segment.jws = await signStatement(
             cast.get(step.agent).actorKey,
             "awp-record-segment+jws",
@@ -2535,15 +2536,8 @@ async function runPath(
                 read: async (ref: ResourceReference, request: string) => {
                   const answer = await holder.read(ref, request);
                   if (!answer.ok || !answer.originals) return answer;
-                  const envelope = JSON.parse(
-                    Buffer.from(required(answer.jws.split(".")[1]), "base64url").toString("utf8"),
-                  );
-                  const original = JSON.parse(
-                    Buffer.from(
-                      required(envelope.statements[0].split(".")[1]),
-                      "base64url",
-                    ).toString("utf8"),
-                  );
+                  const envelope = decodeCompactPayload(answer.jws);
+                  const original = decodeCompactPayload((envelope.statements as string[])[0] ?? "");
                   original.allergy = "altered-by-holder";
                   const declaration = required(
                     scenario.resources.find((r) => r.ref === reference.ref),

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join, relative, resolve } from "path";
 import ts from "typescript";
@@ -24,7 +24,7 @@ function sources(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return entry.name === "generated" ? [] : sources(path);
-    return path.endsWith(".ts") && !path.endsWith(".d.ts") ? [path] : [];
+    return path.endsWith(".ts") && !/\.(?:d|test|spec)\.ts$/.test(path) ? [path] : [];
   });
 }
 
@@ -51,8 +51,8 @@ function scopeOf(node, source) {
   return names.join(".") || "<module>";
 }
 
-/** Mechanical migration guard. Runtime exemptions are explicit function/count bounds only. */
-export function checkRdfPipeline(root = packageRoot, allowlist = {}) {
+/** Mechanical migration guard. Every remaining scope has an exact count and a reason. */
+export function checkRdfPipeline(root = packageRoot, allowlist = []) {
   root = resolve(root);
   const files = sources(join(root, "src"));
   const program = ts.createProgram(files, {
@@ -175,40 +175,109 @@ export function checkRdfPipeline(root = packageRoot, allowlist = {}) {
 
   const counts = new Map();
   const failures = [];
+  const allowances = new Map();
+  const ceiling = new Map();
+  const statusPath = join(root, "RDF-PIPELINE-STATUS.json");
+  let hasCeiling = false;
+  const invalid = (name, detail, rule = "invalid-allowance") =>
+    failures.push({
+      file: "scripts/rdf-pipeline-allowlist.json",
+      function: name,
+      line: 1,
+      rule,
+      detail,
+    });
+  if (existsSync(statusPath)) {
+    hasCeiling = true;
+    try {
+      const status = JSON.parse(readFileSync(statusPath, "utf8"));
+      if (!Array.isArray(status.findings)) throw new Error("missing findings");
+      for (const finding of status.findings) {
+        const key = `${finding.file}/${finding.function}/${finding.rule}`;
+        ceiling.set(key, (ceiling.get(key) ?? 0) + 1);
+      }
+    } catch {
+      invalid("<module>", "RDF-PIPELINE-STATUS.json must contain the recorded finding ceiling");
+    }
+  }
+  // The old empty file is harmless; nonempty legacy allowances lacked reasons and are refused.
+  if (!Array.isArray(allowlist)) {
+    if (!allowlist || typeof allowlist !== "object" || Object.keys(allowlist).length)
+      invalid("<module>", "allowances must be a list of file/function/rule/count/reason entries");
+    allowlist = [];
+  }
+  if (allowlist.length && !hasCeiling)
+    invalid(
+      "<module>",
+      "nonempty allowances require the recorded RDF-PIPELINE-STATUS.json ceiling",
+    );
+  for (const entry of allowlist) {
+    if (!entry || typeof entry !== "object") {
+      invalid("<module>", "allowance must be an object");
+      continue;
+    }
+    const { file, function: name, rule, count, reason } = entry;
+    if (
+      Object.keys(entry).some(
+        (key) => !["file", "function", "rule", "count", "reason"].includes(key),
+      ) ||
+      typeof file !== "string" ||
+      !/^src\/[a-zA-Z0-9_/-]+\.ts$/.test(file) ||
+      typeof name !== "string" ||
+      !name ||
+      name === "<module>" ||
+      name.includes("*") ||
+      !["json-signature", "foreign-json-parse"].includes(rule) ||
+      !Number.isSafeInteger(count) ||
+      count <= 0 ||
+      typeof reason !== "string" ||
+      reason.trim().length < 20
+    ) {
+      invalid(
+        typeof name === "string" ? name : "<module>",
+        "an allowance needs an exact source scope, supported rule, positive count and explanatory reason",
+      );
+      continue;
+    }
+    const key = `${file}/${name}/${rule}`;
+    if (hasCeiling && count > (ceiling.get(key) ?? 0)) {
+      invalid(name, "allowance would grow beyond the recorded file/function/rule ceiling");
+      continue;
+    }
+    if (allowances.has(key)) invalid(name, "duplicate allowance for this file/function/rule");
+    else allowances.set(key, entry);
+  }
+  let exempted = 0;
   for (const finding of findings) {
     const key = `${finding.file}/${finding.function}/${finding.rule}`;
     const count = (counts.get(key) ?? 0) + 1;
     counts.set(key, count);
-    const allowance =
-      finding.file === "src/runtime/agent.ts"
-        ? (allowlist[finding.function]?.[finding.rule] ?? 0)
-        : 0;
-    if (count > allowance) failures.push(finding);
+    if (count > (allowances.get(key)?.count ?? 0)) failures.push(finding);
+    else exempted++;
   }
-  for (const [name, rules] of Object.entries(allowlist))
-    for (const [rule, count] of Object.entries(rules)) {
-      if (
-        !Number.isSafeInteger(count) ||
-        count < 0 ||
-        !["json-signature", "foreign-json-parse"].includes(rule)
-      )
-        failures.push({
-          file: "scripts/rdf-pipeline-allowlist.json",
-          function: name,
-          line: 1,
-          rule: "invalid-allowance",
-          detail: "only bounded runtime/agent.ts function allowances are accepted",
-        });
-    }
-  return { findings, failures, exempted: findings.length - failures.length };
+  // Reductions must remove/shrink their allowance. A renamed function cannot leave a spare
+  // exemption, and an allowance cannot reserve room for later object reads.
+  for (const [key, entry] of allowances) {
+    const actual = counts.get(key) ?? 0;
+    if (actual < entry.count)
+      invalid(
+        entry.function,
+        `allowance is no longer needed at this count: expected ${entry.count}, found ${actual}`,
+        "stale-allowance",
+      );
+  }
+  return { findings, failures, exempted };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const rootIndex = process.argv.indexOf("--root");
   const root = rootIndex < 0 ? packageRoot : resolve(process.argv[rootIndex + 1]);
   const allowPath = join(root, "scripts/rdf-pipeline-allowlist.json");
-  const allowlist = existsSync(allowPath) ? JSON.parse(readFileSync(allowPath, "utf8")) : {};
+  const allowlist = existsSync(allowPath) ? JSON.parse(readFileSync(allowPath, "utf8")) : [];
   const result = checkRdfPipeline(root, allowlist);
+  // Updating the status can only shrink its per-scope ceiling: growth already failed above.
+  if (process.argv.includes("--write-status") && result.failures.length === 0)
+    writeFileSync(join(root, "RDF-PIPELINE-STATUS.json"), `${JSON.stringify(result, null, 2)}\n`);
   if (process.argv.includes("--json")) console.log(JSON.stringify(result, null, 2));
   else {
     for (const failure of result.failures)
@@ -216,7 +285,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         `${failure.file}:${failure.line} ${failure.function}: ${failure.rule}: ${failure.detail}`,
       );
     console.log(
-      `RDF pipeline: ${result.failures.length} failures, ${result.exempted} explicit runtime allowances.`,
+      `RDF pipeline: ${result.failures.length} failures, ${result.exempted} explicit remaining violations.`,
     );
   }
   if (result.failures.length > 0) process.exitCode = 1;

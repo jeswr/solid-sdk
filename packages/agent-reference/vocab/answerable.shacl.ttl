@@ -2287,3 +2287,24 @@ awp:GateOutcomeShape a sh:NodeShape;
     sh:targetClass awp:GateOutcome.
 awp:GrantKindShape a sh:NodeShape;
     sh:targetClass awp:GrantKind.
+
+# AUTHORED-BY Codex GPT-6
+awp:VerifiableCredentialShape sh:property [
+    sh:name "issuedAt"; sh:path <http://www.w3.org/ns/prov#generatedAtTime>;
+    sh:maxCount 1; sh:datatype xsd:dateTime
+].
+awp:StatementSubjectShape sh:property [
+    sh:name "period"; sh:path <http://purl.org/dc/terms/temporal>;
+    sh:maxCount 1; sh:nodeKind sh:BlankNodeOrIRI; sh:node awp:StatementPeriodShape
+].
+awp:StatementPeriodShape a sh:NodeShape;
+    sh:targetClass <http://purl.org/dc/terms/PeriodOfTime>;
+    sh:name "Claim period";
+    sh:closed true; sh:ignoredProperties (rdf:type);
+    sh:property [
+        sh:name "start"; sh:path <https://schema.org/startDate>;
+        sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string
+    ], [
+        sh:name "end"; sh:path <https://schema.org/endDate>;
+        sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string
+    ].

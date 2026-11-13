@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 import { mapCodeClaim } from "../mechanisms/code-mapping.js";
 import { isClaimEvidence, verifySelectivePresentation } from "../mechanisms/selective.js";
+import { MessageEnvelopeNode } from "../model/envelope.js";
+import { StatementQualityNode } from "../model/quality.js";
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The inbound gate. Every message is checked before the core sees it: integrity, source,
@@ -92,7 +94,7 @@ export type IntegrityResult =
       readonly ok: false;
       readonly reason: ReasonCode;
       readonly detail: string;
-      readonly extra?: JsonObject;
+      readonly extra?: { readonly digest: string; readonly binding?: string };
       /** Set once the payload parsed, so the runtime can bind the rejection to its id. */
       readonly message?: AnyMessage;
       readonly kid?: string;
@@ -274,14 +276,18 @@ export class InboundGate {
     const checked = validateMessage(payload);
     if (!checked.ok) return { ok: false, reason: checked.reason, detail: checked.detail };
     const msg = checked.message;
+    const envelope = MessageEnvelopeNode.fromMessage(msg);
+    const sender = envelope.from;
+    const kind = envelope.kind;
+    if (!sender || !kind) throw new Error("internal: incomplete validated envelope");
     const bound = { message: msg, ...(signedBy ? { kid: signedBy.kid } : {}) };
     const fail = (reason: ReasonCode, detail: string) =>
       ({ ok: false, reason, detail, ...bound }) as const;
 
     // Sender ↔ key binding and configuration ↔ mechanism binding.
-    const config = configurationById(msg.configuration);
+    const config = configurationById(envelope.configuration ?? "");
     if (signedBy) {
-      if (msg.from.actor !== signedBy.subject) {
+      if (sender.actor !== signedBy.subject) {
         return fail(
           "sender-key-mismatch",
           "message names a different actor than the pinned key's subject",
@@ -298,13 +304,13 @@ export class InboundGate {
         );
       }
     } else {
-      if (!config?.unsignedRequestKinds.includes(msg.kind)) {
+      if (!config?.unsignedRequestKinds.includes(kind)) {
         return fail(
           "unsigned-not-allowed",
-          `unsigned ${msg.kind} not permitted by ${msg.configuration}`,
+          `unsigned ${kind} not permitted by ${envelope.configuration}`,
         );
       }
-      if (msg.from.actor || msg.from.onBehalfOf || (msg.evidence ?? []).length > 0) {
+      if (sender.actor || sender.onBehalfOf || (msg.evidence ?? []).length > 0) {
         return fail(
           "unsigned-not-allowed",
           "an unsigned message cannot claim an identity or carry evidence",
@@ -319,9 +325,9 @@ export class InboundGate {
     if (new Set((msg.content ?? []).map((p) => p.id)).size !== (msg.content ?? []).length)
       return fail("malformed", "duplicate content part");
 
-    if (signedBy && this.deps.gate.organizations && msg.from.onBehalfOf) {
+    if (signedBy && this.deps.gate.organizations && sender.onBehalfOf) {
       const current = await this.organizations()?.key(
-        msg.from.onBehalfOf,
+        sender.onBehalfOf,
         signedBy.kid,
         signedBy.subject,
         "actor",
@@ -349,11 +355,11 @@ export class InboundGate {
           );
       }
     // Audience.
-    if (msg.to) {
-      if (msg.to.actor !== identity.actor)
-        return fail("wrong-audience", `addressed to ${msg.to.actor}`);
+    if (envelope.to) {
+      if (envelope.to.actor !== identity.actor)
+        return fail("wrong-audience", `addressed to ${envelope.to.actor}`);
     } else {
-      const answers = msg.inReplyTo ? answersOurs(msg.inReplyTo) : false;
+      const answers = envelope.inReplyTo ? answersOurs(envelope.inReplyTo) : false;
       const publicConfig = config?.requesterAuthentication === "not-applicable";
       if (!(publicConfig && (answers || !signedBy))) {
         return fail("wrong-audience", "message has no audience");
@@ -362,8 +368,8 @@ export class InboundGate {
 
     // Time window.
     const now = Date.parse(at);
-    const created = Date.parse(msg.createdAt);
-    const expires = Date.parse(msg.expiresAt);
+    const created = Date.parse(envelope.createdAt ?? "");
+    const expires = Date.parse(envelope.expiresAt ?? "");
     if (created > now + limits.maxClockSkewMs)
       return fail("not-yet-valid", "createdAt is in the future");
     if (expires <= now - limits.maxClockSkewMs) return fail("expired", "message expired");
@@ -568,8 +574,11 @@ export class InboundGate {
           f.claimType === rule.claimType &&
           f.admittedPurpose === purpose &&
           f.statement &&
-          fitnessOf(f.statement as Claim, this.deps.gate.reliance, this.deps.now()).verdict ===
-            "pass",
+          fitnessOf(
+            StatementQualityNode.from(f.statement as Claim),
+            this.deps.gate.reliance,
+            this.deps.now(),
+          ).verdict === "pass",
       );
       const groups = new Map<string, AdmittedFact[]>();
       for (const fact of facts) {
@@ -730,37 +739,42 @@ export class InboundGate {
         verdict: "fail",
         reason: check.verification.outcome === "unknown-key" ? "unknown-key" : "evidence-invalid",
       };
+    const metadata = StatementQualityNode.from(s);
+    // Legacy claim schemas admit non-IRI identifiers. Keep those exact readings until
+    // their credential admission is migrated; valid issuer/subject IRIs read the graph.
+    const issuer = metadata.issuer ?? s.issuer;
+    const sourceSubject = metadata.claimSubject ?? s.subject;
     if (
-      s.method === "model-output" &&
+      metadata.method === "model-output" &&
       (typeof s.originalDigest !== "string" ||
         typeof s.implementation !== "string" ||
         typeof s.implementationDigest !== "string")
     )
       return { verdict: "fail", reason: "evidence-invalid", claim: s };
-    if (check.signer?.subject !== s.issuer)
+    if (check.signer?.subject !== issuer)
       return { verdict: "fail", reason: "evidence-invalid", claim: s };
     if (this.deps.gate.organizations && check.signer) {
       const current = await this.organizations()?.key(
-        s.issuer,
+        issuer,
         check.signer.kid,
-        s.issuer,
+        issuer,
         check.signer.role,
       );
       if (!current?.ok)
         return { verdict: "fail", reason: current?.reason ?? "lookup-failed", claim: s };
       if (
-        this.deps.gate.organizations.policy.statusClaims?.includes(s.claimType) &&
+        this.deps.gate.organizations.policy.statusClaims?.includes(metadata.claimType) &&
         (!s.status || typeof s.status !== "object")
       )
         return { verdict: "fail", reason: "lookup-failed", claim: s };
       if (s.status && typeof s.status === "object") {
-        const status = await this.organizations()?.status(s.issuer, s.status);
+        const status = await this.organizations()?.status(issuer, s.status);
         if (!status?.ok)
           return { verdict: "fail", reason: status?.reason ?? "lookup-failed", claim: s };
       }
     }
     if (
-      s.method === "derived" &&
+      metadata.method === "derived" &&
       this.deps.gate.rules?.length &&
       (!s.derivation || typeof s.derivation !== "object" || Array.isArray(s.derivation))
     )
@@ -770,23 +784,23 @@ export class InboundGate {
     // Recomputed outputs get their source authority from their admitted original inputs.
     // The source phase below verifies the rule, exact inputs, output and inherited terms.
     if (
-      s.method === "derived" &&
+      metadata.method === "derived" &&
       s.derivation &&
       ((s.derivation as JsonObject).assurance === "recomputed" || opaqueDerivation(s as JsonObject))
     )
       return { verdict: "pass", reason: "source-accepted", claim: s };
-    const about = s.subject ?? subject;
+    const about = sourceSubject ?? subject;
     const input = {
       evaluator: this.deps.identity.actor,
-      source: s.issuer,
-      claimType: s.claimType,
+      source: issuer,
+      claimType: metadata.claimType,
       ...(about ? { subject: about } : {}),
       at,
     };
     const resolution = this.deps.gate.resolver?.resolveSource(input);
     const outcome = resolution?.outcome ?? this.deps.trust.assessSource(input).outcome;
-    const permittedSources = this.deps.gate.claimSources?.[s.claimType];
-    if (outcome !== "no-route" && permittedSources && !permittedSources.includes(s.issuer))
+    const permittedSources = this.deps.gate.claimSources?.[metadata.claimType];
+    if (outcome !== "no-route" && permittedSources && !permittedSources.includes(issuer))
       return {
         verdict: "fail",
         reason: "source-not-authoritative",
@@ -812,7 +826,7 @@ export class InboundGate {
         ? {
             rule: {
               id: resolution.rule.id,
-              text: `${this.name(s.issuer)} is accepted for ${s.claimType} claims.`,
+              text: `${this.name(issuer)} is accepted for ${metadata.claimType} claims.`,
             },
           }
         : {}),
@@ -1182,11 +1196,11 @@ export class InboundGate {
     ) {
       for (const input of ((c.derivation as JsonObject).inputs ?? []) as JsonObject[]) {
         const basis = fitnessOf(
-          {
+          StatementQualityNode.from({
             claimType: String(input.claimType),
             method: String(input.method),
             asOf: String(input.asOf),
-          },
+          }),
           this.deps.gate.reliance,
           at,
         );
@@ -1203,7 +1217,7 @@ export class InboundGate {
       }
     }
     const f = fitnessOf(
-      { ...c, method: r.methodOverride ?? c.method },
+      StatementQualityNode.from({ ...c, method: r.methodOverride ?? c.method }),
       this.deps.gate.reliance,
       at,
     );
@@ -1320,7 +1334,9 @@ export class InboundGate {
         return false;
       }
       const fitness = fitnessOf(
-        result.statement as unknown as import("./quality.js").QualityClaim,
+        StatementQualityNode.from(
+          result.statement as unknown as import("./quality.js").QualityClaim,
+        ),
         this.deps.gate.reliance,
         at,
       );
@@ -1457,7 +1473,8 @@ export class InboundGate {
           purpose: opts.purpose,
           at: this.deps.now(),
         }).verdict === "pass" &&
-        fitnessOf(c, this.deps.gate.reliance, this.deps.now()).verdict === "pass"
+        fitnessOf(StatementQualityNode.from(c), this.deps.gate.reliance, this.deps.now())
+          .verdict === "pass"
       )
         candidates.push(c);
     }
@@ -1739,7 +1756,8 @@ export class Admission {
           r.claim?.claimType === need.claimType &&
           r.claim.subject === rep.party &&
           (r.claim as JsonObject).level === need.level &&
-          fitnessOf(r.claim, this.deps.gate.reliance, this.deps.now()).verdict === "pass" &&
+          fitnessOf(StatementQualityNode.from(r.claim), this.deps.gate.reliance, this.deps.now())
+            .verdict === "pass" &&
           evaluateItemTerms(r.claim.terms as ItemTerms | undefined, {
             name: this.deps.gate.name,
             agent: this.deps.identity.actor,

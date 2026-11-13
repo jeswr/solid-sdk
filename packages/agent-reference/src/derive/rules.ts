@@ -5,6 +5,7 @@ import { digestOf } from "../core/canonical.js";
 import type { JsonObject } from "../core/types.js";
 import type { ContextItem, GateMemory } from "../gates/common.js";
 import { claimTime, evaluateItemTerms, fitnessOf } from "../gates/quality.js";
+import { StatementQualityNode } from "../model/quality.js";
 
 const name = z.string().min(1);
 const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
@@ -208,13 +209,13 @@ export function evaluateRule(options: {
         i.statement &&
         (!options.reliance ||
           fitnessOf(
-            {
+            StatementQualityNode.from({
               ...i.statement,
               claimType: i.claimType,
               method:
                 i.method ??
                 (typeof i.statement.method === "string" ? i.statement.method : undefined),
-            },
+            }),
             options.reliance,
             at,
           ).verdict === "pass") &&
@@ -411,7 +412,11 @@ export function evaluateRule(options: {
         (i) =>
           i.asOf ??
           (i.statement
-            ? claimTime(i.statement as unknown as import("../gates/quality.js").QualityClaim)
+            ? claimTime(
+                StatementQualityNode.from(
+                  i.statement as unknown as import("../gates/quality.js").QualityClaim,
+                ),
+              )
             : undefined) ??
           "",
       )
@@ -448,7 +453,11 @@ export function evaluateRule(options: {
           asOf:
             i.asOf ??
             (i.statement
-              ? claimTime(i.statement as unknown as import("../gates/quality.js").QualityClaim)
+              ? claimTime(
+                  StatementQualityNode.from(
+                    i.statement as unknown as import("../gates/quality.js").QualityClaim,
+                  ),
+                )
               : undefined) ??
             at,
           period: i.statement?.period ?? null,

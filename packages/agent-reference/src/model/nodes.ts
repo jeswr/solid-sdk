@@ -55,6 +55,14 @@ export class RdfNode extends TermWrapper {
     readLiteral(value);
     return value.value;
   }
+  /** Preserve source date-time spelling for legacy admission checks; SHACL validates wire data. */
+  protected timeLexical(predicate: string): string | undefined {
+    const value = this.one(predicate);
+    if (value === undefined) return undefined;
+    if (value.termType !== "Literal" || value.datatype.value !== XSD + "dateTime" || value.language)
+      throw new TypeError("Expected one date-time literal");
+    return value.value;
+  }
   protected child<T extends RdfNode>(
     predicate: string,
     View: new (term: Term, dataset: Store) => T,
@@ -252,6 +260,12 @@ export class MessageNode extends RdfNode {
   }
   set body(value: BodyNode) {
     this.setNode(AWP + "body", value);
+  }
+  get inReplyTo(): string | undefined {
+    return this.iri(AWP + "inReplyTo");
+  }
+  set inReplyTo(value: string) {
+    this.setIri(AWP + "inReplyTo", value);
   }
   get createdAt(): string | undefined {
     return this.text(AWP + "createdAt", XSD + "dateTime");

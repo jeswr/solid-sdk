@@ -9,6 +9,7 @@
 import { z } from "zod";
 import type { Iri } from "../core/types.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
+import type { QualityInput, StatementQualityNode } from "../model/quality.js";
 import type { Namer } from "../trace/packet.js";
 import type { ItemTerms, RelianceProfile } from "./common.js";
 import { idWords } from "./common.js";
@@ -39,19 +40,13 @@ const termsShape = z
   })
   .passthrough();
 
-export interface QualityClaim {
-  readonly claimType: string;
-  readonly method?: string;
-  readonly asOf?: string;
-  readonly issuedAt?: string;
-  readonly period?: { readonly start: string; readonly end: string };
-  readonly validUntil?: string;
-}
+/** Legacy ingress type; decisions below use the live RDF metadata view. */
+export type QualityClaim = QualityInput;
 
 const DAY = 86_400_000;
 
 /** When the claim speaks of: its `asOf`, else the end of its period, else when it was issued. */
-export function claimTime(c: QualityClaim): string | undefined {
+export function claimTime(c: StatementQualityNode): string | undefined {
   if (c.asOf) return c.asOf;
   if (c.period?.end && /^\d{4}-\d{2}$/.test(c.period.end)) {
     const [y, m] = c.period.end.split("-").map((x) => Number.parseInt(x, 10));
@@ -69,7 +64,7 @@ export interface Fitness {
 
 /** Is this claim fit for the task under the reliance profile? */
 export function fitnessOf(
-  c: QualityClaim,
+  c: StatementQualityNode,
   profile: RelianceProfile | undefined,
   at: string,
 ): Fitness {

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 /** Logging projection only. Never use this display projection for verification. */
 import { digestOf } from "../core/canonical.js";
+import { decodeCompactPayload } from "../wire/inspect.js";
 
 function containsPrivate(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
@@ -23,7 +24,7 @@ export function jointLogView<T>(value: T): T {
     const parts = value.split(".");
     if (parts.length === 3) {
       try {
-        const decoded = JSON.parse(Buffer.from(parts[1] ?? "", "base64url").toString());
+        const decoded = decodeCompactPayload(value);
         // Nested evidence can itself be a JWS.
         if (
           containsPrivate(decoded) ||

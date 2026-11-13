@@ -18,38 +18,17 @@ import {
   type KnownContent,
 } from "../profile/content.js";
 import type { WireMessage } from "../store/state.js";
+import { decodeJws } from "../wire/inspect.js";
+
+export { peekWire } from "../wire/inspect.js";
+
 import type { PacketLayerView, PacketView } from "./types.js";
 
 /** Display name for an identifier (falls back to the identifier itself). */
 export type Namer = (iri: string | undefined) => string;
 
-function decodeJws(jws: string): { header?: JsonObject; payload?: JsonObject } {
-  const [h, p] = jws.split(".");
-  try {
-    return {
-      header: JSON.parse(Buffer.from(h ?? "", "base64url").toString("utf8")) as JsonObject,
-      payload: JSON.parse(Buffer.from(p ?? "", "base64url").toString("utf8")) as JsonObject,
-    };
-  } catch {
-    return {};
-  }
-}
-
 function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
-}
-
-/** Best-effort read of a wire unit's payload WITHOUT verifying it (for display only). */
-export function peekWire(wire: unknown): AnyMessage | undefined {
-  if (!wire || typeof wire !== "object") return undefined;
-  const w = wire as Record<string, unknown>;
-  try {
-    if (typeof w.jws === "string") return decodeJws(w.jws).payload as unknown as AnyMessage;
-    if (typeof w.payload === "string") return JSON.parse(w.payload) as AnyMessage;
-  } catch {
-    return undefined;
-  }
-  return undefined;
 }
 
 function evidenceOf(message: AnyMessage, role: EvidenceItem["role"]): JsonObject[] {
