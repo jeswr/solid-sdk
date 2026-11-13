@@ -388,28 +388,6 @@ export function CaptureBar({ label }: { label?: string }) {
     };
   }, []);
   useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement;
-      if (
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        target.closest("input,textarea,select,[contenteditable=true],[role=dialog]")
-      )
-        return;
-      if (event.key === "c") {
-        event.preventDefault();
-        (
-          opening.current ??
-          root.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>("textarea, input")
-        )?.focus();
-      }
-    };
-    addEventListener("keydown", shortcut);
-    return () => removeEventListener("keydown", shortcut);
-  }, []);
-  useEffect(() => {
     if (expanded)
       root.current
         ?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
