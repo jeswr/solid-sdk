@@ -384,16 +384,30 @@ before contacting the native host and again on review. If Chrome withholds this 
 ("On click" or "On specific sites"), sharing refuses without requesting permission or sending
 a native message. Allow the extension on this site from Chrome's own extension menu first,
 then try again. Capture never requests or removes a host origin.
-Confirmation checks site access again before sending, including access withdrawn during review.
-With site access already granted, the review click requests only optional `cookies`, reads
-cookies matching the chosen page, and removes cookie access immediately after preparing the
-snapshot. It then checks that cookie access is absent. Cleanup also covers errors, permission
-denial, cancellation, popup closure and grants arriving after closure; the same host grants
-remain throughout.
-The preview shows the site,
-cookie count and persona. Click **Share this sign-in with my agent** to send that snapshot
-to the local agent vault. Cancel, profile changes, navigation to another site and expired
-reviews prevent sending. Nothing is captured automatically or sent to the page.
+Every popup load first checks optional `cookies` access, independently of site validation.
+If it is already granted or cannot be checked, sharing is blocked: no review, permission
+request or native message. The warning stays visible even on invalid pages or withheld
+sites. Click **Remove cookie access** to remove it and verify absence before sharing is
+enabled. If removal or verification fails, sharing stays blocked; remove cookie access
+from Chrome's extension settings before retrying. The review click rechecks absence, so
+each capture starts without cookie permission.
+The service worker owns one capture lease across all popups, from Review until cleanup.
+A second popup receives **Another sharing is in progress** and cannot request cookies or
+start another capture. Review checks the current active tab and existing host access before
+enabling **Allow cookies and review**. Click that button to request only optional `cookies`
+inside the popup's click gesture. The worker checks the tab and host access again after the
+prompt before contacting `beginLogin`, then shows the site, cookie count and persona.
+Click **Share this sign-in with my agent** to confirm. The worker verifies this lease's cookie
+grant and the current tab and host access again, reads a fresh exact-origin snapshot, and
+sends it only if its count still matches the review. Nothing is sent to the page.
+
+Cookie access lasts only for this exclusive review/confirmation lease, which expires after
+two minutes. Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
+cleanup: remove only `cookies`, verify absence, then release the lease. Host grants never
+change. Cancellation is final even if an older async step completes afterward. An unresolved
+permission prompt fences new captures after cancellation/closure until its result or late
+grant is cleaned; an old grant can never become another capture's authority. If Chrome never
+reports a closed prompt's outcome, sharing stays blocked for that worker lifetime.
 
 Profiles/personas come from `@jeswr/agent-vault`, separately from the extension's Solid
 accounts. Configure an account for the exact site in the agent's store first. Install the
@@ -405,9 +419,10 @@ extension storage, content scripts or the page bridge. Values are never rendered
 Required Solid host permissions remain unchanged; optional cookie access is extension-wide
 while held, so the exact-origin query and filtering remain necessary.
 If cookie removal rejects or its absence cannot be confirmed, the popup shows a warning
-alongside the truthful sharing result. Worker cleanup failure leaves a toolbar `!` badge;
-a surviving cookie grant also warns when the popup reopens. A warning must not be read as
-a clean cleanup, even if the capture itself succeeded.
+alongside the review or sharing outcome and blocks further sharing until removal is verified.
+Worker cleanup failure leaves a toolbar `!` badge; a surviving grant also blocks sharing
+when the popup reopens. Cookie permission belongs only to one exclusive capture lease;
+cleanup failure stays visible alongside the actual sharing outcome.
 
 Hostile same-OS-user processes are outside the vault's threat model: they can read its
 store/key or forge the public extension-ID caller argument. No code-signature checks or

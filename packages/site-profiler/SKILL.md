@@ -73,3 +73,8 @@ preference writes and uses a scripted planner. Never invoke a planner/model CLI 
 For product administration, a quantity input describes inventoryLevel, not purchase quantity.
 A demonstrated destructive grid search remains a required dynamic input, including when the
 site submits no explicit selected IDs. Never drop or fix that selector to a demonstration SKU.
+
+- Never emit executor-owned headers (including Accept and Content-Type) as model static headers,
+  header parameters or CSRF header targets. Keep body encoding in request.contentType. Verification
+  derives Accept from extraction format; recorded JSON Accept is not a model header. Vendor-specific
+  Accept requires a future first-class, inventoried field.

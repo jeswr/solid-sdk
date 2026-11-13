@@ -37,7 +37,9 @@ function permits(decision: ApprovalDecision, result: ExecutionResult): boolean {
 }
 
 export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
-  const { executor, planner, approver } = options;
+  const { planner, approver } = options;
+  let executor = options.executor;
+  let model = options.model;
   const maxSteps = options.maxSteps ?? 12;
   const budget = options.observationBudget ?? 12_000;
   const maxApprovals = options.maxApprovals ?? 25;
@@ -80,7 +82,7 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
     const input = budgetHistory(
       {
         goal: redact(options.goal),
-        catalogue: redact(renderCatalogue(options.model)),
+        catalogue: redact(renderCatalogue(model)),
         history: history.map((h) => ({
           ...h,
           request: redact(h.request),
@@ -135,8 +137,10 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
       // Concrete writes use the executor's canonical wire fingerprint. Writes
       // depending on future read values are checked again at its write boundary.
       let previous: string | undefined;
+      let knownEffect = false;
       try {
         const plan = executor.planToRequests(request);
+        knownEffect = plan.effect !== undefined || Boolean(plan.missing?.length);
         for (const write of plan.requests) {
           if (
             write.fingerprint &&
@@ -170,6 +174,34 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
         result = await executor.execute(request, exclusions());
       } catch {
         result = failure("Executor failed to execute the action.");
+      }
+      if (
+        options.fallback &&
+        result.status === "no-path" &&
+        !knownEffect &&
+        !result.missing?.length
+      ) {
+        step.statuses.push(result.status);
+        step.via = "fallback";
+        const fallback = await options.fallback.run({
+          goal: options.goal,
+          request,
+          model,
+          approver,
+          persona: options.persona,
+          maxApprovals,
+          exclusions: exclusions(),
+        });
+        result = fallback.result;
+        model = fallback.model;
+        executor = fallback.executor;
+        trace.model = model;
+        step.learned = fallback.proposed.map((operation) => operation.id);
+        if (fallback.approvals.length) {
+          step.approvals = fallback.approvals;
+          step.approval = fallback.approvals.at(-1);
+        }
+        if (fallback.refreshError) step.refreshError = fallback.refreshError;
       }
       remember(result);
       if (result.refreshError) step.refreshError = result.refreshError;

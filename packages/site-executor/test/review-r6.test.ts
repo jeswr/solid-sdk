@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6
 import type { Flow, Operation, Parameter, SiteModel } from "@jeswr/site-model";
-import { parseActionRequest } from "@jeswr/site-model";
+import { parseActionRequest, validateSiteModel } from "@jeswr/site-model";
 import { describe, expect, it, vi } from "vitest";
-import { applyCsrfToken, compileOperation } from "../src/compile.js";
+import { applyCsrfToken, bodyInit, compileOperation, requestFingerprint } from "../src/compile.js";
 import { InMemorySessions } from "../src/cookies.js";
 import { createExecutor } from "../src/executor.js";
 import { createApprovalGate } from "../src/gate.js";
+import { BindingError } from "../src/values.js";
 import { effectiveWireFields } from "../src/wire.js";
 
 const O = "https://shop.test";
@@ -470,7 +471,7 @@ describe("Rule W field inventory", () => {
     f.pay.request = {
       method: "POST",
       urlTemplate: `${O}/pay/{id}?delivery=standard`,
-      headers: { Delivery: "express", Accept: "application/json" },
+      headers: { Delivery: "express" },
       contentType: "application/json",
       bodyTemplate: '{"a/b":{"~name":true},"list":["x"],"static":20}',
     };
@@ -504,5 +505,287 @@ describe("Rule W field inventory", () => {
       { name: "delivery", value: "express", location: "body" },
       { name: "submit", value: "Pay", location: "body" },
     ]);
+  });
+});
+
+describe("review r7 — executor-owned headers", () => {
+  const owned = [
+    "aCcEpT",
+    "CONTENT-TYPE",
+    "Content-Length",
+    "Cookie",
+    "Origin",
+    "Referer",
+    "Host",
+    "Authorization",
+    "Proxy-Authorization",
+    "Cookie2",
+    "Set-Cookie",
+    "Transfer-Encoding",
+    "Connection",
+    "Keep-Alive",
+    "Upgrade",
+    "TE",
+    "Trailer",
+    "Sec-Fetch-Site",
+    "Proxy-Custom",
+  ];
+  for (const route of ["static", "parameter", "csrf"] as const) {
+    it.each(
+      owned,
+    )(`refuses executor-owned %s via ${route} before compilation or execution`, (name) => {
+      const f = fixture();
+      if (route === "static") f.pay.request.headers = { [name]: "model-value" };
+      else if (route === "parameter")
+        f.pay.inputs = [param(name, [], { location: "header", required: false })];
+      else
+        f.pay.csrf = [
+          { source: { kind: "cookie", name: "sid" }, target: { kind: "header", name } },
+        ];
+      expect(validateSiteModel(f.model)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ message: expect.stringContaining("executor-owned header") }),
+        ]),
+      );
+      expect(() => compileOperation(f.pay, {}, O)).toThrow(BindingError);
+      expect(() => f.executor()).toThrow("executor-owned header");
+      expect(f.transport).not.toHaveBeenCalled();
+    });
+  }
+
+  it.each([false, true])("refuses static Accept on total and payment (direct buy=%s)", (direct) => {
+    const f = fixture(direct);
+    if (!direct)
+      f.read.request.headers = { Accept: "application/vnd.shop+json; delivery=standard" };
+    f.pay.request.headers = { Accept: "application/vnd.shop+json; delivery=express" };
+    expect(() => f.executor()).toThrow("executor-owned header");
+    expect(f.transport).not.toHaveBeenCalled();
+  });
+
+  it("refuses a header-located Accept parameter in a direct buy", () => {
+    const f = fixture(true);
+    f.pay.inputs.push(
+      param("AcCePt", [], {
+        location: "header",
+        default: "application/vnd.shop+json; delivery=express",
+      }),
+    );
+    expect(() => f.executor()).toThrow("executor-owned header");
+  });
+
+  it.each([
+    "query",
+    "form",
+  ] as const)("refuses model Accept even beside an %s accept field", (location) => {
+    const f = fixture();
+    f.pay.request.headers = { Accept: "application/vnd.shop+json; delivery=express" };
+    f.pay.inputs = [param("accept", [], { location, default: "common" })];
+    expect(() => f.executor()).toThrow("executor-owned header");
+  });
+
+  it.each([
+    "json",
+    "html",
+    "none",
+  ] as const)("derives Accept from %s extraction and keeps model headers inventoried", async (format) => {
+    const f = fixture();
+    const op = f.read;
+    op.actionType = `${S}ViewAction`;
+    op.request.headers = { "X-Requested-With": "XMLHttpRequest" };
+    op.extraction = format === "none" ? undefined : { format, itemType: `${S}Thing`, fields: [] };
+    const expected =
+      format === "json" ? "application/json" : format === "html" ? "text/html" : "*/*";
+    const transport = vi.fn<Transport>(async (_url, init) => {
+      expect(new Headers(init?.headers).get("accept")).toBe(expected);
+      return format === "json" ? Response.json({}) : new Response("");
+    });
+    const executor = createExecutor({
+      model: { ...f.model, operations: [op], flows: [] },
+      sessions: new InMemorySessions(),
+      fetch: transport,
+    });
+    expect((await executor.execute(parseActionRequest(`[] a <${S}ViewAction>.`))).status).toBe(
+      "done",
+    );
+    expect(effectiveWireFields(compileOperation(op, {}, O))).toEqual([
+      { name: "x-requested-with", value: "XMLHttpRequest", location: "header" },
+    ]);
+  });
+
+  it("refuses a model header also supplied by the vault before approval or transmission", async () => {
+    const f = fixture();
+    f.pay.request.headers = { "X-Session": "model-value" };
+    const sessions = new InMemorySessions();
+    sessions.set(O, undefined, { cookies: [], headers: { "x-session": "vault-secret" } });
+    const executor = createExecutor({ model: f.model, sessions, gate: f.gate, fetch: f.transport });
+    expect(await executor.execute(f.request)).toMatchObject({
+      status: "error",
+      errorKind: "binding",
+      requests: 0,
+    });
+    expect(f.transport).not.toHaveBeenCalled();
+  });
+});
+
+describe("review r7 — serialized form inventory", () => {
+  it.each([
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+  ] as const)("inventories the actual serialized %s names and values, including CSRF", async (contentType) => {
+    const f = fixture();
+    // Multipart normalizes newlines (including in names); lone surrogates become U+FFFD.
+    const fields: [string, string][] = [
+      ['a"b\nc\rd\r\ne', "1 High Street\nFar Town\rEnd\r\nLast"],
+      ["unicode", "{raw}"],
+      ["escaped%22%0Aname", "value"],
+      ["name\ud800", "with\u0000nul"],
+    ];
+    f.pay.request.contentType = contentType;
+    f.pay.request.bodyTemplate = new URLSearchParams(fields).toString();
+    f.pay.inputs = [param("raw", [], { default: "\ud800" })];
+    const compiled = compileOperation(f.pay, {}, O);
+    const csrf = {
+      source: { kind: "cookie" as const, name: "sid" },
+      target: { kind: "form" as const, name: 'token"\nfield' },
+    };
+    applyCsrfToken(compiled, csrf, "secret\nwith\rlines");
+    const request = new Request(compiled.url, {
+      method: compiled.method,
+      headers: compiled.headers,
+      body: bodyInit(compiled.body),
+    });
+    const transmitted = [...(await request.formData())];
+    const actual = transmitted.map(([name, value]) => ({
+      name: name.toLowerCase(),
+      value,
+      location: "body",
+    }));
+    expect(effectiveWireFields(compiled)).toEqual(actual);
+    expect(compiled.body?.kind !== "json" && compiled.body?.fields).toEqual(transmitted);
+    expect(actual[0]?.value).toBe(
+      contentType === "multipart/form-data"
+        ? "1 High Street\r\nFar Town\r\nEnd\r\nLast"
+        : fields[0]?.[1],
+    );
+    expect(actual[0]?.name).toBe(
+      contentType === "multipart/form-data" ? 'a"b\r\nc\r\nd\r\ne' : fields[0]?.[0],
+    );
+  });
+
+  it.each([
+    "\n",
+    "\r",
+  ])("refuses multipart normalization that changes the total's received newline %j", async (newline) => {
+    const f = fixture();
+    const address = `1 High Street${newline}Far Town`;
+    f.read.request.urlTemplate += `?address=${encodeURIComponent(address)}`;
+    f.pay.request.contentType = "multipart/form-data";
+    f.pay.inputs = [param("address", [], { location: "form", default: address })];
+    const result = await f.start();
+    expect(result.status, result.error).toBe("refused");
+    expect(result.error).toContain("payment sends address");
+    expect(f.transport.mock.calls.some(([url]) => String(url).includes("/pay"))).toBe(false);
+  });
+
+  it.each([
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+  ] as const)("sends the exact covered newline bytes for %s", async (contentType) => {
+    const f = fixture();
+    const address = contentType === "multipart/form-data" ? "A\r\nB" : "A\nB";
+    f.read.request.urlTemplate += `?address=${encodeURIComponent(address)}`;
+    f.pay.request.contentType = contentType;
+    f.pay.inputs = [param("address", [], { location: "form", default: address })];
+    const executor = f.executor();
+    const approval = await f.start(executor);
+    expect(approval.status, approval.error).toBe("needs-approval");
+    f.gate.approve(approval.approval?.id ?? "");
+    expect((await executor.execute(f.request, { approvalId: approval.approval?.id })).status).toBe(
+      "done",
+    );
+    const call = f.transport.mock.calls.find(([url]) => String(url).endsWith("/pay"));
+    if (!call) throw new Error("Missing payment");
+    const request = new Request(String(call[0]), call[1]);
+    expect((await request.formData()).get("address")).toBe(address);
+  });
+});
+
+describe("review r7 — reserved path token coverage", () => {
+  const reserve = (op: Operation, name: string) => {
+    op.request.urlTemplate += `/key/{${name}}`;
+    op.csrf = [{ source: { kind: "cookie", name: "sid" }, target: { kind: "query", name } }];
+  };
+  const sessionExecutor = (f: ReturnType<typeof fixture>) => {
+    const sessions = new InMemorySessions();
+    sessions.set(O, undefined, {
+      cookies: [
+        { name: "sid", value: "session-secret-123", domain: "shop.test", path: "/", secure: true },
+      ],
+    });
+    return createExecutor({ model: f.model, sessions, gate: f.gate, fetch: f.transport });
+  };
+  it.each([
+    "payment",
+    "total",
+    "both",
+    "direct",
+  ])("inventories and exempts decorated path tokens on %s", async (side) => {
+    const f = fixture(side === "direct");
+    if (side !== "total") reserve(f.pay, "paymentToken");
+    if (side === "total" || side === "both") reserve(f.read, "totalToken");
+    expect(validateSiteModel(f.model)).toEqual([]);
+    for (const op of [f.read, f.pay]) {
+      const compiled = compileOperation(op, {}, O);
+      const fingerprint = requestFingerprint(compiled);
+      for (const rule of compiled.csrf) applyCsrfToken(compiled, rule, "session-secret-123");
+      const tokenFields = effectiveWireFields(compiled).filter((field) => field.sessionToken);
+      expect(tokenFields).toEqual(
+        op.csrf?.map((rule) => ({
+          name: rule.target.name.toLowerCase(),
+          value: "session-secret-123",
+          location: "path",
+          sessionToken: true,
+        })) ?? [],
+      );
+      // The pre-decoration fingerprint stays independent of token values.
+      const other = compileOperation(op, {}, O);
+      expect(requestFingerprint(other)).toBe(fingerprint);
+    }
+    const executor = sessionExecutor(f);
+    const approval = await f.start(executor);
+    expect(approval.status, approval.error).toBe("needs-approval");
+    expect(approval.approval?.amount).toBe("20");
+    expect(JSON.stringify(approval)).not.toContain("session-secret-123");
+    f.gate.approve(approval.approval?.id ?? "");
+    const result = await executor.execute(f.request, { approvalId: approval.approval?.id });
+    expect(result.status, result.error).toBe("done");
+    expect(JSON.stringify(result)).not.toContain("session-secret-123");
+    const payment = f.transport.mock.calls.find(([url]) =>
+      new URL(String(url)).pathname.startsWith("/pay"),
+    );
+    expect(payment).toBeDefined();
+    if (side !== "total") expect(String(payment?.[0])).toContain("/key/session-secret-123");
+  });
+
+  it.each([
+    "total-token",
+    "total-query",
+    "payment-query",
+    "payment-header",
+  ])("refuses path token name collisions with %s", async (collision) => {
+    const f = fixture();
+    reserve(f.pay, "sessionPath");
+    if (collision === "total-token") reserve(f.read, "sessionPath");
+    else if (collision === "total-query")
+      f.read.request.urlTemplate += "?SESSIONPATH=configuration";
+    else if (collision === "payment-query")
+      f.pay.request.urlTemplate += "?SESSIONPATH=configuration";
+    else f.pay.request.headers = { SESSIONPATH: "configuration" };
+    const result = await f.start(sessionExecutor(f));
+    expect(result.status, result.error).toBe("refused");
+    expect(result.error).toMatch(/CSRF target|duplicate wire field/);
+    expect(
+      f.transport.mock.calls.some(([url]) => new URL(String(url)).pathname.startsWith("/pay")),
+    ).toBe(false);
   });
 });

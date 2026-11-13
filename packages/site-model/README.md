@@ -205,7 +205,11 @@ placeholders using undeclared variables, path parameters missing from the URL te
 CSRF source templates using undeclared variables, an `idField` that is no field rule's
 property, a flow effect weaker than its strongest step, login routes naming unknown
 operations or a password route without its form operation, duplicate parameter names,
-relative ranges or path steps, and defaults outside the options.
+relative ranges or path steps, and defaults outside the options. Static headers, header parameters
+and CSRF header targets cannot name executor-owned headers (case-insensitively), including Accept,
+Content-Type, session credentials and framing headers. One otherwise-unbound simple whole path
+segment named by a query-target CSRF rule is reserved for session decoration; other undeclared
+variables, including body and CSRF source template variables, still fail validation.
 
 ## Generated model
 

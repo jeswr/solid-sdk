@@ -225,3 +225,26 @@ describe("verification with recorded successful requests", () => {
     );
   });
 });
+
+it("derives JSON Accept during verification without retaining a model Accept header", async () => {
+  let requests = 0;
+  const { operations, warnings } = await verifyOperations([checkout], {
+    replayer: {
+      async get(_url, { headers }) {
+        requests++;
+        expect(headers?.accept).toBe("application/json");
+        return {
+          status: 200,
+          contentType: "application/json",
+          body: '{"totalPaymentDue":"20.00"}',
+        };
+      },
+    },
+    now,
+    haveSession: true,
+  });
+  expect(requests).toBe(1);
+  expect(warnings).toEqual([]);
+  expect(operations).toHaveLength(1);
+  expect(operations[0]?.request.headers).toBeUndefined();
+});

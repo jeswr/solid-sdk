@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 export { claudeCliPlanner, codexCliPlanner } from "./cli.js";
+export * from "./fallback/index.js";
 export {
   PLANNER_SYSTEM,
   parsePlannerReply,

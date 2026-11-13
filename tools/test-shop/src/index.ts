@@ -18,6 +18,7 @@ import {
 } from "./data.js";
 import {
   accountPage,
+  addressPage,
   type CartView,
   cartPage,
   checkoutPage,
@@ -95,6 +96,7 @@ export interface ShopState {
   /** Carts by user email. */
   carts: Map<string, CartLine[]>;
   orders: Order[];
+  addresses: Map<string, string>;
   logins: LoginEvent[];
   requests: RequestLogEntry[];
   /** Number of live cookie sessions. */
@@ -173,11 +175,13 @@ export async function startShop(options: ShopOptions = {}): Promise<RunningShop>
     products,
     carts: new Map(),
     orders: [],
+    addresses: new Map(),
     logins: [],
     requests: [],
     sessionCount: () => sessions.size,
     reset() {
       state.carts.clear();
+      state.addresses.clear();
       state.orders.length = 0;
       state.logins.length = 0;
       state.requests.length = 0;
@@ -366,6 +370,11 @@ export async function startShop(options: ShopOptions = {}): Promise<RunningShop>
         });
         return true;
       }
+      if (path === "/account/address") {
+        const s = requirePage();
+        if (s) html(200, addressPage(state.addresses.get(s.email) ?? "", ctx));
+        return true;
+      }
       if (path === "/account") {
         const s = requirePage();
         if (s && user) html(200, accountPage(user.name, user.email, ctx));
@@ -472,6 +481,24 @@ export async function startShop(options: ShopOptions = {}): Promise<RunningShop>
           `csrf=${s.csrf}; Path=/; SameSite=Lax`,
         ],
       });
+      return true;
+    }
+
+    if (method === "POST" && path === "/account/address") {
+      const s = requirePage();
+      if (!s) return true;
+      const body = await form();
+      if (body.get("csrf_token") !== s.csrf) {
+        html(403, notFoundPage(ctx));
+        return true;
+      }
+      const address = body.get("streetAddress")?.trim();
+      if (!address) {
+        html(400, addressPage("", ctx));
+        return true;
+      }
+      state.addresses.set(s.email, address);
+      redirect(303, "/account/address");
       return true;
     }
 

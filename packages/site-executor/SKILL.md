@@ -53,8 +53,15 @@ Security review hardening:
 - Replace parameter configuration matching with closed-world coverage of concrete requests after
   expansion and CSRF insertion. Inventory every query/form/multipart field, every JSON member by
   RFC 6901 pointer, each path variable by template name, and all model static/parameter/CSRF
-  headers. Exclude only session/vault and Content-Type, Content-Length, Accept, Cookie, Origin,
-  Referer headers. Compare names case-insensitively and canonical values exactly. Refuse duplicate
+  headers, tracking model header provenance at compilation. Refuse executor-owned Accept,
+  Content-Type, Content-Length, Cookie, Origin, Referer, Host, credentials and framing names
+  through static headers, parameters and CSRF targets (case-insensitively); never silently drop.
+  Shared validation must report the same declarations. Reserve vault header names on session load.
+  Derive Accept from extraction format and Content-Type from body encoding; profiler output must
+  omit executor-owned headers. Vendor-specific Accept needs a future inventoried field.
+  Normalize compiled multipart names/values to their serialized fields (CRLF, USVString and name
+  quoting), including CSRF insertion. Verify actual Request serialization; LF and CRLF quotes differ.
+  Compare names case-insensitively and canonical values exactly. Refuse duplicate
   names across any locations within either request.
 - Every payment field must be covered by the total request's same name/value, a whole checked
   order/basket identity equal to the total, or the CSRF target. CSRF names cannot alias anything
@@ -142,3 +149,8 @@ Created identities may come from checked on-origin 301/302/303 redirects and sup
 bindings. Keep every write approval and repeat guard; never replay POST while following redirects.
 The harness's opt-in live test creates and cleans up only its own product, blocks background
 preference writes and uses a scripted planner. Never invoke a planner/model CLI for acceptance.
+
+- Inventory decorated reserved path slots as path fields flagged sessionToken. Payment tokens
+  get the unique CSRF exemption, never collision exemption; total tokens get reverse-coverage
+  exemption only. Shared validation admits one otherwise-unbound whole simple segment per query
+  CSRF target, keeping all other undeclared endpoint/body/source variables invalid.

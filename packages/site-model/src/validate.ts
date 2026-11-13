@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /** validateSiteModel: structural checks SHACL cannot express over the whole model. */
 import type { Flow, Operation, Parameter, SiteModel } from "./types.js";
 import { EFFECT_ORDER, effectRank } from "./vocab.js";
@@ -44,6 +45,41 @@ export function templateVariables(template: string): { variables: string[]; erro
   return { variables };
 }
 
+/** Credentials, framing and content negotiation are owned by the executor/session layer. */
+const EXECUTOR_HEADERS = new Set([
+  "accept",
+  "content-type",
+  "content-length",
+  "cookie",
+  "cookie2",
+  "set-cookie",
+  "authorization",
+  "proxy-authorization",
+  "host",
+  "transfer-encoding",
+  "connection",
+  "keep-alive",
+  "upgrade",
+  "te",
+  "trailer",
+  "origin",
+  "referer",
+]);
+
+export function isExecutorOwnedHeader(name: string): boolean {
+  const lower = name.toLowerCase();
+  return EXECUTOR_HEADERS.has(lower) || lower.startsWith("proxy-") || lower.startsWith("sec-");
+}
+
+/** Check every declaration, including optional parameters that have no concrete value yet. */
+export function modelHeaderNames(op: Operation): string[] {
+  return [
+    ...Object.keys(op.request.headers ?? {}),
+    ...op.inputs.filter((p) => p.location === "header").map((p) => p.name),
+    ...(op.csrf ?? []).filter((r) => r.target.kind === "header").map((r) => r.target.name),
+  ];
+}
+
 function checkParameters(
   inputs: Parameter[],
   path: string,
@@ -87,9 +123,31 @@ function checkOperation(
   problem: (path: string, message: string) => void,
 ): void {
   const declared = checkParameters(op.inputs, path, problem);
+  // A query-target CSRF rule may reserve one otherwise-unbound simple path segment.
+  // It does not declare an input or make the name available in body/source templates.
+  const endpointNames = new Set(declared);
+  const variables = templateVariables(op.request.urlTemplate).variables;
+  const pathTemplate = (op.request.urlTemplate.split(/[?#]|\{[?&]/)[0] ?? "").replace(
+    /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/]*/,
+    "",
+  );
+  for (const rule of op.csrf ?? []) {
+    const name = rule.target.name;
+    if (
+      rule.target.kind === "query" &&
+      !declared.has(name) &&
+      variables.filter((v) => v === name).length === 1 &&
+      pathTemplate.split("/").filter((s) => s === `{${name}}`).length === 1 &&
+      op.csrf?.filter((r) => r.target.kind === "query" && r.target.name === name).length === 1
+    )
+      endpointNames.add(name);
+  }
+  for (const name of modelHeaderNames(op))
+    if (isExecutorOwnedHeader(name))
+      problem(`${path}.request.headers`, `model names executor-owned header "${name}"`);
   const used = checkTemplate(
     op.request.urlTemplate,
-    declared,
+    endpointNames,
     `${path}.request.urlTemplate`,
     problem,
   );

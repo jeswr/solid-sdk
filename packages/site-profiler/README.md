@@ -163,3 +163,8 @@ read-only probes with the ordinary search cleared, page reset to 1 and size capp
 Dispatch/session values and observed XHR headers are preserved; preferences are never saved.
 A fresh password login retains its page CSRF source so the host can bootstrap its cookie jar;
 the cookie preference applies to demonstrated writes after sign-in.
+
+Model headers omit executor-owned content negotiation, credential and framing headers, including
+Accept. Verification derives Accept from extraction format, as the executor does; JSON grid reads
+therefore retain their JSON negotiation without storing Accept in the learned model. Vendor-specific
+Accept media types require a future first-class, inventoried field.

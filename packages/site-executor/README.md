@@ -112,9 +112,20 @@ excluded. The remaining observations retain their original step order and untrus
 
    A value can never break out of its JSON string. Form and multipart bodies are built from
    `form`/`body` parameters or from a form template. Values are checked against their XSD range
-   and their `options`. Static headers from the model cannot set `Cookie`, `Authorization`,
-   `Host`, `Origin`, `Sec-*` or framing headers. Header values containing control characters are
-   rejected.
+   and their `options`. The executor owns `Accept`, `Content-Type`, `Content-Length`, `Cookie`, `Origin`,
+   `Referer`, `Host`, credentials and framing headers (including `Sec-*` and `Proxy-*`). Static
+   headers, header parameters (even unset optional ones) and CSRF header targets naming any of
+   these are refused case-insensitively with `BindingError`; structural validation reports them.
+   No forbidden model header is silently dropped. Vault header names are also reserved when the
+   session loads. Header values containing control characters are rejected.
+   `Accept` derives from extraction: json uses `application/json`, html uses `text/html`, and
+   none uses `*/*`. `Content-Type` derives from the declared body encoding; multipart boundaries
+   belong to the transport. Vendor-specific Accept media types are a known limitation; a future
+   first-class, inventoried accept field would be needed to support them.
+   Multipart names and values are normalized at compilation (including CSRF insertion): CR/LF
+   becomes CRLF and lone surrogates become U+FFFD. Multipart name quoting is canonicalized to
+   its decoded field name. The compiled body retains those values and sends them unchanged.
+   URLencoded forms preserve line breaks and use the same USVString conversion as URLSearchParams.
 4. **CSRF.** Each source kind is supported: `cookie` (read from the jar), `html` (a CSS
    selector plus an attribute), `meta` and `json` (an RFC 6901 pointer). The token can go into a
    header, a form field (or a top-level JSON member) or a query parameter. A missing token stops
@@ -211,26 +222,15 @@ excluded. The remaining observations retain their original step order and untrus
   contributed the single fresh amount/currency pair, using the concrete compiled requests after
   template expansion and CSRF insertion:
 
-  1. Inventory every query parameter, form/multipart field, JSON body member (named by its
-     RFC 6901 pointer), URL path variable (named by its template variable), and model-supplied
-     request header: static, parameter and CSRF headers. Include static body/query literals.
-     Exclude session/vault headers and executor transport headers `Content-Type`, `Content-Length`,
-     `Accept`, `Cookie`, `Origin` and `Referer`. Names compare case-insensitively; values compare
-     exactly after the existing typed canonicalisation. JSON pointers retain their leading `/`:
-     a JSON `/delivery` member is distinct from a query/form `delivery` field.
-  2. Refuse any name occurring more than once within P or within Q, across all locations.
-  3. Every P field must have the same name/value in Q, be the target of P's CSRF rule, or be a
-     whole, checked order/basket identity matching the total record. A CSRF name must not occur
-     in Q or elsewhere in P, including case aliases. Otherwise refuse with
-     "payment sends <name>, which the basket total did not cover".
-  4. Every non-identity Q field must also occur in P with the same name/value. An identity
-     exemption requires a whole value checked against the selected order's records.
-  5. For a direct buy (payment is the first write), every P field must be the whole bound
-     product identity, the whole bound quantity multiplied into the amount, or the unique CSRF
-     token. Even static submit values and wire amount/currency fields need a fresh matching total.
-  6. Refuse item or value truncation in any read capable of supplying money or identity evidence
-     for the selected order/product, including separate identity-only reads. The incomplete
-     tail cannot prove the absence of a conflicting identity or price.
+  | Rule | Required behavior |
+  |---|---|
+  | W1 — inventory | Every query, form/multipart field, JSON member (RFC 6901 pointer), path variable and model header (static, parameter or CSRF). Header provenance is recorded at compilation; only executor/session headers are excluded. Multipart inventory describes serialized fields, including CRLF normalization; an LF quote and CRLF payment differ and refuse. Names compare case-insensitively and canonical values exactly. A JSON `/delivery` differs from query/form `delivery`. |
+  | W2 — duplicates | Refuse repeated names within P or Q across all locations, including session path tokens. |
+  | W3 — payment coverage | Each P field has the same name/value in Q, is a whole checked order/basket identity matching the total, or is P's unique CSRF/session path token. Token names cannot occur elsewhere in P or anywhere in Q, including another token. Otherwise refuse "payment sends <name>, which the basket total did not cover". |
+  | W4 — reverse coverage | Each Q field has the same name/value in P, except whole identities checked against the selected order and decorated session path tokens. Duplicate checks still apply. |
+  | W5 — direct buy | Only whole bound product identity, whole bound quantity multiplied into the amount, and unique CSRF/session path decoration. Static submit values and wire money fields require a fresh matching total. |
+  | W6 — truncation | Refuse item/value truncation in any money- or identity-capable read for the selected order/product, including identity-only reads. |
+  | W7 — trust | The model is trusted like code; validate its structure and refuse differences on the wire except these explicit exemptions. |
 
   Keep the whole-value invariant for bound payment inputs: unused, embedded, duplicated and
   transformed uses (including URI prefix modifiers) refuse. Configuration matching never uses
@@ -263,7 +263,10 @@ excluded. The remaining observations retain their original step order and untrus
   `render(redact)` for rendering the retained structured values with an updated redactor.
 
 These stricter checks intentionally refuse formerly accepted malformed models, unbound payments,
-unsafe routes and invalid flow inputs. The shared site-model TypeScript contract is unchanged; the additive executor result/session APIs are described above.
+unsafe routes and invalid flow inputs. Forbidden model headers that were previously silently dropped now refuse at construction/compilation;
+header parameter errors also occur before input resolution. Previously retained model Accept headers
+are invalid and fixtures/profiler output omit them. Multipart LF/CRLF differences now refuse.
+The shared site-model TypeScript contract is unchanged; the additive executor result/session APIs are described above.
 
 ## Tests
 
@@ -354,3 +357,9 @@ redirect becomes trusted identifier/url facts and a result receipt. This also su
 bindings from a JS-rendered form. Secret-bearing URLs, off-origin targets and non-ID routes do
 not supply identities. The POST is sent once; only GET follows the redirect. Approvals,
 commitment/repeat guards, CSRF decoration and payment rules retain their existing boundaries.
+
+Review r7 regressions are in the `review r7` groups of `test/review-r6.test.ts`: executor-owned
+headers through all three routes, static/direct-buy/header-parameter Accept and Accept aliases,
+derived extraction Accept, actual serialized form inventories, multipart newline mismatches,
+and path tokens on payment, total, both, and direct buys with collision refusals. Shared validation
+also tests the one unbound whole-segment CSRF slot and every other undeclared-variable refusal.

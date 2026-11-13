@@ -185,3 +185,60 @@ describe("templateVariables", () => {
     expect(templateVariables(template).error).toBe(error);
   });
 });
+
+describe("reserved CSRF path slots", () => {
+  const tokenOperation = (suffix = "/key/{sessionPath}"): Operation => ({
+    ...search,
+    inputs: [],
+    request: { method: "GET", urlTemplate: `https://shop.test${suffix}` },
+    csrf: [
+      { source: { kind: "cookie", name: "sid" }, target: { kind: "query", name: "sessionPath" } },
+    ],
+  });
+  it("accepts one otherwise-unbound whole path segment named by a query CSRF rule", () => {
+    expect(problems(withOps(tokenOperation()))).toEqual([]);
+  });
+  it.each([
+    "/key/prefix{sessionPath}",
+    "/key/{+sessionPath}",
+    "/key/{sessionPath:3}",
+    "/key/{sessionPath}/{sessionPath}",
+    "/key/{sessionPath}{?sessionPath}",
+    "/key{?sessionPath}",
+  ])("keeps rejecting an undeclared non-slot variable in %s", (path) => {
+    expect(problems(withOps(tokenOperation(path))).join(" ")).toContain("not a declared parameter");
+  });
+  it("does not reserve an undeclared authority variable as a path token", () => {
+    const op = tokenOperation();
+    op.request.urlTemplate = "https://{sessionPath}/items";
+    expect(problems(withOps(op)).join(" ")).toContain("not a declared parameter");
+  });
+  it("does not declare other endpoint, body or CSRF source variables", () => {
+    const op = tokenOperation("/key/{sessionPath}/{other}");
+    op.request.bodyTemplate = '{"value":"{sessionPath}"}';
+    op.csrf?.push({
+      source: { kind: "json", urlTemplate: "https://shop.test/{sessionPath}", pointer: "/token" },
+      target: { kind: "form", name: "token" },
+    });
+    const result = problems(withOps(op));
+    expect(result).toHaveLength(3);
+    expect(result.join(" ")).toContain('template variable "other"');
+    expect(result.join(" ")).toContain('placeholder "{sessionPath}"');
+    expect(result.join(" ")).toContain("csrf[1].source.urlTemplate");
+  });
+  it("does not reserve a slot for a header rule, missing rule or duplicate query rules", () => {
+    for (const kind of ["header", "missing", "duplicate"] as const) {
+      const op = tokenOperation();
+      if (kind === "header")
+        op.csrf = [
+          {
+            source: { kind: "cookie", name: "sid" },
+            target: { kind: "header", name: "sessionPath" },
+          },
+        ];
+      else if (kind === "missing") op.csrf = [];
+      else if (op.csrf?.[0]) op.csrf.push(op.csrf[0]);
+      expect(problems(withOps(op)).join(" ")).toContain("not a declared parameter");
+    }
+  });
+});

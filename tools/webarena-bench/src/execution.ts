@@ -83,7 +83,8 @@ export async function getPage(
     actionType: `${SCHEMA}ViewAction`,
     label: "View identified page",
     inputs: [],
-    request: { method: "GET" as const, urlTemplate: pageUrl, headers: { Accept: "text/html" } },
+    request: { method: "GET" as const, urlTemplate: pageUrl },
+    extraction: { format: "html" as const, itemType: `${SCHEMA}WebPage`, fields: [] },
     effect: "read" as const,
     session: model.login?.length ? ("signed-in" as const) : ("none" as const),
     provenance: {

@@ -47,16 +47,22 @@ styles to `#login-form`** (the suite CSS-leak guards).
 
 ## Agent sign-in capture boundary
 
-`popup/agent-sign-in*.ts` offers explicit, reviewed sharing of the active site's browser
-cookies with the local agent vault. This is independent of Solid-OIDC tokens. The popup
-checks existing Chrome access to the selected exact origin before any native message and
-again on review, shows site/count/persona, and
-requires confirmation. Never expose this action through window.solid or the content bridge.
-`background/agent-vault.ts` admits only Chrome-attested popup senders, never a content-script
-sender/tab. Its single native port is retained for the vault's keep-alive owner. Native host
-replies contain display metadata, a generation token or acknowledgements, never credentials.
-Use the browser-safe `@jeswr/agent-vault/browser` schemas and PSL boundary; parent cookies
-require explicit vetted host configuration. No cookie values in logs, errors, UI or storage.
+`popup/agent-sign-in-view.ts` is a thin, long-lived-port view of the worker's single
+capture state machine (`background/agent-capture.ts`). The worker owns the exclusive lease,
+all tab/access checks, cookie reads, native requests and cleanup under one async mutex.
+Review validates the CURRENT active tab against the lease's tab/origin and existing host
+access before arming the popup's **Allow cookies and review** click. Only that click requests
+optional `cookies`, synchronously inside its gesture. After the prompt the worker rechecks
+tab/origin and host access before `beginLogin`; confirmation rechecks lease ownership of the
+cookie grant, tab/origin and host access before reading a fresh snapshot and sending it.
+The preview shows site/count/persona; a changed cookie count refuses confirmation.
+Never expose this action through window.solid or the content bridge.
+`background/agent-vault.ts` admits only Chrome-attested popup ports, never a content-script
+sender/tab. There is no generic popup-to-native request proxy. Its single native port is
+retained for the vault's keep-alive owner. Native host replies contain display metadata,
+a generation token or acknowledgements, never credentials. Use the browser-safe
+`@jeswr/agent-vault/browser` schemas and PSL boundary; parent cookies require explicit
+vetted host configuration. No cookie values in logs, errors, UI or storage.
 
 Hostile processes running as the same OS user are explicitly outside the native vault's
 threat model: they can read its store/key or forge the public extension-ID caller argument.
@@ -67,15 +73,26 @@ capture marks its vault session `origin: "browser-capture"` and records a pendin
 "New sign-in from browser" entry for the host's later agent approval UI.
 Capture never requests or removes a host origin. Withheld site access refuses without a
 permission request or native message; tell the person to allow the extension on this site
-through Chrome's own extension menu first, then try again. Request only optional `cookies`
-on the review click once host access is confirmed, and recheck host access before sending
-the confirmed capture. Remove cookies in finally after the snapshot
-and verify absence with permissions.contains, with worker onDisconnect/late-grant cleanup
-for popup closure. Removal rejection or unconfirmed absence must display a warning alongside
-the actual capture outcome; worker cleanup failure sets a toolbar `!` badge. A surviving
-cookie grant warns when the popup reopens. Required `<all_urls>` stays in place and host grants
-never change; temporary cookie access is extension-wide, so exact-origin filtering and
-explicit confirmation still apply.
+through Chrome's own extension menu first, then try again. Check optional `cookies` on every
+popup load before tab/site validation, retaining its warning even when loading fails.
+A pre-existing or uncheckable cookie grant blocks review, permission requests and native
+messages. Only the person's **Remove cookie access** click removes this stale grant and
+verifies absence before enabling sharing; failed removal keeps the warning and directs
+them to Chrome's extension settings. Recheck absence on review: captures start without it.
+Request only optional `cookies` from the worker-armed popup click. The permission lasts
+only for the exclusive capture lease (review -> confirming -> sending -> cleaning -> idle),
+with a two-minute timeout. A second popup receives "Another sharing is in progress" without
+another request or native message. Success, failure, Cancel, timeout and port disconnect
+all remove only the lease's requested cookie permission and verify absence before releasing
+the lease. Cancellation invalidates in-flight work immediately and terminal views never
+move backwards. An unresolved prompt fences new captures after the lease ends until its
+result/onAdded grant has been cleaned, so no late grant can belong to another lease.
+If Chrome never reports a closed prompt's outcome, sharing stays blocked for that worker
+lifetime. Removal rejection or unconfirmed absence displays a warning alongside the actual
+outcome and blocks further sharing; worker cleanup failure sets a toolbar `!` badge.
+A surviving cookie grant blocks sharing on every popup load, including withheld sites.
+Required `<all_urls>` stays in place and host grants never change; temporary cookie access
+is extension-wide, so exact-origin filtering and explicit confirmation still apply.
 
 ## Gate
 

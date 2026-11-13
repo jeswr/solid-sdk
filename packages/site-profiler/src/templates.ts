@@ -7,6 +7,7 @@
 // and merges evidence for the same endpoint.
 
 import type { CsrfRule, LearnMethod } from "@jeswr/site-model";
+import { isExecutorOwnedHeader } from "@jeswr/site-model";
 import { formFields } from "./form-body.js";
 import { formCsrfRules, isCsrfFieldName } from "./forms.js";
 import { descendants, parseHtml } from "./html.js";
@@ -123,7 +124,7 @@ function staticHeaders(samples: RecordedRequest[]): Record<string, string> {
   if (!first) return out;
   for (const [name, value] of Object.entries(first.requestHeaders)) {
     if (value === "[redacted]") continue;
-    const keep = KEEP_HEADER.test(name) || (name === "accept" && /json/i.test(value));
+    const keep = KEEP_HEADER.test(name.toLowerCase()) && !isExecutorOwnedHeader(name);
     if (keep && samples.every((s) => s.requestHeaders[name] === value)) out[name] = value;
   }
   return out;
@@ -137,6 +138,7 @@ function csrfFromSamples(samples: RecordedRequest[]): CsrfRule[] {
         rules.push({ source: { kind: "cookie", name: cookie }, target: { kind: "form", name } });
     }
     for (const [header, cookie] of Object.entries(s.headersFromCookies ?? {})) {
+      if (isExecutorOwnedHeader(header)) continue;
       if (
         !rules.some((r) => r.target.kind === "header" && r.target.name.toLowerCase() === header)
       ) {
@@ -439,10 +441,12 @@ export function candidateFromScriptCall(call: ScriptCall): EndpointCandidate | u
     params,
     headers: Object.fromEntries(
       Object.entries(call.headers).filter(
-        ([k]) => KEEP_HEADER.test(k.toLowerCase()) || /^accept$/i.test(k),
+        ([k]) => KEEP_HEADER.test(k.toLowerCase()) && !isExecutorOwnedHeader(k),
       ),
     ),
-    csrf: call.csrf,
+    csrf: call.csrf.filter(
+      (r) => r.target.kind !== "header" || !isExecutorOwnedHeader(r.target.name),
+    ),
     sources: ["js-analysis"],
     samples: [],
     responseKind: "unknown",
