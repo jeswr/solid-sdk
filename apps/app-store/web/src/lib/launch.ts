@@ -7,14 +7,13 @@
 // THE ONE SECURITY INVARIANT (load-bearing, exhaustively tested in launch.test.ts):
 //   ONLY the user's PUBLIC WebID is ever placed in a launch URL — NEVER a token,
 //   access_token, refresh_token, id_token, DPoP proof, authorization code, or any
-//   other credential. A WebID is public by definition; the actual session is
-//   re-established at the shared IdP broker via OIDC `prompt=none` on landing (the
-//   media-kraken#54 silent-SSO pattern), so nothing secret needs to (or does) travel
+//   other credential. The destination owns its session; shared-session apps offer
+//   the WebID as an account suggestion requiring a click. Nothing secret travels
 //   in the URL. The no-token test asserts the output contains none of those tokens.
 //
 // THE TWO MECHANISMS (selected by the app's `launch` field):
 //   1. "autologin" → `${app.url}#autologin/<encodeURIComponent(webid)>` — the
-//      full-page redirect SSO consumed by the 8 vite pod-apps + Solid Issues. Built
+//      account suggestion consumed by the pod-apps + Solid Issues. Built
 //      with the vendored canonical `autologinFragment` so the producer matches every
 //      target's parser. The WebID rides in the URL FRAGMENT, which (RFC 3986 §3.5) is
 //      client-side and never sent on the wire — the strongest placement.

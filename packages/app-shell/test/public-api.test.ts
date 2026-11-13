@@ -22,6 +22,7 @@ import * as api from "../src/index.js";
 // API. A diff here is a CONTRACT change — coordinate it with consumers.
 const PUBLIC_EXPORTS = [
   // Account menu
+  "AccountControl",
   "AccountMenu",
   "initials",
   // Error handling (boundary + standalone themed panel)

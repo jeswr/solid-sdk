@@ -30,9 +30,8 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
 // leaves the broken storage installed, so a test fails before reaching the behavior
 // under test. We instead PROBE by actually calling setItem/removeItem inside try/catch
 // and install the polyfill if the store is undefined, missing setItem, OR callable-but-
-// throwing. The silent-session-restore RememberedAccount pointer is localStorage-backed,
-// so the implementation-level SessionProvider test needs a functioning store to seed a
-// returning-user pointer. Test-infra only — never shipped.
+// throwing. The shared provider directory uses localStorage, so the session tests need a
+// functioning store for recent-provider suggestions. Test-infra only — never shipped.
 const localStorageWorks = (): boolean => {
   try {
     if (

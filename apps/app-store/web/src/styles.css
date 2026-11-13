@@ -282,49 +282,25 @@ a {
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(2px);
 }
-.signin-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 1.75rem;
+.login-screen {
+  padding: 1.25rem;
 }
-.signin-form h2 {
-  margin: 0;
-  font-size: 1.3rem;
+.login-sign-in .su-sign-in-card {
+  border: 0;
+  padding: 0;
+  box-shadow: none;
 }
-.signin-sub {
-  color: var(--muted-text);
-  font-size: 0.92rem;
-  margin: 0 0 0.5rem;
-  line-height: 1.45;
+.login-retry {
+  margin-top: 1rem;
 }
-.signin-form label {
-  font-weight: 600;
-  font-size: 0.82rem;
-}
-.signin-form input {
-  padding: 0.6rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  font-size: 0.95rem;
-  background: var(--host-bg);
-  color: var(--host-ink);
-}
-.signin-error {
+.store-auth-error {
   color: var(--host-danger);
-  font-size: 0.9rem;
-  margin: 0.25rem 0 0;
+  padding: 0 1.25rem;
 }
 .signin-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.6rem;
-  margin-top: 0.75rem;
-}
-.signin-hint {
-  color: var(--muted-text);
-  font-size: 0.82rem;
-  margin-top: 0.75rem;
+  padding: 0 1.25rem 1.25rem;
 }
 
 /* ── Catalog (LD) view ─────────────────────────────────────────────────── */

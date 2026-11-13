@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { appUrl } from "../auth/app-url";
+import { appUrl } from "@jeswr/app-session";
 
 /** Both the hash route and the catalog document path render the catalog view. */
 export function isCatalogRoute(
@@ -7,6 +7,6 @@ export function isCatalogRoute(
 ): boolean {
   if (!url) return false;
   if (url.hash === "#/catalog") return true;
-  const catalogPath = new URL(appUrl("catalog", url.origin)).pathname;
+  const catalogPath = new URL(appUrl("catalog", import.meta.env.BASE_URL, url.origin)).pathname;
   return [catalogPath, `${catalogPath}/`].includes(url.pathname);
 }
