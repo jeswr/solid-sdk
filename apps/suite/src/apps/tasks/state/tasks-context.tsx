@@ -13,28 +13,35 @@ import {
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
-import { type StoredProject, TaskStore } from "../lib/model/store";
+import type { StoredProject } from "../lib/model/store";
 import { TasksSharingAdapter } from "../lib/share/adapter";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess, supportsTasksSharing } from "./access";
 import { pendingDeletes } from "./actions";
 import { completionVisuals } from "./completion-visuals";
+import { OfflineTaskStore } from "./offline";
+import { TasksConflicts, useTasksOffline } from "./offline-session";
 import { setPreferencesIdentity, useTasksPreferences } from "./preferences";
 import { TasksCache } from "./tasks-cache";
 
 export type { NewTask, TaskLoad, TasksSnapshot } from "./tasks-cache";
-export type TasksContextValue = ReturnType<typeof useTasksValue>;
+export type TasksContextValue = ReturnType<typeof useTasksValue>["value"];
 const TasksContext = createContext<TasksContextValue | null>(null);
 function useTasksValue(session: PodSession) {
+  const offline = useTasksOffline(session);
   const [cache] = useState(
     () =>
       new TasksCache(
-        new TaskStore({
-          storage: session.storageUrl,
-          webId: session.webId,
-          fetch: session.fetch,
-          ensurePrivateTasksAccess: (url, owner) => ensurePrivateTasksAccess(session, url, owner),
-          ensurePrivateIndexAccess: (url, owner) => ensurePrivateIndexAccess(session, url, owner),
-        }),
+        new OfflineTaskStore(
+          {
+            storage: session.storageUrl,
+            webId: session.webId,
+            fetch: offline.fetch,
+            ensurePrivateTasksAccess: (url, owner) => ensurePrivateTasksAccess(session, url, owner),
+            ensurePrivateIndexAccess: (url, owner) => ensurePrivateIndexAccess(session, url, owner),
+          },
+          offline.online,
+          offline.together,
+        ),
         (error, retry) => {
           toast.error(
             classifyError(error) === "conflict"
@@ -49,6 +56,7 @@ function useTasksValue(session: PodSession) {
         (message) => toast.info(message),
       ),
   );
+  useEffect(() => offline.subscribeReceipts(cache.confirmOfflineWrite), [cache, offline]);
   const { preferences } = useTasksPreferences();
   useLayoutEffect(() => {
     setPreferencesIdentity(session.webId);
@@ -99,7 +107,7 @@ function useTasksValue(session: PodSession) {
     }, 0);
     return () => clearTimeout(timer);
   }, [cache, snapshot.projects]);
-  return useMemo(
+  const value = useMemo(
     () => ({
       ...snapshot,
       cache,
@@ -147,12 +155,18 @@ function useTasksValue(session: PodSession) {
     }),
     [snapshot, cache, session, sharing],
   );
+  return { value, offline };
 }
 /** Small session-scoped API: projects, URL-keyed loads, TaskView projections and conditional mutations.
  * Mutations resolve undefined after rollback + a retry toast. Consumers retain StoredTask validators. */
 export function TasksProvider({ session, children }: { session: PodSession; children: ReactNode }) {
-  const value = useTasksValue(session);
-  return <TasksContext value={value}>{children}</TasksContext>;
+  const { value, offline } = useTasksValue(session);
+  return (
+    <TasksContext value={value}>
+      {children}
+      <TasksConflicts cache={value.cache} offline={offline} />
+    </TasksContext>
+  );
 }
 export function useTasks(): TasksContextValue {
   const context = useContext(TasksContext);
