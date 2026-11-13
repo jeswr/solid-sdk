@@ -17,6 +17,7 @@
     "deploy": "GitHub Pages: https://jeswr.github.io/solid-sdk/<slug>/ for the ten Vite apps; Vercel: solid-suite (main only); Pod Manager, Issues and Coeliac: git deployments disabled"
   },
   "packages": [
+    "@jeswr/agent-browser",
     "@jeswr/agent-authz-verifier",
     "@jeswr/agentic-legacy-bridge",
     "@jeswr/app-session",

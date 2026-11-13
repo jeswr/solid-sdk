@@ -9,6 +9,7 @@ Includes shared and package skills, including internal repository workflows.
 | --- | --- | --- |
 | accessible-html-links | Use when writing or reviewing HTML navigation, vague link text, external links, role=link, onclick navigation, or elements that imitate links. Enforce native anchors, descriptive purpose, valid interactive nesting, and safe external navigation. | [skills/accessible-html-links/SKILL.md](accessible-html-links/SKILL.md) |
 | agent-audit | Use when working on the system-written audit ledger surface in @jeswr/agent-audit. | [packages/agent-audit/SKILL.md](../packages/agent-audit/SKILL.md) |
+| agent-browser | Use when implementing or consuming @jeswr/agent-browser, its RDF-only planner protocol, approval loop, CLI planners, host-side password login, trace format or fictional shop demo. | [packages/agent-browser/SKILL.md](../packages/agent-browser/SKILL.md) |
 | agent-channels | Use when working on the channel bindings and carriage profiles surface in @jeswr/agent-channels. | [packages/agent-channels/SKILL.md](../packages/agent-channels/SKILL.md) |
 | agent-credentials | Use when working on the private credential store, PKCE login, provisioning, or purpose-separated token supply in @jeswr/agent-credentials. | [packages/agent-credentials/SKILL.md](../packages/agent-credentials/SKILL.md) |
 | agent-executor | Use when working on the single action enforcement point surface in @jeswr/agent-executor. | [packages/agent-executor/SKILL.md](../packages/agent-executor/SKILL.md) |
