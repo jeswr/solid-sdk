@@ -262,7 +262,11 @@ describe("money from trusted reads in the same flow", () => {
     const total: Operation = {
       ...read,
       id: "urn:total",
-      inputs: [],
+      inputs: pay.inputs.map((input) => ({
+        ...input,
+        location: "query",
+        default: input.name === "sku" ? "TRAIL" : "1",
+      })),
       request: { method: "GET", urlTemplate: `${O}/total` },
       extraction: {
         format: "json",
@@ -288,7 +292,7 @@ describe("money from trusted reads in the same flow", () => {
     ];
     flow.steps.splice(1, 0, ...(fresh ? additions : additions.reverse()));
     const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) =>
-      String(url).endsWith("/total")
+      new URL(String(url)).pathname === "/total"
         ? Response.json({
             total: "23.45",
             currency: "GBP",
@@ -302,16 +306,16 @@ describe("money from trusted reads in the same flow", () => {
           : Response.json({}),
     );
     const gate = allow();
-    expect(
-      (
-        await createExecutor({ model, fetch, gate, sessions: new InMemorySessions() }).execute(
-          request('schema:price "30";'),
-        )
-      ).status,
-    ).toBe(fresh ? "done" : "refused");
+    const result = await createExecutor({
+      model,
+      fetch,
+      gate,
+      sessions: new InMemorySessions(),
+    }).execute(request('schema:price "30";'));
+    expect(result.status, result.error).toBe(fresh ? "done" : "refused");
     expect(
       gate.authorize.mock.calls.filter(([r]) => r.effect === "payment").map(([r]) => r.amount),
-    ).toEqual(fresh ? ["20", "23.45"] : ["20"]);
+    ).toEqual(fresh ? ["23.45"] : []);
   });
 
   it("voids approval for a changed price and refuses a different source item", async () => {
@@ -407,7 +411,11 @@ describe("money from trusted reads in the same flow", () => {
     const total: Operation = {
       ...read,
       id: "urn:total",
-      inputs: [],
+      inputs: pay.inputs.map((input) => ({
+        ...input,
+        location: "query",
+        default: input.name === "sku" ? "TRAIL" : "1",
+      })),
       request: { method: "GET", urlTemplate: `${O}/total` },
       extraction: {
         format: "json",
@@ -427,7 +435,7 @@ describe("money from trusted reads in the same flow", () => {
     );
     let price = "20";
     const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) =>
-      String(url).endsWith("/total")
+      new URL(String(url)).pathname === "/total"
         ? Response.json({ price, currency: "GBP" })
         : init?.method === "GET"
           ? Response.json({ items: [product({ price })] })
@@ -441,7 +449,7 @@ describe("money from trusted reads in the same flow", () => {
     const ex = createExecutor({ model, fetch, gate, sessions: new InMemorySessions() });
     const req = request('schema:price "30";');
     const first = await ex.execute(req);
-    expect(first.status).toBe("needs-approval");
+    expect(first.status, first.error).toBe("needs-approval");
     approvals.approve(first.approval?.id ?? "");
     price = "21";
     const changed = await ex.execute(req, { approvalId: first.approval?.id ?? "" });

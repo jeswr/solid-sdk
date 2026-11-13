@@ -44,6 +44,20 @@ Security review hardening:
   Keep whole-value, exact-decimal and cumulative-spending checks. The README Money threat model
   is normative: client checks cannot prevent a site displaying one amount and charging another;
   the payment instrument's own limit is the backstop.
+- Aggregate every amount OR currency claim before consistency checks, including partial records;
+  bind and revalidate each contributing source. Truncated money-capable reads make evidence
+  incomplete even when retained records do not match. Expose item/value truncation and detect
+  item overflow before materializing fields (HTML needs at most one extra match).
+- Bind each payment input to checked order/basket identity, CSRF/session decoration, or the same
+  canonical value taken by every contributing total read (same name or nonempty semantic path).
+  Otherwise refuse "needs a fresh basket total for these options". Direct buys account for mapped
+  quantity in price multiplication and cross-check money mappings; refuse any other option.
+  Bind the total reads' concrete inputs and paths in the evidence digest.
+  Require the matching total input to reach its request exactly once as a whole value;
+  a declared but unused, embedded or partially sent input cannot cover a payment option.
+- Reject payment flows without a payment-effect operation at construction. Preparatory writes
+  retain their own effect; strongest steps inherit a stronger declared flow effect. Every write
+  gated as payment must pass mandatory money checks.
 - Reject endpoint dot segments, including encoded values, route separator injection and route
   changes caused by URL normalization. CSRF tokens cannot overwrite approved inputs.
 - Untrusted marking overrides datatype, including `iri`, and untrusted fields cannot supply item
@@ -69,6 +83,8 @@ Execution rules:
   repeats. Only 4xx is Failed and uncommitted (unless an earlier write already committed).
 - Keep RDF term kinds through resolution. Blank nodes cannot bind scalar inputs; IRI terms use
   WHATWG normalization before wire encoding and fingerprinting. Literal text stays literal.
+  Extraction retains response kinds in structured `terms`, normalizes `datatype: "iri"` values
+  before binding (including scalar targets), and leaves literal lexical text verbatim.
 - Fingerprint concrete writes before session/CSRF decoration: method, WHATWG URL (sorted query)
   and canonical body. Canonicalize typed values on all wire surfaces and exclude unused inputs.
   Expose concrete plan fingerprints and enforce execute's excludeFingerprints at the boundary

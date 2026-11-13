@@ -51,6 +51,10 @@ Repeat guard and recovery:
   5xx, resets, network errors, timeouts and post-success extraction failures retain uncertain
   fingerprints; only 4xx is uncommitted. allowRetryOf grants host recovery for specific fingerprints;
   allowRepeats explicitly disables this task guard.
+- Post-execution session/secret refresh is auxiliary: always return the executor's result with
+  its status, receipt and committed/uncertain list intact. Report a safe `refreshError` separately
+  on TaskExecutionResult and TraceStep; never expose the store exception or replace execution
+  with an empty failure. Retain earlier commitments when a later approval retry throws too.
 - Surface no-path.missing as safe planner-history error text. A Buy flow learned from a product-name
   search still requires that name; an object IRI cannot resolve the search input. Let the planner
   correct the mapped inputs instead of weakening typed identity matching.

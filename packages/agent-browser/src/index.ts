@@ -24,6 +24,7 @@ export type {
   PlannerInput,
   PlannerOutput,
   RunTaskOptions,
+  TaskExecutionResult,
   TaskExecutor,
   TaskStatus,
   TaskTrace,

@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import type { ActionRequest, Operation, Parameter } from "@jeswr/site-model";
 import { SAB, SCHEMA } from "@jeswr/site-model";
-import { type CompiledRequest, fillJsonTemplate } from "./compile.js";
+import { type CompiledRequest, compileOperation, fillJsonTemplate } from "./compile.js";
 import type { ExtractedItem } from "./extract.js";
 import { moneyFields } from "./gate.js";
 import { normaliseEffect } from "./match.js";
@@ -35,6 +35,8 @@ export interface MoneyEvidence {
       amounts: [string, string[]][];
       currencies: [string, string[]][];
       identity: [string, string[]][];
+      inputs: Record<string, string>;
+      sources: Record<string, string[]>;
     }[];
   };
 }
@@ -43,6 +45,9 @@ export interface MoneyRead {
   operation: Operation;
   url: string;
   items: ExtractedItem[];
+  values?: Record<string, string>;
+  sources?: Record<string, string[]>;
+  truncation?: { items: boolean; values: boolean };
 }
 export interface MoneyWrite {
   step: number;
@@ -243,22 +248,37 @@ export function factsMoney(
       ),
     );
   const totalRequired = lastWrite >= 0;
-  const candidates = reads
-    .filter((r) => onOrigin(r.url) && (!totalRequired || r.step > lastWrite))
-    .flatMap((read) =>
-      read.items.flatMap((item, index) => {
-        if (item.iri && !onOrigin(item.iri)) return [];
-        const types = [
-          read.operation.extraction?.itemType ?? "",
-          ...(item.values.get(`${RDF}type`) ?? []),
-        ].map(expandIri);
-        const total =
-          types.includes(`${SCHEMA}Order`) ||
-          types.includes(`${SCHEMA}Invoice`) ||
-          item.values.has(`${SCHEMA}totalPaymentDue`);
-        return [{ read, item, index, total }];
-      }),
-    );
+  const window = reads.filter((r) => onOrigin(r.url) && (!totalRequired || r.step > lastWrite));
+  const refusal = totalRequired
+    ? "needs one fresh basket total"
+    : "needs one unambiguous product price";
+  for (const read of window) {
+    const ex = read.operation.extraction;
+    const couldSupplyMoney =
+      ex &&
+      ([`${SCHEMA}Order`, `${SCHEMA}Invoice`].includes(expandIri(ex.itemType)) ||
+        ex.fields.some(
+          (f) =>
+            !f.untrusted &&
+            [...AMOUNTS, ...CURRENCIES, `${RDF}type`].includes(expandIri(f.property)),
+        ));
+    if (couldSupplyMoney && (read.truncation?.items || read.truncation?.values))
+      throw new MoneyRefusal(`${refusal}: incomplete extracted money evidence`);
+  }
+  const candidates = window.flatMap((read) =>
+    read.items.flatMap((item, index) => {
+      if (item.iri && !onOrigin(item.iri)) return [];
+      const types = [
+        read.operation.extraction?.itemType ?? "",
+        ...(item.values.get(`${RDF}type`) ?? []),
+      ].map(expandIri);
+      const total =
+        types.includes(`${SCHEMA}Order`) ||
+        types.includes(`${SCHEMA}Invoice`) ||
+        item.values.has(`${SCHEMA}totalPaymentDue`);
+      return [{ read, item, index, total }];
+    }),
+  );
   const orderIds = ids.filter((id) =>
     ["iri", "fallback", `${SCHEMA}orderNumber`, `${SCHEMA}identifier`].includes(id.type),
   );
@@ -269,9 +289,6 @@ export function factsMoney(
   const selected = candidates.filter((c) =>
     totalRequired ? c.total : !c.total && productIds.some((id) => identityMatches(c.item, id)),
   );
-  const refusal = totalRequired
-    ? "needs one fresh basket total"
-    : "needs one unambiguous product price";
   if (
     !totalRequired &&
     !selected.some(
@@ -306,7 +323,8 @@ export function factsMoney(
         assertSent(payment.operation, p, payment.values, payment.compiled);
   }
   const records: MoneyEvidence["binding"]["records"] = [];
-  const pairs = new Map<string, { amount: string; currency: string }>();
+  const allAmounts = new Set<string>();
+  const allCurrencies = new Set<string>();
   for (const { read, item, index } of selected) {
     const amounts = AMOUNTS.filter((p) => item.values.get(p)?.length).map(
       (p): [string, string[]] => [p, [...(item.values.get(p) ?? [])]],
@@ -314,7 +332,8 @@ export function factsMoney(
     const currencies = CURRENCIES.filter((p) => item.values.get(p)?.length).map(
       (p): [string, string[]] => [p, [...(item.values.get(p) ?? [])]],
     );
-    if (!amounts.length || !currencies.length) continue;
+    // A partial claim contributes to the same consistency check and retry binding.
+    if (!amounts.length && !currencies.length) continue;
     if (
       totalRequired &&
       orderIds.length &&
@@ -326,19 +345,19 @@ export function factsMoney(
     )
       throw new MoneyRefusal(`${refusal}: order identity does not match`);
     for (const raw of amounts.flatMap(([, values]) => values)) {
-      let amount: string;
       try {
-        amount = multiply(text(decimal(raw)), quantity);
+        allAmounts.add(multiply(text(decimal(raw)), quantity));
       } catch {
         throw new MoneyRefusal(`${refusal}: conflicting or invalid site monetary amounts`);
       }
-      for (const code of currencies.flatMap(([, values]) => values)) {
-        const currency = code.toUpperCase();
-        if (!/^[A-Z]{3}$/.test(currency))
-          throw new MoneyRefusal(`${refusal}: invalid site currency`);
-        pairs.set(`${amount}:${currency}`, { amount, currency });
-      }
     }
+    for (const code of currencies.flatMap(([, values]) => values)) {
+      const currency = code.toUpperCase();
+      if (!/^[A-Z]{3}$/.test(currency)) throw new MoneyRefusal(`${refusal}: invalid site currency`);
+      allCurrencies.add(currency);
+    }
+    if (normaliseEffect(payment.operation.effect) === "payment")
+      assertPaymentConfiguration(payment, origin, totalRequired ? read : undefined);
     records.push({
       step: read.step,
       operation: read.operation.id,
@@ -350,16 +369,81 @@ export function factsMoney(
       identity: [...item.values].filter(([p]) =>
         [...ID_PROPERTIES, `${SCHEMA}orderNumber`, `${SCHEMA}referencesOrder`].includes(p),
       ),
+      inputs: { ...read.values },
+      sources: { ...read.sources },
     });
   }
-  if (pairs.size !== 1)
+  if (allAmounts.size !== 1 || allCurrencies.size !== 1)
     throw new MoneyRefusal(`${refusal}: conflicting or missing site amounts/currencies`);
-  const pair = [...pairs.values()][0] as { amount: string; currency: string };
   return {
-    ...pair,
+    amount: [...allAmounts][0] as string,
+    currency: [...allCurrencies][0] as string,
     revalidate: [...new Set(records.map((r) => r.step))],
     binding: { quantity, records },
   };
+}
+
+/** Every payment option must be covered by the evidence's concrete configuration. */
+function assertPaymentConfiguration(payment: MoneyWrite, origin: string, total?: MoneyRead): void {
+  const path = (p: Parameter, sources: Record<string, string[]> = {}) =>
+    (p.path.length ? p.path : (sources[p.name] ?? [])).map(expandIri);
+  for (const p of payment.operation.inputs) {
+    const value = payment.values[p.name] ?? p.default;
+    if (value === undefined) continue;
+    const semantic = path(p, payment.sources);
+    const ids = inputIdentities(semantic, value);
+    // Identity checks above already bind these identifiers to the evidence.
+    if (
+      ids.length &&
+      (!total ||
+        ids.every((id) =>
+          ["iri", "fallback", `${SCHEMA}orderNumber`, `${SCHEMA}identifier`].includes(id.type),
+        ))
+    )
+      continue;
+    // CSRF/session decoration is attached separately, after evidence and approval.
+    if (
+      payment.operation.csrf?.some(
+        (rule) =>
+          rule.target.name === p.name &&
+          (rule.target.kind === p.location ||
+            (rule.target.kind === "form" && p.location === "body")),
+      )
+    )
+      continue;
+    // Direct-buy arithmetic and resolvedMoney cross-check every monetary mapping.
+    if (!total && kind(semantic)) continue;
+    if (
+      total?.operation.inputs.some((candidate) => {
+        const readValue = total.values?.[candidate.name] ?? candidate.default;
+        const readPath = path(candidate, total.sources);
+        const same =
+          candidate.name === p.name ||
+          (semantic.length > 0 && semantic.join("\0") === readPath.join("\0"));
+        if (
+          !same ||
+          readValue === undefined ||
+          canonicalValue(candidate, readValue) !== canonicalValue(p, value)
+        )
+          return false;
+        // A declared but unused value cannot establish the site's quoted configuration.
+        try {
+          const inputs = total.values ?? {};
+          assertSent(
+            total.operation,
+            candidate,
+            inputs,
+            compileOperation(total.operation, inputs, origin),
+          );
+          return true;
+        } catch {
+          return false;
+        }
+      })
+    )
+      continue;
+    throw new MoneyRefusal("needs a fresh basket total for these options");
+  }
 }
 
 export function assertFactsCap(

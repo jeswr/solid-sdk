@@ -94,8 +94,11 @@ excluded. The remaining observations retain their original step order and untrus
    Scalar inputs reject blank nodes. IRI terms are WHATWG-normalized before sending and
    fingerprinting. `no-path.missing` identifies those inputs without exposing URLs, defaults or binding specs.
 2. **Gate.** The executor computes the effect it reports to the gate. For a flow, this is the
-   strongest of the flow's declared effect and each step's effect for writes. Preparatory flow
-   reads are authorized separately as reads. Every write is compiled and authorized immediately
+   strongest of the flow's declared effect and each step's effect. The strongest steps inherit
+   any stronger declared flow effect; preparatory steps keep their own effect. A payment flow
+   must contain a payment-effect operation, checked at construction, and every write gated as
+   payment passes the mandatory money checks. Preparatory flow reads are authorized as reads.
+   Every write is compiled and authorized immediately
    before execution, after its earlier-step bindings resolve. An unknown effect counts as
    `payment`. The executor loads the session before calling the gate, so a missing sign-in does
    not use up an approval. Every flow input is validated against its own range and options before
@@ -142,6 +145,9 @@ excluded. The remaining observations retain their original step order and untrus
    `sab:`, `rdf:` and `xsd:` prefixes. An untrusted field becomes
    `[ a sab:UntrustedText ; rdf:value "..." ]`, including fields with `datatype: "iri"`.
    Untrusted fields cannot supply subject identities. Item IRIs must be http(s).
+   Structured items retain RDF kinds in `terms` alongside lexical `values`. Fields declared
+   `datatype: "iri"` are WHATWG-normalized before storage, binding and fingerprinting, even
+   when bound into an `xsd:string` parameter. Literal text stays verbatim.
 
 ## Security invariants
 
@@ -173,6 +179,8 @@ excluded. The remaining observations retain their original step order and untrus
   last preceding write is evidence. Collect every trusted on-origin total record from every read
   in that window: an Order, Invoice, or item with `schema:totalPaymentDue`. Exactly one distinct
   (amount, currency) pair is required; otherwise refuse with "needs one fresh basket total".
+  Aggregate amounts and currencies independently across every contributing record, including
+  records with only an amount or only a currency, before checking consistency.
   Product prices never supply a fallback after a write. Totals explain the whole basket and need
   not duplicate checkout's product quantities.
 
@@ -188,10 +196,21 @@ excluded. The remaining observations retain their original step order and untrus
   Different identifiers refuse; empty identity lists never count as a match. An unbound checkout
   may use the fresh basket total read in its own flow.
 
+  Every payment input must be CSRF/session decoration, a checked order/basket identity, or an
+  input each contributing total read took with the same value. Match by parameter name or
+  nonempty semantic path and compare canonical values, including defaults. Otherwise refuse
+  with "needs a fresh basket total for these options". Declared inputs qualify only when sent
+  exactly once as whole values in the total request. A direct buy accounts for mapped quantity
+  in exact price multiplication and cross-checks mapped money; any other non-identity option
+  requires a fresh total. The digest includes the total reads' concrete inputs and semantic paths.
+
   Bind every contributing record's subject, raw amount/currency values, typed identity, source
   read and quantity in the approval digest. Re-read every contributing source on approval retry;
   changed evidence invalidates consent without replaying completed writes. Untrusted fields,
   off-origin reads/items and observations from separate actions cannot authorize money.
+  Every contributing partial record is bound and its source is re-read too. If any money-capable
+  read in the evidence window reports item or value truncation, evidence is incomplete and
+  payment is refused, even when the retained items do not match the purchase identity.
   Wire monetary mappings remain strict cross-checks (whole values, sent exactly once, exact JSON
   numeric representation); they cannot establish payment money by themselves. The planner's
   price is a cap, never evidence: above-cap or different-currency site facts refuse without approval.
@@ -201,8 +220,9 @@ excluded. The remaining observations retain their original step order and untrus
   (default 5), `maxResponseBytes` (default 5 MiB), `maxExecutionMs` (default 30,000 per execute call).
   The absolute deadline covers fetch, redirects, CSRF reads and body consumption, aborts requests
   and cancels readers; expiration returns `errorKind: "limit"`. Extraction keeps at most 200 items
-  (limited before item materialization) and 4000 characters per emitted value. Each extraction
-  also enforces 100 values per field, 1000 total values, 3000 quads and 1 MiB of Turtle. Exceeding
+  (limited before item materialization, detecting one extra HTML match) and 4000 characters per emitted value.
+  `ExtractOutput.truncation` reports `{ items, values }`; truncation never silently authorizes money.
+  Each extraction also enforces 100 values per field, 1000 total values, 3000 quads and 1 MiB of Turtle. Exceeding
   any value, quad or output budget fails extraction. The standalone `extract` options can tune
   `maxValuesPerField`, `maxTotalValues`, `maxQuads`, and `maxOutputBytes`; its result also offers
   `render(redact)` for rendering the retained structured values with an updated redactor.
@@ -232,3 +252,9 @@ binding (#1), referenced-object identity borrowing (#2), typed order/IRI mismatc
 post-write totals (#4), 5xx/reset/timeout commitment (#5), scalar blank nodes and normalized IRIs
 (#6), plus accepted/rejected session revision handoff. Agent-browser covers repeat blocking and
 explicit `allowRetryOf` recovery for uncertain writes.
+
+Round 4 regressions are in `test/review-r4.test.ts`: partial monetary claims and source retries (#1),
+bounded item overflow and value truncation (#2), total/payment configuration and direct-buy options (#3),
+payment-flow construction and per-step effects (#4), and response IRI kinds and repeat fingerprints (#6).
+Agent-browser's `test/review-r4.test.ts` covers preservation of committed/uncertain results and repeat
+blocking after auxiliary session-refresh failures (#5).

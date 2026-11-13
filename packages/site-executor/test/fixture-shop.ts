@@ -333,7 +333,29 @@ export function shopModel(origin: string): SiteModel {
         id: "urn:op:total",
         actionType: `${S}ViewAction`,
         label: "Basket total",
-        inputs: [],
+        inputs: [
+          {
+            name: "delivery",
+            path: [`${S}deliveryMethod`],
+            range: `${XSD}string`,
+            required: true,
+            location: "query",
+          },
+          {
+            name: "amount",
+            path: [`${S}amount`, `${S}value`],
+            range: `${XSD}decimal`,
+            required: true,
+            location: "query",
+          },
+          {
+            name: "currency",
+            path: [`${S}amount`, `${S}currency`],
+            range: `${XSD}string`,
+            required: true,
+            location: "query",
+          },
+        ],
         request: { method: "GET", urlTemplate: `${origin}/api/total` },
         session: "signed-in",
         effect: "read",
@@ -500,7 +522,14 @@ export function shopModel(origin: string): SiteModel {
         steps: [
           { operation: "urn:op:search", bind: { q: "$input.name" } },
           { operation: "urn:op:add-to-cart", bind: { sku: `$step0.${S}sku`, qty: "1" } },
-          { operation: "urn:op:total", bind: {} },
+          {
+            operation: "urn:op:total",
+            bind: {
+              delivery: "$input.delivery",
+              amount: `$step0.${S}price`,
+              currency: `$step0.${S}priceCurrency`,
+            },
+          },
           {
             operation: "urn:op:checkout",
             bind: {

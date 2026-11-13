@@ -16,6 +16,8 @@ export class ExtractionError extends Error {
 export interface ExtractedItem {
   iri?: string;
   values: Map<string, string[]>;
+  /** RDF kinds survive response bindings, even into scalar write parameters. */
+  terms?: Map<string, Quad_Object[]>;
 }
 interface RawValue {
   lexical: string;
@@ -34,6 +36,7 @@ export interface ExtractOptions {
 export interface ExtractOutput {
   items: ExtractedItem[];
   turtle: string;
+  truncation: { items: boolean; values: boolean };
   /** Re-render retained structured values with newly discovered secrets. */
   render: (redact: (text: string) => string) => Promise<string>;
 }
@@ -90,6 +93,7 @@ function rawItems(
   body: string,
   maxItems: number,
   maxField: number,
+  truncation: ExtractOutput["truncation"],
   account: (rule: FieldRule | undefined, count: number) => void,
 ): Map<FieldRule, RawValue[]>[] {
   let roots: unknown[];
@@ -101,6 +105,9 @@ function rawItems(
       throw new ExtractionError("response is not valid JSON");
     }
     const root = extraction.itemPath ? jsonPointer(doc, extraction.itemPath) : doc;
+    truncation.items = Array.isArray(root)
+      ? root.length > maxItems
+      : root !== undefined && maxItems === 0;
     roots =
       root === undefined
         ? []
@@ -109,9 +116,9 @@ function rawItems(
           : [root].slice(0, maxItems);
   } else {
     const doc = parseHtml(body);
-    roots = extraction.itemPath
-      ? selectElements(extraction.itemPath, doc, maxItems)
-      : [doc].slice(0, maxItems);
+    roots = extraction.itemPath ? selectElements(extraction.itemPath, doc, maxItems + 1) : [doc];
+    truncation.items = roots.length > maxItems;
+    roots = roots.slice(0, maxItems);
   }
   return roots.map((item) => {
     account(undefined, 1);
@@ -161,7 +168,8 @@ export async function extract(
   // Account while reading fields, rather than building all field arrays first.
   let valueCount = 0,
     quadCount = 0;
-  const retained = rawItems(extraction, body, maxItems, maxField, (rule, count) => {
+  const truncation = { items: false, values: false };
+  const retained = rawItems(extraction, body, maxItems, maxField, truncation, (rule, count) => {
     if (!rule) quadCount += count;
     else {
       valueCount += count;
@@ -171,8 +179,11 @@ export async function extract(
     if (quadCount > maxQuads) throw new ExtractionError("quad limit exceeded");
   });
   const idRule = findIdRule(extraction);
+  for (const raw of retained)
+    for (const values of raw.values())
+      if (values.some((v) => v.lexical.length > maxLen)) truncation.values = true;
   const items = retained.map((raw) => {
-    const item: ExtractedItem = { values: new Map() };
+    const item: ExtractedItem = { values: new Map(), terms: new Map() };
     const id = idRule ? raw.get(idRule)?.[0]?.lexical : undefined;
     const iri = id === undefined ? undefined : resolveIri(id, options.baseUrl);
     if (iri && options.redact(iri) === iri) item.iri = iri;
@@ -180,13 +191,26 @@ export async function extract(
       // Untrusted prose is never a fact source for a subsequent operation.
       if (rule.untrusted || values.length === 0) continue;
       const prop = expandIri(rule.property);
-      item.values.set(prop, [...(item.values.get(prop) ?? []), ...values.map((v) => v.lexical)]);
+      const terms = values.flatMap<Quad_Object>((v) => {
+        if (rule.datatype === "iri") {
+          const iri = resolveIri(v.lexical, options.baseUrl);
+          return iri ? [namedNode(iri)] : [];
+        }
+        return [
+          rule.datatype || v.inferred
+            ? literal(v.lexical, namedNode(expandIri(rule.datatype ?? v.inferred ?? "")))
+            : literal(v.lexical),
+        ];
+      });
+      item.terms?.set(prop, [...(item.terms.get(prop) ?? []), ...terms]);
+      item.values.set(prop, [...(item.values.get(prop) ?? []), ...terms.map((v) => v.value)]);
     }
     return item;
   });
   const render = async (redactor: (text: string) => string): Promise<string> => {
     const redact = (value: string): string => {
       const s = redactor(value);
+      if (s.length > maxLen) truncation.values = true;
       return s.length > maxLen ? `${s.slice(0, maxLen)}…` : s;
     };
     // n3 writes incrementally into this bounded sink. Do not first allocate an
@@ -252,5 +276,5 @@ export async function extract(
     if (bytes > maxBytes) throw new ExtractionError("output byte limit exceeded");
     return chunks.join("");
   };
-  return { items, turtle: await render(options.redact), render };
+  return { items, turtle: await render(options.redact), truncation, render };
 }

@@ -265,6 +265,12 @@ function validatedModel(source: SiteModel): SiteModel {
   const operations = new Set(model.operations.map((op) => op.id));
   for (const flow of model.flows) {
     if (!flow.steps.length) throw new BindingError("empty flow");
+    const steps = flow.steps.map((step) => model.operations.find((op) => op.id === step.operation));
+    if (
+      normaliseEffect(flow.effect) === "payment" &&
+      !steps.some((op) => op && normaliseEffect(op.effect) === "payment")
+    )
+      throw new BindingError("payment flow needs a payment operation");
     for (const [index, step] of flow.steps.entries()) {
       if (!operations.has(step.operation))
         throw new BindingError("flow references unknown operation");
@@ -290,6 +296,7 @@ interface ObservationRecord {
   url: string;
   output?: ExtractOutput;
   createdLocation?: string;
+  inputs?: Record<string, string>;
 }
 interface Progress {
   index: number;
@@ -605,6 +612,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         url: res.url.href,
         ...(res.createdLocation ? { createdLocation: res.createdLocation } : {}),
         output: out,
+        inputs: { ...values },
       },
       items: out.items,
     };
@@ -645,7 +653,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
       }
       const prop = m[2] === "@id" ? "@id" : expandIri(m[2] as string);
       const first = stepItems[n]?.[0];
-      const v = prop === "@id" ? first?.iri : first?.values.get(prop)?.[0];
+      const term = prop === "@id" ? undefined : first?.terms?.get(prop)?.[0];
+      const v = prop === "@id" ? first?.iri : (term?.value ?? first?.values.get(prop)?.[0]);
       if (v === undefined) {
         if (param.required) {
           throw new BindingError(`step ${index} needs ${prop} from step ${n}, which returned none`);
@@ -1009,6 +1018,19 @@ export function createExecutor(options: ExecutorOptions): Executor {
           const resolved = operationValues(op, values);
           const compiled = compileOperation(op, resolved, origin);
           const sources = stepSources(flow, i);
+          // Only strongest-effect steps inherit a stronger declared flow effect.
+          // Preparatory writes keep their own class; every payment gate requires evidence.
+          const ownEffect = normaliseEffect(op.effect);
+          const strongest = steps.reduce<EffectClass>(
+            (effect, step) => maxEffect(effect, step.effect),
+            "read",
+          );
+          const effect =
+            ownEffect === "read"
+              ? "read"
+              : flow && ownEffect === strongest
+                ? maxEffect(ownEffect, effectiveEffect(model, flow, undefined, steps))
+                : ownEffect;
           const fingerprint =
             normaliseEffect(op.effect) !== "read" ? requestFingerprint(compiled) : undefined;
           if (fingerprint && opts.excludeFingerprints?.includes(fingerprint))
@@ -1018,7 +1040,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
               error: "already done in this task; ask the person if they really want another",
             });
           let evidence: MoneyEvidence | undefined;
-          const payment = normaliseEffect(op.effect) === "payment";
+          const payment = effect === "payment";
           if (flow && normaliseEffect(op.effect) !== "read") {
             const lastWrite = steps
               .slice(0, i)
@@ -1050,6 +1072,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
                           operation: read,
                           url: record.url,
                           items: progress.stepItems[n] ?? [],
+                          values: record.inputs,
+                          sources: stepSources(flow, n),
+                          truncation: record.output?.truncation,
                         },
                       ]
                     : [];
@@ -1060,6 +1085,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
               );
           }
           const money = resolvedMoney(request, op, resolved, sources, compiled, evidence);
+          if (payment && (!evidence || money.amount === undefined || money.currency === undefined))
+            throw new MoneyRefusal("payment needs trusted site price evidence");
           // The host's spending limit sees the cumulative charge in this flow.
           if (
             money.currency !== undefined &&
@@ -1074,13 +1101,6 @@ export function createExecutor(options: ExecutorOptions): Executor {
           const authorizedMoney = total !== undefined ? { ...money, amount: total } : money;
           if (evidence && authorizedMoney.amount !== undefined)
             assertFactsCap(claims, { amount: authorizedMoney.amount, currency: evidence.currency });
-          const effect =
-            normaliseEffect(op.effect) === "read"
-              ? "read"
-              : maxEffect(
-                  op.effect,
-                  flow ? effectiveEffect(model, flow, undefined, steps) : op.effect,
-                );
           const gateInputs = authorizationInputs(inputs, resolved, i, flow);
           const digest = approvalDigest({
             site: origin,

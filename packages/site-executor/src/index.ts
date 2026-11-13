@@ -40,7 +40,13 @@ export {
   type PlannedRequest,
   planToRequests,
 } from "./executor.js";
-export { type ExtractedItem, ExtractionError, extract } from "./extract.js";
+export {
+  type ExtractedItem,
+  ExtractionError,
+  type ExtractOptions,
+  type ExtractOutput,
+  extract,
+} from "./extract.js";
 export {
   type ApprovalGate,
   type ApprovalRequest,

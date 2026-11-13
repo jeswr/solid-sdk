@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   cookiesFor,
   createApprovalGate,
@@ -160,7 +161,11 @@ export function createTaskExecutor(options: Omit<ExecutorOptions, "gate">): Task
       };
       await remember();
       const result = await executor.execute(request, opts);
-      await remember();
+      try {
+        await remember();
+      } catch {
+        return { ...result, refreshError: "Session secret refresh failed after execution." };
+      }
       return result;
     },
   };

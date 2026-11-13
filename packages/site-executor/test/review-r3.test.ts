@@ -257,6 +257,8 @@ describe("r3 money evidence", () => {
 
   it("accepts one fresh total after a write without demanding product quantity on the total", async () => {
     const f = fixture(true);
+    f.pay.inputs = [];
+    required(f.flow.steps.at(-1)).bind = {};
     const result = await f
       .executor(f.transport([product({ totalPaymentDue: "20" })]))
       .execute(f.buy());

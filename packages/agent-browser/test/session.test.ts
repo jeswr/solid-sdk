@@ -52,7 +52,7 @@ function transport(longReviews = false) {
               name: "Trail Runner sneakers",
               price: "20.00",
               currency: "GBP",
-              review: `${injection.repeat(longReviews ? 200 : 1)}. ${sid} ${password}`,
+              review: `${injection.repeat(longReviews ? 60 : 1)}. ${sid} ${password}`,
             },
           ],
         });

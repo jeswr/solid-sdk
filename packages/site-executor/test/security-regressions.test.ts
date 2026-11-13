@@ -445,6 +445,11 @@ describe("security review regressions", () => {
     );
     const total = quote();
     total.id = "urn:total";
+    total.inputs = payment().inputs.map((input) => ({
+      ...input,
+      location: "query",
+      default: input.name === "charge" ? "10" : input.name === "currency" ? "GBP" : "104",
+    }));
     total.request.urlTemplate = `${O}/total`;
     if (!total.extraction) throw new Error("Missing extraction");
     total.extraction = { ...total.extraction, itemType: `${S}Order` };

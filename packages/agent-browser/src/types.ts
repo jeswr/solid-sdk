@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import type { ApprovalRequest, ExecutionStatus, Executor } from "@jeswr/site-executor";
+import type {
+  ApprovalRequest,
+  ExecutionResult,
+  ExecutionStatus,
+  Executor,
+} from "@jeswr/site-executor";
 import type { SiteModel } from "@jeswr/site-model";
 
 export type TaskStatus = ExecutionStatus | "repeat-blocked";
@@ -33,11 +38,14 @@ export type ApprovalDecision = "approve" | "deny" | { limit: number };
 export type Approver = (request: ApprovalRequest) => ApprovalDecision | Promise<ApprovalDecision>;
 
 export interface TaskExecutor extends Executor {
+  execute(...args: Parameters<Executor["execute"]>): Promise<TaskExecutionResult>;
   approve?(id: string): boolean;
   reject?(id: string): boolean;
   /** Host-side redaction; never sent to the planner. */
   redact?(text: string): string;
 }
+
+export type TaskExecutionResult = ExecutionResult & { refreshError?: string };
 
 export interface RunTaskOptions {
   goal: string;
@@ -73,6 +81,8 @@ export interface TraceStep {
   approvals?: NonNullable<TraceStep["approval"]>[];
   observations: string;
   error?: string;
+  /** Auxiliary host failure; execution status and commitment memory remain authoritative. */
+  refreshError?: string;
   elapsedMs: number;
 }
 

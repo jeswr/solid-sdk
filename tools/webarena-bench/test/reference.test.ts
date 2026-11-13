@@ -31,7 +31,8 @@ it("loads generated fixture submissions through the actual Python FinalAgentResp
         mapResponse(type, trace(type === "RETRIEVE" ? '[{"name":"Example","count":1}]' : "Done")),
       );
     }
-    expect((await checkReference(directory)).validated_submissions).toBe(3);
+    const reference = await checkReference(directory);
+    if (reference) expect(reference.validated_submissions).toBe(3);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

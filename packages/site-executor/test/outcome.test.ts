@@ -188,6 +188,7 @@ describe("execution outcomes", () => {
   it("a failed later write never reports an earlier extracted item as a completed result", async () => {
     const { model, operation } = fixture();
     operation.effect = "irreversible-write";
+    model.flows = [];
     operation.inputs = [];
     operation.request.bodyTemplate = "{}";
     const later: Operation = {
@@ -271,6 +272,11 @@ describe("execution outcomes", () => {
     model.operations.push({
       ...quote,
       id: `${origin}/model#total`,
+      inputs: operation.inputs.map((input) => ({
+        ...input,
+        location: "query",
+        default: input.name === "amount" ? "0.2" : input.name === "currency" ? "GBP" : "104",
+      })),
       request: { method: "GET", urlTemplate: `${origin}/total` },
       extraction: { ...quote.extraction, itemType: `${S}Order` },
     });

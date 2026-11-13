@@ -379,6 +379,7 @@ describe("CSRF sources", () => {
     const model = shopModel(shop.url);
     const checkout = model.operations.find((o) => o.id === "urn:op:checkout");
     if (checkout) checkout.effect = "irreversible-write";
+    model.flows = [];
     if (checkout?.csrf?.[0])
       checkout.csrf[0].source = {
         kind: "html",
@@ -403,18 +404,18 @@ describe("flows", () => {
       `[] a schema:BuyAction ; schema:deliveryMethod "${delivery}" ; schema:object [ a schema:Product ; schema:name "${name}" ; schema:offers [ schema:price 20 ; schema:priceCurrency "gbp" ] ] .`,
     );
 
-  it("prefers the flow, gates it as a payment and binds $step0 values into later steps", async () => {
+  it("prefers the flow, gates each write by its effect and binds $step0 values into later steps", async () => {
     const gate = createApprovalGate();
     const executor = createExecutor({ model: shopModel(shop.url), sessions, gate });
     const ask = await executor.execute(buy());
     expect(ask.status).toBe("needs-approval");
     expect(ask.target).toMatchObject({ kind: "flow", id: "urn:flow:buy" });
-    expect(ask.approval?.effect).toBe("payment");
+    expect(ask.approval?.effect).toBe("reversible-write");
     expect(ask.approval?.summary).toMatch(/^Buy Trail Runner for GBP 20.00 on 127\.0\.0\.1:\d+$/);
     gate.approve(ask.approval?.id as string);
     const checkout = await executor.execute(buy(), { approvalId: ask.approval?.id as string });
-    expect(checkout.status).toBe("needs-approval");
-    expect(checkout.approval).toMatchObject({ amount: "20", currency: "GBP" });
+    expect(checkout.status, checkout.error).toBe("needs-approval");
+    expect(checkout.approval).toMatchObject({ effect: "payment", amount: "20", currency: "GBP" });
     gate.approve(checkout.approval?.id as string);
     const r = await executor.execute(buy(), { approvalId: checkout.approval?.id as string });
     expect(r.status).toBe("done");
@@ -434,8 +435,8 @@ describe("flows", () => {
       "GET /api/search?q=Trail%20Runner&page=1",
       "GET /api/search?q=Trail%20Runner&page=1",
       "POST /api/cart/items",
-      "GET /api/total",
-      "GET /api/total",
+      "GET /api/total?delivery=express&amount=20.0&currency=GBP",
+      "GET /api/total?delivery=express&amount=20.0&currency=GBP",
       "GET /checkout",
       "POST /checkout",
       "GET /orders/1000",
@@ -495,9 +496,13 @@ describe("flows", () => {
   it("gates on the strongest step effect when a flow under-declares", async () => {
     const model = shopModel(shop.url);
     (model.flows[0] as { effect: string }).effect = "read";
-    const executor = createExecutor({ model, sessions });
-    const r = await executor.execute(buy());
-    expect(r.status).toBe("needs-approval");
+    const gate = createApprovalGate();
+    const executor = createExecutor({ model, sessions, gate });
+    const first = await executor.execute(buy());
+    expect(first.approval?.effect).toBe("reversible-write");
+    gate.approve(first.approval?.id ?? "");
+    const r = await executor.execute(buy(), { approvalId: first.approval?.id });
+    expect(r.status, r.error).toBe("needs-approval");
     expect(r.approval?.effect).toBe("payment");
   });
 
@@ -558,7 +563,7 @@ describe("dry run", () => {
     expect(plan.requests.map((r) => `${r.method} ${r.url}`)).toEqual([
       "GET https://shop.test/api/search?q=Trail%20Runner&page=1",
       "POST https://shop.test/api/cart/items",
-      "GET https://shop.test/api/total",
+      "GET https://shop.test/api/total?delivery=standard&amount=%24step0.https%3A%2F%2Fschema.org%2Fprice&currency=%24step0.https%3A%2F%2Fschema.org%2FpriceCurrency",
       "POST https://shop.test/checkout",
     ]);
     expect(plan.requests[1]?.body).toBe(`{"sku":"$step0.${S}sku","qty":1}`);

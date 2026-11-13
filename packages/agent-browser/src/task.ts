@@ -8,6 +8,7 @@ import type {
   ApprovalDecision,
   PlannerHistory,
   RunTaskOptions,
+  TaskExecutionResult,
   TaskTrace,
   TraceStep,
 } from "./types.js";
@@ -112,7 +113,7 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
         break;
       }
       step.request = redact(output.turtle);
-      let result: ExecutionResult;
+      let result: TaskExecutionResult;
       let request: ReturnType<typeof parseActionRequest>;
       try {
         // Parse and serialise, so missing conventional prefix declarations are accepted.
@@ -171,6 +172,7 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
         result = failure("Executor failed to execute the action.");
       }
       remember(result);
+      if (result.refreshError) step.refreshError = result.refreshError;
       step.statuses.push(result.status);
       let approvalCount = 0;
       while (result.status === "needs-approval" && result.approval) {
@@ -218,12 +220,17 @@ export async function runTask(options: RunTaskOptions): Promise<TaskTrace> {
           try {
             result = await executor.execute(request, { approvalId: approval.id, ...exclusions() });
           } catch {
-            result = failure(
-              "Executor failed to execute the approved action; do not assume it was completed.",
-            );
+            result = {
+              ...failure(
+                "Executor failed to execute the approved action; do not assume it was completed.",
+              ),
+              committed: result.committed,
+              observations: result.observations,
+            };
           }
         }
         remember(result);
+        if (result.refreshError) step.refreshError = result.refreshError;
         step.statuses.push(result.status);
       }
       step.status = result.errorKind === "repeat" ? "repeat-blocked" : result.status;

@@ -65,6 +65,11 @@ requests to the existing executor, including its origin guard, manual redirect c
 and cookie storage. Login
 does not run through the planner. Use the same session provider and persona for login
 and execution. The adapter remembers login/session secrets for trace redaction.
+`createTaskExecutor.execute` returns `TaskExecutionResult`, extending the executor result with
+an optional safe `refreshError`. A post-execution session/secret refresh failure preserves the
+executor's status, observations, receipt and committed/uncertain list. `runTask` reports the
+auxiliary error in `TraceStep.refreshError` and still blocks repeats; store exceptions never
+enter the trace or planner history.
 
 ## Planner protocol
 
