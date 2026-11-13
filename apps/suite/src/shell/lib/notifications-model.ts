@@ -33,6 +33,8 @@ export interface NotificationSource {
   list(signal: AbortSignal): Promise<SuiteNotification[]>;
   subscribe?(onChange: () => void): () => void;
   markRead?(ids: string[]): Promise<void>;
+  /** Restore unread state, so undoing "mark all read" survives a reload. */
+  markUnread?(ids: string[]): Promise<void>;
 }
 export type AccessDecision =
   | { approve: true; role: string; duration?: "forever" | "day" | "month" | "year" }

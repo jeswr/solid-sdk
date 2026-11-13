@@ -2,6 +2,7 @@
 export interface NotificationReadState {
   load(): Set<string>;
   save(ids: ReadonlySet<string>): void;
+  remove?(ids: ReadonlySet<string>): void;
 }
 
 /** Newest receipts kept per account; older notifications have long left the tray. */
@@ -31,6 +32,18 @@ export function createNotificationReadState(
   };
   return {
     load,
+    remove(ids) {
+      if (!accountId) return;
+      try {
+        const kept = [...load()].filter((id) => !ids.has(id));
+        (storage ?? globalThis.localStorage).setItem(
+          key,
+          JSON.stringify({ version: 1, accountId, ids: kept }),
+        );
+      } catch {
+        // The restored overlay remains usable when storage is denied.
+      }
+    },
     save(ids) {
       if (!accountId || !ids.size) return;
       try {
