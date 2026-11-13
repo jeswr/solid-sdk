@@ -483,10 +483,12 @@ all redirects. Listing skips containers whose conversation metadata returns 404,
 while preserving permission, transport and message-read errors.
 
 Chat tools are registered alongside the canonical pod tools and compatibility
-aliases when using the fetch-based server configuration. The chat adapter retains
-its ACL discovery and write safeguards. The portable `PodPort` configuration
-registers pod and memory tools; chat tools currently require the fetch-based
-configuration for their ACL discovery.
+aliases. With the fetch-based configuration, chat ACLs are discovered with a direct HEAD.
+A portable `{ pod, readOnly }` configuration (for example storage-client's PodPort)
+registers them when the port implements `head` and has an owner WebID; ACLs are then
+discovered through `PodPort.head` and held to the same pod-scope and shape checks
+(unique WAC ACL, no query, fragment or self-reference). Without `head` or a WebID the chat
+tools are not registered. Writes still require `readOnly:false`.
 
 ## Streamable HTTP
 

@@ -11,6 +11,11 @@ import { Store } from 'n3';
 import type { z } from 'zod';
 
 // @public
+export type ChatPodConfig = Omit<SolidMcpConfig, "fetch"> & {
+    fetch?: typeof fetch;
+};
+
+// @public
 export interface CliConfig {
     account?: string;
     // (undocumented)
@@ -30,7 +35,7 @@ export interface CliConfig {
 }
 
 // @public
-export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPodPort;
+export function createChatPodPort(config: ChatPodConfig, pod?: PodPort): ChatPodPort;
 
 // @public
 export function createCliFetch(config: CliConfig, fetchImpl?: typeof fetch): Promise<typeof fetch>;
@@ -258,6 +263,6 @@ export function writeResource(source: PodSource, url: string, content: string, c
 }>;
 
 // @public
-export function writesEnabled(config: SolidMcpConfig): boolean;
+export function writesEnabled(config: Pick<SolidMcpConfig, "readOnly">): boolean;
 
 ```

@@ -138,7 +138,18 @@ export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer {
     createPodToolRegistry(pod, config.readOnly !== false, config.clientInfo),
   );
   registerPodTools(server, createContextToolRegistry(pod));
-  // Chat ACL discovery requires the original authenticated fetch capability.
   if ("fetch" in config) registerChatTools(server, { ...config, podRoot }, pod);
+  // A PodPort-only server (for example storage-client) discovers chat ACLs through its own
+  // HEAD. Without HEAD or an owner WebID it cannot protect chats, so the tools stay absent.
+  else if (pod.head && pod.webId)
+    registerChatTools(
+      server,
+      {
+        podRoot,
+        webId: pod.webId,
+        ...(config.readOnly === undefined ? {} : { readOnly: config.readOnly }),
+      },
+      pod,
+    );
   return server;
 }
