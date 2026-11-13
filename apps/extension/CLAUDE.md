@@ -98,12 +98,20 @@ Request only optional `cookies` from the worker-armed popup click. The exclusive
 A second popup receives "Another sharing is in progress" without another request or native
 message. Success, failure, Cancel, timeout and port disconnect all remove cookie access and
 verify absence before releasing the lease. Cancellation invalidates in-flight work immediately
-and terminal views never move backwards. Request settlement, removal, absence verification
+and terminal views never move backwards. Removal, absence verification
 and marker writes retain the lease and mutex through completion, even after Cancel. Other
 popups show "Finishing the previous sharing" meanwhile. Each lease owns its cleanup result;
-an earlier failure never skips a newer lease's cleanup. An unresolved prompt retains its lease
-until its result settles and cleanup completes; onAdded alone cannot release it. A missing
-outcome blocks sharing for that worker lifetime. A delayed armed click after expiry may still request permission in
+an earlier failure never skips a newer lease's cleanup. An unsettled prompt waits for the
+popup's report only until disconnect or lease timeout. At that point the worker owns an
+orphaned cleanup state: immediately remove `cookies` and verify absence, retaining the lease
+fence for sixty seconds after disconnect/timeout. Any onAdded cookie grant during that window
+is removed immediately outside the mutex, even while another revocation is pending. This
+state never reads cookies, sends native messages or requests host access. A second popup shows
+"Finishing the previous sharing" and the existing warning with an enabled "Remove cookie
+access" retry button on removal failure. At the end of the window, join every pending
+revocation and verify absence before releasing the fence; failure retains the fence until
+cleanup succeeds. Ignore abandoned/late settlement reports. The stateless onAdded/startup
+rule removes grants arriving later. A delayed armed click after expiry may still request permission in
 Chrome, but its grant is removed without a current acquiring lease. A replacement worker also
 removes it at start, even with cleared session storage and no marker.
 Required `<all_urls>` stays in place and host grants never change; temporary cookie access

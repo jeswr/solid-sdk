@@ -4,9 +4,10 @@ import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CAPTURE_CLEANUP_KEY } from '../src/background/agent-capture-cleanup';
 import { mountAgentSignIn } from '../src/popup/agent-sign-in-view';
-import { captureHarness, deferred, phase, site } from './agent-capture-fixture';
+import { captureHarness, deferred, phase, reviewing, site } from './agent-capture-fixture';
 
 afterEach(() => {
+  vi.useRealTimers();
   document.body.innerHTML = '';
 });
 function fixture() {
@@ -35,6 +36,53 @@ function fixture() {
   return { h, p, root, button, text, warning, mount, choose, review };
 }
 const nativeTypes = (p: ReturnType<typeof fixture>) => p.h.native.mock.calls.map(([r]) => r.type);
+
+it.each([
+  30000, 60000,
+])('shows finishing and an enabled orphan cleanup retry at %s ms, retaining the fence until verified absence', async (delay) => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const a = await reviewing(f.h);
+  const prompt = deferred<boolean>();
+  f.h.browser.permissions.request.mockImplementationOnce(() => prompt.promise);
+  void a.allow();
+  await phase(a, 'prompt');
+  f.h.native.mockClear();
+  f.h.state.cookies = true;
+  f.h.browser.permissions.remove.mockRejectedValue(new Error('fixture-secret'));
+  a.client.disconnect();
+  f.mount();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.text()).toBe('Finishing the previous sharing.');
+  expect(f.warning().hidden).toBe(false);
+  expect(f.warning().textContent).toContain("Chrome's extension settings");
+  expect(f.button('remove-cookie-access').textContent).toBe('Remove cookie access');
+  expect(f.button('remove-cookie-access').disabled).toBe(false);
+  expect(f.button('review').disabled).toBe(true);
+  expect(f.h.browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: '!' });
+  await vi.advanceTimersByTimeAsync(delay);
+  f.p.start();
+  expect(f.p.view.phase).toBe('busy');
+  expect(f.h.browser.cookies.getAll).not.toHaveBeenCalled();
+  expect(f.h.native).not.toHaveBeenCalled();
+  f.h.browser.permissions.remove.mockImplementation(async () => {
+    f.h.state.cookies = false;
+    return true;
+  });
+  f.button('remove-cookie-access').click();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.h.state.cookies).toBe(false);
+  expect(f.warning().hidden).toBe(true);
+  if (delay < 60000) {
+    f.p.start();
+    expect(f.p.view.message).toBe('Finishing the previous sharing.');
+    await vi.advanceTimersByTimeAsync(60000 - delay);
+  }
+  await f.choose();
+  expect(f.button('review').disabled).toBe(false);
+  expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+  f.p.client.disconnect();
+});
 
 it('requests cookies synchronously in the authorized click gesture and renders worker metadata before sending', async () => {
   const f = fixture();

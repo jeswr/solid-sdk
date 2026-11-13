@@ -41,7 +41,7 @@ interface Lease {
   id: number;
   owner: Owner;
   tab: Tab;
-  phase: 'reviewing' | 'acquiring' | 'confirming' | 'sending' | 'cleaning';
+  phase: 'reviewing' | 'acquiring' | 'confirming' | 'sending' | 'cleaning' | 'orphaned';
   expectsCookies: boolean;
   authorizationInvalid: boolean;
   choices: CaptureChoices;
@@ -52,16 +52,22 @@ interface Lease {
   cancelled: boolean;
   stop(): void;
   stopped: Promise<never>;
-  permission?: { settled: Promise<boolean>; settle(allowed: boolean): void };
+  permission?: {
+    pending: boolean;
+    settled: Promise<boolean | undefined>;
+    settle(allowed: boolean | undefined): void;
+  };
+  orphaned?: { expired: boolean; removals: Set<Promise<boolean>> };
   cleanup?: Promise<boolean>;
   timer: ReturnType<typeof setTimeout>;
   token?: string;
 }
 
-/** One worker, one lease, one mutex for *all* Chrome/native work (including cleanup).
+/** One worker, one lease, one mutex for Chrome/native work (including cleanup).
  * Cancellation, authorization and prompt ingress latches run outside the mutex.
- * Mutating steps settle under the mutex even after cancellation. An outstanding
- * prompt retains its lease until its result settles and cleanup completes.
+ * An orphaned prompt wakes settlement waits and retains a sixty-second fence.
+ * Its idempotent revocations bypass the mutex; no reads or sends are allowed.
+ * All revocations must finish before that lease can end.
  */
 export function installAgentCapture(
   browser: typeof chrome,
@@ -145,6 +151,8 @@ export function installAgentCapture(
     !active.cancelled &&
     !active.authorizationInvalid &&
     ['acquiring', 'confirming', 'sending'].includes(active.phase);
+  const orphanedLease = () =>
+    active?.orphaned ? active : pendingPrompt?.orphaned ? pendingPrompt : undefined;
   const remove = async () => {
     cleanupNotice = 'cleaning';
     warnings();
@@ -186,6 +194,17 @@ export function installAgentCapture(
       await cleanupStatus(true);
       return false;
     }
+  };
+  const removeOrphaned = (lease: Lease) => {
+    const orphaned = lease.orphaned!;
+    // Never queue behind a settlement wait or another removal. In this state
+    // authority can only be revoked, and the fence prevents a new capture.
+    const removal = remove();
+    orphaned.removals.add(removal);
+    void removal.then(() => {
+      orphaned.removals.delete(removal);
+      if (orphaned.expired) enqueue(() => finish(lease, 'cancelled', 'Sharing cancelled.'));
+    });
   };
   const current = async (): Promise<Tab> => {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -233,9 +252,8 @@ export function installAgentCapture(
     phase: 'failed' | 'shared' | 'cancelled',
     message: string,
   ) => {
-    if (active !== lease) return;
-    lease.phase = 'cleaning';
-    clearTimeout(lease.timer);
+    if (active !== lease && !(lease.orphaned && pendingPrompt === lease && !active)) return;
+    if (!lease.orphaned) lease.phase = 'cleaning';
     emit(lease.owner, {
       phase: lease.cancelled ? 'cancelled' : 'cleaning',
       message: lease.cancelled ? 'Sharing cancelled.' : message,
@@ -248,9 +266,24 @@ export function installAgentCapture(
     do {
       permission = lease.permission;
       await permission?.settled;
+      if (lease.orphaned) {
+        // Keep the mutex available during the settle window, while the lease
+        // itself fences new captures. Join every concurrent revocation before
+        // final verification; none may outlive the fence and revoke a new lease.
+        let cleaned: boolean;
+        do {
+          await Promise.all(lease.orphaned.removals);
+          if (!lease.orphaned.expired) return;
+          lease.cleanup = recover();
+          cleaned = await lease.cleanup;
+        } while (lease.orphaned.removals.size);
+        if (!cleaned) return; // A failed cleanup retains the fence and retry UI.
+        break;
+      }
       lease.cleanup = recover();
       await lease.cleanup;
     } while (lease.permission !== permission);
+    clearTimeout(lease.timer);
     if (pendingPrompt === lease) pendingPrompt = undefined;
     // Cancel can arrive while removal is pending. Never publish an older completion.
     emit(lease.owner, {
@@ -258,11 +291,28 @@ export function installAgentCapture(
       message: lease.cancelled ? 'Sharing cancelled.' : message,
     });
     active = undefined;
+    // A popup opened during cleanup must become usable when the fence ends.
+    if (!pendingPrompt)
+      for (const owner of owners)
+        if (owner !== lease.owner && owner.view.phase === 'busy') enqueue(() => load(owner));
   };
-  const cancel = (lease: Lease) => {
-    if (active !== lease) return;
+  const cancel = (lease: Lease, abandoned = false) => {
+    if (active !== lease && !(abandoned && pendingPrompt === lease)) return;
     lease.cancelled = true;
     lease.stop();
+    if (abandoned && lease.permission?.pending && !lease.orphaned) {
+      lease.phase = 'orphaned';
+      lease.orphaned = { expired: false, removals: new Set() };
+      clearTimeout(lease.timer);
+      lease.timer = setTimeout(() => {
+        lease.orphaned!.expired = true;
+        enqueue(() => finish(lease, 'cancelled', 'Sharing cancelled.'));
+      }, 60000);
+      // Undefined is abandonment, never an authorization result. It wakes both
+      // the prompt handler and cleanup even when the popup can never report back.
+      lease.permission.settle(undefined);
+      removeOrphaned(lease);
+    }
     emit(lease.owner, { phase: 'cancelled', message: 'Sharing cancelled.', preview: undefined });
     warnings();
     enqueue(() => finish(lease, 'cancelled', 'Sharing cancelled.'));
@@ -354,7 +404,7 @@ export function installAgentCapture(
       cancelled: false,
       stopped,
       stop,
-      timer: setTimeout(() => cancel(lease), 120000),
+      timer: setTimeout(() => cancel(lease, true), 120000),
     };
     active = lease;
     owner.lastLease = lease;
@@ -374,7 +424,11 @@ export function installAgentCapture(
       });
     });
   };
-  const granted = async (lease: Lease, allowed: boolean) => {
+  const granted = async (lease: Lease, allowed: boolean | undefined) => {
+    if (lease.orphaned) {
+      await finish(lease, 'cancelled', 'Sharing cancelled.');
+      return;
+    }
     if (pendingPrompt === lease) pendingPrompt = undefined;
     if (active !== lease) {
       // A stale result cannot claim a newer lease's authority.
@@ -474,6 +528,11 @@ export function installAgentCapture(
   browser.permissions.onRemoved.addListener(invalidate);
   browser.permissions.onAdded.addListener((permissions) => {
     const cookies = permissions.permissions?.includes('cookies');
+    const orphaned = orphanedLease();
+    if (cookies && orphaned) {
+      removeOrphaned(orphaned);
+      return;
+    }
     // Only the current armed gesture may acquire authority. Every permission change
     // during confirmation/sending invalidates the authorization latch.
     if (
@@ -520,7 +579,13 @@ export function installAgentCapture(
       void browser.runtime.lastError;
       owner.closed = true;
       owners.delete(owner);
-      if (active?.owner === owner) cancel(active);
+      const lease =
+        active?.owner === owner
+          ? active
+          : pendingPrompt?.owner === owner
+            ? pendingPrompt
+            : undefined;
+      if (lease) cancel(lease, true);
     });
     port.onMessage.addListener((input: unknown) => {
       const intent = captureIntent(input);
@@ -539,6 +604,11 @@ export function installAgentCapture(
         return;
       }
       if (intent.type === 'removeCookieAccess') {
+        const orphaned = orphanedLease();
+        if (orphaned) {
+          removeOrphaned(orphaned);
+          return;
+        }
         enqueue(async () => {
           if (active || pendingPrompt) {
             emit(owner, { phase: 'busy', message: busyMessage() });
@@ -565,11 +635,24 @@ export function installAgentCapture(
       if (intent.type === 'requesting') {
         if (!lease.expectsCookies) return;
         lease.expectsCookies = false;
-        let settle!: (allowed: boolean) => void;
-        const settled = new Promise<boolean>((resolve) => {
+        let settle!: (allowed: boolean | undefined) => void;
+        const settled = new Promise<boolean | undefined>((resolve) => {
           settle = resolve;
         });
-        lease.permission = { settled, settle };
+        // Even a delayed armed request whose original lease already ended must
+        // have a worker deadline; its popup can disappear without reporting back.
+        const timeout = setTimeout(() => cancel(lease, true), 120000);
+        const permission = {
+          pending: true,
+          settled,
+          settle: (allowed: boolean | undefined) => {
+            if (!permission.pending) return;
+            permission.pending = false;
+            clearTimeout(timeout);
+            settle(allowed);
+          },
+        };
+        lease.permission = permission;
         pendingPrompt = lease;
         const valid =
           active === lease && !lease.cancelled && !lease.authorizationInvalid && !cleanupNotice;
@@ -582,8 +665,8 @@ export function installAgentCapture(
         enqueue(async () => {
           if (valid && !lease.cancelled && !lease.authorizationInvalid && active === lease)
             emit(owner, { phase: 'prompt', message: 'Waiting for cookie permission…' });
-          // The result is settled at ingress, so waiting here cannot deadlock the
-          // mutex's queue. onAdded alone does not settle an outstanding request.
+          // Result ingress or worker-owned abandonment wakes this wait. onAdded
+          // never authorizes a request or releases an orphaned lease's fence.
           await granted(lease, await settled);
         });
         return;

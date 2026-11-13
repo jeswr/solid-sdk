@@ -416,15 +416,23 @@ latch when it resumes, and dispatch checks it immediately before sending. Nothin
 Cookie access lasts only for this exclusive review/confirmation lease, which expires after
 two minutes. Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
 cleanup: remove only `cookies`, verify absence, then release the lease. Host grants never
-change. Cancel marks the lease cancelled immediately; request settlement, permission removal,
-absence verification and marker writes retain the lease and mutex until they finish. Other
+change. Cancel marks the lease cancelled immediately; permission removal, absence verification
+and marker writes retain the lease and mutex until they finish. Other
 popups show **Finishing the previous sharing** meanwhile. Cancellation is final even if an
-older async step completes afterward. An unresolved permission prompt retains its lease after
-cancellation/closure until its result settles and cleanup finishes; `permissions.onAdded`
-alone does not release it. If a closed popup cannot report the outcome, sharing stays blocked
-for that worker lifetime, and a replacement worker removes any surviving grant at startup.
+older async step completes afterward. A cancelled permission prompt waits for its result only
+until disconnect or lease timeout. If the popup disconnects or the lease expires while the
+prompt is unsettled, the worker takes over in an orphaned cleanup state: it immediately removes
+`cookies` and verifies absence, then keeps the lease fence for sixty seconds from that event.
+Every cookie grant arriving during this window is removed immediately, bypassing the mutex;
+these idempotent removals cannot read cookies, send native messages or request host access.
+A second popup shows **Finishing the previous sharing**, with the warning and enabled
+**Remove cookie access** retry button if removal fails. After the window, all pending removals
+must finish and absence must be verified before the lease ends; a failed verification keeps
+the fence until cleanup succeeds. Settlement reports after abandonment are ignored. Grants
+arriving after the window are removed by the global startup/onAdded rule.
 Cleanup results belong to each lease: a failed earlier removal never skips a newer lease's
-cleanup. Cancellation can interrupt non-mutating checks; mutating work completes under the mutex.
+cleanup. Cancellation can interrupt non-mutating checks; mutating work completes before the
+lease is released, including any concurrent orphaned revocations.
 Only a small display marker (`agentCaptureCleanup: true`) is stored in `chrome.storage.local`
 while removal is in progress or has failed; it is cleared after verified absence. No ownership
 metadata or session-storage fallback is needed. The marker contains no cookie values and never

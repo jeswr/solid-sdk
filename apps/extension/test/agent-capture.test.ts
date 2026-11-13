@@ -292,7 +292,7 @@ describe('worker capture lease', () => {
   ])('quarantines a late grant with another lease attempting to start after %s', async (exit) => {
     vi.useFakeTimers();
     const h = captureHarness();
-    let b = h.popup();
+    const b = h.popup();
     b.load();
     await phase(b, 'ready');
     const a = await reviewing(h);
@@ -309,14 +309,14 @@ describe('worker capture lease', () => {
     prompt.resolve(true);
     await allowed;
     if (exit === 'disconnect') {
-      // A closed popup cannot report settlement. onAdded alone must not release
-      // the lease; a replacement worker revokes the grant before another capture.
+      // A closed popup cannot report settlement. The worker revokes immediately
+      // but retains the fence through the bounded orphan settle window.
       await vi.advanceTimersByTimeAsync(0);
       b.start();
       expect(b.view.message).toBe('Finishing the previous sharing.');
-      expect(h.browser.permissions.remove).not.toHaveBeenCalled();
-      h.restart();
-      b = h.popup();
+      expect(h.state.cookies).toBe(false);
+      expect(h.browser.permissions.remove).toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(60000);
     }
     await vi.waitFor(() => expect(h.state.cookies).toBe(false));
     b.load();
@@ -603,6 +603,7 @@ describe('worker capture lease', () => {
     'sending',
     'cleaning',
   ])('verifies absence and cleans any grant on port disconnect in %s', async (stage) => {
+    vi.useFakeTimers();
     const h = captureHarness();
     const a = h.popup();
     a.load();
