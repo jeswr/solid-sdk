@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 
+import type { BoardGrouping } from "../lib/board/swimlanes";
 import { isSharedTrackerUrl } from "../lib/model/rdf";
 import { type GroupMode, groupOptions } from "../lib/views/grouping";
 import type { SortMode } from "../lib/views/project-groups";
@@ -14,6 +15,7 @@ export interface TasksPreferences {
   viewMode: Record<string, "list" | "board">;
   sort: Record<string, SortMode>;
   groupBy: Record<string, GroupMode>;
+  boardGrouping: Record<string, BoardGrouping>;
   collapsedSections: string[];
   collapsedProjects: string[];
   sidebar: { labelsOpen: boolean; projectsOpen: boolean };
@@ -26,6 +28,7 @@ export const defaultPreferences: TasksPreferences = {
   viewMode: {},
   sort: {},
   groupBy: {},
+  boardGrouping: {},
   collapsedSections: [],
   collapsedProjects: [],
   sidebar: { labelsOpen: true, projectsOpen: true },
@@ -38,6 +41,7 @@ export type PreferenceAction =
   | { type: "favouriteProject"; url: string; value: boolean }
   | { type: "groupBy"; viewId: string; value: GroupMode }
   | { type: "sort"; viewId: string; value: SortMode }
+  | { type: "boardGrouping"; viewId: string; value: BoardGrouping }
   | { type: "viewMode"; viewId: string; value: "list" | "board" }
   | { type: "collapse"; sectionId: string }
   | { type: "collapseProject"; url: string }
@@ -80,6 +84,8 @@ export function preferencesReducer(
       return { ...state, groupBy: { ...state.groupBy, [action.viewId]: action.value } };
     case "sort":
       return { ...state, sort: { ...state.sort, [action.viewId]: action.value } };
+    case "boardGrouping":
+      return { ...state, boardGrouping: { ...state.boardGrouping, [action.viewId]: action.value } };
     case "viewMode":
       return { ...state, viewMode: { ...state.viewMode, [action.viewId]: action.value } };
     case "collapse":
@@ -129,6 +135,7 @@ export function parsePreferences(raw: string | null): TasksPreferences {
       viewMode: entries(data.viewMode, ["list", "board"]),
       sort: entries(data.sort, ["manual", "due", "priority", "name"]),
       groupBy: entries(data.groupBy, Object.keys(groupOptions) as GroupMode[]),
+      boardGrouping: entries(data.boardGrouping, ["none", "priority", "assignee", "label"]),
       collapsedSections: Array.isArray(data.collapsedSections)
         ? data.collapsedSections.filter((id): id is string => typeof id === "string")
         : [],

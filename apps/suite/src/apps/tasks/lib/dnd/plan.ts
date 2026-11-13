@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
+
+import { inLane, laneFor } from "../board/swimlanes";
 import { positionForDrop } from "../views/positions";
 import { compareTasks, taskSection } from "../views/project-groups";
 import { taskDayKey } from "../views/today";
@@ -97,6 +99,7 @@ export function sortedTarget(target: DropTarget): DropTarget {
     kind: "section",
     projectUrl: target.container.projectUrl,
     sectionId: target.container.sectionId,
+    lane: target.container.lane,
     at: "end",
   };
 }
@@ -139,7 +142,7 @@ function dayPlan(active: TaskView, dayKey: string): DropPlan {
  * reorder/section drops. In a sorted list (`manual: false`) only section,
  * project and day moves apply.
  */
-export function planDrop(
+function basePlanDrop(
   active: TaskView,
   dropTarget: DropTarget,
   views: readonly TaskView[],
@@ -208,19 +211,46 @@ export function planDrop(
   }
 }
 
+/** Lane changes share the same conditional mutation as section and position changes. */
+export function planDrop(
+  active: TaskView,
+  target: DropTarget,
+  views: readonly TaskView[],
+  options: PlanOptions = {},
+): DropPlan {
+  const lane =
+    target.kind === "section"
+      ? target.lane
+      : target.kind === "task" && target.container.kind === "section"
+        ? target.container.lane
+        : undefined;
+  const destination =
+    lane ??
+    (options.groupRowsBy && options.groupRowsBy !== "none"
+      ? laneFor(active, options.groupRowsBy)
+      : undefined);
+  if (destination?.group === "label" && !inLane(active, destination)) return NONE;
+  const rows = destination ? views.filter((task) => inLane(task, destination)) : views;
+  const plan = basePlanDrop(active, target, rows, options);
+  return plan.kind === "position" && destination ? { ...plan, lane: destination } : plan;
+}
+
 /** Keyboard "Move up/down" (and Alt+↑/↓) within the rendered level; manual order only. */
 export function planMove(
   active: TaskView,
   direction: -1 | 1,
   views: readonly TaskView[],
-  { manual = true, flat = false }: PlanOptions = {},
+  { manual = true, flat = false, groupRowsBy }: PlanOptions = {},
 ): DropPlan {
   if (!manual) return NONE;
+  const lane = groupRowsBy && groupRowsBy !== "none" ? laneFor(active, groupRowsBy) : undefined;
+  if (lane) views = views.filter((task) => inLane(task, lane));
   const level = levelOf(active, views, flat);
   const all = members(level, views);
   const destination = all.findIndex((view) => view.url === active.url) + direction;
   if (destination < 0 || destination >= all.length) return NONE;
-  return planAt(active, level, destination, views);
+  const plan = planAt(active, level, destination, views);
+  return plan.kind === "position" && lane ? { ...plan, lane } : plan;
 }
 
 /**
@@ -232,8 +262,10 @@ export function moveTarget(
   active: TaskView,
   direction: -1 | 1,
   views: readonly TaskView[],
-  { manual = true, flat = false }: PlanOptions = {},
+  { manual = true, flat = false, groupRowsBy }: PlanOptions = {},
 ): DropTarget | undefined {
+  const lane = groupRowsBy && groupRowsBy !== "none" ? laneFor(active, groupRowsBy) : undefined;
+  if (lane) views = views.filter((task) => inLane(task, lane));
   const level = levelOf(active, views, flat);
   const all = members(level, views);
   const at = all.findIndex((view) => view.url === active.url);
@@ -242,7 +274,12 @@ export function moveTarget(
   return {
     kind: "task",
     url: neighbour.url,
-    container: { kind: "section", projectUrl: level.projectUrl, sectionId: level.sectionId },
+    container: {
+      kind: "section",
+      projectUrl: level.projectUrl,
+      sectionId: level.sectionId,
+      ...(lane ? { lane } : {}),
+    },
     placement: direction < 0 ? "before" : "after",
   };
 }
@@ -261,6 +298,11 @@ export function isPlaced(
   const task = views.find((view) => view.url === plan.url);
   if (!task) return false;
   if (plan.kind === "reschedule") return taskDayKey(task) === plan.dayKey;
+  const lane = plan.lane;
+  if (lane) {
+    if (!inLane(task, lane)) return false;
+    views = views.filter((view) => inLane(view, lane));
+  }
   const level = levelOf(task, views, flat);
   return (
     level.projectUrl === plan.projectUrl &&

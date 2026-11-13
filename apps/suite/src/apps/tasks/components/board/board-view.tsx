@@ -17,6 +17,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import { type BoardGrouping, boardLanes, inLane, type Swimlane } from "../../lib/board/swimlanes";
 import { formatDue, isOverdue } from "../../lib/format/due";
 import { classifyError } from "../../lib/model/errors";
 import type { StoredProject } from "../../lib/model/store";
@@ -47,10 +48,12 @@ function BoardCard({
   task,
   project,
   sectionId,
+  lane,
 }: {
   task: TaskView;
   project: StoredProject;
   sectionId: string | undefined;
+  lane?: Swimlane | undefined;
 }) {
   const tasks = useTasks();
   const now = useNow();
@@ -60,7 +63,7 @@ function BoardCard({
   const completing = useCompleting(task);
   const drag = useTaskDrag(
     task,
-    { kind: "section", projectUrl: project.url, sectionId },
+    { kind: "section", projectUrl: project.url, sectionId, lane },
     { disabled: pending || completing },
   );
   const query = new URLSearchParams(params.toString());
@@ -98,7 +101,11 @@ function BoardCard({
         </Link>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <IconButton label={`Actions for '${task.title}'`} variant="ghost">
+            <IconButton
+              label={`Actions for '${task.title}'`}
+              variant="ghost"
+              data-tsk-row={task.url}
+            >
               <Ellipsis size={18} aria-hidden="true" />
             </IconButton>
           </DropdownMenuTrigger>
@@ -161,6 +168,9 @@ function BoardColumn({
   count,
   first,
   last,
+  lane,
+  bodyOnly = false,
+  headerOnly = false,
 }: {
   project: StoredProject;
   section: Category | undefined;
@@ -168,44 +178,56 @@ function BoardColumn({
   count: number;
   first: boolean;
   last: boolean;
+  lane?: Swimlane | undefined;
+  bodyOnly?: boolean;
+  headerOnly?: boolean;
 }) {
   const heading = useId();
   return (
     <section
       className="tsk-board-column"
-      aria-label={section?.name}
-      aria-labelledby={section ? undefined : heading}
+      aria-label={section?.name ?? (bodyOnly ? "No section" : undefined)}
+      aria-labelledby={section || bodyOnly ? undefined : heading}
     >
-      {section ? (
-        <SectionHeader
+      {!bodyOnly &&
+        (section ? (
+          <SectionHeader
+            project={project}
+            section={section}
+            count={count}
+            first={first}
+            last={last}
+            board
+          />
+        ) : (
+          <div className="tsk-section-header">
+            <h2 id={heading} className="tsk-board-heading">
+              No section
+            </h2>
+            <span className="tsk-count">{count}</span>
+          </div>
+        ))}
+      {!headerOnly && (
+        <SectionEnd
           project={project}
-          section={section}
-          count={count}
-          first={first}
-          last={last}
-          board
-        />
-      ) : (
-        <div className="tsk-section-header">
-          <h2 id={heading} className="tsk-board-heading">
-            No section
-          </h2>
-          <span className="tsk-count">{count}</span>
-        </div>
+          sectionId={section?.id}
+          lane={lane}
+          className="tsk-board-body"
+        >
+          <ol className="tsk-board-cards" aria-label={`${section?.name ?? "No section"} tasks`}>
+            {rows.map((row) => (
+              <BoardCard
+                key={row.task.url}
+                task={row.task}
+                project={project}
+                sectionId={section?.id}
+                lane={lane}
+              />
+            ))}
+          </ol>
+        </SectionEnd>
       )}
-      <SectionEnd project={project} sectionId={section?.id} className="tsk-board-body">
-        <ol className="tsk-board-cards" aria-label={`${section?.name ?? "No section"} tasks`}>
-          {rows.map((row) => (
-            <BoardCard
-              key={row.task.url}
-              task={row.task}
-              project={project}
-              sectionId={section?.id}
-            />
-          ))}
-        </ol>
-      </SectionEnd>
-      <AddTaskRow project={project} sectionId={section?.id} />
+      {!bodyOnly && <AddTaskRow project={project} sectionId={section?.id} />}
     </section>
   );
 }
@@ -265,7 +287,8 @@ function AddColumn({ project }: { project: StoredProject }) {
  */
 export function BoardView({ projectUrl }: { projectUrl: string }) {
   const tasks = useTasks();
-  const { preferences } = useTasksPreferences();
+  const { preferences, dispatch } = useTasksPreferences();
+  const grouping = preferences.boardGrouping[encodeRef(projectUrl)] ?? "none";
   const project = tasks.projects.find((item) => item.url === projectUrl);
   const load = tasks.tasks[projectUrl];
   const title =
@@ -287,6 +310,18 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
   );
   const unsectioned = groups.unsectioned;
   const showNoSection = unsectioned.length > 0 || groups.sections.length === 0;
+  const columns = [
+    ...(showNoSection
+      ? [
+          {
+            section: undefined,
+            rows: unsectioned,
+            openCount: unsectioned.filter((row) => row.task.state === "open").length,
+          },
+        ]
+      : []),
+    ...groups.sections,
+  ];
   return (
     <TaskListFocus className="tsk-content tsk-board-view">
       <header className="tsk-view-header">
@@ -306,6 +341,24 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
             title
           )}
         </h1>
+        <label className="tsk-board-group">
+          Group rows by
+          <select
+            value={grouping}
+            onChange={(event) =>
+              dispatch({
+                type: "boardGrouping",
+                viewId: encodeRef(projectUrl),
+                value: event.target.value as BoardGrouping,
+              })
+            }
+          >
+            <option value="none">None</option>
+            <option value="priority">Priority</option>
+            <option value="assignee">Assignee</option>
+            <option value="label">Label</option>
+          </select>
+        </label>
       </header>
       <LabelFilterBar projectUrl={projectUrl} />
       {renderAsync({
@@ -333,29 +386,52 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
             <ErrorState error="not-found" />
           ) : undefined,
         children: project ? (
-          <div className="tsk-board">
-            {showNoSection && (
-              <BoardColumn
-                project={project}
-                section={undefined}
-                rows={unsectioned}
-                count={unsectioned.filter((row) => row.task.state === "open").length}
-                first
-                last
-              />
-            )}
-            {groups.sections.map(({ section, rows, openCount }, index) => (
-              <BoardColumn
-                key={section.id}
-                project={project}
-                section={section}
-                rows={rows}
-                count={openCount}
-                first={index === 0}
-                last={index === groups.sections.length - 1}
-              />
-            ))}
-            <AddColumn project={project} />
+          <div className="tsk-board" data-grouped={grouping !== "none" || undefined}>
+            <div className="tsk-board-columns">
+              {columns.map(({ section, rows, openCount }, index) => (
+                <BoardColumn
+                  key={section?.id ?? "none"}
+                  project={project}
+                  section={section}
+                  rows={rows}
+                  count={openCount}
+                  first={!section || section.id === groups.sections[0]?.section.id}
+                  last={index === columns.length - 1}
+                  headerOnly={grouping !== "none"}
+                />
+              ))}
+              <AddColumn project={project} />
+            </div>
+            {grouping !== "none" &&
+              boardLanes(
+                columns.flatMap((column) => column.rows.map((row) => row.task)),
+                grouping,
+                project.tracker.labels,
+                project.tracker.groupMembers,
+              ).map(({ lane, name }) => (
+                <section
+                  className="tsk-swimlane"
+                  key={`${lane?.group}:${lane?.value}`}
+                  aria-label={name}
+                >
+                  <h2>{name}</h2>
+                  <div className="tsk-board-columns">
+                    {columns.map(({ section, rows, openCount }) => (
+                      <BoardColumn
+                        key={section?.id ?? "none"}
+                        project={project}
+                        section={section}
+                        rows={rows.filter((row) => lane && inLane(row.task, lane))}
+                        count={openCount}
+                        first={false}
+                        last={false}
+                        lane={lane}
+                        bodyOnly
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
           </div>
         ) : null,
       })}

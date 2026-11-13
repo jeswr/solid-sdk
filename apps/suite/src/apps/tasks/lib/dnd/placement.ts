@@ -43,6 +43,12 @@ export function dropPriority(kind: unknown): number {
 /** Whether two rows render in the same list (section or day group). */
 export function sameContainer(a: DropContainer, b: DropContainer): boolean {
   if (a.kind === "section")
-    return b.kind === "section" && a.projectUrl === b.projectUrl && a.sectionId === b.sectionId;
+    return (
+      b.kind === "section" &&
+      a.projectUrl === b.projectUrl &&
+      a.sectionId === b.sectionId &&
+      a.lane?.group === b.lane?.group &&
+      a.lane?.value === b.lane?.value
+    );
   return b.kind === "day" && a.dayKey === b.dayKey;
 }
