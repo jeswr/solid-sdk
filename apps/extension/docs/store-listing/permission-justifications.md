@@ -85,13 +85,21 @@ needed to send access updates only to the relevant pages.
 
 ## Optional permission: `cookies`; `nativeMessaging` and existing host access
 
-The optional agent sign-in feature first checks existing Chrome site access before any
+Every popup load first checks optional cookie access before validating the page or site.
+A pre-existing or uncheckable grant blocks review, permission requests and native messages;
+the warning also remains visible on invalid pages and withheld sites. Its **Remove cookie
+access** button removes only `cookies`, then verifies absence with `permissions.contains`
+before enabling sharing. Failure keeps sharing blocked and directs the person to Chrome's
+extension settings. Review checks absence again: every capture starts without cookie access.
+The optional agent sign-in feature also checks existing Chrome site access before any
 native message, and checks again on the explicit popup review click. If the site's access
 is withheld, capture refuses without requesting permission or contacting the native host,
 and tells the person to allow the extension on this site from Chrome's extension menu first,
 then try again. Capture never requests or removes a host origin. Required `<all_urls>`
 access remains unchanged, and capture does not use the declared optional host patterns.
 Confirmation rechecks host access before sending, including withdrawal during review.
+After review's cleanup it also rechecks cookie absence: an unexpected grant, including a
+late prompt, refuses the capture and triggers cleanup before another review can be attempted.
 The review click requests only the optional `cookies` permission. Cookie access is absent
 at installation; while held, it combines with existing host access and is extension-wide. The feature
 reads cookies matching that page URL, checks exact-host or explicitly vetted parent-domain
@@ -106,8 +114,10 @@ confirmation, then checked absent with `chrome.permissions.contains({ permission
 Failure, permission denial, cancellation and success restore the same host grants with no
 cookie access. A worker port's `onDisconnect` also removes and verifies cookie permission
 if the popup closes, including grants arriving after closure. Removal rejection or a failed
-absence check displays a popup warning alongside the truthful capture outcome; worker
-cleanup failure displays a toolbar `!` badge. A surviving grant warns on reopening the popup.
+absence check displays a popup warning alongside the actual outcome and blocks further sharing
+until removal is verified; worker cleanup failure displays a toolbar `!` badge. A surviving
+grant blocks sharing on reopening the popup. Cookie access belongs only to one capture's
+snapshot step and must be absent outside it.
 
 ## Remote code
 

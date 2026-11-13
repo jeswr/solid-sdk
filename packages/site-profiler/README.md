@@ -125,3 +125,8 @@ signed-out probe even when the server uses HTTP 200.
 The opt-in live acceptance test lives in `tools/webarena-bench/test/live.test.ts`, where the profiler,
 executor and host login dependencies already exist. See that tool's README for the command and
 artifact option. It performs only GETs and sign-in, without a planner or mutation demonstration.
+
+Model headers omit executor-owned content negotiation, credential and framing headers, including
+Accept. Verification derives Accept from extraction format, as the executor does; JSON grid reads
+therefore retain their JSON negotiation without storing Accept in the learned model. Vendor-specific
+Accept media types require a future first-class, inventoried field.

@@ -182,8 +182,10 @@ describe('user-initiated sharing', () => {
     await expect(controller.load()).rejects.toThrow(
       "Chrome's extension menu first, then try again",
     );
-    expect(browser.permissions.contains).toHaveBeenCalledTimes(1);
-    expect(browser.permissions.contains).toHaveBeenCalledWith({ origins: [`${site}:443/*`] });
+    expect(browser.permissions.contains.mock.calls).toEqual([
+      [permissions],
+      [{ origins: [`${site}:443/*`] }],
+    ]);
     expect(browser.permissions.request).not.toHaveBeenCalled();
     expect(browser.permissions.remove).not.toHaveBeenCalled();
     expect(browser.runtime.connect).not.toHaveBeenCalled();
@@ -385,8 +387,8 @@ describe('user-initiated sharing', () => {
     'rejects',
     'still present',
     'verification rejects',
-  ])('reports a cleanup warning when removal %s without replacing the capture result', async (failure) => {
-    const { browser, controller, state, before } = setup();
+  ])('reports a cleanup warning when removal %s without replacing the review result', async (failure) => {
+    const { browser, transport, controller, state, before } = setup();
     await controller.load();
     if (failure === 'rejects')
       browser.permissions.remove.mockRejectedValueOnce(new Error('secret'));
@@ -394,6 +396,7 @@ describe('user-initiated sharing', () => {
     if (failure === 'verification rejects') {
       browser.permissions.contains
         .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false)
         .mockRejectedValueOnce(new Error('secret'));
     }
     await expect(controller.review('personal', 'alex')).resolves.toMatchObject({ count: 1 });
@@ -401,8 +404,14 @@ describe('user-initiated sharing', () => {
     expect(browser.permissions.contains).toHaveBeenLastCalledWith(permissions);
     expect(state.origins).toEqual(before.origins);
     expect(browser.runtime.connect.mock.results[0].value.disconnect).toHaveBeenCalled();
-    await expect(controller.share()).resolves.toBeUndefined();
-    expect(controller.permissionWarning).toBe(true);
+    if (failure === 'verification rejects')
+      await expect(controller.share()).resolves.toBeUndefined();
+    else {
+      await expect(controller.share()).rejects.toThrow('Sharing refused');
+      expect(transport.mock.calls.some(([r]) => r.type === 'capture')).toBe(false);
+    }
+    expect(controller.permissionWarning).toBe(false);
+    expect(state).toEqual(before);
   });
   it.each([
     'beginLogin',

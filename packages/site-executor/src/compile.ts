@@ -6,7 +6,9 @@
 // into raw text, and the final URL passes the origin guard.
 
 import { createHash } from "node:crypto";
+import { toUSVString } from "node:util";
 import type { CsrfRule, Operation, Parameter } from "@jeswr/site-model";
+import { isExecutorOwnedHeader, modelHeaderNames } from "@jeswr/site-model";
 import { canonicalJson } from "./gate.js";
 import { guardUrl } from "./origin.js";
 import {
@@ -29,6 +31,8 @@ export interface CompiledRequest {
   url: URL;
   /** Lower-cased header names. Never credentials: the session layer adds those at send time. */
   headers: Record<string, string>;
+  /** Header provenance: only model static, parameter and CSRF header names. */
+  modelHeaders: string[];
   body?: CompiledBody;
   csrf: CsrfRule[];
   /** Local contract convention: an unbound whole path slot named by a query CSRF target. */
@@ -66,28 +70,14 @@ function pathFields(
     );
 }
 
-/** Headers a site model may never set: credentials and transport framing belong to the executor. */
-const FORBIDDEN_HEADERS = new Set([
-  "cookie",
-  "cookie2",
-  "set-cookie",
-  "authorization",
-  "proxy-authorization",
-  "host",
-  "content-length",
-  "transfer-encoding",
-  "connection",
-  "keep-alive",
-  "upgrade",
-  "te",
-  "trailer",
-  "origin",
-  "referer",
-]);
+/** Kept for the session transport's credential/framing policy. */
+export const isForbiddenHeader = isExecutorOwnedHeader;
 
-export function isForbiddenHeader(name: string): boolean {
-  const n = name.toLowerCase();
-  return FORBIDDEN_HEADERS.has(n) || n.startsWith("proxy-") || n.startsWith("sec-");
+export function checkModelHeaders(operation: Operation, sessionNames: string[] = []): void {
+  const owned = new Set(sessionNames.map((name) => name.toLowerCase()));
+  for (const name of modelHeaderNames(operation))
+    if (isExecutorOwnedHeader(name) || owned.has(name.toLowerCase()))
+      throw new BindingError(`model names a forbidden executor-owned header "${name}"`);
 }
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: header values must not carry control characters
@@ -264,6 +254,7 @@ export function compileOperation(
   origin: string,
   options: CompileOptions = {},
 ): CompiledRequest {
+  checkModelHeaders(operation);
   const placeholders = options.placeholders ?? new Set<string>();
   const params = new Map(operation.inputs.map((p) => [p.name, p]));
   const present: Record<string, string> = {};
@@ -319,7 +310,6 @@ export function compileOperation(
 
   const headers: Record<string, string> = {};
   for (const [name, value] of Object.entries(request.headers ?? {})) {
-    if (isForbiddenHeader(name)) continue;
     checkHeaderValue(name, value);
     headers[name.toLowerCase()] = value;
   }
@@ -337,6 +327,7 @@ export function compileOperation(
     url,
     headers,
     csrf: operation.csrf ?? [],
+    modelHeaders: Object.keys(headers),
     pathFields: pathFields(request.urlTemplate, present, url),
   };
   if (pathTokenNames.length)
@@ -382,10 +373,10 @@ export function compileOperation(
             present[p.name] as string,
           ]);
     if (contentType === "multipart/form-data") {
-      compiled.body = { kind: "multipart", fields };
+      compiled.body = { kind: "multipart", fields: normaliseFormFields(fields, true) };
       delete compiled.headers["content-type"]; // fetch sets the boundary
     } else {
-      compiled.body = { kind: "form", fields };
+      compiled.body = { kind: "form", fields: normaliseFormFields(fields, false) };
       compiled.headers["content-type"] = "application/x-www-form-urlencoded";
     }
   }
@@ -399,7 +390,9 @@ export function applyCsrfToken(compiled: CompiledRequest, rule: CsrfRule, token:
     if (isForbiddenHeader(target.name))
       throw new BindingError(`CSRF target names a forbidden header`);
     checkHeaderValue(target.name, token);
-    compiled.headers[target.name.toLowerCase()] = token;
+    const name = target.name.toLowerCase();
+    compiled.headers[name] = token;
+    if (!compiled.modelHeaders.includes(name)) compiled.modelHeaders.push(name);
   } else if (target.kind === "query") {
     const path = compiled.pathTokens;
     if (path?.names.includes(target.name)) {
@@ -420,6 +413,11 @@ export function applyCsrfToken(compiled: CompiledRequest, rule: CsrfRule, token:
       // Preserve query-token decoration already applied by other rules.
       compiled.url.pathname = next.pathname;
       guardUrl(compiled.url.href, path.origin);
+      // The slot is one whole segment; use its decoded, transmitted value.
+      compiled.pathFields = [
+        ...(compiled.pathFields ?? []).filter(([name]) => name !== target.name),
+        [target.name, decodeURIComponent(encodeValue(token, false))],
+      ];
     } else appendQuery(compiled.url, target.name, token);
   } else if (compiled.body?.kind === "json") {
     const value = compiled.body.value;
@@ -432,10 +430,35 @@ export function applyCsrfToken(compiled: CompiledRequest, rule: CsrfRule, token:
       compiled.body = { kind: "form", fields: [] };
       compiled.headers["content-type"] = "application/x-www-form-urlencoded";
     }
-    const fields = compiled.body.fields.filter(([k]) => k !== target.name);
-    fields.push([target.name, token]);
+    const [field] = normaliseFormFields([[target.name, token]], compiled.body.kind === "multipart");
+    if (!field) throw new BindingError("missing CSRF field");
+    const fields = compiled.body.fields.filter(([k]) => k !== field[0]);
+    fields.push(field);
     compiled.body.fields = fields;
   }
+}
+
+/** Match Web IDL USVString conversion and multipart's newline normalization before Rule W. */
+const formLines = (value: string): string => toUSVString(value).replace(/\r\n|\r|\n/g, "\r\n");
+
+export function normaliseFormFieldName(name: string, multipart: boolean): string {
+  // Multipart names quote CR/LF and double quotes as percent escapes. Parsers undo
+  // those escapes (including literal spellings); keep a stable decoded name in the
+  // compiled payload so its serialization and inventory describe the same field.
+  return multipart
+    ? formLines(
+        name.replace(/%0[ad]|%22/gi, (encoded) =>
+          String.fromCharCode(Number.parseInt(encoded.slice(1), 16)),
+        ),
+      )
+    : toUSVString(name);
+}
+
+function normaliseFormFields(fields: [string, string][], multipart: boolean): [string, string][] {
+  return fields.map(([name, value]) => [
+    normaliseFormFieldName(name, multipart),
+    multipart ? formLines(value) : toUSVString(value),
+  ]);
 }
 
 /** Text form of a compiled body (dry runs and the send path). */

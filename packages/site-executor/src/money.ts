@@ -577,7 +577,11 @@ function assertWireConfiguration(
       }
     }
     for (const field of quoted.values())
-      if (!totalIds.has(field.name) && sent.get(field.name)?.value !== field.value)
+      if (
+        !field.sessionToken &&
+        !totalIds.has(field.name) &&
+        sent.get(field.name)?.value !== field.value
+      )
         throw new MoneyRefusal(`basket total sends ${field.name}, which the payment did not cover`);
   }
 }

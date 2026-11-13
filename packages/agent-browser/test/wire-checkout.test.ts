@@ -33,7 +33,7 @@ it("Rule W executes the learned test-shop checkout with delivery and csrf_token 
     method,
     url: `${origin}${path}`,
     resourceType: "xhr",
-    requestHeaders: {},
+    requestHeaders: { accept: "application/json" },
     cookieNames: ["sid"],
     status: 200,
     contentType: "application/json",
@@ -101,6 +101,12 @@ it("Rule W executes the learned test-shop checkout with delivery and csrf_token 
     operations,
     flows: [flow],
   };
+  expect(
+    operations.every(
+      (op) =>
+        !Object.keys(op.request.headers ?? {}).some((name) => name.toLowerCase() === "accept"),
+    ),
+  ).toBe(true);
   const model = readSiteModel(await writeSiteModel(learned));
   const sessions = new InMemorySessions();
   sessions.set(origin, undefined, {
@@ -118,6 +124,7 @@ it("Rule W executes the learned test-shop checkout with delivery and csrf_token 
         currency: "GBP",
       });
     if (url.pathname === "/api/checkout") {
+      expect(new Headers(init?.headers).get("accept")).toBe("application/json");
       expect(url.searchParams.get("delivery")).toBe("standard");
       return Response.json(total);
     }

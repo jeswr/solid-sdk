@@ -384,8 +384,17 @@ before contacting the native host and again on review. If Chrome withholds this 
 ("On click" or "On specific sites"), sharing refuses without requesting permission or sending
 a native message. Allow the extension on this site from Chrome's own extension menu first,
 then try again. Capture never requests or removes a host origin.
+Every popup load first checks optional `cookies` access, independently of site validation.
+If it is already granted or cannot be checked, sharing is blocked: no review, permission
+request or native message. The warning stays visible even on invalid pages or withheld
+sites. Click **Remove cookie access** to remove it and verify absence before sharing is
+enabled. If removal or verification fails, sharing stays blocked; remove cookie access
+from Chrome's extension settings before retrying. The review click rechecks absence, so
+each capture starts without cookie permission.
 Confirmation checks site access again before sending, including access withdrawn during review.
-With site access already granted, the review click requests only optional `cookies`, reads
+It also rechecks that cookie access is absent: an unexpected grant, including a late prompt,
+refuses the capture and triggers cleanup. Review again after cleanup to retry.
+With site access already granted and cookie access absent, the review click requests only optional `cookies`, reads
 cookies matching the chosen page, and removes cookie access immediately after preparing the
 snapshot. It then checks that cookie access is absent. Cleanup also covers errors, permission
 denial, cancellation, popup closure and grants arriving after closure; the same host grants
@@ -405,9 +414,10 @@ extension storage, content scripts or the page bridge. Values are never rendered
 Required Solid host permissions remain unchanged; optional cookie access is extension-wide
 while held, so the exact-origin query and filtering remain necessary.
 If cookie removal rejects or its absence cannot be confirmed, the popup shows a warning
-alongside the truthful sharing result. Worker cleanup failure leaves a toolbar `!` badge;
-a surviving cookie grant also warns when the popup reopens. A warning must not be read as
-a clean cleanup, even if the capture itself succeeded.
+alongside the review or sharing outcome and blocks further sharing until removal is verified.
+Worker cleanup failure leaves a toolbar `!` badge; a surviving grant also blocks sharing
+when the popup reopens. Cookie permission belongs only to the snapshot step of one capture;
+cleanup failure is never reported as clean success.
 
 Hostile same-OS-user processes are outside the vault's threat model: they can read its
 store/key or forge the public extension-ID caller argument. No code-signature checks or

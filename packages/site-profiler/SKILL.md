@@ -52,3 +52,8 @@ Administrative applications:
   `test/generic-browser.test.ts` covers actual login/menu/idle/deadline behavior. The explicitly
   authorized disposable live fixture is opt-in via SAB_LIVE_SITE_URL in webarena-bench; the default
   suite remains deterministic and local. Never run a planner as part of live profiling acceptance.
+
+- Never emit executor-owned headers (including Accept and Content-Type) as model static headers,
+  header parameters or CSRF header targets. Keep body encoding in request.contentType. Verification
+  derives Accept from extraction format; recorded JSON Accept is not a model header. Vendor-specific
+  Accept requires a future first-class, inventoried field.

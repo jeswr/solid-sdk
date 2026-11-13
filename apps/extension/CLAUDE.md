@@ -67,13 +67,22 @@ capture marks its vault session `origin: "browser-capture"` and records a pendin
 "New sign-in from browser" entry for the host's later agent approval UI.
 Capture never requests or removes a host origin. Withheld site access refuses without a
 permission request or native message; tell the person to allow the extension on this site
-through Chrome's own extension menu first, then try again. Request only optional `cookies`
+through Chrome's own extension menu first, then try again. Check optional `cookies` on every
+popup load before tab/site validation, retaining its warning even when loading fails.
+A pre-existing or uncheckable cookie grant blocks review, permission requests and native
+messages. Only the person's **Remove cookie access** click removes this stale grant and
+verifies absence before enabling sharing; failed removal keeps the warning and directs
+them to Chrome's extension settings. Recheck absence on review: captures start without it.
+Request only optional `cookies`
 on the review click once host access is confirmed, and recheck host access before sending
 the confirmed capture. Remove cookies in finally after the snapshot
 and verify absence with permissions.contains, with worker onDisconnect/late-grant cleanup
 for popup closure. Removal rejection or unconfirmed absence must display a warning alongside
-the actual capture outcome; worker cleanup failure sets a toolbar `!` badge. A surviving
-cookie grant warns when the popup reopens. Required `<all_urls>` stays in place and host grants
+the actual outcome and block further sharing; worker cleanup failure sets a toolbar `!` badge.
+Confirmation rechecks cookie absence after review's cleanup; any unexpected grant refuses
+the capture and triggers cleanup. A surviving cookie grant blocks sharing when the popup
+reopens, including on withheld sites. Outside the snapshot step of one capture, cookie
+permission must be absent. Required `<all_urls>` stays in place and host grants
 never change; temporary cookie access is extension-wide, so exact-origin filtering and
 explicit confirmation still apply.
 
