@@ -806,3 +806,8 @@ table.cov tbody th { font-weight: 600; text-align: left; white-space: nowrap; }
   .uc-body .outcome-list li { grid-template-columns: 1fr; }
   .bar-row { grid-template-columns: 120px 1fr 24px; }
 }
+table.results td.num, table.data td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.results td.num { font-size: 15px; font-weight: 650; }
+table.results td.num.bad { color: var(--fail); }
+table.results td:first-child { max-width: 300px; font-weight: 400; }
+table.results td:first-child strong { font-weight: 650; }

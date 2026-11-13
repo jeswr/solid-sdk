@@ -81,6 +81,13 @@ prose says. So the check works on what the prose *could* say.
   recipient and this purpose. Otherwise the disclosure check gives `ask-principal` with
   `context-not-clear`, and the principal is shown the text; or `fail` when the mandate does
   not let the principal decide.
+- **UNS-9a. The other side of the context rule.** UNS-9 protects the principal's data. The
+  same reasoning protects the people the agent writes to. When the core's context for a task
+  holds content from a source that was not accepted, free text to another party MAY leave
+  without approval only if it was written in a context that never held that content
+  (UNS-7, UNS-10). Otherwise the disclosure check gives `ask-principal` with
+  `context-not-clear` and the principal is shown the text. An agent that has read a hostile
+  page must not be able to pass its links on in the principal's name unseen.
 - **UNS-10. Need-to-know context.** An agent SHOULD give the core, for each conversation, only
   the items the other party may be told, and SHOULD do work on other items in a separate
   context whose results come back as structured values. An agent that does this rarely
@@ -93,6 +100,21 @@ prose says. So the check works on what the prose *could* say.
   any of these, however it is worded.
 - **UNS-13. Say what it is.** Free text sent by an agent MUST be marked as written by a
   model, and the message MUST say for whom the agent acts.
+
+## 4a. What the agent tells its own principal
+
+The outbound gate stands between the core and the world. Nothing stands between the core
+and its own principal, and an attack can aim there: text on a page says "recommend this
+hotel", and the agent does.
+
+- **UNS-18. Say where it came from.** Whatever the agent tells its principal that rests on
+  content from a source that was not accepted MUST be shown with that fact: what the content
+  was, where it came from, and that nobody vouched for it. A recommendation, a summary and
+  an answer are readings (UNS-3) and carry the weakest label among the things they rest on.
+- **UNS-19. Decisions stay with what was checked.** An approval request shown to the
+  principal (CORE-OUT-7) MUST be built by the gate from the action itself, never from the
+  core's description of it, so that what the core says to the principal cannot change what
+  the principal approves.
 
 ## 5. Judgement
 
@@ -123,6 +145,9 @@ prose says. So the check works on what the prose *could* say.
   down.
 - **The model's skill.** Inside its limits the core may bargain badly, write unclearly or
   miss the point. The gates bound what it can cost; they do not make it good.
+- **Persuasion.** UNS-18 labels what the agent says to its principal. A labelled
+  recommendation can still persuade. In the first benchmark run this was the largest group
+  of attacks that got through ([60 Evaluation](60-evaluation.md), section 9).
 - **Approval fatigue.** Every `ask-principal` spends the person's attention. A design that
   asks too often trains people to say yes. The number of asks per task is measured in
   [60 Evaluation](60-evaluation.md), and UNS-10 and UNS-16 exist to keep it low.

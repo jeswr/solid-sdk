@@ -349,6 +349,16 @@ tool, changing who can read something, making a payment, accepting an offer.
   anything. The disclosure and data terms checks may give `not-applicable` only when the
   gate itself has established that the message carries no data of the principal's, not
   because the core says so. Free text written by the core is treated as in UNS-8 to UNS-13.
+- **CORE-OUT-13.** A read that contacts another party is a message to that party. Fetching a
+  page, querying a provider and following a link all pass the recipient and disclosure
+  checks. A request to a party that is not established MAY go only when it carries nothing
+  of the principal's, including in its address, and what comes back is content, not
+  instruction.
+- **CORE-OUT-14.** A grant in a mandate covers an action only as far as it names it: the
+  kind of action, its object, its counterparty, its amount and the data it carries. Whatever
+  a grant leaves unnamed is not granted by it. "May delete files" does not follow from "may
+  delete this file", and "may write to this person" does not cover everything that could be
+  written.
 
 ### 5.4 Status and freshness
 

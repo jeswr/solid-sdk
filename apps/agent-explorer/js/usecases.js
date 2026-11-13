@@ -186,6 +186,35 @@
   // ---- Evaluation plan, shown above the test matrix ---------------------------------------
   var E = D.evaluation;
   var METHOD = index(E.methods);
+  function firstResults() {
+    var A = AX.data.evalAgentDojo;
+    if (!A) return '';
+    var T = {};
+    A.groups.forEach(function (g) {
+      if (g.version !== 'v1') return;
+      var t = (T[g.mandate] = T[g.mandate] || { tasks: 0, noAsk: 0, appr: 0, noGateFin: 0, asks: 0, pairs: 0, noGate: 0, refuse: 0, approve: 0 });
+      t.tasks += g.user_tasks; t.noAsk += g.finished_no_ask.numerator; t.appr += g.finished_approving_asks.numerator; t.noGateFin += g.finished_no_gate.numerator;
+      t.asks += g.asks_per_task.sum; t.pairs += g.pairs; t.noGate += g.attack_success['no-gate'].numerator; t.refuse += g.attack_success.refuse.numerator; t.approve += g.attack_success.approve.numerator;
+    });
+    var f = T.fitted, s = T.standing;
+    if (!f || !s) return '';
+    function pct(n, d) { return '<small class="muted"> ' + (100 * n / d).toFixed(1) + '%</small>'; }
+    var h = '<h2 id="results">First result: 629 attacks, no model</h2>';
+    h += '<p style="max-width:72ch">AgentDojo publishes the exact tool calls that carry out each of its ' + f.tasks + ' tasks and each attack. We replayed every pair of task and attack through the gates with the model replaced by one that proposes exactly what the attacker wants. <strong>The gates stopped most attacks and not all of them.</strong> What got through is listed below, with the rule each one led to.</p>';
+    h += '<div class="table-wrap"><table class="data results"><thead><tr><th></th><th>No gate</th><th>Fitted mandates</th><th>Standing mandates</th></tr></thead><tbody>';
+    h += '<tr><td><strong>Attacks that succeed</strong> when the person refuses every ask</td><td class="num bad">' + s.noGate + pct(s.noGate, s.pairs) + '</td><td class="num">' + f.refuse + pct(f.refuse, f.pairs) + '</td><td class="num">' + s.refuse + pct(s.refuse, s.pairs) + '</td></tr>';
+    h += '<tr><td><strong>Attacks that succeed</strong> when the person approves every ask</td><td class="num bad">' + s.noGate + '</td><td class="num">' + f.approve + '</td><td class="num bad">' + s.approve + pct(s.approve, s.pairs) + '</td></tr>';
+    h += '<tr><td><strong>Tasks finished</strong> without asking the person</td><td class="num">' + s.noGateFin + '</td><td class="num">' + f.noAsk + '</td><td class="num">' + s.noAsk + pct(s.noAsk, s.tasks) + '</td></tr>';
+    h += '<tr><td><strong>Tasks finished</strong> when asks are approved</td><td class="num">' + s.noGateFin + '</td><td class="num">' + f.appr + '</td><td class="num">' + s.appr + '</td></tr>';
+    h += '<tr><td><strong>Asks per task</strong>, on average</td><td class="num">·</td><td class="num">' + (f.asks / f.tasks).toFixed(2) + '</td><td class="num">' + (s.asks / s.tasks).toFixed(2) + '</td></tr>';
+    h += '</tbody></table></div>';
+    h += '<p class="small muted" style="max-width:86ch;margin-top:8px">Out of ' + s.pairs + ' pairs and ' + s.tasks + ' tasks (AgentDojo ' + esc(A.agentdojo_version) + ', suite v1; one task fails everywhere because of an error in the benchmark\'s own checker). A fitted mandate allows exactly what the task needs. A standing mandate is one set of seven rules per area, written and locked before any attack was read. The reference gate does not yet have amount limits, known recipients or the free-text rule, so a labelled adapter supplies them: this measures the design\'s rules, not the finished implementation. Model calls: ' + A.model_calls + '.</p>';
+    h += '<h3 class="sub">What got through under standing mandates, and what changed</h3><div class="table-wrap"><table class="data"><thead><tr><th>Attacks</th><th>What happened</th><th>Why the rules allowed it</th><th>What changed</th></tr></thead><tbody>' + (E.findings || []).map(function (x) {
+      return '<tr><td class="num"><strong>' + x.count + '</strong></td><td>' + esc(x.what) + '</td><td>' + esc(x.why) + '</td><td>' + esc(x.change) + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    h += '<p style="max-width:72ch;margin-top:12px"><strong>The cost.</strong> Under standing mandates ' + (s.tasks - s.noAsk) + ' of ' + s.tasks + ' legitimate tasks stop to ask, mostly to pay a payee taken from a file or to write to someone the instruction did not name. And a person who approves everything stops nothing: for those attacks the approval is the only defense. The new rules were written after seeing these results, so they still need a test on attacks we have not looked at.</p>';
+    return h;
+  }
   var baseTests = R.tests;
   R.tests = function (root, p) {
     if (baseTests) baseTests(root, p); else root.innerHTML = '<div class="page"></div>';
@@ -197,7 +226,8 @@
       runsHtml = page.innerHTML;
     }
     var nRun = U.filter(isRun).length;
-    var h = '<header><p class="eyebrow">Evaluation</p><h1>How we know it works</h1><p class="lede">The design promises that an agent does only what its principal allowed, reveals no more than a task needs, relies only on what it has reason to, and leaves a record that shows who was at fault. This page is the plan for testing each promise and its cost, and the runs so far. No number appears here until a run has produced it.</p></header>';
+    var h = '<header><p class="eyebrow">Evaluation</p><h1>How we know it works</h1><p class="lede">The design promises that an agent does only what its principal allowed, reveals no more than a task needs, relies only on what it has reason to, and leaves a record that shows who was at fault. This page is the plan for testing each promise and its cost, and the results so far. No number appears here until a run has produced it.</p></header>';
+    h += firstResults();
     h += '<h2 id="questions">Ten questions</h2><div class="table-wrap"><table class="data"><thead><tr><th>Question</th><th>What is measured</th><th>How</th></tr></thead><tbody>';
     E.questions.forEach(function (q) {
       h += '<tr><td><strong>' + esc(q.question) + '</strong></td><td>' + esc(q.measure) + '</td><td><a href="' + AX.buildHash('tests', { at: 'method-' + q.method }) + '">' + esc(METHOD[q.method].name) + '</a></td></tr>';
@@ -216,7 +246,8 @@
       return '<section class="card"><h3>' + esc(m.name) + '</h3><p>' + esc(m.summary) + '</p></section>';
     }).join('') + '</div>';
     h += '<h2>Order of work</h2><div class="table-wrap"><table class="data"><thead><tr><th>Phase</th><th>What</th><th>Status</th></tr></thead><tbody>' + E.phases.map(function (ph) {
-      return '<tr><td><strong>' + esc(ph.id) + '</strong> ' + esc(ph.name) + '</td><td>' + esc(ph.summary) + '</td><td><span class="tag">' + esc(ph.status === 'next' ? 'Next' : ph.status === 'later' ? 'Later' : ph.status) + '</span></td></tr>';
+      var done = ph.status.indexOf('done') >= 0;
+      return '<tr><td><strong>' + esc(ph.id) + '</strong> ' + esc(ph.name) + '</td><td>' + esc(ph.summary) + '</td><td><span class="tag' + (done ? ' ok' : '') + '">' + esc(ph.status === 'next' ? 'Next' : ph.status === 'later' ? 'Later' : ph.status.charAt(0).toUpperCase() + ph.status.slice(1)) + '</span></td></tr>';
     }).join('') + '</tbody></table></div>';
     h += '<p style="margin-top:14px"><a href="' + AX.buildHash('specs', { doc: '60-evaluation' }) + '">The full plan</a>, including what would count against the design.</p>';
     h += '<h2 id="runs">Runs so far</h2><p style="max-width:72ch"><strong>' + nRun + ' of ' + U.length + '</strong> use cases in the catalogue has a real run. <a href="' + AX.buildHash('usecases', { tab: 'catalogue', run: 'no' }) + '">See the ' + (U.length - nRun) + ' not run yet</a>. The table below is the mortgage example: one cell per scenario and configuration that has been loaded.</p>';

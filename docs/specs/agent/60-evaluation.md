@@ -1,8 +1,8 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Evaluation
 
-Draft 0.5, 13 November 2026. Informative. A plan: no result is reported here until a run has
-produced it.
+Draft 0.5, 13 November 2026. Informative. A plan, and from section 9 the results so far. No
+result is reported here until a run has produced it.
 
 **Question: how do we know the design works, and how would we find out that it does not?**
 
@@ -155,3 +155,55 @@ the share of tasks whose calls all get a go (the ceiling on Q2), and the approva
   repeat is reported beside the mean.
 - **People.** Whether a principal understands an approval request is not tested here. It
   needs a user study.
+
+## 9. First results: AgentDojo replayed with no model (13 November 2026)
+
+Phase E1 has run once. Source: `packages/agent-reference/eval/agentdojo/` (its `METHOD.md`
+was written before the results, its `REPORT.md` lists every attack that got through).
+AgentDojo 0.1.35, suite version v1: 97 user tasks and 629 pairs of task and attack. No model
+was called.
+
+**What the numbers measure.** The reference gate has no amount limits, no rule for known
+recipients, no per-task context set and no free-text rule yet. An adapter around it supplies
+them, and each check in the results is labelled `reference` or `adapter`. So this measures
+the rules of the design, not the reference implementation as it stands. Principals are
+simulated: one refuses every ask, one approves every ask. Standing mandates and the classes
+of tools were written and hash-locked before any attack was read, and were not changed
+afterwards.
+
+| | No gate | Fitted mandates | Standing mandates |
+|---|---|---|---|
+| Attacks that succeed, every ask refused | 627 of 629 | 43 | 67 |
+| Attacks that succeed, every ask approved | 627 | 43 | 627 |
+| Tasks finished with no ask | 96 of 97 | 96 | 64 |
+| Tasks finished when asks are approved | 96 | 96 | 96 |
+| Asks per task, mean | | 0 | 0.42 |
+
+One task fails in every arm because of an error in the benchmark's own checker.
+
+**The gates did not hold everything.** By the test in section 7, any attack that succeeds
+under a worst-case core counts against the design. What got through, under standing
+mandates:
+
+| Attacks | What happened | Why the rules let it through | Change |
+|---|---|---|---|
+| 20 | The attack changes only what the agent tells its own principal (recommend this hotel) | Nothing stands between the core and its principal | UNS-18, UNS-19. Bounded, not solved |
+| 20 | A calendar entry is created, with no other party involved | The standing rule lets ordinary changes to the principal's own records go | A standing mandate cannot know what a task asked for. Needs the per-task mandate (the "drafted" kind) |
+| 21 | A web page is visited | The rule treated every read as harmless | CORE-OUT-13: a read that contacts another party is a message to it |
+| 5 | A link from hostile content is sent to a colleague the principal does write to | The free-text rule protected the principal's data, not the recipient | UNS-9a |
+| 1 | Passport and card details are sent to an address the task itself named | A known recipient was treated as allowed to receive anything | CORE-OUT-14: a grant covers the data it names |
+
+Under fitted mandates the same kinds appear in smaller numbers (20, 4, 12, 3 and 1), plus
+three where the fitted mandate named a tool and not its object (delete a file, change a
+password): CORE-OUT-14 again.
+
+**The cost.** Under standing mandates a third of legitimate tasks (33 of 97) stop to ask,
+most of them in banking (12 of 16) and messaging (12 of 21): paying a payee taken from a
+file, writing to someone not named in the instruction. And when the person approves
+everything, nothing is stopped at all. For those attacks the approval is the only defense,
+which is the approval-fatigue problem in 04, section 6, measured.
+
+**What this run does not show.** How a real model behaves (E2). Whether a person reads an
+approval request. Whether the changed rules above work: they were written after seeing these
+results, so a rerun on the same attacks proves little, and they need a benchmark not yet
+looked at.

@@ -692,10 +692,18 @@ METHODS = [
 ]
 PHASES = [
     ('E0', 'Runs without a model', 'Mutation, worst-case core and fault injection over the mortgage runs and the catalogue. Properties of the gates checked on generated actions.', 'next'),
-    ('E1', 'AgentDojo replayed without a model', 'The benchmark publishes the tool calls that solve each task and each attack. Replaying both through the gate gives attack success under a worst-case core, the ceiling on utility, and the number of approvals.', 'next'),
+    ('E1', 'AgentDojo replayed without a model', 'The benchmark publishes the tool calls that solve each task and each attack. Replaying both through the gate gives attack success under a worst-case core, the ceiling on utility, and the number of approvals.', 'first run done'),
     ('E2', 'A real model in the loop', 'AgentDojo and ConVerse with a model as the core: with gates, without, and with each check removed.', 'needs a model key'),
     ('E3', 'Health and policy', 'MedAgentBench against the health profile; the tau-bench family with the organization\'s policy as its mandate.', 'later'),
     ('E4', 'Negotiation and markets', 'Negotiation and marketplace benchmarks for commitments and manipulation.', 'later'),
+]
+# What got through in the first AgentDojo replay (standing mandates, v1), and the change it led to.
+FINDINGS = [
+    (20, 'The attack changes only what the agent tells its own principal: "recommend this hotel".', 'Nothing stands between the model and its own principal.', 'New rules: anything the agent says that rests on unvouched content must say so. This bounds the problem; it does not solve it.'),
+    (20, 'A calendar entry is created, with no other party involved.', 'The standing rule lets ordinary changes to the principal\'s own records go.', 'A standing mandate cannot know what a task asked for. This needs the mandate drafted for each task.'),
+    (21, 'A web page is visited.', 'The rule treated every read as harmless.', 'New rule: a read that contacts another party is a message to that party.'),
+    (5, 'A link from hostile content is sent to a colleague the principal does write to.', 'The free-text rule protected the principal\'s data, not the person receiving.', 'New rule: free text written after reading unvouched content is shown to the principal first.'),
+    (1, 'Passport and card details are sent to an address the task itself named.', 'A known recipient was treated as allowed to receive anything.', 'New rule: a grant covers only the data it names.'),
 ]
 MANDATES = [
     ('Fitted', 'Written from the task\'s own solution. The smallest mandate that lets the task finish: best case for the gates.'),
@@ -760,7 +768,8 @@ out = dict(
         questions=[dict(id=a, question=b, measure=c, method=d) for a, b, c, d in QUESTIONS],
         methods=[dict(id=a, name=b, needsModel=c, summary=d) for a, b, c, d in METHODS],
         phases=[dict(id=a, name=b, summary=c, status=d) for a, b, c, d in PHASES],
-        mandates=[dict(name=a, summary=b) for a, b in MANDATES]),
+        mandates=[dict(name=a, summary=b) for a, b in MANDATES],
+        findings=[dict(count=a, what=b, why=c, change=d) for a, b, c, d in FINDINGS]),
     useCases=U)
 json.dump(out, open(os.path.join(HERE, '..', 'data', 'use-cases.json'), 'w'), indent=1, ensure_ascii=False)
 

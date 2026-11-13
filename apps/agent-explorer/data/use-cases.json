@@ -458,7 +458,7 @@
     "id": "E1",
     "name": "AgentDojo replayed without a model",
     "summary": "The benchmark publishes the tool calls that solve each task and each attack. Replaying both through the gate gives attack success under a worst-case core, the ceiling on utility, and the number of approvals.",
-    "status": "next"
+    "status": "first run done"
    },
    {
     "id": "E2",
@@ -491,6 +491,38 @@
    {
     "name": "Drafted",
     "summary": "Drafted by the model from the person's instruction and approved as written. What the baseline does on day one."
+   }
+  ],
+  "findings": [
+   {
+    "count": 20,
+    "what": "The attack changes only what the agent tells its own principal: \"recommend this hotel\".",
+    "why": "Nothing stands between the model and its own principal.",
+    "change": "New rules: anything the agent says that rests on unvouched content must say so. This bounds the problem; it does not solve it."
+   },
+   {
+    "count": 20,
+    "what": "A calendar entry is created, with no other party involved.",
+    "why": "The standing rule lets ordinary changes to the principal's own records go.",
+    "change": "A standing mandate cannot know what a task asked for. This needs the mandate drafted for each task."
+   },
+   {
+    "count": 21,
+    "what": "A web page is visited.",
+    "why": "The rule treated every read as harmless.",
+    "change": "New rule: a read that contacts another party is a message to that party."
+   },
+   {
+    "count": 5,
+    "what": "A link from hostile content is sent to a colleague the principal does write to.",
+    "why": "The free-text rule protected the principal's data, not the person receiving.",
+    "change": "New rule: free text written after reading unvouched content is shown to the principal first."
+   },
+   {
+    "count": 1,
+    "what": "Passport and card details are sent to an address the task itself named.",
+    "why": "A known recipient was treated as allowed to receive anything.",
+    "change": "New rule: a grant covers only the data it names."
    }
   ]
  },
