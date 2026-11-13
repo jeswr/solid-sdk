@@ -1,3 +1,4 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
 /* AUTHORED-BY Codex GPT-6 */
 .hm-permissions-page {
   max-width: 1040px;
@@ -262,4 +263,40 @@
 .hm-signing-impact {
   display: grid;
   gap: var(--space-2);
+}
+
+.hm-agent-permissions {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-block: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.hm-agent-permissions h2,
+.hm-agent-toggle,
+.hm-agent-category {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.hm-agent-toggle {
+  min-height: 44px;
+}
+.hm-agent-permissions ul {
+  padding-inline-start: var(--space-5);
+}
+.hm-agent-review {
+  max-height: 85dvh;
+  overflow-y: auto;
+}
+.hm-agent-review pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.hm-agent-permissions :is(a, button, summary, [tabindex]):focus-visible,
+.hm-agent-review :is(a, button, summary):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }

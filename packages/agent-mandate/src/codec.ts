@@ -124,6 +124,26 @@ export function decodeCurrency(n: Node): { currency?: string } {
   if (!CURRENCY.test(currency)) throw new Error("Invalid currency");
   return { currency };
 }
+const EMPTY_SCOPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil";
+const MEMORY_CATEGORY = /^https:\/\/w3id\.org\/dpv\/pd#[A-Za-z][A-Za-z0-9]*$/;
+/** rdf:nil distinguishes an explicit OFF from the legacy preference default. */
+export function encodeMemoryScope(scope: readonly string[] | undefined): Record<string, JsonValue> {
+  if (scope === undefined) return {};
+  if (scope.some((category) => !MEMORY_CATEGORY.test(category)))
+    throw new Error("Expected DPV personal-data category IRIs");
+  return { [`${AGENT}memoryScope`]: scope.length ? scope : [EMPTY_SCOPE] };
+}
+export function decodeMemoryScope(n: Node): { memoryScope?: readonly string[] } {
+  const values = n.values(`${AGENT}memoryScope`);
+  if (!values.length) return {};
+  if (values.some((value) => value.termType !== "NamedNode"))
+    throw new Error("Expected memory category IRIs");
+  const scope = values.map((value) => value.value);
+  if (scope.length === 1 && scope[0] === EMPTY_SCOPE) return { memoryScope: [] };
+  // Reuse issuance validation; malformed signed scopes fail closed on both read paths.
+  encodeMemoryScope(scope);
+  return { memoryScope: scope };
+}
 export const encodeProhibitions = (rules: readonly Rule[]): JsonValue[] => rules.map(encodeRule);
 /** Encode an executor limit as an ODRL constraint plus agent:enforcement. */
 export function encodeLimit(c: Limit): JsonValue {
