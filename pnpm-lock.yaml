@@ -1839,6 +1839,9 @@ importers:
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
+      '@jeswr/pod-export':
+        specifier: workspace:*
+        version: link:../../packages/pod-export
       '@jeswr/solid-auth-core':
         specifier: workspace:*
         version: link:../../packages/solid-auth-core
@@ -2485,6 +2488,12 @@ importers:
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
+      '@jeswr/pod-export':
+        specifier: workspace:*
+        version: link:../../packages/pod-export
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../../packages/pod-type-index
       '@jeswr/rdf-engine':
         specifier: workspace:*
         version: link:../../packages/rdf-engine
@@ -4167,6 +4176,31 @@ importers:
       rdf-validate-shacl:
         specifier: ^0.6.5
         version: 0.6.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/pod-export:
+    dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../ldp-container
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
