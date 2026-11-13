@@ -96,6 +96,10 @@ export const evidenceSchema = z
     balance: z.number().min(0).max(1e9).optional(),
     asOf: iso.optional(),
     issuedAt: iso,
+    /** How the issuer produced the claim (e.g. `recorded-by-authority`). Optional. */
+    method: z.string().max(64).optional(),
+    /** The issuer's terms of use (ODRL, pilot subset, plus a deletion duty). Optional. */
+    terms: z.record(z.string(), z.unknown()).optional(),
     synthetic: z.literal(true),
   })
   .strict();

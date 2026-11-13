@@ -32,16 +32,55 @@ export interface PrincipalLimits {
   readonly maxRetentionDays?: number;
 }
 
-/** Gate codes for `not-applicable` verdicts (the pilot's reason codes cover the rest). */
+/** The closed list of reasons a `not-applicable` verdict may carry (core section 9). */
 export const NOT_APPLICABLE = {
-  notInConfiguration: "not-in-configuration",
+  noAction: "no-action",
   noClaims: "no-claims",
-  noAction: "no-action-intent",
-  conversationBound: "conversation-bound",
-  notYetAgreed: "not-yet-agreed",
-  noRegister: "no-register-for-party",
+  noPrincipal: "no-principal",
+  noData: "no-data",
   noPersonalData: "no-personal-data",
 } as const;
+
+/** Precedence and freshness rules for one kind of claim (reliance suite). */
+export interface RelianceRule {
+  readonly id: string;
+  /** Claim type, or a prefix ending in `.*`. */
+  readonly claimType: string;
+  readonly methods: readonly string[];
+  readonly maxAgeDays: number;
+  /** Plain words for the rule, shown with the verdict. */
+  readonly text: string;
+}
+
+export interface RelianceProfile {
+  readonly id: string;
+  readonly rules: readonly RelianceRule[];
+}
+
+/** Terms an issuer attaches to a statement: ODRL (pilot subset) plus a deletion duty. */
+export interface ItemTerms {
+  readonly policy: import("@jeswr/solid-odrl").OdrlPolicy;
+  /** OPEN-DESIGN: the pilot ODRL subset has no duties, so deletion travels beside the policy. */
+  readonly deleteWithinDays?: number;
+  /** Recipients must be registered for this kind of business (checked through the resolver). */
+  readonly recipientMustBe?: { readonly task: string; readonly label: string };
+}
+
+/** A fact the inbound gate admitted, with its labels (shared with the outbound gate). */
+export interface AdmittedFact {
+  readonly id: string;
+  readonly label: string;
+  readonly claimType: string;
+  readonly source: string;
+  readonly method?: string;
+  readonly asOf?: string;
+  readonly terms?: ItemTerms;
+}
+
+/** What the two gates of one agent share: the labels of admitted facts. */
+export class GateMemory {
+  readonly facts = new Map<string, AdmittedFact>();
+}
 
 export interface GateContext {
   readonly sink?: TraceSink;
@@ -51,7 +90,27 @@ export interface GateContext {
   readonly principalLimits?: PrincipalLimits;
   /** Display label for an operation id ("a mortgage application"). */
   readonly taskLabel?: (operation: Iri) => string;
+  /** Plain name for a statement ("Harbour Bank's balance at 31 October 2026"). */
+  readonly claimLabel?: (statement: Readonly<Record<string, unknown>>) => string;
+  readonly reliance?: RelianceProfile;
+  /** What the agent tells its principal when a claim is admitted, if anything. */
+  readonly tellPrincipal?: (statement: Readonly<Record<string, unknown>>) => string | undefined;
 }
+
+/** The core clause each check applies (01-core). */
+export const CHECK_CLAUSE: Readonly<Record<Check, string>> = {
+  integrity: "CORE-IN-1",
+  source: "CORE-IN-4",
+  authority: "CORE-IN-7",
+  terms: "CORE-IN-10",
+  fitness: "CORE-IN-13",
+  mandate: "CORE-OUT-2",
+  recipient: "CORE-OUT-3",
+  disclosure: "CORE-OUT-4",
+  "data-terms": "CORE-OUT-5",
+  "limits-approval": "CORE-OUT-7",
+  evidence: "CORE-OUT-9",
+};
 
 /** The layers each check reads, for trace references into the configuration. */
 export const CHECK_LAYERS: Readonly<Record<Check, readonly LayerId[]>> = {
@@ -71,9 +130,23 @@ export const CHECK_LAYERS: Readonly<Record<Check, readonly LayerId[]>> = {
 export function refsFor(
   ctx: GateContext,
   layers: readonly LayerId[],
+  clause?: string,
 ): { refs?: readonly TraceRef[] } {
   const c = ctx.configuration;
-  return c ? { refs: layers.map((layer) => ({ layer, suite: c.layers[layer] })) } : {};
+  return c
+    ? {
+        refs: layers.map((layer) => ({
+          layer,
+          suite: c.layers[layer],
+          ...(clause ? { clause } : {}),
+        })),
+      }
+    : {};
+}
+
+/** Refs for a check event, with the core clause the check applies. */
+export function checkRefs(ctx: GateContext, check: Check): { refs?: readonly TraceRef[] } {
+  return refsFor(ctx, CHECK_LAYERS[check], CHECK_CLAUSE[check]);
 }
 
 export function defaultName(iri: string | undefined): string {

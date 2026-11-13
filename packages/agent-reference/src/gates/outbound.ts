@@ -21,22 +21,30 @@ import type { WireMessage } from "../store/state.js";
 import { packetView } from "../trace/packet.js";
 import type { OutboundCheck, OutboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
 import {
-  CHECK_LAYERS,
   type CheckVerdict,
+  checkRefs,
   defaultName,
   type GateContext,
+  type GateMemory,
+  type ItemTerms,
   idWords,
   NOT_APPLICABLE,
   refsFor,
   resolutionView,
   ruleText,
 } from "./common.js";
+import { evaluateItemTerms, termsSummary } from "./quality.js";
 
 export interface OutboundDeps {
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
   readonly now: () => string;
   readonly mandate: () => OwnerMandate | undefined;
   readonly gate: GateContext;
+  readonly memory: GateMemory;
+  /** Whether `party` opened this conversation (a reply to its verified agent). */
+  readonly isReplyTo: (conversation: Iri, party: Iri) => boolean;
+  /** The offered terms with this digest, as received in this agent's conversations. */
+  readonly offerTerms: (termsDigest: string) => JsonObject | undefined;
 }
 
 export interface Release {
@@ -103,7 +111,7 @@ export class OutboundGate {
       kind: "check",
       check,
       verdict,
-      ...refsFor(this.deps.gate, CHECK_LAYERS[check]),
+      ...checkRefs(this.deps.gate, check),
       ...extra,
       caption,
     });
@@ -129,14 +137,24 @@ export class OutboundGate {
     return ask ? { rule: ask, withApproval: true } : undefined;
   }
 
+  private labels(intent: ActionIntent): string[] {
+    const ids = intent.parameters.evidence;
+    return Array.isArray(ids)
+      ? ids.map((id) => this.deps.memory.facts.get(String(id))?.label ?? "a statement")
+      : [];
+  }
+
   private describeAction(intent: ActionIntent): string {
     const p = intent.parameters;
+    const task = this.deps.gate.taskLabel?.(intent.target);
     if (intent.action === "compensate")
       return `pay ${String(p.amount ?? "?")} ${String(p.currency ?? "")} to ${this.name(intent.recipient)}`;
     if (intent.action === "distribute") {
-      const items = Array.isArray(p.evidence) ? p.evidence.length : undefined;
-      return `share ${items ? `${items} statement(s)` : idWords(intent.target)} with ${this.name(intent.recipient)}`;
+      const labels = this.labels(intent);
+      return `share ${labels.length > 0 ? listWords(labels) : idWords(intent.target)} with ${this.name(intent.recipient)}`;
     }
+    if (task && task !== intent.target)
+      return `take the next step in ${task} with ${this.name(intent.recipient)}`;
     return `${intent.action} ${idWords(intent.target)} with ${this.name(intent.recipient)}`;
   }
 
@@ -148,28 +166,30 @@ export class OutboundGate {
       typeof days === "number" &&
       days > limits.maxRetentionDays
     )
-      return `${this.owner}'s limit is ${limits.maxRetentionDays} days of keeping data; this asks for ${days}.`;
+      return `You asked me not to let anyone keep your data for more than ${limits.maxRetentionDays} days; this asks for ${days}.`;
     return undefined;
   }
 
   /** The request the principal sees, built from the rule and the facts of the action. */
   approvalRequest(intent: ActionIntent, limitText: string | undefined): string {
     const p = intent.parameters;
-    const facts: string[] = [];
-    if (intent.purpose) facts.push(`for ${idWords(intent.purpose)}`);
-    if (typeof p.retentionDays === "number") facts.push(`kept for ${p.retentionDays} days`);
-    if (Array.isArray(p.onward) && p.onward.length > 0)
-      facts.push(`passed on only to ${p.onward.map((o) => this.name(String(o))).join(", ")}`);
-    const evidence = Array.isArray(p.evidence)
-      ? ` The statements: ${p.evidence.map((e) => idWords(String(e))).join(", ")}.`
-      : "";
-    const ask =
-      intent.action === "distribute" && Array.isArray(p.evidence)
-        ? `asks for ${p.evidence.length} of your statements`
-        : `asks me to ${this.describeAction(intent)}`;
-    return `${this.name(intent.recipient)} ${ask}${
-      facts.length > 0 ? `, ${facts.join(", ")}` : ""
-    }.${evidence}${limitText ? ` ${limitText}` : ""} May I go ahead?`;
+    const who = this.name(intent.recipient);
+    if (intent.action === "distribute") {
+      const labels = this.labels(intent);
+      const uses = [
+        intent.purpose ? `use them for ${idWords(intent.purpose)}` : "",
+        typeof p.retentionDays === "number" ? `keep them for ${p.retentionDays} days` : "",
+        Array.isArray(p.onward) && p.onward.length > 0
+          ? `pass them on only to ${listWords(p.onward.map((o) => this.name(String(o))))}`
+          : "",
+      ].filter(Boolean);
+      return `${who} asks for ${labels.length === 1 ? "one" : labels.length === 2 ? "two" : labels.length} of your statements: ${listWords(labels)}. They would ${listWords(uses)}.${
+        limitText ? ` ${limitText}` : ""
+      } May I share them?`;
+    }
+    return `${who} asks me to ${this.describeAction(intent)}${
+      intent.purpose ? ` for ${idWords(intent.purpose)}` : ""
+    }.${limitText ? ` ${limitText}` : ""} May I go ahead?`;
   }
 
   /** The core proposes an action; the gate receives it. */
@@ -177,9 +197,7 @@ export class OutboundGate {
     this.emit({
       part: "core",
       kind: "propose",
-      caption: `The core proposes to ${this.describeAction(intent)}${
-        intent.purpose ? ` for ${idWords(intent.purpose)}` : ""
-      }.`,
+      caption: `The core proposes to ${this.describeAction(intent)}.`,
     });
   }
 
@@ -236,7 +254,9 @@ export class OutboundGate {
     );
 
     // 2. Recipient.
-    if (!this.recipient(verdicts, subject, intent.recipient, intent.operation)) {
+    if (
+      !this.recipient(verdicts, subject, intent.recipient, intent.operation, intent.conversation)
+    ) {
       this.decide(
         "stop",
         "The action is stopped: the recipient is not accepted.",
@@ -245,48 +265,14 @@ export class OutboundGate {
       return { outcome: "stop", verdicts, decision: { ...decision, outcome: "deny" } };
     }
 
-    // 3. Disclosure. OPEN-DESIGN: no least-disclosure suite yet.
-    this.verdict(
-      verdicts,
-      subject,
-      "disclosure",
-      "not-applicable",
-      "No least-disclosure step in this configuration: what was asked for goes by value.",
-      { reason: NOT_APPLICABLE.notInConfiguration },
-    );
-
-    // 4. Data terms.
-    if (intent.action === "distribute") {
-      const p = intent.parameters;
-      const parts = [
-        intent.purpose ? `purpose ${idWords(intent.purpose)}` : "",
-        typeof p.retentionDays === "number" ? `kept at most ${p.retentionDays} days` : "",
-        Array.isArray(p.onward) && p.onward.length > 0
-          ? `passed on only to ${p.onward.map((o) => this.name(String(o))).join(", ")}`
-          : "",
-      ].filter(Boolean);
-      this.verdict(
-        verdicts,
-        subject,
-        "data-terms",
-        "pass",
-        `The statements carry no terms of their own; these terms go out with them: ${parts.join("; ")}.`,
-        {
-          rule: {
-            id: String(p.termsDigest ?? subject),
-            text: `The agreed terms (digest ${String(p.termsDigest ?? "?").slice(0, 16)}…) go out with the data.`,
-          },
-        },
-      );
-    } else {
-      this.verdict(
-        verdicts,
-        subject,
-        "data-terms",
-        "not-applicable",
-        "This action passes on no personal data.",
-        { reason: NOT_APPLICABLE.noPersonalData },
-      );
+    // 3. Disclosure, then 4. data terms: either can stop the release.
+    // Without a configuration (the pilot's own callers) the gate adds no checks of its own.
+    const blocked = ctx.configuration
+      ? (this.disclosure(verdicts, subject, intent) ?? this.dataTerms(verdicts, subject, intent))
+      : undefined;
+    if (blocked) {
+      this.decide("stop", "The action is stopped; nothing leaves.", blocked);
+      return { outcome: "stop", verdicts, decision: { ...decision, outcome: "deny" } };
     }
 
     // 5. Limits and approval.
@@ -301,7 +287,7 @@ export class OutboundGate {
       };
     }
     if (effective.outcome === "approval-required") {
-      const reason = limitText ? "excessive-scope" : "approval-required";
+      const reason = limitText ? "limit-exceeded" : "approval-required";
       const request = this.approvalRequest(intent, limitText);
       this.verdict(
         verdicts,
@@ -355,16 +341,29 @@ export class OutboundGate {
     subject: string,
     party: Iri | undefined,
     task: Iri | undefined,
+    conversation?: Iri,
   ): boolean {
     const resolver = this.deps.gate.resolver;
-    if (!resolver || !party || !task) {
+    if (!party) {
       this.verdict(
         verdicts,
         subject,
         "recipient",
         "not-applicable",
-        "The recipient is reached only through its pinned key; no lookup in this configuration.",
-        { reason: NOT_APPLICABLE.notInConfiguration },
+        "The message goes to no one in particular.",
+        {
+          reason: NOT_APPLICABLE.noPrincipal,
+        },
+      );
+      return true;
+    }
+    if (!resolver || !task) {
+      this.verdict(
+        verdicts,
+        subject,
+        "recipient",
+        "pass",
+        `${this.name(party)}'s agent is reached through the key pinned when the two were introduced.`,
       );
       return true;
     }
@@ -378,22 +377,189 @@ export class OutboundGate {
       });
       return true;
     }
+    if (r.outcome === "no-route" && conversation && this.deps.isReplyTo(conversation, party)) {
+      this.verdict(
+        verdicts,
+        subject,
+        "recipient",
+        "pass",
+        `A reply to ${this.name(party)}'s verified agent, which opened this conversation; no register lists private persons.`,
+        {
+          ...resolution,
+          rule: { id: conversation, text: "Replies go to the verified sender of the request." },
+        },
+      );
+      return true;
+    }
     if (r.outcome === "no-route") {
       this.verdict(
         verdicts,
         subject,
         "recipient",
-        "not-applicable",
-        `No register answers for ${this.name(party)}; it is reached through its pinned key and its signed representation.`,
-        { reason: NOT_APPLICABLE.noRegister, ...resolution },
+        "indeterminate",
+        `${this.name(party)}: ${r.answer}`,
+        {
+          reason: "lookup-failed",
+          ...resolution,
+        },
       );
-      return true;
+      return false;
     }
     this.verdict(verdicts, subject, "recipient", "fail", `${this.name(party)}: ${r.answer}`, {
       reason: "not-authorised",
       ...resolution,
     });
     return false;
+  }
+
+  /** Disclosure: is what goes out what the request and the purpose need, and no more? */
+  private disclosure(
+    verdicts: CheckVerdict[],
+    subject: string,
+    intent: ActionIntent,
+  ): string | undefined {
+    const p = intent.parameters;
+    if (intent.action === "distribute" && Array.isArray(p.evidence)) {
+      const offer =
+        typeof p.termsDigest === "string" ? this.deps.offerTerms(p.termsDigest) : undefined;
+      const requested = Array.isArray(offer?.evidenceRequest)
+        ? offer.evidenceRequest.map((r) => String((r as JsonObject).claimType))
+        : undefined;
+      const items = p.evidence.map((id) => this.deps.memory.facts.get(String(id)));
+      if (!requested) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "indeterminate",
+          "What the request needs cannot be found.",
+          {
+            reason: "missing-context",
+          },
+        );
+        return "missing-context";
+      }
+      const extra = items.filter((f) => !f || !requested.includes(f.claimType));
+      const missing = requested.filter((t) => !items.some((f) => f?.claimType === t));
+      const rule = {
+        id: String(p.termsDigest),
+        text: `The request asks for ${listWords(requested.map((t) => idWords(t)))}; by value is the only form in this configuration.`,
+      };
+      if (extra.length > 0) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "fail",
+          `${extra.length} item(s) would go that the request does not need.`,
+          { reason: "excessive-scope", rule },
+        );
+        return "excessive-scope";
+      }
+      this.verdict(
+        verdicts,
+        subject,
+        "disclosure",
+        "pass",
+        `Only what the request needs goes: ${listWords(this.labels(intent))}${
+          missing.length > 0 ? ` (nothing held for ${listWords(missing)})` : ""
+        }.`,
+        { reason: "minimal-disclosure", rule },
+      );
+      return;
+    }
+    if (Array.isArray(p.disclosed)) {
+      this.verdict(
+        verdicts,
+        subject,
+        "disclosure",
+        "pass",
+        `Only the fields the application needs go: ${listWords(p.disclosed.map((f) => idWords(String(f))))}.`,
+        { reason: "minimal-disclosure" },
+      );
+      return;
+    }
+    this.verdict(
+      verdicts,
+      subject,
+      "disclosure",
+      "not-applicable",
+      "This action passes on no personal data.",
+      {
+        reason: NOT_APPLICABLE.noPersonalData,
+      },
+    );
+  }
+
+  /** Data terms: do the terms on each item allow this use and this recipient? */
+  private dataTerms(
+    verdicts: CheckVerdict[],
+    subject: string,
+    intent: ActionIntent,
+  ): string | undefined {
+    const p = intent.parameters;
+    if (intent.action !== "distribute" || !Array.isArray(p.evidence)) {
+      this.verdict(
+        verdicts,
+        subject,
+        "data-terms",
+        "not-applicable",
+        "This action passes on no personal data.",
+        {
+          reason: NOT_APPLICABLE.noPersonalData,
+        },
+      );
+      return undefined;
+    }
+    let blocked: string | undefined;
+    for (const id of p.evidence) {
+      const fact = this.deps.memory.facts.get(String(id));
+      const terms: ItemTerms | undefined = fact?.terms;
+      const t = evaluateItemTerms(terms, {
+        agent: this.deps.identity.actor,
+        action: "distribute",
+        target: String(id),
+        ...(intent.purpose ? { purpose: intent.purpose } : {}),
+        ...(typeof p.retentionDays === "number" ? { retentionDays: p.retentionDays } : {}),
+        at: this.deps.now(),
+      });
+      let verdict = t.verdict;
+      let text = t.text;
+      let reason = t.reason;
+      if (verdict === "pass" && terms?.recipientMustBe && intent.recipient) {
+        const r = this.deps.gate.resolver?.resolveRecipient({
+          party: intent.recipient,
+          task: intent.operation,
+          taskLabel: terms.recipientMustBe.task,
+          at: this.deps.now(),
+        });
+        if (r?.outcome !== "accepted") {
+          verdict = "fail";
+          reason = "not-authorised";
+          text = `Its terms allow sharing only with ${terms.recipientMustBe.label}; ${this.name(intent.recipient)} is not shown to be one.`;
+        } else {
+          text = `${text} ${this.name(intent.recipient)} is ${terms.recipientMustBe.label} (sector register).`;
+        }
+      }
+      if (verdict !== "pass") blocked ??= reason ?? "indeterminate-policy";
+      this.verdict(
+        verdicts,
+        subject,
+        "data-terms",
+        verdict,
+        `${fact?.label ?? "An item"}: ${lower(text)}`,
+        {
+          ...(reason ? { reason } : {}),
+          rule: {
+            id: terms?.policy.id ?? "default-terms",
+            text: terms
+              ? `The issuer's terms: ${termsSummary(terms)}. They go out with the data.`
+              : text,
+          },
+        },
+      );
+    }
+    return blocked;
   }
 
   /** The principal declined a held action: it stops. */
@@ -424,15 +590,15 @@ export class OutboundGate {
         "No action is proposed by this message, so there is no mandate decision.",
         { reason: NOT_APPLICABLE.noAction },
       );
-      this.recipient(verdicts, subject, message.to?.party, opts.operation);
+      this.recipient(verdicts, subject, message.to?.party, opts.operation, message.conversation);
       this.verdict(
         verdicts,
         subject,
         "disclosure",
         "not-applicable",
-        "No least-disclosure step in this configuration.",
+        "This message proposes no action, so nothing is disclosed by choice.",
         {
-          reason: NOT_APPLICABLE.notInConfiguration,
+          reason: NOT_APPLICABLE.noAction,
         },
       );
       this.verdict(
@@ -466,12 +632,12 @@ export class OutboundGate {
       verdicts,
       message.id,
       "evidence",
-      signed ? "pass" : "not-applicable",
+      signed ? "pass" : "fail",
       signed
         ? `Signed (JWS ${String(header.alg)}) with ${this.name(this.deps.identity.actor)}'s pinned key, and written to the record.`
         : "Sent unsigned, as its configuration allows; written to the record.",
       {
-        ...(signed ? {} : { reason: NOT_APPLICABLE.notInConfiguration }),
+        ...(signed ? {} : { reason: "evidence-missing" }),
         rule: {
           id: message.configuration,
           text: "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record.",
@@ -526,4 +692,13 @@ export class OutboundGate {
       caption,
     });
   }
+}
+
+function listWords(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "nothing";
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+
+function lower(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1);
 }

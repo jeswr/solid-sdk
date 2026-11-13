@@ -38,13 +38,17 @@ import { packetView } from "../trace/packet.js";
 import type { InboundCheck, InboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
 import type { Resolution } from "../trust/resolver.js";
 import {
-  CHECK_LAYERS,
+  type AdmittedFact,
+  checkRefs,
   defaultName,
   type GateContext,
+  type GateMemory,
+  type ItemTerms,
   NOT_APPLICABLE,
   refsFor,
   resolutionView,
 } from "./common.js";
+import { evaluateItemTerms, fitnessOf, termsSummary } from "./quality.js";
 
 export interface InboundDeps {
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
@@ -53,6 +57,10 @@ export interface InboundDeps {
   readonly now: () => string;
   readonly record: (record: { readonly type: string }) => void;
   readonly gate: GateContext;
+  /** Labels of admitted facts, shared with this agent's outbound gate. */
+  readonly memory: GateMemory;
+  /** The agreed terms in force in a conversation, if an agreement was made. */
+  readonly agreementTerms: (conversation: Iri) => JsonObject | undefined;
 }
 
 export type IntegrityResult =
@@ -79,8 +87,15 @@ const claimSchema = z
     issuer: z.string().max(512),
     claimType: z.string().max(256),
     subject: z.string().max(512).optional(),
+    method: z.string().max(64).optional(),
+    asOf: z.string().max(64).optional(),
+    issuedAt: z.string().max(64).optional(),
+    period: z.object({ start: z.string().max(16), end: z.string().max(16) }).optional(),
+    terms: z.unknown().optional(),
+    validUntil: z.string().max(64).optional(),
   })
   .passthrough();
+type Claim = z.infer<typeof claimSchema>;
 
 const OUTCOME_VERDICT: Record<InboundOutcome, Verdict> = {
   admit: "pass",
@@ -89,6 +104,9 @@ const OUTCOME_VERDICT: Record<InboundOutcome, Verdict> = {
 };
 
 export class InboundGate {
+  /** Authority settled per conversation (the representation statement accepted). */
+  private readonly authorityByConversation = new Map<string, { id: string; party: string }>();
+
   constructor(private readonly deps: InboundDeps) {}
 
   private get name() {
@@ -116,7 +134,12 @@ export class InboundGate {
         caption: `${/^[aeiou]/.test(peek.kind) ? "An" : "A"} ${peek.kind} message from ${this.name(peek.from?.actor)} reaches the inbound gate.`,
       });
     }
-    return new Admission(this, this.deps, peek?.id ?? digestBytes(JSON.stringify(wire ?? null)));
+    return new Admission(
+      this,
+      this.deps,
+      peek?.id ?? digestBytes(JSON.stringify(wire ?? null)),
+      this.authorityByConversation,
+    );
   }
 
   /**
@@ -396,6 +419,14 @@ export class InboundGate {
     return last ?? done({ ...base, outcome: "not-accepted", reason: "representation-invalid" });
   }
 
+  /** Plain name for a claim. */
+  labelOf(c: Claim): string {
+    return (
+      this.deps.gate.claimLabel?.(c as unknown as Record<string, unknown>) ??
+      `${this.name(c.issuer)}'s ${c.claimType} statement`
+    );
+  }
+
   /** Source: who stands behind one relayed claim, and is that source accepted for it? */
   async assessClaim(
     item: EvidenceItem,
@@ -403,32 +434,29 @@ export class InboundGate {
   ): Promise<{
     verdict: Verdict;
     reason?: string;
-    claimType?: string;
-    source?: Iri;
+    claim?: Claim;
     resolution?: Resolution;
-    assessment?: SourceAuthorityAssessment;
-    statement?: JsonObject;
+    rule?: { id: string; text: string };
   }> {
     const at = this.deps.now();
-    const check = await verifyStatement(item.value, {
-      trust: this.deps.trust,
-      typ: TYP.statement,
-      role: "issuer",
-      schema: claimSchema,
-      limits: this.deps.limits,
-      verifier: this.deps.identity.actor,
-      at,
-    });
+    const verify = (role: "issuer" | "party") =>
+      verifyStatement(item.value, {
+        trust: this.deps.trust,
+        typ: TYP.statement,
+        role,
+        schema: claimSchema,
+        limits: this.deps.limits,
+        verifier: this.deps.identity.actor,
+        at,
+      });
+    let check = await verify("issuer");
+    // A party pinned at its introduction (an organization's own key) may also make statements.
+    if (check.verification.outcome === "unknown-key") check = await verify("party");
     const s = check.payload;
     if (!s || check.verification.outcome !== "valid")
       return { verdict: "fail", reason: "evidence-invalid" };
     if (check.signer?.subject !== s.issuer)
-      return {
-        verdict: "fail",
-        reason: "evidence-invalid",
-        claimType: s.claimType,
-        source: s.issuer,
-      };
+      return { verdict: "fail", reason: "evidence-invalid", claim: s };
     const input = {
       evaluator: this.deps.identity.actor,
       source: s.issuer,
@@ -437,22 +465,30 @@ export class InboundGate {
       at,
     };
     const resolution = this.deps.gate.resolver?.resolveSource(input);
-    const assessment = this.deps.trust.assessSource(input);
+    const outcome = resolution?.outcome ?? this.deps.trust.assessSource(input).outcome;
     const verdict: Verdict =
-      assessment.outcome === "accepted"
-        ? "pass"
-        : assessment.outcome === "unresolved"
-          ? "indeterminate"
-          : "fail";
+      outcome === "accepted" ? "pass" : outcome === "unresolved" ? "indeterminate" : "fail";
+    const reason =
+      verdict === "pass"
+        ? "source-accepted"
+        : verdict === "indeterminate"
+          ? "lookup-failed"
+          : outcome === "no-route"
+            ? "source-unknown"
+            : "source-not-authoritative";
     return {
       verdict,
-      ...(verdict === "fail" ? { reason: "source-not-authoritative" } : {}),
-      ...(verdict === "indeterminate" ? { reason: "indeterminate-policy" } : {}),
-      claimType: s.claimType,
-      source: s.issuer,
+      reason,
+      claim: s,
       ...(resolution ? { resolution } : {}),
-      assessment,
-      statement: s as unknown as JsonObject,
+      ...(resolution?.rule
+        ? {
+            rule: {
+              id: resolution.rule.id,
+              text: `${this.name(s.issuer)} is accepted for ${s.claimType} claims.`,
+            },
+          }
+        : {}),
     };
   }
 
@@ -467,7 +503,7 @@ export class InboundGate {
       kind: "check",
       check,
       verdict,
-      ...refsFor(this.deps.gate, CHECK_LAYERS[check]),
+      ...checkRefs(this.deps.gate, check),
       ...extra,
       caption,
     });
@@ -484,99 +520,175 @@ export class InboundGate {
     });
   }
 
-  /**
-   * Admit statements the agent fetched or holds (reading data is an inbound message too):
-   * integrity and source per statement, then terms and fitness, then a labelled memory fact.
-   */
-  async admitStatements(
-    items: readonly { readonly jws: string }[],
-    opts: { readonly subject?: Iri; readonly task: string },
-  ): Promise<{ admitted: JsonObject[]; refused: number }> {
-    const name = this.name;
-    const admitted: JsonObject[] = [];
-    let refused = 0;
-    for (const item of items) {
-      const r = await this.assessClaim(
-        { role: "credential", format: "jws-compact", value: item.jws },
-        opts.subject,
-      );
-      const who = r.source ? name(r.source) : "an unknown signer";
-      this.verdictEvent(
-        "integrity",
-        r.reason === "evidence-invalid" ? "fail" : "pass",
-        r.reason === "evidence-invalid"
-          ? "The statement's signature does not check out against any pinned key."
-          : `The ${r.claimType} statement is intact and signed with ${who}'s pinned key.`,
-        r.reason === "evidence-invalid" ? { reason: "evidence-invalid" } : {},
-      );
-      if (r.reason === "evidence-invalid") {
-        refused++;
-        this.decisionEvent("refuse", "The statement is refused and kept out of memory.", r.reason);
-        continue;
-      }
+  /** Source, terms and fitness of one claim: one event each. Returns whether all passed. */
+  async claimChecks(
+    item: EvidenceItem,
+    subject: Iri | undefined,
+    need: { purpose?: Iri; retentionDays?: number; task: string },
+    phase: "source" | "terms" | "fitness",
+    cache: Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>,
+    termsOk: Map<string, boolean> = new Map(),
+  ): Promise<boolean> {
+    let r = cache.get(item.value);
+    if (!r) {
+      r = await this.assessClaim(item, subject);
+      cache.set(item.value, r);
+    }
+    const c = r.claim;
+    const label = c ? this.labelOf(c) : "A relayed statement";
+    if (phase === "source") {
       this.verdictEvent(
         "source",
         r.verdict,
-        r.verdict === "pass"
-          ? `${who} is an accepted source for ${r.claimType}, for ${opts.task}.`
-          : `${who} is not an accepted source for ${r.claimType}.`,
+        r.reason === "evidence-invalid"
+          ? `${label} does not verify against its issuer's pinned key.`
+          : r.verdict === "pass"
+            ? `${label}: ${this.name(c?.issuer)} is an accepted source for this kind of claim.`
+            : `${label}: ${this.name(c?.issuer)} is not accepted as a source for this kind of claim.`,
         {
           ...(r.reason ? { reason: r.reason } : {}),
-          ...(r.assessment?.rule
-            ? {
-                rule: {
-                  id: r.assessment.rule.id,
-                  text: `${who} is accepted for ${r.claimType} claims.`,
-                },
-              }
-            : {}),
+          ...(r.rule ? { rule: r.rule } : {}),
           ...(r.resolution ? { resolution: resolutionView(r.resolution) } : {}),
         },
       );
+      return r.verdict === "pass";
+    }
+    if (!c || r.verdict !== "pass") return false;
+    const at = this.deps.now();
+    const terms = c.terms as ItemTerms | undefined;
+    if (phase === "terms") {
+      const t = evaluateItemTerms(terms, {
+        agent: this.deps.identity.actor,
+        action: "use",
+        target: c.id ?? "",
+        ...(need.purpose ? { purpose: need.purpose } : {}),
+        ...(need.retentionDays !== undefined ? { retentionDays: need.retentionDays } : {}),
+        at,
+      });
+      this.verdictEvent(
+        "terms",
+        t.verdict,
+        `${label}: ${t.text.charAt(0).toLowerCase()}${t.text.slice(1)}`,
+        {
+          ...(t.reason ? { reason: t.reason } : {}),
+          rule: { id: terms?.policy.id ?? "default-terms", text: t.text },
+        },
+      );
+      termsOk.set(item.value, t.verdict === "pass");
+      return t.verdict === "pass";
+    }
+    const f = fitnessOf(c, this.deps.gate.reliance, at);
+    this.verdictEvent(
+      "fitness",
+      f.verdict,
+      f.verdict === "pass"
+        ? `${label} is fit for ${need.task}: ${c.method ?? "method unstated"}, ${f.ageDays} days old.`
+        : f.reason === "stale-data"
+          ? `${label} is too old for ${need.task}.`
+          : f.reason === "method-not-accepted"
+            ? `${label} was not produced in a way ${need.task} accepts.`
+            : `No reliance rule covers ${label}.`,
+      { ...(f.reason ? { reason: f.reason } : {}), ...(f.rule ? { rule: f.rule } : {}) },
+    );
+    if (termsOk.get(item.value) !== true || f.verdict !== "pass") return false;
+    const fact: AdmittedFact = {
+      id: c.id ?? digestOf(c),
+      label,
+      claimType: c.claimType,
+      source: c.issuer,
+      ...(c.method ? { method: c.method } : {}),
+      ...(c.asOf ? { asOf: c.asOf } : {}),
+      ...(terms ? { terms } : {}),
+    };
+    this.deps.memory.facts.set(fact.id, fact);
+    return true;
+  }
+
+  /** The memory event for an admitted claim, labelled with source, method, age and terms. */
+  storeEvent(c: Claim, chat?: string): void {
+    const terms = c.terms as ItemTerms | undefined;
+    this.emit({
+      part: "memory",
+      kind: "store",
+      fact: {
+        id: c.id ?? digestOf(c),
+        label: this.labelOf(c),
+        claimType: c.claimType,
+        subject: c.subject ?? "unknown",
+        value:
+          (c as JsonObject).balance ??
+          (c as JsonObject).monthly ??
+          (c as JsonObject).decision ??
+          null,
+        source: c.issuer,
+        ...(c.method ? { method: c.method } : {}),
+        ...(c.asOf ? { asOf: c.asOf } : {}),
+        ...(c.period ? { period: c.period } : {}),
+        ...(terms ? { terms: { id: terms.policy.id, summary: termsSummary(terms) } } : {}),
+        provenance: `signed by ${this.name(c.issuer)}${c.issuedAt ? `, issued ${c.issuedAt}` : ""}`,
+      },
+      ...(chat ? { chat: { who: "agent" as const, text: chat } } : {}),
+      caption: `${this.labelOf(c)} is stored with its source, how it was produced, its date and its terms.`,
+    });
+  }
+
+  /**
+   * Admit statements the agent fetched or holds (reading data is an inbound message too):
+   * integrity, source, authority, terms and fitness per statement, then a labelled fact.
+   */
+  async admitStatements(
+    items: readonly { readonly jws: string }[],
+    opts: { readonly subject?: Iri; readonly task: string; readonly purpose?: Iri },
+  ): Promise<{ admitted: number; refused: number }> {
+    let admitted = 0;
+    let refused = 0;
+    for (const item of items) {
+      const ev: EvidenceItem = { role: "credential", format: "jws-compact", value: item.jws };
+      const cache = new Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>();
+      const r = await this.assessClaim(ev, opts.subject);
+      cache.set(item.jws, r);
+      const label = r.claim ? this.labelOf(r.claim) : "A statement";
+      if (r.reason === "evidence-invalid") {
+        this.verdictEvent("integrity", "fail", `${label} does not verify against a pinned key.`, {
+          reason: "evidence-invalid",
+        });
+        this.decisionEvent(
+          "refuse",
+          `${label} is refused and kept out of memory.`,
+          "evidence-invalid",
+        );
+        refused++;
+        continue;
+      }
+      this.verdictEvent(
+        "integrity",
+        "pass",
+        `${label} is intact and signed with ${this.name(r.claim?.issuer)}'s pinned key.`,
+      );
+      const sourceOk = await this.claimChecks(ev, opts.subject, opts, "source", cache);
       this.verdictEvent(
         "authority",
         "not-applicable",
-        "The statement asks for nothing, so there is no authority to check.",
+        `${label} asks for nothing, so there is no authority to check.`,
         { reason: NOT_APPLICABLE.noAction },
       );
-      this.verdictEvent(
-        "terms",
-        "not-applicable",
-        "The statement carries no terms of use in this configuration.",
-        { reason: NOT_APPLICABLE.notInConfiguration },
-      );
-      // OPEN-DESIGN: no freshness, completeness or confidence rules at the gate yet.
-      this.verdictEvent(
-        "fitness",
-        "not-applicable",
-        "No freshness or confidence rule applies at the gate in this configuration.",
-        { reason: NOT_APPLICABLE.notInConfiguration },
-      );
-      if (r.verdict !== "pass") {
+      const termsOk = new Map<string, boolean>();
+      const ok =
+        sourceOk &&
+        (await this.claimChecks(ev, opts.subject, opts, "terms", cache, termsOk)) &&
+        (await this.claimChecks(ev, opts.subject, opts, "fitness", cache, termsOk));
+      if (!ok) {
         refused++;
-        this.decisionEvent("refuse", "The statement is refused and kept out of memory.", r.reason);
+        this.decisionEvent(
+          "refuse",
+          `${label} is refused and kept out of memory.`,
+          sourceOk ? undefined : r.reason,
+        );
         continue;
       }
-      this.decisionEvent("admit", `The ${r.claimType} statement from ${who} is admitted.`);
-      const s = r.statement as JsonObject;
-      this.emit({
-        part: "memory",
-        kind: "store",
-        fact: {
-          id: String(s.id ?? digestOf(s)),
-          claimType: String(r.claimType),
-          subject: String(s.subject ?? opts.subject ?? "unknown"),
-          value: s.balance ?? s.monthly ?? null,
-          source: String(r.source),
-          sourceKind: "authority",
-          confidence: 1,
-          terms: "none attached (baseline)",
-          provenance: `signed by ${who}; issued ${String(s.issuedAt ?? "unknown")}`,
-          ...(typeof s.asOf === "string" ? { asOf: s.asOf } : {}),
-        },
-        caption: `The statement is stored with its source, its origin and how sure the source is.`,
-      });
-      admitted.push(s);
+      this.decisionEvent("admit", `${label} is admitted.`);
+      this.storeEvent(r.claim as Claim);
+      admitted++;
     }
     return { admitted, refused };
   }
@@ -587,11 +699,15 @@ export class Admission {
   private outcome: InboundOutcome | undefined;
   private readonly done = new Set<InboundCheck>();
   private readonly sources = new Map<string, Verdict>();
+  private readonly claimCache = new Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>();
+  private claimsAdmitted = true;
+  private admittedClaims: Claim[] = [];
 
   constructor(
     private readonly gate: InboundGate,
     private readonly deps: InboundDeps,
     readonly subject: string,
+    private readonly authorityByConversation: Map<string, { id: string; party: string }>,
   ) {}
 
   get decided(): boolean {
@@ -621,19 +737,32 @@ export class Admission {
       {
         rule: {
           id: m.configuration,
-          text: `The configuration requires a JWS from a pinned key, this agent as audience, a valid time window and a one-time message id (${m.id}).`,
+          text: "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before.",
         },
       },
     );
   }
 
-  /** Source: one event per relayed claim; claims the gate did not accept are labelled. */
+  private claims(msg: AnyMessage): EvidenceItem[] {
+    return (msg.evidence ?? []).filter(
+      (e) => e.role === "credential" && e.format === "jws-compact",
+    );
+  }
+
+  private need(conv: ConversationState) {
+    const t = this.deps.agreementTerms(conv.id);
+    return {
+      ...(typeof t?.purpose === "string" ? { purpose: t.purpose } : {}),
+      ...(typeof t?.retentionDays === "number" ? { retentionDays: t.retentionDays } : {}),
+      task: "a mortgage application",
+    };
+  }
+
+  /** Source: one event per relayed claim. */
   async source(msg: AnyMessage): Promise<void> {
     if (this.done.has("source")) return;
     this.done.add("source");
-    const claims = (msg.evidence ?? []).filter(
-      (e) => e.role === "credential" && e.format === "jws-compact",
-    );
+    const claims = this.claims(msg);
     if (claims.length === 0) {
       this.gate.verdictEvent(
         "source",
@@ -644,31 +773,20 @@ export class Admission {
       return;
     }
     for (const item of claims) {
-      const r = await this.gate.assessClaim(item, msg.from.onBehalfOf);
-      if (r.source && r.claimType)
-        this.sources.set(`${r.source}|${r.claimType}|${msg.from.onBehalfOf ?? ""}`, r.verdict);
-      const who = r.source ? this.name(r.source) : "an unknown signer";
-      this.gate.verdictEvent(
+      const ok = await this.gate.claimChecks(
+        item,
+        msg.from.onBehalfOf,
+        { task: "" },
         "source",
-        r.verdict,
-        r.reason === "evidence-invalid"
-          ? "A relayed statement does not verify against its issuer's pinned key; it is not admitted."
-          : r.verdict === "pass"
-            ? `${who} is an accepted source for ${r.claimType}.`
-            : `${who} is not accepted as a source for ${r.claimType}; that claim is not admitted.`,
-        {
-          ...(r.reason ? { reason: r.reason } : {}),
-          ...(r.assessment?.rule
-            ? {
-                rule: {
-                  id: r.assessment.rule.id,
-                  text: `${who} is accepted for ${r.claimType} claims.`,
-                },
-              }
-            : {}),
-          ...(r.resolution ? { resolution: resolutionView(r.resolution) } : {}),
-        },
+        this.claimCache,
       );
+      const r = this.claimCache.get(item.value);
+      if (r?.claim)
+        this.sources.set(
+          `${r.claim.issuer}|${r.claim.claimType}|${msg.from.onBehalfOf ?? ""}`,
+          r.verdict,
+        );
+      if (!ok) this.claimsAdmitted = false;
     }
   }
 
@@ -686,7 +804,12 @@ export class Admission {
         this.decided ? " (asked by the core after admission)" : ""
       }.`,
       {
-        ...(verdict === "fail" ? { reason: "source-not-authoritative" } : {}),
+        reason:
+          verdict === "pass"
+            ? "source-accepted"
+            : verdict === "fail"
+              ? "source-not-authoritative"
+              : "lookup-failed",
         ...(a.rule
           ? {
               rule: {
@@ -713,18 +836,20 @@ export class Admission {
       this.gate.verdictEvent(
         "authority",
         "not-applicable",
-        "This operation does not ask the sender to show who it acts for.",
-        { reason: NOT_APPLICABLE.notInConfiguration },
+        "This operation is not made on anyone's behalf.",
+        { reason: NOT_APPLICABLE.noPrincipal },
       );
       return rep;
     }
     const ok = rep.outcome === "accepted";
+    if (ok && rep.statement)
+      this.authorityByConversation.set(conv.id, { id: rep.statement, party: rep.party });
     this.gate.verdictEvent(
       "authority",
       ok ? "pass" : "fail",
       ok
-        ? `${this.name(rep.party)} signed a statement that ${this.name(rep.actor)} acts for it in this operation.`
-        : `The sender has not shown that it acts for ${this.name(rep.party)} here (${rep.reason}).`,
+        ? `${this.name(rep.party)} signed a statement that ${this.name(rep.actor)} acts for them in this operation.`
+        : `The sender has not shown that it acts for ${this.name(rep.party)} here.`,
       {
         ...(ok ? {} : { reason: rep.reason ?? "representation-invalid" }),
         rule: {
@@ -748,93 +873,127 @@ export class Admission {
     await this.source(msg);
     if (!this.done.has("authority")) {
       this.done.add("authority");
-      const opening = msg.kind === "describe" || msg.kind === "description";
-      this.gate.verdictEvent(
-        "authority",
-        "not-applicable",
-        opening
-          ? "Describing capabilities asks for nothing, so there is no authority to check."
-          : "Authority was checked when this conversation was opened; the sender is bound to it.",
-        { reason: opening ? NOT_APPLICABLE.noAction : NOT_APPLICABLE.conversationBound },
-      );
+      const earlier = this.authorityByConversation.get(conv.id);
+      if (earlier && msg.kind !== "describe" && msg.kind !== "description") {
+        this.gate.verdictEvent(
+          "authority",
+          "pass",
+          `Settled when this conversation opened: ${this.name(earlier.party)}'s signed representation statement still covers it.`,
+          {
+            rule: {
+              id: earlier.id,
+              text: "The representation accepted earlier in this conversation, still valid.",
+            },
+          },
+        );
+      } else {
+        this.gate.verdictEvent(
+          "authority",
+          "not-applicable",
+          "This message asks for nothing, so there is no authority to check.",
+          { reason: NOT_APPLICABLE.noAction },
+        );
+      }
     }
-    const terms = this.terms(conv, msg);
+    const claims = this.claims(msg);
+    const need = this.need(conv);
+    const terms = this.messageTerms(conv, msg, claims.length > 0);
     if (terms.verdict === "fail") {
       this.refuse(terms.reason, "no agreement covers this exchange");
       return { ok: false, reason: terms.reason, detail: "no agreement covers this exchange" };
     }
-    // OPEN-DESIGN: the gate has no fitness rules yet (freshness, completeness, confidence,
-    // conflict ranking); the lender's core checks the 12-month income series itself.
+    this.done.add("terms");
     this.done.add("fitness");
-    this.gate.verdictEvent(
-      "fitness",
-      "not-applicable",
-      "No freshness, completeness or confidence rule applies at the gate in this configuration.",
-      { reason: NOT_APPLICABLE.notInConfiguration },
-    );
-    const notAdmitted = [...this.sources.values()].filter((v) => v !== "pass").length;
+    if (claims.length === 0) {
+      this.gate.verdictEvent(
+        "fitness",
+        "not-applicable",
+        "The message carries no claims whose quality matters.",
+        { reason: NOT_APPLICABLE.noClaims },
+      );
+    } else {
+      const admitted: Claim[] = [];
+      const termsOk = new Map<string, boolean>();
+      const passed = claims.filter((item) => this.claimCache.get(item.value)?.verdict === "pass");
+      for (const item of passed)
+        await this.gate.claimChecks(
+          item,
+          msg.from.onBehalfOf,
+          need,
+          "terms",
+          this.claimCache,
+          termsOk,
+        );
+      for (const item of passed) {
+        const r = this.claimCache.get(item.value);
+        const ok = await this.gate.claimChecks(
+          item,
+          msg.from.onBehalfOf,
+          need,
+          "fitness",
+          this.claimCache,
+          termsOk,
+        );
+        if (!ok) this.claimsAdmitted = false;
+        else if (r?.claim) admitted.push(r.claim);
+      }
+      this.admittedClaims = admitted;
+    }
     this.outcome = "admit";
     this.gate.decisionEvent(
       "admit",
-      notAdmitted > 0
-        ? `The message is admitted; ${notAdmitted} statement(s) the gate did not accept are labelled as such.`
-        : "The message is admitted and passed to the core.",
+      this.claimsAdmitted
+        ? "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+        : "The message is admitted; statements that did not pass are labelled as not admitted.",
     );
+    for (const c of this.admittedClaims)
+      this.gate.storeEvent(
+        c,
+        this.deps.gate.tellPrincipal?.(c as unknown as Record<string, unknown>),
+      );
     return { ok: true };
   }
 
-  private terms(
+  /** Terms at message level: the agreement it comes under, if any. */
+  private messageTerms(
     conv: ConversationState,
     msg: AnyMessage,
+    hasClaims: boolean,
   ): { verdict: "pass" | "not-applicable" } | { verdict: "fail"; reason: ReasonCode } {
-    this.done.add("terms");
     const body = msg.body as unknown as JsonObject;
     const basis = body.basis as JsonObject | undefined;
-    if (msg.kind === "deliver" || msg.kind === "invoke" || msg.kind === "receipt") {
-      if (basis?.kind === "public") {
-        this.gate.verdictEvent("terms", "not-applicable", "A public request: no terms apply.", {
-          reason: NOT_APPLICABLE.noPersonalData,
-        });
-        return { verdict: "not-applicable" };
-      }
-      const agreement = basis?.kind === "agreement" ? String(basis.agreement) : conv.agreement;
-      if (agreement && agreement === conv.agreement) {
-        this.gate.verdictEvent(
-          "terms",
-          "pass",
-          "This comes under the agreement both sides signed; its terms bind what is sent.",
-          {
-            rule: {
-              id: agreement,
-              text: "Signed offer and acceptance of the exact terms (by digest).",
-            },
-          },
-        );
-        return { verdict: "pass" };
-      }
-      if (basis?.kind !== "agreement") {
-        // OPEN-DESIGN: grant-, invocation- and representation-based exchanges are decided by
-        // the pilot's domain handlers; the gate does not evaluate their terms yet.
-        this.gate.verdictEvent(
-          "terms",
-          "not-applicable",
-          "No agreement governs this exchange; any grant it relies on is checked by the core.",
-          { reason: NOT_APPLICABLE.notYetAgreed },
-        );
-        return { verdict: "not-applicable" };
-      }
+    if (basis?.kind === "agreement" && basis.agreement !== conv.agreement) {
       this.gate.verdictEvent("terms", "fail", "No agreement covers this exchange.", {
         reason: "no-agreement",
       });
       return { verdict: "fail", reason: "no-agreement" };
     }
+    if (hasClaims) return { verdict: "pass" }; // per-claim terms events follow
+    if (
+      conv.agreement &&
+      (msg.kind === "deliver" || msg.kind === "receipt" || msg.kind === "invoke")
+    ) {
+      this.gate.verdictEvent(
+        "terms",
+        "pass",
+        "This comes under the agreement both sides signed; its terms bind what is sent.",
+        {
+          rule: {
+            id: conv.agreement,
+            text: "Signed offer and acceptance of the exact terms (by digest).",
+          },
+        },
+      );
+      return { verdict: "pass" };
+    }
+    // OPEN-DESIGN: negotiation messages carry offered terms, not data under terms.
     this.gate.verdictEvent(
       "terms",
       "not-applicable",
-      msg.kind === "propose"
-        ? "Terms are being negotiated; none are in force yet."
-        : "Nothing is exchanged under terms by this message.",
-      { reason: NOT_APPLICABLE.notYetAgreed },
+      "The message carries no data that needs terms.",
+      {
+        reason: NOT_APPLICABLE.noData,
+      },
     );
     return { verdict: "not-applicable" };
   }

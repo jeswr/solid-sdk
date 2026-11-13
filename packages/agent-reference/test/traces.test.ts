@@ -91,7 +91,7 @@ describe("reference traces are reproducible and use the model's ids", () => {
     expect(over.some((e) => e.outcome === "stop" && e.reason === "not-authorised")).toBe(true);
     const limit = await run("mortgage-out-of-limit");
     expect(
-      limit.events.some((e) => e.check === "limits-approval" && e.reason === "excessive-scope"),
+      limit.events.some((e) => e.check === "limits-approval" && e.reason === "limit-exceeded"),
     ).toBe(true);
     expect(
       decisions(limit).some((e) => e.outcome === "stop" && e.reason === "approval-denied"),

@@ -41,7 +41,7 @@ import type {
   ReasonCode,
   RepresentationAssessment,
 } from "../core/types.js";
-import type { GateContext } from "../gates/common.js";
+import { type GateContext, GateMemory } from "../gates/common.js";
 import { type Admission, InboundGate } from "../gates/inbound.js";
 import { OutboundGate } from "../gates/outbound.js";
 import { type KeyAlg, type SigningKey, signCompact, verifyCompact } from "../mechanisms/jws.js";
@@ -289,6 +289,7 @@ export class AgentRuntime {
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
     const gate = options.gates ?? {};
+    const memory = new GateMemory();
     this.inbound = new InboundGate({
       identity: this.identity,
       trust: this.trust,
@@ -296,12 +297,31 @@ export class AgentRuntime {
       now: () => this.now(),
       record: (r) => this.record(r),
       gate,
+      memory,
+      agreementTerms: (id) => {
+        const agreement = this.state.conversations[id]?.agreement;
+        return agreement ? this.state.agreements[agreement]?.terms : undefined;
+      },
     });
     this.outbound = new OutboundGate({
       identity: this.identity,
       now: () => this.now(),
       mandate: () => this.mandate?.mandate,
       gate,
+      memory,
+      isReplyTo: (id, party) => {
+        const conv = this.state.conversations[id];
+        return conv?.role === "responder" && conv.peer.party === party;
+      },
+      offerTerms: (termsDigest) => {
+        for (const [key, entry] of Object.entries(this.state.domain)) {
+          if (!key.startsWith("_offer:")) continue;
+          const terms = domainValue(entry);
+          if (terms && typeof terms === "object" && digestOf(terms) === termsDigest)
+            return terms as JsonObject;
+        }
+        return undefined;
+      },
     });
   }
 
@@ -629,7 +649,7 @@ export class AgentRuntime {
    */
   admitStatements(
     items: readonly { readonly jws: string }[],
-    opts: { readonly subject?: Iri; readonly task: string },
+    opts: { readonly subject?: Iri; readonly task: string; readonly purpose?: Iri },
   ) {
     return this.exclusive(() => this.inbound.admitStatements(items, opts));
   }
@@ -738,6 +758,8 @@ export class AgentRuntime {
       observed?: JsonObject;
       final: boolean;
     },
+    /** Protected statements to carry with the receipt (e.g. a signed decision). */
+    evidence: readonly EvidenceItem[] = [],
   ): Promise<StepResult> {
     return this.exclusive(async () => {
       const conv = this.mustConversation(conversationId);
@@ -745,7 +767,7 @@ export class AgentRuntime {
         conv.id,
         "receipt",
         { ref: conv.agreement ?? conv.id, ...body },
-        {},
+        evidence.length > 0 ? { evidence } : {},
       );
       this.persist();
       const after = this.state.conversations[conv.id];

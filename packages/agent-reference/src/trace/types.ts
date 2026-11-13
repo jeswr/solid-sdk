@@ -133,7 +133,12 @@ export interface TraceAgent {
 
 export interface TraceFile {
   readonly schema: typeof TRACE_SCHEMA;
-  readonly scenario: { readonly id: string; readonly title: string };
+  readonly scenario: {
+    readonly id: string;
+    readonly title: string;
+    /** Titles of the worked-example steps this trace covers, by step number. */
+    readonly steps?: Readonly<Record<string, string>>;
+  };
   readonly configuration: { readonly id: string; readonly layers: Record<LayerId, SuiteId> };
   readonly agents: readonly TraceAgent[];
   readonly generated: { readonly commit: string; readonly core: "scripted" | "recorded-model" };
@@ -174,27 +179,39 @@ export function outlineOf(trace: Pick<TraceFile, "events">): OutlineEntry[] {
 }
 
 /**
- * A fact held in memory, with where it came from and how sure its source was. Modelled now for
- * the fitness check; a payroll or doctor figure outranks a self-reported one.
+ * A fact held in memory, with where it came from and how it was produced. The baseline has
+ * no numeric confidence: reliance rests on the method and the source's standing.
  */
 export interface MemoryFact {
   readonly id: string;
+  /** Plain name ("Harbour Bank's balance at 31 October 2026"). */
+  readonly label: string;
   readonly claimType: string;
   readonly subject: string;
   readonly value: unknown;
   readonly source: string;
-  /** How the source stands for this claim: an accepted authority, an attestation, or self-report. */
-  readonly sourceKind: "authority" | "attested" | "self-reported";
-  /** 0..1, as stated or implied by the source. */
-  readonly confidence: number;
-  readonly terms?: string;
-  readonly provenance?: string;
+  /** How the claim was produced, as its source states it (e.g. `recorded-by-authority`). */
+  readonly method?: string;
   readonly asOf?: string;
+  readonly period?: { readonly start: string; readonly end: string };
+  /** The issuer's terms of use, kept with the fact. */
+  readonly terms?: { readonly id: string; readonly summary: string };
+  readonly provenance?: string;
+  /** A confidence the source stated, when it states one (none in the baseline). */
+  readonly confidence?: number;
 }
 
-/** Ranking used when two facts disagree: authority over attestation over self-report. */
+const METHOD_RANK: Record<string, number> = {
+  "recorded-by-authority": 3,
+  attested: 2,
+  derived: 1,
+  "self-reported": 0,
+};
+
+/** Precedence when two facts disagree: by method first, then by a stated confidence. */
 export function outranks(a: MemoryFact, b: MemoryFact): boolean {
-  const rank = { authority: 2, attested: 1, "self-reported": 0 } as const;
-  if (rank[a.sourceKind] !== rank[b.sourceKind]) return rank[a.sourceKind] > rank[b.sourceKind];
-  return a.confidence > b.confidence;
+  const ra = METHOD_RANK[a.method ?? ""] ?? -1;
+  const rb = METHOD_RANK[b.method ?? ""] ?? -1;
+  if (ra !== rb) return ra > rb;
+  return (a.confidence ?? 0) > (b.confidence ?? 0);
 }

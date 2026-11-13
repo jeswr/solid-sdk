@@ -48,6 +48,8 @@ export interface RegisterEntry {
   readonly party: Iri;
   /** What the register says the party is authorized for (operation ids). */
   readonly authorizedFor: readonly Iri[];
+  /** Kinds of claim the register says the party is an authority for (`x.*` prefixes allowed). */
+  readonly claimTypes?: readonly string[];
   readonly status: "authorized" | "suspended" | "withdrawn";
   readonly id: string;
 }
@@ -84,7 +86,10 @@ export class TrustResolver {
     return `${this.opts.principal}'s own list`;
   }
 
-  /** Is `source` accepted for claims of `claimType` about `subject`? Own list only. */
+  /**
+   * Is `source` accepted for claims of `claimType` about `subject`? The own list first (the
+   * trust store's scoped source rules); otherwise the root and the register it delegates to.
+   */
   resolveSource(input: {
     evaluator: Iri;
     source: Iri;
@@ -97,23 +102,81 @@ export class TrustResolver {
       input.subject ? ` about ${name(input.subject)}` : ""
     }?`;
     const a = this.opts.trust.assessSource(input);
-    const says =
-      a.outcome === "accepted"
-        ? `${name(input.source)} is accepted for ${input.claimType} (rule ${a.rule?.id ?? "?"}).`
-        : (a.reason ?? "no rule recognises this source");
-    const answer =
-      a.outcome === "accepted"
-        ? `Accepted, for ${input.claimType} claims only.`
-        : a.outcome === "unresolved"
-          ? "Cannot tell."
-          : `Not accepted for ${input.claimType}.`;
+    if (a.outcome === "accepted" || a.outcome === "unresolved" || !this.opts.root) {
+      return {
+        question,
+        path: [
+          {
+            at: this.ownListName,
+            kind: "own-list",
+            says:
+              a.outcome === "accepted"
+                ? `${name(input.source)} is accepted for ${input.claimType}.`
+                : (a.reason ?? "No rule recognises this source."),
+          },
+        ],
+        answer:
+          a.outcome === "accepted"
+            ? `Accepted, for ${input.claimType} claims only.`
+            : a.outcome === "unresolved"
+              ? "Cannot tell."
+              : `Not accepted for ${input.claimType}.`,
+        outcome: a.outcome,
+        checkedAt: input.at,
+        ...(a.rule ? { rule: a.rule } : {}),
+      };
+    }
+    const path: PathStep[] = [
+      {
+        at: this.ownListName,
+        kind: "own-list",
+        says: `No entry for ${name(input.source)} for this kind of claim.`,
+      },
+    ];
+    const root = this.opts.root;
+    const matches = (types: readonly string[] | undefined) =>
+      (types ?? []).some((t) =>
+        t.endsWith(".*") ? input.claimType.startsWith(t.slice(0, -1)) : t === input.claimType,
+      );
+    const register = root.delegates.find((r) => r.entries.some((e) => e.party === input.source));
+    const entry = register?.entries.find((e) => e.party === input.source);
+    if (!register || !entry) {
+      path.push({
+        at: root.name,
+        kind: "root",
+        says: `No register it delegates to lists ${name(input.source)}.`,
+      });
+      return {
+        question,
+        path,
+        answer: "No register answers for this source.",
+        outcome: "no-route",
+        checkedAt: input.at,
+      };
+    }
+    path.push({
+      at: root.name,
+      kind: "root",
+      says: `${register.answersFor[0]?.toUpperCase()}${register.answersFor.slice(1)} are answered by the ${register.name}.`,
+    });
+    const ok = entry.status === "authorized" && matches(entry.claimTypes);
+    path.push({
+      at: register.name,
+      kind: "register",
+      says: ok
+        ? `${name(input.source)} is authorized; it is an authority for ${input.claimType}. Checked ${input.at}.`
+        : `${name(input.source)} is ${entry.status}, but not an authority for ${input.claimType}. Checked ${input.at}.`,
+    });
     return {
       question,
-      path: [{ at: this.ownListName, kind: "own-list", says }],
-      answer,
-      outcome: a.outcome === "not-accepted" ? "not-accepted" : a.outcome,
+      path,
+      answer: ok
+        ? `Accepted, for ${input.claimType} claims only.`
+        : `Not accepted for ${input.claimType}.`,
+      outcome: ok ? "accepted" : "not-accepted",
       checkedAt: input.at,
-      ...(a.rule ? { rule: a.rule } : {}),
+      expires: new Date(Date.parse(input.at) + register.answerTtlMs).toISOString(),
+      rule: { id: entry.id },
     };
   }
 
