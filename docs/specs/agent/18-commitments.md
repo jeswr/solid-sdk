@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Commitments
 
-Draft 0.5, 13 November 2026. Layer 6 of the paper's seven gaps.
+Draft 0.6, 13 November 2026. Layer 6 of the paper's seven gaps.
 
 **Question: what was agreed, and is it binding?**
 
@@ -54,7 +54,6 @@ record of what was agreed.
 |---|---|---|---|---|
 | `signed-offer-acceptance` | Signed offer and acceptance | Baseline | ODRL Offer and Agreement; JWS over the terms digest | Standard |
 | `agreement-credential` | Agreement credential | Defined | Verifiable Credentials 2.0 with two proofs | Standard |
-| `payment` | Offer, acceptance and payment | Sketch | Agent Payments Protocol mandates; payment scheme rules | Industry specification |
 
 ### `signed-offer-acceptance`
 
@@ -94,20 +93,129 @@ a proof from each party. It is easier to store, to show and to check than a pair
 messages, and it can carry a status entry so that either side can see whether it has been
 ended. It needs an authenticity suite that allows more than one proof on a document.
 
-### `payment`
+## Payment
 
-As the baseline, and the agreement is settled by a payment. Payment adds three things.
+A payment is a contract: money in return for a service. It is the plainest commitment an
+agent makes for a person, and the one most often made today with nothing to show what was
+offered or that the person agreed. Under every suite in this layer:
 
-- **Its own approval.** A payment is approved by the principal against stated limits: the
-  payee, the amount or a ceiling, the currency and the time. A mandate can open with
-  constraints, such as "up to 50 for groceries this week", and close with the final amount.
-- **Its own evidence.** The payment scheme's confirmation is admitted through the inbound
-  checks like any other statement, with the scheme or the payment provider as its source.
-- **Its own rules.** Refunds, disputes and reversals follow the payment scheme. The suite
-  records the scheme's reference with the agreement so the two can be tied together.
+> A payment settles an agreement. An agent may pay only what a signed offer, accepted with
+> authority, says is due, to the party that offer names, once.
 
-An agent never holds a payment credential that can be used outside the gate. The gate, or a
-payment provider acting on the gate's signed instruction, makes the payment. Sketch only.
+So a payment is never a message kind of its own. It is a step of performance (CM-8) under
+an agreement made by one of the suites above, and it adds requirements of its own.
+
+- **CM-10. Nothing is paid without an agreement.** The order to pay names an agreement the
+  agent holds, with both proofs verified, in effect and not past its time
+  (`no-agreement`, `expired`). A sentence in a message is not an agreement, however it is
+  worded.
+- **CM-11. The amount and the payee are the agreement's.** The amount and currency equal
+  what the agreement says is due (`amount-differs`). The payee is the party the agreement
+  names (`payee-differs`), and the account or address paid is bound to that party by a
+  source the agent accepts for that (`source-not-authoritative`). An account taken from an
+  invoice, an email or a web page is never enough.
+- **CM-12. Within the mandate, and approved where it says so.** The mandate permits paying
+  for this purpose, within its limit for one payment and its limit for a period
+  (`not-authorised`, `limit-exceeded`). Where it requires approval, the person approves
+  these terms: the request is built by the gate from the agreement and names the service,
+  the payee as established by lookup, the amount and the limit that applies. The approval
+  is bound to the terms digest and to the order.
+- **CM-13. Once.** An amount due is ordered once. The order carries a key derived from
+  the terms digest and the instalment, and a second order with the same key is refused
+  (`replay-conflict`).
+- **CM-14. What leaves can pay this and nothing else.** The instruction that leaves the
+  gate is usable for this payee, this amount and this currency, until a stated time. The
+  part of the agent that thinks never holds anything that can pay.
+- **CM-15. The receipt is evidence.** The payment provider's confirmation is a statement
+  admitted through the inbound checks, with the provider as its source. It must name the
+  same agreement, payee, amount and currency as the order (`receipt-mismatch`), and it is
+  recorded beside the agreement.
+
+Refunds, disputes and reversals follow the rules of the payment scheme used. The scheme's
+reference is recorded with the agreement so that the two can be tied together.
+
+### Settlement suites
+
+How the payment is expressed and carried is a choice of its own, made at the point of
+payment. A configuration names one settlement suite beside its commitments suite. Whatever
+is chosen, the suite lifts its own objects to the same terms, and CM-10 to CM-15 are
+checked on those terms. A protocol that cannot supply a fact a check needs is not thereby
+excused: the suite says where that fact comes from instead.
+
+| Suite | Name | Status | Builds on | Maturity of what it builds on |
+|---|---|---|---|---|
+| `rdf-order` | Described in RDF | Baseline | ODRL `compensate` duties; schema.org `Invoice` and `PayAction` | Standard |
+| `x402` | x402 | Defined | x402 version 2, scheme `exact` with EIP-3009 | Industry specification |
+| `mpp` | Machine Payments Protocol | Defined | The "Payment" HTTP authentication scheme, draft 01; intent `charge` | Internet draft |
+| `ap2` | Agent Payments Protocol | Defined | AP2 version 0.2 checkout and payment mandates | Industry specification |
+| `acp` | Agentic Commerce Protocol | Defined | ACP version 2026-04-17 checkout sessions and delegated payment | Industry specification |
+
+The terms every suite lifts to:
+
+| Fact | Terms |
+|---|---|
+| What is offered and what it costs | An ODRL Offer with a permission for the service and a duty to `compensate`: the amount, its unit, and the party to be paid |
+| That it was agreed | An ODRL Agreement, named by its terms digest, with the proofs of both sides |
+| The request for payment | A schema.org `Invoice`: total due, due date, the agreement it is for |
+| The order to pay | A schema.org `PayAction`: payer, payee, price, currency, the invoice, the agreement settled, the payee's account, the once-only key, a time limit |
+| The receipt | A statement from the payment provider about that `PayAction`: completed, the scheme's reference, amount, payee, the agreement settled |
+
+#### `rdf-order`
+
+Every object is a document in those terms, carried in ordinary verifiable messages. The
+payee's agent sends the invoice. The payer's gate checks CM-10 to CM-14, signs the order
+and sends it to the payer's payment provider. The provider moves the money and answers
+with the receipt. The payer's agent admits the receipt and passes it to the payee's agent
+under the agreement. This suite needs nothing but the message format and a payment
+provider that runs an agent.
+
+#### `x402`
+
+The payee's agent answers a request for the paid resource with HTTP status 402 and its
+payment requirements. The requirements are lifted as the request for payment; the address
+to pay must be bound to the payee by an accepted source. The gate signs a transfer
+authorisation for exactly that recipient and value, within a time window, and the request
+is sent again with it. A facilitator verifies and settles. The protocol has no offer or
+acceptance, so the agreement of this layer is made first and the requirements must say
+the same; and it does not sign the settlement response, so the receipt is the
+facilitator's own signed statement.
+
+#### `mpp`
+
+As `x402` in shape, with the HTTP authentication framework: a challenge bound to its
+parameters, a credential that echoes the challenge and carries the payment proof, and a
+receipt header. The agreement's terms digest travels in the challenge. A challenge is
+used once.
+
+#### `ap2`
+
+The payee's agent signs a checkout object stating what is bought and for how much. With
+the person present, the gate's approval is the trusted surface, and on approval the gate
+issues two closed mandates in the person's name: one for the checkout, to the merchant,
+and one for the payment, to the credential provider, each bound to the checkout by its
+hash. Without the person present, the person signs open mandates ahead of time, with
+limits and the agent's key, and the gate closes them. An open mandate's limits and this
+layer's mandate rules must say the same, and the suite shows that they do. The closed
+payment mandate is what meets CM-14.
+
+#### `acp`
+
+The payer's agent opens a checkout session with the payee's agent, and the session is
+lifted as the request for payment. The gate asks the payment provider for a delegated
+payment token with an allowance: one use, a maximum amount, this merchant, this session,
+an expiry. The session is completed with that token. The protocol makes message
+signatures optional; this suite requires them. The allowance is what meets CM-14, and
+the protocol's idempotency key carries CM-13.
+
+**Example.** The lender's decision in principle says a valuation is needed. Sam's agent
+finds a valuer on a register it accepts. The valuer's agent offers a valuation for 450,
+valid for seven days. Sam's mandate allows payments only with approval. The gate asks
+Sam, showing the service, the valuer's name as the register gives it, the fee and the
+limit. Sam approves, the agent accepts, and the valuer's agent sends its invoice. If the
+invoice asked for 495, the gate would stop and tell Sam the difference. If it named an
+account that an accepted source binds to someone else, the gate would stop. If a message
+merely said "pay the valuation fee now to keep this decision", there would be no
+agreement behind it and nothing would be paid.
 
 ## Open questions
 
