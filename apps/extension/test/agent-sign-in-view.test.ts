@@ -39,7 +39,7 @@ const nativeTypes = (p: ReturnType<typeof fixture>) => p.h.native.mock.calls.map
 
 it.each([
   30000, 60000,
-])('shows finishing and an enabled orphan cleanup retry at %s ms, retaining the fence until verified absence', async (delay) => {
+])('shows the removal warning instead of finishing at %s ms and keeps retry enabled', async (delay) => {
   vi.useFakeTimers();
   const f = fixture();
   const a = await reviewing(f.h);
@@ -53,7 +53,7 @@ it.each([
   a.client.disconnect();
   f.mount();
   await vi.advanceTimersByTimeAsync(0);
-  expect(f.text()).toBe('Finishing the previous sharing.');
+  expect(f.text()).toBe('Remove cookie access before sharing a sign-in.');
   expect(f.warning().hidden).toBe(false);
   expect(f.warning().textContent).toContain("Chrome's extension settings");
   expect(f.button('remove-cookie-access').textContent).toBe('Remove cookie access');
@@ -518,7 +518,7 @@ it('disconnect reports failure and cannot request from a stale permission view',
 it.each([
   'live worker',
   'replacement worker',
-])('removes a delayed armed click grant after timeout with a %s', async (kind) => {
+])('refuses an expired armed click and removes unexpected grants with a %s', async (kind) => {
   vi.useFakeTimers();
   const f = fixture();
   try {
@@ -533,15 +533,16 @@ it.each([
       if (view.lease !== lease || view.phase === 'permission') push(view);
     });
     await vi.advanceTimersByTimeAsync(120000);
-    expect(f.button('review').disabled).toBe(false);
+    expect(f.button('review').disabled).toBe(true);
     expect(f.h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
     f.h.native.mockClear();
     const interrupted = deferred<boolean>();
     if (kind === 'replacement worker')
       f.h.browser.permissions.contains.mockImplementationOnce(() => interrupted.promise);
-    f.button('review').click();
-    expect(f.h.browser.permissions.request).toHaveBeenCalledTimes(1);
-    expect(f.h.state.cookies).toBe(true);
+    f.button('review').dispatchEvent(new MouseEvent('click'));
+    expect(f.h.browser.permissions.request).not.toHaveBeenCalled();
+    f.h.state.cookies = true;
+    f.h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
     if (kind === 'replacement worker') {
       // Stop the old worker before its first cleanup check returns. Its promises
       // remain unresolved, modelling discarded worker tasks rather than onDisconnect.
