@@ -48,6 +48,7 @@ import type {
   JsonObject,
   OutcomeConclusion,
 } from "../core/types.js";
+import type { ContextItem } from "../gates/common.js";
 import type { TransmissionRecord } from "../runtime/transmission.js";
 
 export interface SeenEntry {
@@ -140,6 +141,12 @@ export interface MandateRevocation {
 }
 
 export interface RuntimeState {
+  duties: import("../runtime/duties.js").DutyState;
+  recordMessages: Record<
+    string,
+    { direction: "in" | "out"; conversation: string; digest: string; jws: string }
+  >;
+  precedenceHolds: Record<string, import("../gates/common.js").AdmittedFact>;
   readonly version: 1;
   conversations: Record<Iri, ConversationState>;
   seen: Record<Iri, SeenEntry>;
@@ -158,6 +165,47 @@ export interface RuntimeState {
   tasks: Record<Iri, TaskState>;
   /** Provider transmissions of outbound messages, keyed by message id (see transmission.ts). */
   transmissions: Record<Iri, TransmissionRecord>;
+  contextItems: Record<Iri, ContextItem[]>;
+  knownIdentifiers: Record<Iri, string[]>;
+  generatedConversations: Record<Iri, true>;
+  /** Single-use approvals remain remembered after their permitted release. */
+  usedApprovals: Record<Iri, true>;
+  notificationDuties: Record<
+    string,
+    {
+      id: string;
+      rule: string;
+      use: string;
+      recipient: string;
+      due: string;
+      status: "pending" | "discharged" | "failed";
+      at?: string;
+      message?: string;
+    }
+  >;
+  trustPins: { kid: string; party: string; purpose: string; expiresAt: string }[];
+  trustHolds: Record<
+    string,
+    {
+      digest: string;
+      message: import("../core/types.js").AnyMessage;
+      wire: WireMessage;
+      binding: string;
+      kid: string;
+      party: string;
+      purpose: string;
+      expiresAt: string;
+    }
+  >;
+  trustRefusals: Record<string, true>;
+  statementRefusals: Record<string, string>;
+  /** Gate records only, excluded from facts, domain memory and core context. */
+  relianceHolds: Record<string, import("../gates/common.js").RelianceHold>;
+  relianceBindings: Record<string, string>;
+  paymentTotals: Record<string, number>;
+  paymentReleases: Record<string, true>;
+  paymentReservations: Record<string, { digest: string; period: string; amountMinor: number }>;
+  organisationApprovals: Record<string, import("../gates/approvals.js").OrganisationApproval[]>;
 }
 
 /** Explicit conversation/task ownership. Legacy JSON without this envelope has no owner. */
@@ -177,6 +225,9 @@ export function domainValue(record: Json | undefined): Json | undefined {
 export function emptyState(): RuntimeState {
   return {
     version: 1,
+    duties: { transfers: [], incoming: [], work: {} },
+    precedenceHolds: {},
+    recordMessages: {},
     conversations: {},
     seen: {},
     outbox: {},
@@ -188,6 +239,21 @@ export function emptyState(): RuntimeState {
     revokedMandates: [],
     tasks: {},
     transmissions: {},
+    contextItems: {},
+    knownIdentifiers: {},
+    generatedConversations: {},
+    usedApprovals: {},
+    notificationDuties: {},
+    organisationApprovals: {},
+    paymentTotals: {},
+    statementRefusals: {},
+    relianceHolds: {},
+    relianceBindings: {},
+    trustPins: [],
+    trustHolds: {},
+    trustRefusals: {},
+    paymentReleases: {},
+    paymentReservations: {},
   };
 }
 

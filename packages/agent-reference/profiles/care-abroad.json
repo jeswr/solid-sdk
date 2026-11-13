@@ -1,0 +1,87 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "care-abroad",
+  "parties": {
+    "party-1": "A traveller",
+    "party-2": "A home practice",
+    "party-3": "A clinic abroad",
+    "clinic-agent": "The clinic’s agent",
+    "mapping-registry": "The fictional clinical mapping registry"
+  },
+  "claims": [
+    {
+      "kind": "medicine.code",
+      "sources": [
+        "urn:fictional:care-abroad:party-2"
+      ],
+      "methods": [
+        "recorded-by-authority",
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "code-mapping",
+      "sources": [
+        "urn:fictional:care-abroad:mapping-registry"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 365
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:care-abroad",
+      "claims": [
+        "medicine.code"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": [],
+  "codeMappings": {
+    "receivers": [
+      "urn:fictional:care-abroad:clinic-agent:actor"
+    ],
+    "acceptedLists": [
+      "urn:medicine-list:B"
+    ],
+    "maxStatusAgeSeconds": 60,
+    "approximate": "ask-more",
+    "routes": [
+      {
+        "fromList": "urn:medicine-list:A",
+        "toList": "urn:medicine-list:B",
+        "registry": "urn:fictional:care-abroad:mapping-registry",
+        "table": "urn:fictional:care-abroad:mapping-table",
+        "version": "1"
+      }
+    ],
+    "assurance": "attested"
+  },
+  "standIns": [
+    {
+      "what": "Cross-border clinical sources and mapping registry",
+      "replacedBy": "Separately keyed fictional clinical and registry sources publish the original signed medicine statement, a versioned signed mapping table and fresh signed status via a local resolver. Local explicit source rules replace the catalogue federation trust route; no federation transport is claimed."
+    },
+    {
+      "what": "An attested mapping result",
+      "replacedBy": "The fictional mapping registry is an issuer-only deriver with its own key. It verifies the actual original signature and computes the mapping from the signed table, then publishes a signed record bound to the original digest, table version and output; the clinic’s profile accepts it for this purpose."
+    }
+  ],
+  "attestedDerivers": [
+    {
+      "deriver": "urn:fictional:care-abroad:mapping-registry",
+      "rule": "urn:fictional:care-abroad:mapping-table",
+      "purposes": [
+        "urn:purpose:care-abroad"
+      ]
+    }
+  ]
+}

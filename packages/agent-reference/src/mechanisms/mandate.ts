@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The bounded OWNER MANDATE and the pilot ODRL adapter (framework A4/A5, profile C1 rules).
  *
@@ -49,7 +50,7 @@ export const POLICY_EVALUATOR_ID = SOLID_ODRL_ENGINE_ID;
 
 /** The ODRL subset this pilot profile accepts. Anything else is `indeterminate`. */
 export const PILOT_ODRL_SUBSET = {
-  actions: ["use", "read", "distribute", "compensate", "transfer"],
+  actions: ["pay", "use", "read", "distribute", "compensate", "transfer"],
   leftOperands: ["dateTime", "purpose", "recipient"],
   operators: ["eq", "neq", "isAnyOf", "isNoneOf", "lt", "lteq", "gt", "gteq"],
   conflict: ["prohibit"],
@@ -81,8 +82,24 @@ const rule = z
     assigner: z.string().optional(),
     constraints: z.array(constraint).max(16).optional(),
     duties: z.array(z.unknown()).max(8).optional(),
+    approvals: z
+      .strictObject({
+        count: z.number().int().min(1).max(16),
+        roles: z.array(z.string()).min(1),
+        distinctFromRequester: z.boolean(),
+      })
+      .optional(),
+    limit: z
+      .strictObject({
+        perAction: z.number().nonnegative(),
+        perPeriod: z.number().nonnegative(),
+        period: z.literal("calendar-month"),
+        currency: z.string().regex(/^[A-Z]{3}$/),
+      })
+      .optional(),
   })
-  .strict();
+  .strict()
+  .refine((r) => !(r.approvals || r.limit) || !!r.id, "rules with approvals or limits need an id");
 const policy = z
   .object({
     id: iri,
@@ -97,6 +114,19 @@ const policy = z
   })
   .strict();
 
+export const standingRuleSchema = z.strictObject({
+  id: iri,
+  when: z.strictObject({ requesterRole: z.string(), declared: z.literal("emergency") }),
+  allows: z.strictObject({ action: z.literal("read"), items: z.array(z.string()).min(1) }),
+  duties: z
+    .array(z.strictObject({ notify: z.array(z.string()).min(1), within: z.literal("PT1H") }))
+    .min(1),
+  expires: instant,
+});
+export type StandingRule = z.infer<typeof standingRuleSchema>;
+
+import { dutyRuleSchema } from "../runtime/duties.js";
+
 export const mandateSchema = z
   .object({
     type: z.literal("OwnerMandate"),
@@ -107,6 +137,8 @@ export const mandateSchema = z
     operator: iri.optional(),
     validFrom: instant,
     validUntil: instant,
+    standing: z.array(standingRuleSchema).max(16).optional(),
+    duties: z.array(dutyRuleSchema).max(64).optional(),
     autonomous: policy,
     withApproval: policy,
     note: z.string().max(1024).optional(),
@@ -227,6 +259,7 @@ export function actionDigest(intent: ActionIntent): string {
 export interface EvaluateInput {
   readonly loaded: LoadedMandate | undefined;
   readonly loadFailure?: string;
+  readonly withdrawn?: boolean;
   readonly intent: ActionIntent;
   readonly decider: Iri;
   readonly at: string;
@@ -265,6 +298,7 @@ export function evaluateIntent(input: EvaluateInput): AuthorisationDecision {
       reason: `mandate-invalid: ${input.loadFailure ?? "absent"}`,
     };
   }
+  if (input.withdrawn) return { ...base, outcome: "deny", reason: "mandate-withdrawn" };
   const m = input.loaded.mandate;
   const now = Date.parse(input.at);
   if (now < Date.parse(m.validFrom)) {

@@ -1,0 +1,179 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "degree-recognition",
+  "path": {
+    "index": 1,
+    "what": "No chain links the two national registers"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The graduate"
+    },
+    {
+      "id": "receiver",
+      "name": "The foreign employer"
+    },
+    {
+      "id": "university",
+      "name": "The fictional university"
+    },
+    {
+      "id": "national-root",
+      "name": "The employer’s national register"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The graduate’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The foreign employer’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "degree-recognition--branch-1",
+    "title": "Showing a degree to an employer abroad: No chain links the two national registers",
+    "steps": {
+      "1": "The foreign employer’s agent checks the signed statements."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The graduate’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The foreign employer’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Foreign university trust preflight",
+      "replacedBy": "The locally introduced university key verifies its degree statement, but no register chain reaches it; no selective hidden-value proof is made"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The fictional university's education.degree statement is intact and signed with The fictional university's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-unknown",
+      "resolution": {
+        "question": "Is The fictional university an authority for education.degree claims about The graduate?",
+        "path": [
+          {
+            "at": "The foreign employer's own list",
+            "kind": "own-list",
+            "says": "No entry for The fictional university for this kind of claim."
+          },
+          {
+            "at": "The employer’s national trust root",
+            "kind": "root",
+            "says": "No register it delegates to lists The fictional university."
+          }
+        ],
+        "answer": "No register answers for this source."
+      },
+      "caption": "The fictional university's education.degree statement: The fictional university is not accepted as a source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The fictional university's education.degree statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "outcome": "ask-more",
+      "reason": "source-unknown",
+      "caption": "Required claim: education.degree. Accepted sources: urn:fictional:degree-recognition:university. Accepted methods: recorded-by-authority."
+    }
+  ]
+}

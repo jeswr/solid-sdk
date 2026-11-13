@@ -1,0 +1,439 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "introduction",
+  "useCase": "introduction",
+  "title": "Being introduced to a stranger safely",
+  "profile": "introduction",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:introduction:owner",
+      "name": "The first person",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:introduction:receiver",
+      "name": "The second person",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "identity-provider",
+      "identity": "urn:fictional:introduction:identity-provider",
+      "name": "The identity provider",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:introduction:owner-agent",
+      "name": "The first person’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:introduction:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:introduction:receiver-agent",
+      "name": "The second person’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:introduction:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:introduction:receiver",
+          "tasks": [
+            "urn:op:introduction",
+            "urn:op:introduction:request"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:introduction:owner",
+          "tasks": [
+            "urn:op:introduction",
+            "urn:op:introduction:request"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:introduction:identity.verified",
+          "version": "1",
+          "source": "urn:fictional:introduction:identity-provider",
+          "claimTypes": [
+            "identity.verified"
+          ],
+          "subjects": [
+            "urn:fictional:introduction:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:introduction:identity.verified",
+          "version": "1",
+          "source": "urn:fictional:introduction:identity-provider",
+          "claimTypes": [
+            "identity.verified"
+          ],
+          "subjects": [
+            "urn:fictional:introduction:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "self-profile",
+      "issuer": "owner",
+      "subject": "urn:fictional:introduction:owner",
+      "kind": "identity.verified",
+      "value": {
+        "value": true
+      },
+      "method": "self-reported",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:introduction:self-profile",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:introduction:self-profile",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:introduction"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:introduction:self-profile",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:introduction"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:introduction"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:introduction:request"
+        }
+      ],
+      "withApproval": [
+        {
+          "type": "permission",
+          "action": "read",
+          "target": "urn:op:introduction"
+        }
+      ]
+    }
+  ],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "One side can show only a self-made profile",
+      "change": {
+        "assurance": null,
+        "suites": {
+          "authenticity": "jws",
+          "identity": "pinned-key"
+        },
+        "script": [
+          {
+            "id": "show-self-profile",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "receiver-agent",
+            "kind": "invoke",
+            "operation": "urn:op:introduction",
+            "contents": {},
+            "intent": {
+              "action": "distribute",
+              "operation": "urn:op:introduction",
+              "target": "urn:op:introduction",
+              "recipient": "urn:fictional:introduction:receiver",
+              "purpose": "urn:purpose:introduction",
+              "parameters": {}
+            },
+            "evidence": [
+              "self-profile"
+            ],
+            "purpose": "urn:purpose:introduction"
+          },
+          {
+            "id": "check-self-profile",
+            "agent": "receiver-agent",
+            "type": "receive",
+            "from": "owner-agent"
+          },
+          {
+            "id": "consider-introduction",
+            "agent": "receiver-agent",
+            "type": "effect",
+            "intent": {
+              "action": "read",
+              "operation": "urn:op:introduction",
+              "target": "urn:op:introduction",
+              "purpose": "urn:purpose:introduction",
+              "conversation": "urn:scenario:introduction:task",
+              "parameters": {
+                "support": [
+                  "urn:scenario:introduction:self-profile"
+                ]
+              }
+            },
+            "params": {},
+            "activityType": "urn:activity:consider-introduction"
+          }
+        ],
+        "traceSteps": {
+          "1": "The first person sends their self-made profile under their own signature.",
+          "2": "The receiving gate holds the unaccepted statement outside memory and core context.",
+          "3": "The second person’s agent proposes to consider the introduction, and the gate asks its principal about this exact reliance."
+        }
+      },
+      "expect": {
+        "outcome": "ask-principal",
+        "check": "limits-approval",
+        "reason": "method-not-accepted"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "not-applicable",
+          "reason": "no-principal"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "ask-principal",
+          "reason": "method-not-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "method-not-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "principal",
+          "kind": "ask-principal",
+          "reason": "method-not-accepted"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "ask-principal",
+        "reason": "method-not-accepted"
+      }
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "source"
+  ],
+  "suites": {
+    "authenticity": "selective-disclosure",
+    "identity": "anonymous"
+  },
+  "assurance": "proved",
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "needs a proof system"
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Proof-free source preflight",
+      "replacedBy": "Reviewed fictional keys authenticate the self-profile author only; no anonymous identity proof or statement of personal safety is produced"
+    }
+  ],
+  "traceSteps": {}
+}

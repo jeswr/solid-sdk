@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Domain adapter: UC-04 patient-authorised summary over a LOCAL SYNTHETIC FHIR R4 service.
  *
@@ -11,8 +12,10 @@
  * NOT an OAuth 2.0 / SMART implementation, no PKCE exchange happens, and no ONC Inferno test was
  * run. Resources are hand-authored Synthea-like fixtures for two wholly synthetic patients.
  */
+
+import type { ContentProfile, ContentVocabulary } from "@jeswr/agent-reference/profile/content";
 import { z } from "zod";
-import { digestOf, newUrn } from "../core/canonical.js";
+import { digestOf } from "../core/canonical.js";
 import { DEFAULT_LIMITS } from "../core/limits.js";
 import { iso } from "../core/schema.js";
 import type {
@@ -92,6 +95,153 @@ export const accessGrantSchema = z
   })
   .strict();
 export type AccessGrant = z.infer<typeof accessGrantSchema>;
+
+/** The synthetic profile's compartments and code systems are finite, reviewed terms. */
+export function healthContent(
+  resources: readonly JsonObject[] = [],
+  patientIds: readonly string[] = ["synthetic-maya", "synthetic-noah", "synthetic-zoe"],
+): ContentProfile {
+  const code = (values: readonly (string | number | boolean)[]) => ({
+    type: "code" as const,
+    values,
+  });
+  const id = { type: "identifier" as const };
+  const date = { type: "date" as const };
+  const vocabulary: Record<string, import("@jeswr/agent-reference/profile/content").ContentType> = {
+    "terms.model": id,
+    "terms.purpose": id,
+    "terms.patientId": { ...code(patientIds), claimType: "health.compartment" },
+    "terms.requestedScopes.*": code([...SUPPORTED_SCOPES, "patient/Condition.rs"]),
+    "terms.sessionMinutes": { type: "number" },
+    "terms.synthetic": code([true]),
+    "selection.grantedScopes.*": code(SUPPORTED_SCOPES),
+    "selection.grantId": id,
+    "selection.expiresAt": date,
+    "input.resourceType": code([
+      "Patient",
+      "MedicationRequest",
+      "AllergyIntolerance",
+      "Observation",
+    ]),
+    "input.patientId": { ...code(patientIds), claimType: "health.compartment" },
+    "output.resourceType": code(["Bundle"]),
+    "output.type": code(["searchset"]),
+    "output.total": { type: "number" },
+    "description.extensions.smartLikeConfiguration.issuer": id,
+    "description.extensions.smartLikeConfiguration.resourceServer": id,
+    "description.extensions.smartLikeConfiguration.capabilities.*": code([
+      "launch-standalone",
+      "context-standalone-patient",
+      "permission-v2",
+    ]),
+    "description.extensions.smartLikeConfiguration.code_challenge_methods_supported.*": code([
+      "S256",
+      "plain",
+    ]),
+    "description.extensions.smartLikeConfiguration.scopes_supported.*": code(SUPPORTED_SCOPES),
+  };
+  const prefix = "output.entry.*.resource.";
+  const termsAt = (path: string): string[] => {
+    const visit = (item: unknown, keys: string[]): unknown[] => {
+      if (!keys.length) return [item];
+      if (!item || typeof item !== "object") return [];
+      const [key, ...rest] = keys;
+      return key === "*"
+        ? Object.values(item).flatMap((v) => visit(v, rest))
+        : visit((item as Record<string, unknown>)[key ?? ""], rest);
+    };
+    return resources
+      .flatMap((r) => visit(r, path.split(".")))
+      .filter((v): v is string => typeof v === "string");
+  };
+  // Proper names, compartment references, version IDs and code displays from the installed data.
+  // Narrative/notes are deliberately absent: they remain free text.
+  for (const path of [
+    "id",
+    "resourceType",
+    "meta.versionId",
+    "name.*.family",
+    "name.*.given.*",
+    "subject.reference",
+    "patient.reference",
+    "medicationCodeableConcept.coding.*.code",
+    "medicationCodeableConcept.coding.*.display",
+    "code.coding.*.code",
+    "code.coding.*.display",
+    "clinicalStatus.coding.*.code",
+    "verificationStatus.coding.*.code",
+    "meta.tag.*.code",
+  ])
+    vocabulary[`${prefix}${path}`] = {
+      type: "term",
+      values: termsAt(path),
+      claimType: "health.resources",
+    };
+  for (const path of [
+    "meta.source",
+    "meta.tag.*.system",
+    "medicationCodeableConcept.coding.*.system",
+    "code.coding.*.system",
+    "clinicalStatus.coding.*.system",
+    "verificationStatus.coding.*.system",
+  ])
+    vocabulary[`${prefix}${path}`] = { ...id, claimType: "health.resources" };
+  vocabulary[`${prefix}status`] = {
+    ...code(["active", "stopped", "final"]),
+    claimType: "health.resources",
+  };
+  vocabulary[`${prefix}intent`] = { ...code(["order"]), claimType: "health.resources" };
+  vocabulary[`${prefix}birthDate`] = { ...date, claimType: "health.resources" };
+  vocabulary[`${prefix}effectiveDateTime`] = { ...date, claimType: "health.resources" };
+  vocabulary[`${prefix}valueQuantity.value`] = { type: "number", claimType: "health.resources" };
+  vocabulary[`${prefix}valueQuantity.unit`] = {
+    ...code(["mm[Hg]"]),
+    claimType: "health.resources",
+  };
+  const grantVocabulary: ContentVocabulary = {
+    type: code(["AccessGrant"]),
+    id,
+    issuer: id,
+    audience: id,
+    subject: id,
+    patient: id,
+    consent: id,
+    purpose: id,
+    "cnf.jkt": { type: "term" },
+    patientId: code(patientIds),
+    "scopes.*": code(SUPPORTED_SCOPES),
+    issuedAt: date,
+    expiresAt: date,
+  };
+  return {
+    identifiers: [
+      AUTHZ_OP.id,
+      FHIR_SEARCH_OP.id,
+      SCOPE_MODEL.id,
+      FHIR_MODEL.id,
+      PURPOSE.personalHealthSummary,
+      "https://cedarvalley.example/#token-issuer",
+      ...resources.flatMap((r) => [String((r.meta as JsonObject)?.source ?? "")]),
+      "https://example.org/awp-fixture",
+      "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "http://snomed.info/sct",
+      "http://example.org/local-codes",
+      "http://loinc.org",
+      "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+      "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+    ],
+    vocabulary,
+    purposes: { [PURPOSE.personalHealthSummary]: ["health.resources", "health.compartment"] },
+    protectedTerms: {
+      "selection.grant": {
+        typ: TYP.statement,
+        role: "issuer",
+        schema: accessGrantSchema,
+        vocabulary: grantVocabulary,
+      },
+    },
+  };
+}
 
 /**
  * The patient revokes ONE grant. It carries the issuer-signed grant itself (`grantStatement`),
@@ -197,6 +347,13 @@ export function accessGrantCheck(revocations: RevocationList): DisclosureCheck {
 // ------------------------------------------------------------------ authorisation server
 
 export class AuthorisationServerHandler implements OperationHandler {
+  get contentProfile() {
+    const profile = healthContent([], [...this.cfg.enrollments.values()]);
+    return {
+      ...profile,
+      identifiers: [...(profile.identifiers ?? []), this.cfg.issuer, this.cfg.resourceServer],
+    };
+  }
   readonly description: OperationDescription = {
     id: AUTHZ_OP.id,
     version: AUTHZ_OP.version,
@@ -236,7 +393,6 @@ export class AuthorisationServerHandler implements OperationHandler {
         code_challenge_methods_supported: [...(this.cfg.codeChallengeMethods ?? ["S256"])],
         scopes_supported: [...SUPPORTED_SCOPES],
         revocation_supported: true,
-        note: "advertised support only; not a grant",
       },
     };
   }
@@ -332,7 +488,7 @@ export class AuthorisationServerHandler implements OperationHandler {
       return { type: "refuse", reason: "insufficient-scope", detail: "no data scope approved" };
     const grant: AccessGrant = {
       type: "AccessGrant",
-      id: newUrn(),
+      id: ctx.mintIdentifier(),
       issuer: this.cfg.issuer,
       audience: this.cfg.resourceServer,
       subject: pa.client,
@@ -453,6 +609,9 @@ export async function applyGrantRevocation(
 // ------------------------------------------------------------------ resource server
 
 export class ResourceServerHandler implements OperationHandler {
+  get contentProfile() {
+    return healthContent(this.cfg.resources);
+  }
   readonly description: OperationDescription = {
     id: FHIR_SEARCH_OP.id,
     version: FHIR_SEARCH_OP.version,
@@ -636,6 +795,7 @@ export interface SummaryStatement {
 }
 
 export class CareBriefHandler implements OperationHandler {
+  readonly contentProfile = healthContent();
   readonly description: OperationDescription;
   readonly requiresRepresentation = false;
   readonly resources: JsonObject[] = [];

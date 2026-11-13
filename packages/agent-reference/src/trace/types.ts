@@ -39,8 +39,8 @@ export type Verdict =
   | "indeterminate";
 
 /** Gate outcomes, in the model's words. Carried on `decision` events. */
-export type InboundOutcome = "admit" | "ask-more" | "refuse";
-export type OutboundOutcome = "go" | "ask-principal" | "stop";
+export type InboundOutcome = "admit" | "ask-more" | "refuse" | "ask-principal";
+export type OutboundOutcome = "go" | "ask-principal" | "stop" | "ask-more";
 
 export type EventKind =
   | "message-in"
@@ -135,6 +135,10 @@ export interface TraceAgent {
 }
 
 export interface TraceFile {
+  readonly useCase?: string;
+  readonly path?: "main" | { readonly index: number; readonly what: string };
+  readonly parties?: readonly { readonly id: string; readonly name: string }[];
+  readonly standIns?: readonly { readonly what: string; readonly replacedBy: string }[];
   readonly schema: typeof TRACE_SCHEMA;
   readonly scenario: {
     readonly id: string;

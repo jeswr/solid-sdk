@@ -1,0 +1,611 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "flat-share",
+  "title": "Two people agree to share a flat",
+  "profile": "flat-share",
+  "parties": [
+    {
+      "id": "alex",
+      "identity": "urn:fictional:alex",
+      "name": "Alex, a fictional flatmate",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "alex-agent",
+      "identity": "urn:fictional:alex-agent",
+      "actor": "urn:fictional:alex-agent:agent",
+      "name": "Alex’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "alex"
+    },
+    {
+      "id": "blair",
+      "identity": "urn:fictional:blair",
+      "name": "Blair, a fictional flatmate",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "blair-agent",
+      "identity": "urn:fictional:blair-agent",
+      "actor": "urn:fictional:blair-agent:agent",
+      "name": "Blair’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "blair"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "alex-agent",
+        "blair-agent"
+      ]
+    ],
+    "ownLists": {
+      "alex-agent": [
+        {
+          "party": "urn:fictional:blair",
+          "tasks": [
+            "urn:op:flat-share"
+          ],
+          "purposes": [
+            "urn:purpose:flat-share"
+          ],
+          "expiresAt": "2026-12-31T00:00:00.000Z"
+        }
+      ],
+      "blair-agent": []
+    },
+    "sources": {},
+    "controllers": {}
+  },
+  "statements": [],
+  "requester": {},
+  "mandates": [
+    {
+      "agent": "alex-agent",
+      "autonomous": [
+        {
+          "id": "urn:rule:authorised",
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:flat-share"
+        }
+      ],
+      "withApproval": [
+        {
+          "id": "urn:rule:authorised",
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:flat-share"
+        }
+      ],
+      "prohibitions": [],
+      "standingRules": []
+    },
+    {
+      "agent": "blair-agent",
+      "autonomous": [
+        {
+          "id": "urn:rule:authorised",
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:flat-share"
+        }
+      ],
+      "withApproval": [
+        {
+          "id": "urn:rule:authorised",
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:flat-share"
+        }
+      ],
+      "prohibitions": [],
+      "standingRules": []
+    }
+  ],
+  "script": [
+    {
+      "id": "offer",
+      "agent": "alex-agent",
+      "type": "start",
+      "peer": "blair-agent",
+      "kind": "propose",
+      "operation": "urn:op:flat-share",
+      "contents": {
+        "purpose": "urn:purpose:flat-share",
+        "depositSplit": 0.5,
+        "moveIn": "2026-12-01"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:flat-share",
+        "target": "urn:op:flat-share",
+        "purpose": "urn:purpose:flat-share",
+        "recipient": "urn:fictional:blair",
+        "parameters": {}
+      },
+      "discover": false
+    },
+    {
+      "id": "unknown-sender",
+      "agent": "blair-agent",
+      "type": "receive",
+      "from": "alex-agent",
+      "reply": {
+        "type": "accept",
+        "intent": {
+          "action": "use",
+          "operation": "urn:op:flat-share",
+          "target": "urn:op:flat-share",
+          "conversation": {
+            "$ref": "current.conversation.id"
+          },
+          "purpose": "urn:purpose:flat-share",
+          "recipient": "urn:fictional:alex",
+          "parameters": {}
+        }
+      }
+    },
+    {
+      "id": "trust-yes",
+      "agent": "blair-agent",
+      "type": "trust-decision",
+      "decision": "approve"
+    },
+    {
+      "id": "accepted-offer",
+      "agent": "alex-agent",
+      "type": "receive",
+      "from": "blair-agent"
+    },
+    {
+      "id": "record",
+      "agent": "blair-agent",
+      "type": "record"
+    },
+    {
+      "id": "alex-record",
+      "agent": "alex-agent",
+      "type": "record"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "One side's identity cannot be tied to any source the other accepts",
+      "change": {
+        "script": [
+          {
+            "id": "offer",
+            "agent": "alex-agent",
+            "type": "start",
+            "peer": "blair-agent",
+            "kind": "propose",
+            "operation": "urn:op:flat-share",
+            "contents": {
+              "purpose": "urn:purpose:flat-share",
+              "depositSplit": 0.5,
+              "moveIn": "2026-12-01"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:flat-share",
+              "target": "urn:op:flat-share",
+              "purpose": "urn:purpose:flat-share",
+              "recipient": "urn:fictional:blair",
+              "parameters": {}
+            }
+          },
+          {
+            "id": "unknown-sender",
+            "agent": "blair-agent",
+            "type": "receive",
+            "from": "alex-agent"
+          }
+        ],
+        "traceSteps": {
+          "1": "Alex’s agent sends a signed request.",
+          "2": "Blair’s agent checks the incoming message and prepares a response."
+        }
+      },
+      "expect": {
+        "outcome": "ask-principal",
+        "check": "source",
+        "reason": "source-unknown"
+      },
+      "outline": [
+        {
+          "agent": "alex-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "alex-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "alex-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "alex-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "alex-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "alex-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "alex-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "alex-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "alex-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "blair-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "blair-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "blair-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "ask-principal",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "blair-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "blair-agent",
+          "part": "principal",
+          "kind": "ask-principal",
+          "reason": "source-unknown"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "ask-principal",
+      "reason": "source-unknown"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "reason": "source-unknown"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "source-unknown"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "alex-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "recipient",
+    "source",
+    "limits-approval"
+  ],
+  "suites": {
+    "trust": "pinned-list"
+  },
+  "assurance": null,
+  "blocked": [],
+  "useCase": "flat-share",
+  "traceSteps": {
+    "1": "Alex’s agent sends a signed request.",
+    "2": "Blair’s agent checks the incoming message and prepares a response.",
+    "3": "Blair’s agent completes the trust decision step.",
+    "4": "Alex’s agent checks the incoming message and prepares a response.",
+    "5": "Blair’s agent checks the durable record.",
+    "6": "Alex’s agent checks the durable record."
+  }
+}

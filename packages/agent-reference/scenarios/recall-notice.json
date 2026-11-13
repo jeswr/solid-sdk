@@ -1,0 +1,880 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "recall-notice",
+  "useCase": "recall-notice",
+  "title": "A product recall notice",
+  "profile": "recall-notice",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:recall-notice:owner",
+      "name": "The manufacturer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:recall-notice:receiver",
+      "name": "The product owner",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "attacker",
+      "identity": "urn:fictional:recall-notice:attacker",
+      "name": "The fictional attacker",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:recall-notice:owner-agent",
+      "name": "The manufacturer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:recall-notice:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:recall-notice:receiver-agent",
+      "name": "The product owner’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:recall-notice:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:recall-notice:receiver",
+          "tasks": [
+            "urn:op:recall-notice",
+            "urn:op:recall-notice:request"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:recall-notice:owner",
+          "tasks": [
+            "urn:op:recall-notice",
+            "urn:op:recall-notice:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:recall-notice:receiver",
+          "tasks": [
+            "urn:op:recall-notice"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:recall-notice:product.recall",
+          "version": "1",
+          "source": "urn:fictional:recall-notice:owner",
+          "claimTypes": [
+            "product.recall"
+          ],
+          "subjects": [
+            "urn:fictional:recall-notice:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:recall-notice:product.recall",
+          "version": "1",
+          "source": "urn:fictional:recall-notice:owner",
+          "claimTypes": [
+            "product.recall"
+          ],
+          "subjects": [
+            "urn:fictional:recall-notice:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "recall",
+      "issuer": "owner",
+      "subject": "urn:fictional:recall-notice:owner",
+      "kind": "product.recall",
+      "value": {
+        "product": "urn:fictional:product",
+        "notice": "urn:fictional:recall",
+        "action": "stop-using"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:recall-notice:recall",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:recall-notice:recall",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recall-notice"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:recall-notice:recall",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recall-notice"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:recall-notice"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:recall-notice:request"
+        },
+        {
+          "type": "permission",
+          "action": "read",
+          "target": "urn:op:recall-notice"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "admit-source",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "recall"
+      ],
+      "purpose": "urn:purpose:recall-notice"
+    },
+    {
+      "id": "request",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "invoke",
+      "operation": "urn:op:recall-notice:request",
+      "contents": {
+        "request": "product.recall"
+      },
+      "intent": {
+        "action": "use",
+        "target": "urn:op:recall-notice:request",
+        "operation": "urn:op:recall-notice:request",
+        "recipient": "urn:fictional:recall-notice:owner",
+        "purpose": "urn:purpose:recall-notice",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:recall-notice"
+    },
+    {
+      "id": "request-arrives",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent"
+    },
+    {
+      "id": "share",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:recall-notice",
+      "contents": {
+        "items": [
+          "urn:scenario:recall-notice:recall"
+        ]
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:recall-notice",
+        "operation": "urn:op:recall-notice",
+        "recipient": "urn:fictional:recall-notice:receiver",
+        "purpose": "urn:purpose:recall-notice",
+        "parameters": {},
+        "evidence": [
+          {
+            "itemId": "urn:scenario:recall-notice:recall",
+            "claimType": "product.recall"
+          }
+        ]
+      },
+      "evidence": [
+        "recall"
+      ],
+      "purpose": "urn:purpose:recall-notice"
+    },
+    {
+      "id": "receive",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "receipt",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent"
+    },
+    {
+      "id": "record",
+      "agent": "receiver-agent",
+      "type": "record"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The notice is not signed by the registered manufacturer",
+      "change": {
+        "statements": [
+          {
+            "id": "recall",
+            "issuer": "attacker",
+            "subject": "urn:fictional:recall-notice:owner",
+            "kind": "product.recall",
+            "value": {
+              "product": "urn:fictional:product",
+              "notice": "urn:fictional:recall",
+              "action": "stop-using"
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:recall-notice:recall",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:recall-notice:recall",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:recall-notice"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:recall-notice:recall",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:recall-notice"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "script": [
+          {
+            "id": "check-notice-author",
+            "agent": "receiver-agent",
+            "type": "admit",
+            "statements": [
+              "recall"
+            ],
+            "purpose": "urn:purpose:recall-notice"
+          },
+          {
+            "id": "act-on-notice",
+            "agent": "receiver-agent",
+            "type": "effect",
+            "intent": {
+              "action": "read",
+              "operation": "urn:op:recall-notice",
+              "target": "urn:op:recall-notice",
+              "recipient": "urn:fictional:recall-notice:receiver",
+              "purpose": "urn:purpose:recall-notice",
+              "conversation": "urn:scenario:recall-notice:task",
+              "parameters": {}
+            },
+            "params": {},
+            "activityType": "urn:activity:recall-response"
+          }
+        ],
+        "traceSteps": {
+          "1": "The product owner’s agent checks the signed statements.",
+          "2": "The product owner’s agent proposes the local action."
+        },
+        "trust": {
+          "root": {
+            "id": "urn:fictional:recall-notice:root",
+            "name": "The product safety root",
+            "delegates": []
+          }
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "fitness",
+        "reason": "source-unknown"
+      },
+      "outline": [
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "stop",
+        "reason": "source-unknown"
+      }
+    }
+  ],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "source",
+    "integrity"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Manufacturer registration and recall delivery",
+      "replacedBy": "A reviewed manufacturer-specific source rule accepts only its recall notices; the attacker’s real signature establishes authorship but not recall authority. No link is opened."
+    },
+    {
+      "what": "Unregistered notice author",
+      "replacedBy": "An intact signature identifies the notice key, but the receiver’s product-safety root has no delegated register for it; key attribution does not supply an authority chain"
+    }
+  ],
+  "result": {
+    "outcome": "go",
+    "check": "evidence",
+    "reason": "evidence-complete"
+  },
+  "traceSteps": {
+    "1": "The manufacturer’s agent checks the signed statements.",
+    "2": "The product owner’s agent sends the signed request.",
+    "3": "The manufacturer’s agent checks the message and prepares a response.",
+    "4": "The manufacturer’s agent sends the signed request.",
+    "5": "The product owner’s agent checks the message and prepares a response.",
+    "6": "The manufacturer’s agent checks the message and prepares a response.",
+    "7": "The product owner’s agent checks the durable record."
+  }
+}

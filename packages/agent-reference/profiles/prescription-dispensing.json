@@ -1,0 +1,73 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "prescription-dispensing",
+  "parties": {
+    "owner": "The first pharmacy",
+    "second": "The second pharmacy",
+    "issuer": "The prescriber",
+    "authority": "The professional register",
+    "register": "The dispensing register",
+    "subject": "The patient"
+  },
+  "claims": [
+    {
+      "kind": "prescription",
+      "sources": [
+        "urn:fictional:prescription-dispensing:issuer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:prescription-dispensing",
+      "claims": [
+        "prescription"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": [
+    {
+      "id": "urn:op:prescription-dispensing",
+      "version": "0.1",
+      "label": "Dispensing a prescription",
+      "pattern": "invoke",
+      "access": "represented",
+      "requiresRepresentation": true,
+      "purposes": [
+        "urn:purpose:prescription-dispensing"
+      ]
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "use",
+      "claims": [
+        "prescription"
+      ]
+    }
+  ],
+  "singleUse": [
+    {
+      "action": "use",
+      "register": "urn:fictional:prescription-dispensing:register",
+      "item": "urn:fictional:prescription-dispensing:item",
+      "operation": "redeem",
+      "maxAgeSeconds": 60
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Dispensing/financing register and local effects",
+      "replacedBy": "Separately keyed fictional register with its own five checks, signed current answers and durable compare-and-set state; the effect adapter records synthetic performance only."
+    }
+  ]
+}

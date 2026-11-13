@@ -1,0 +1,109 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "insurance-quote",
+  "parties": {
+    "owner": "The driver",
+    "receiver": "The insurer",
+    "licensing": "The licensing authority",
+    "claims-register": "The claims register",
+    "owner-agent": "The driver’s agent",
+    "receiver-agent": "The insurer’s agent"
+  },
+  "claims": [
+    {
+      "kind": "identity.details",
+      "sources": [
+        "urn:fictional:insurance-quote:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "claims.list",
+      "sources": [
+        "urn:fictional:insurance-quote:claims-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30,
+      "completeness": "claims.completeness"
+    },
+    {
+      "kind": "claims.completeness",
+      "sources": [
+        "urn:fictional:insurance-quote:claims-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:insurance-quote",
+      "claims": [
+        "claims.list",
+        "claims.completeness"
+      ]
+    },
+    {
+      "id": "urn:purpose:driver-record",
+      "claims": [
+        "identity.details"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "identity.details",
+        "claims.list",
+        "claims.completeness"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:insurance-quote",
+      "version": "0.1",
+      "label": "An insurance quote with the least disclosure",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:insurance-quote:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

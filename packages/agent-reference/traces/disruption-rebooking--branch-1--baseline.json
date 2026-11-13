@@ -1,0 +1,946 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "disruption-rebooking",
+  "path": {
+    "index": 1,
+    "what": "The only alternative costs more than the pre-agreed margin"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The traveller"
+    },
+    {
+      "id": "receiver",
+      "name": "The airline"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The traveller’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The airline’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "disruption-rebooking--branch-1",
+    "title": "Rebooking after a cancelled flight: The only alternative costs more than the pre-agreed margin",
+    "steps": {
+      "1": "The traveller’s agent checks the signed statements.",
+      "2": "The airline’s agent sends the signed request.",
+      "3": "The traveller’s agent checks the message and prepares a response.",
+      "4": "The airline’s agent checks the message and prepares a response.",
+      "5": "The traveller’s agent checks the durable record.",
+      "6": "The airline’s agent checks the durable record.",
+      "7": "The traveller’s agent completes the conversation step.",
+      "8": "The airline’s agent completes the conversation step.",
+      "9": "The traveller’s agent checks the observed result."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The traveller’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The airline’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Airline inventory and fare offer",
+      "replacedBy": "Fictional airline agent signs a same-day replacement-flight offer; direct local signed messages have real expiry windows, and acceptance is recorded on both sides, without claiming a live seat reservation"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The traveller's traveller.margin statement is intact and signed with The traveller's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:disruption-rebooking:traveller.margin",
+        "text": "The traveller is accepted for traveller.margin claims."
+      },
+      "resolution": {
+        "question": "Is The traveller an authority for traveller.margin claims about The traveller?",
+        "path": [
+          {
+            "at": "The traveller's own list",
+            "kind": "own-list",
+            "says": "The traveller is accepted for traveller.margin."
+          }
+        ],
+        "answer": "Accepted, for traveller.margin claims only."
+      },
+      "caption": "The traveller's traveller.margin statement: The traveller is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The traveller's traveller.margin statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:disruption-rebooking:ceiling",
+        "text": "Its terms allow this: use for urn:purpose:traveller planning."
+      },
+      "caption": "The traveller's traveller.margin statement: its terms allow this: use for urn:purpose:traveller planning."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:disruption-rebooking:traveller.margin",
+        "text": "Accept traveller.margin from urn:fictional:disruption-rebooking:owner by self-reported, at most 30 days old."
+      },
+      "caption": "The traveller's traveller.margin statement is fit for urn:scenario:disruption-rebooking:task: self-reported, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The traveller's traveller.margin statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:disruption-rebooking:ceiling",
+        "label": "The traveller's traveller.margin statement",
+        "claimType": "traveller.margin",
+        "subject": "urn:fictional:disruption-rebooking:owner",
+        "value": null,
+        "source": "urn:fictional:disruption-rebooking:owner",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:disruption-rebooking:ceiling",
+          "summary": "use for urn:purpose:traveller planning"
+        },
+        "provenance": "signed by The traveller"
+      },
+      "caption": "The traveller's traveller.margin statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Rebooking after a cancelled flight with The traveller."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The airline's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The traveller a party I can send Rebooking after a cancelled flight to?",
+        "path": [
+          {
+            "at": "The airline's own list",
+            "kind": "own-list",
+            "says": "The traveller is accepted for Rebooking after a cancelled flight."
+          }
+        ],
+        "answer": "Accepted, for Rebooking after a cancelled flight only."
+      },
+      "reason": "recipient-established",
+      "caption": "The traveller: Accepted, for Rebooking after a cancelled flight only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The airline's limits."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The airline’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The propose message goes to The traveller’s agent."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002",
+        "from": "The airline’s agent",
+        "to": "The traveller’s agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:ad41e72edcd…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The airline’s agent to The traveller’s agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002",
+              "conversation": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:disruption-rebooking:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:disruption-rebooking:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:disruption-rebooking:owner-agent:actor",
+                "party": "urn:fictional:disruption-rebooking:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:9a974ff8913b68fcf153ad766771de7209e3f5290a82433020e325bd04668849"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The airline says The airline’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:629f45dc999d176869926de984f9a08e:1794560400000",
+                "party": "urn:fictional:disruption-rebooking:receiver",
+                "actor": "urn:fictional:disruption-rebooking:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:disruption-rebooking",
+                  "urn:op:disruption-rebooking:request",
+                  "urn:op:disruption-rebooking:disclose"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:3dafc6de2eba79ddcb50851b146754a1df62c5e93df1f9f04a5121ac15ade825"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start urn:op:disruption-rebooking, with terms (round 1).",
+            "raw": {
+              "operation": {
+                "id": "urn:op:disruption-rebooking",
+                "version": "0.1"
+              },
+              "terms": {
+                "price": 70,
+                "currency": "GBP",
+                "item": "replacement-flight",
+                "travelDate": "2026-11-13"
+              },
+              "termsDigest": "sha-256:5c0bf85c231b15e279b17ebba4bc43fa0caa9654e6f841300456874336ecd894",
+              "round": 1
+            },
+            "digest": "sha-256:c0a34b01ed37c326b67ec79df569f54890fc74faef8f2cf198c8ee4f7de8fa3a"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "price": 70,
+              "currency": "GBP",
+              "item": "replacement-flight",
+              "travelDate": "2026-11-13"
+            },
+            "digest": "sha-256:5c0bf85c231b15e279b17ebba4bc43fa0caa9654e6f841300456874336ecd894"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The airline’s agent sends a propose message to The traveller’s agent."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002",
+        "from": "The airline’s agent",
+        "to": "The traveller’s agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:ad41e72edcd…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The airline’s agent to The traveller’s agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002",
+              "conversation": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:disruption-rebooking:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:disruption-rebooking:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:disruption-rebooking:owner-agent:actor",
+                "party": "urn:fictional:disruption-rebooking:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:9a974ff8913b68fcf153ad766771de7209e3f5290a82433020e325bd04668849"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The airline says The airline’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:629f45dc999d176869926de984f9a08e:1794560400000",
+                "party": "urn:fictional:disruption-rebooking:receiver",
+                "actor": "urn:fictional:disruption-rebooking:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:disruption-rebooking",
+                  "urn:op:disruption-rebooking:request",
+                  "urn:op:disruption-rebooking:disclose"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:3dafc6de2eba79ddcb50851b146754a1df62c5e93df1f9f04a5121ac15ade825"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start urn:op:disruption-rebooking, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:disruption-rebooking\"; \"sha-256:5c0bf85c231b15e279b17ebba4bc43fa0caa9654e6f841300456874336ecd894\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:disruption-rebooking",
+                "version": "0.1"
+              },
+              "terms": {
+                "price": 70,
+                "currency": "GBP",
+                "item": "replacement-flight",
+                "travelDate": "2026-11-13"
+              },
+              "termsDigest": "sha-256:5c0bf85c231b15e279b17ebba4bc43fa0caa9654e6f841300456874336ecd894",
+              "round": 1
+            },
+            "digest": "sha-256:c0a34b01ed37c326b67ec79df569f54890fc74faef8f2cf198c8ee4f7de8fa3a",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:disruption-rebooking"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:5c0bf85c231b15e279b17ebba4bc43fa0caa9654e6f841300456874336ecd894"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "price": 70,
+              "currency": "GBP",
+              "item": "replacement-flight",
+              "travelDate": "2026-11-13"
+            },
+            "digest": "sha-256:5c0bf85c231b15e279b17ebba4bc43fa0caa9654e6f841300456874336ecd894"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A propose message from The airline’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The airline’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:629f45dc999d176869926de984f9a08e:1794560400000",
+        "text": "A representation statement signed with The airline's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The airline signed a statement that The airline’s agent acts for them in this operation."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 25,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Rebooking after a cancelled flight with The airline."
+    },
+    {
+      "seq": 26,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The traveller's mandate covers this action."
+    },
+    {
+      "seq": 27,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The airline a party I can send Rebooking after a cancelled flight to?",
+        "path": [
+          {
+            "at": "The traveller's own list",
+            "kind": "own-list",
+            "says": "The airline is accepted for Rebooking after a cancelled flight."
+          }
+        ],
+        "answer": "Accepted, for Rebooking after a cancelled flight only."
+      },
+      "reason": "recipient-established",
+      "caption": "The airline: Accepted, for Rebooking after a cancelled flight only."
+    },
+    {
+      "seq": 28,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "limit-exceeded",
+      "rule": {
+        "id": "urn:scenario:disruption-rebooking:owner-agent:limits",
+        "text": "This commitment exceeds the principal's GBP 50 limit."
+      },
+      "caption": "This is outside The traveller's limits, so the gate asks The traveller."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "limit-exceeded",
+      "caption": "The gate holds the action and asks The traveller."
+    },
+    {
+      "seq": 32,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "chat": {
+        "who": "agent",
+        "text": "The airline asks me to take the next step in Rebooking after a cancelled flight with The airline for urn:purpose:disruption rebooking. This commitment exceeds the principal's GBP 50 limit. May I go ahead?"
+      },
+      "caption": "The traveller is asked to approve this exact action; the approval will be bound to its digest."
+    }
+  ]
+}

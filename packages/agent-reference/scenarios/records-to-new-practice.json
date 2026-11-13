@@ -1,0 +1,659 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "records-to-new-practice",
+  "useCase": "records-to-new-practice",
+  "title": "Moving a health record to a new practice",
+  "profile": "records-to-new-practice",
+  "parties": [
+    {
+      "id": "patient",
+      "identity": "urn:fictional:records-to-new-practice:patient",
+      "name": "The patient",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "clinician",
+      "identity": "urn:fictional:records-to-new-practice:clinician",
+      "name": "The clinician",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "holder",
+      "identity": "urn:fictional:records-to-new-practice:holder",
+      "name": "The old practice holding original statements",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "practice",
+      "identity": "urn:fictional:records-to-new-practice:practice",
+      "name": "The new practice",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "practice-agent",
+      "identity": "urn:fictional:records-to-new-practice:practice-agent",
+      "actor": "urn:fictional:records-to-new-practice:practice-agent:actor",
+      "name": "The new practice’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "practice"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {
+      "practice-agent": [
+        {
+          "id": "urn:source:records-to-new-practice:patient-note",
+          "version": "1",
+          "source": "urn:fictional:records-to-new-practice:patient",
+          "claimTypes": [
+            "health.allergy"
+          ],
+          "subjects": [
+            "urn:fictional:records-to-new-practice:patient"
+          ]
+        },
+        {
+          "id": "urn:source:records-to-new-practice:clinical",
+          "version": "1",
+          "source": "urn:fictional:records-to-new-practice:clinician",
+          "claimTypes": [
+            "health.allergy"
+          ],
+          "subjects": [
+            "urn:fictional:records-to-new-practice:patient"
+          ]
+        },
+        {
+          "id": "urn:source:records-to-new-practice:estimate",
+          "version": "1",
+          "source": "urn:fictional:records-to-new-practice:holder",
+          "claimTypes": [
+            "old.estimate"
+          ],
+          "subjects": [
+            "urn:fictional:records-to-new-practice:patient"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "patient-note",
+      "issuer": "patient",
+      "subject": "urn:fictional:records-to-new-practice:patient",
+      "kind": "health.allergy",
+      "value": {
+        "allergy": "none"
+      },
+      "method": "reported-by-subject",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:records-to-new-practice:patient-note",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:records-to-new-practice:patient-note",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:health-record"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "clinical",
+      "issuer": "clinician",
+      "subject": "urn:fictional:records-to-new-practice:patient",
+      "kind": "health.allergy",
+      "value": {
+        "allergy": "none"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:records-to-new-practice:clinical",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:records-to-new-practice:clinical",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:health-record"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "estimate",
+      "issuer": "holder",
+      "subject": "urn:fictional:records-to-new-practice:patient",
+      "kind": "old.estimate",
+      "value": {
+        "value": 10
+      },
+      "method": "estimated",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:records-to-new-practice:estimate",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:records-to-new-practice:estimate",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:health-record"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "practice-agent",
+      "autonomous": [],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "read-patient-note",
+      "agent": "practice-agent",
+      "type": "read-reference",
+      "reference": {
+        "$ref": "grants.record"
+      },
+      "item": "urn:scenario:records-to-new-practice:patient-note",
+      "purpose": "urn:purpose:health-record"
+    },
+    {
+      "id": "read-clinical",
+      "agent": "practice-agent",
+      "type": "read-reference",
+      "reference": {
+        "$ref": "grants.record"
+      },
+      "item": "urn:scenario:records-to-new-practice:clinical",
+      "purpose": "urn:purpose:health-record"
+    },
+    {
+      "id": "read-estimate",
+      "agent": "practice-agent",
+      "type": "read-reference",
+      "reference": {
+        "$ref": "grants.record"
+      },
+      "item": "urn:scenario:records-to-new-practice:estimate",
+      "purpose": "urn:purpose:health-record"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The patient's note of an allergy differs from the clinical entry",
+      "change": {
+        "statements": [
+          {
+            "id": "patient-note",
+            "issuer": "patient",
+            "subject": "urn:fictional:records-to-new-practice:patient",
+            "kind": "health.allergy",
+            "value": {
+              "allergy": "penicillin"
+            },
+            "method": "reported-by-subject",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:records-to-new-practice:patient-note",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:records-to-new-practice:patient-note",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:health-record"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "clinical",
+            "issuer": "clinician",
+            "subject": "urn:fictional:records-to-new-practice:patient",
+            "kind": "health.allergy",
+            "value": {
+              "allergy": "none"
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:records-to-new-practice:clinical",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:records-to-new-practice:clinical",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:health-record"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "estimate",
+            "issuer": "holder",
+            "subject": "urn:fictional:records-to-new-practice:patient",
+            "kind": "old.estimate",
+            "value": {
+              "value": 10
+            },
+            "method": "estimated",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:records-to-new-practice:estimate",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:records-to-new-practice:estimate",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:health-record"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "admit",
+        "check": "fitness",
+        "reason": "superseded-by-better-source"
+      },
+      "catalogueExpected": {
+        "outcome": "ask-more",
+        "reason": "superseded-by-better-source"
+      },
+      "outline": [
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "superseded-by-better-source"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "fitness",
+    "terms",
+    "source"
+  ],
+  "suites": {
+    "data-access": "by-reference-local-holder"
+  },
+  "assurance": null,
+  "blocked": [],
+  "resources": [
+    {
+      "ref": "urn:fictional:records-to-new-practice:record",
+      "holder": "holder",
+      "statements": [
+        "patient-note",
+        "clinical",
+        "estimate"
+      ],
+      "originals": true
+    }
+  ],
+  "grants": [
+    {
+      "id": "record",
+      "holder": "holder",
+      "ref": "urn:fictional:records-to-new-practice:record",
+      "reader": "practice-agent",
+      "statements": [
+        "patient-note",
+        "clinical",
+        "estimate"
+      ],
+      "purpose": "urn:purpose:health-record",
+      "validUntil": "2026-12-01T00:00:00.000Z"
+    }
+  ],
+  "traceSteps": {
+    "1": "Read patient note.",
+    "2": "Read clinical.",
+    "3": "Read estimate."
+  }
+}

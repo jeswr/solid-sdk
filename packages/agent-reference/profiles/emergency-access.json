@@ -1,0 +1,134 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "emergency-access",
+  "claims": [
+    {
+      "kind": "organization.role",
+      "sources": [
+        "urn:fictional:register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    },
+    {
+      "kind": "emergency.declaration",
+      "sources": [
+        "urn:fictional:clinician"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 1
+    },
+    {
+      "kind": "clinical.summary",
+      "sources": [
+        "urn:fictional:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:emergency-access",
+      "claims": [
+        "organization.role",
+        "emergency.declaration",
+        "clinical.summary"
+      ]
+    },
+    {
+      "id": "urn:purpose:emergency-notification",
+      "claims": []
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "code",
+      "values": [
+        "allergies",
+        "current-medicines",
+        "whole-record"
+      ]
+    },
+    "input.rule": {
+      "type": "identifier"
+    },
+    "input.use": {
+      "type": "identifier"
+    },
+    "output.items.*": {
+      "type": "code",
+      "values": [
+        "none-known"
+      ],
+      "claimType": "clinical.summary"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:emergency-read",
+      "version": "0.1",
+      "label": "urn:op:emergency-read",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:emergency-access"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:duty-notification",
+      "version": "0.1",
+      "label": "urn:op:duty-notification",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:emergency-notification"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "notificationRecipients": {
+    "principal": {
+      "actor": "urn:fictional:patient-agent:agent",
+      "party": "urn:fictional:patient"
+    },
+    "named-contact": {
+      "actor": "urn:fictional:contact-agent:agent",
+      "party": "urn:fictional:contact"
+    }
+  },
+  "standIns": [
+    {
+      "what": "Professional register",
+      "replacedBy": "Fictional issuer-only register signing current clinician roles"
+    },
+    {
+      "what": "Patient's clinical record",
+      "replacedBy": "Fictional issuer-only practice signs the summary; a patient-owned record agent enforces the patient-signed standing mandate"
+    }
+  ],
+  "parties": {
+    "clinician": "The clinician",
+    "patient": "The patient",
+    "contact": "The trusted contact",
+    "register": "The professional register",
+    "practice": "The family practice",
+    "clinician-agent": "The clinician’s agent",
+    "record-agent": "The patient’s record agent",
+    "patient-agent": "The patient’s agent",
+    "contact-agent": "The trusted contact’s agent"
+  }
+}

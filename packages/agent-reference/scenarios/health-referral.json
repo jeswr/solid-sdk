@@ -1,0 +1,1179 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "health-referral",
+  "title": "A referral from a family doctor to a specialist",
+  "profile": "health-referral",
+  "parties": [
+    {
+      "id": "practice",
+      "identity": "urn:fictional:practice",
+      "name": "The family practice",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "clinic",
+      "identity": "urn:fictional:clinic",
+      "name": "The specialist clinic",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "record-holder",
+      "identity": "urn:fictional:record-holder",
+      "name": "The local record holder",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "register",
+      "identity": "urn:fictional:register",
+      "name": "The professional register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "clinician",
+      "identity": "urn:fictional:clinician",
+      "name": "The clinician",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "practice-agent",
+      "identity": "urn:fictional:practice-agent",
+      "name": "The family practice’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:practice-agent:agent",
+      "actsFor": "practice"
+    },
+    {
+      "id": "clinic-agent",
+      "identity": "urn:fictional:clinic-agent",
+      "name": "The specialist clinic’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:clinic-agent:agent",
+      "actsFor": "clinic"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "practice-agent",
+        "clinic-agent"
+      ]
+    ],
+    "ownLists": {
+      "practice-agent": [
+        {
+          "party": "urn:fictional:practice",
+          "tasks": [
+            "urn:op:health-referral",
+            "urn:op:referral-more"
+          ]
+        },
+        {
+          "party": "urn:fictional:clinic",
+          "tasks": [
+            "urn:op:health-referral",
+            "urn:op:referral-more"
+          ]
+        }
+      ],
+      "clinic-agent": [
+        {
+          "party": "urn:fictional:practice",
+          "tasks": [
+            "urn:op:health-referral",
+            "urn:op:referral-more"
+          ]
+        },
+        {
+          "party": "urn:fictional:clinic",
+          "tasks": [
+            "urn:op:health-referral",
+            "urn:op:referral-more"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "practice-agent": [
+        {
+          "id": "urn:source:record-holder:referral.history",
+          "version": "1",
+          "source": "urn:fictional:record-holder",
+          "claimTypes": [
+            "referral.history"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:record-holder:clinical.full-record",
+          "version": "1",
+          "source": "urn:fictional:record-holder",
+          "claimTypes": [
+            "clinical.full-record"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:register:organization.role",
+          "version": "1",
+          "source": "urn:fictional:register",
+          "claimTypes": [
+            "organization.role"
+          ],
+          "subjects": "any"
+        }
+      ],
+      "clinic-agent": [
+        {
+          "id": "urn:source:record-holder:referral.history",
+          "version": "1",
+          "source": "urn:fictional:record-holder",
+          "claimTypes": [
+            "referral.history"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:record-holder:clinical.full-record",
+          "version": "1",
+          "source": "urn:fictional:record-holder",
+          "claimTypes": [
+            "clinical.full-record"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:register:organization.role",
+          "version": "1",
+          "source": "urn:fictional:register",
+          "claimTypes": [
+            "organization.role"
+          ],
+          "subjects": "any"
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "history",
+      "issuer": "record-holder",
+      "subject": "urn:fictional:patient",
+      "kind": "referral.history",
+      "value": {
+        "value": "relevant-history"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:history",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:health-referral:history"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:health-referral:history"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "full",
+      "issuer": "record-holder",
+      "subject": "urn:fictional:patient",
+      "kind": "clinical.full-record",
+      "value": {
+        "value": "whole-record"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:full",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:health-referral:full"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:health-referral:full"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "role",
+      "issuer": "register",
+      "subject": "urn:fictional:clinician",
+      "kind": "organization.role",
+      "value": {
+        "subjectKeyOf": "clinician",
+        "role": "clinician",
+        "organization": "urn:fictional:practice",
+        "status": "active",
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:role",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:health-referral:role"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:health-referral:role"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "practice-agent",
+      "autonomous": [
+        {
+          "id": "urn:rule:refer",
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:health-referral"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "clinic-agent",
+      "autonomous": [
+        {
+          "id": "urn:rule:refer",
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:health-referral"
+        },
+        {
+          "type": "permission",
+          "action": "read",
+          "target": "urn:op:referral-more"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "registered-role",
+      "agent": "practice-agent",
+      "type": "admit",
+      "statements": [
+        "role"
+      ],
+      "purpose": "urn:purpose:health-referral",
+      "subject": "urn:fictional:clinician"
+    },
+    {
+      "id": "select-relevant-history",
+      "agent": "practice-agent",
+      "type": "start",
+      "peer": "clinic-agent",
+      "kind": "invoke",
+      "operation": "urn:op:health-referral",
+      "contents": {
+        "reference": {
+          "$ref": "grants.history-grant"
+        }
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:health-referral",
+        "target": "urn:op:health-referral",
+        "recipient": "urn:fictional:clinic",
+        "purpose": "urn:purpose:health-referral",
+        "parameters": {
+          "resource": "urn:resource:patient-history",
+          "items": [
+            "urn:scenario:health-referral:history"
+          ],
+          "grantDigest": {
+            "$ref": "grantDigests.history-grant"
+          }
+        },
+        "conversation": "urn:scenario:health-referral:task"
+      },
+      "purpose": "urn:purpose:health-referral"
+    },
+    {
+      "id": "clinician-selects",
+      "agent": "practice-agent",
+      "type": "organisation-approve",
+      "signer": "clinician"
+    },
+    {
+      "id": "clinic-receives",
+      "agent": "clinic-agent",
+      "type": "receive",
+      "from": "practice-agent"
+    },
+    {
+      "id": "read-relevant-history",
+      "agent": "clinic-agent",
+      "type": "read-reference",
+      "reference": {
+        "$ref": "steps.clinician-selects.outbound.0.message.body.input.reference"
+      },
+      "item": "urn:scenario:health-referral:history",
+      "purpose": "urn:purpose:health-referral"
+    },
+    {
+      "id": "history-admitted",
+      "agent": "clinic-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.read-relevant-history.admitted"
+      },
+      "expected": 1
+    },
+    {
+      "id": "check-clinic-record",
+      "agent": "clinic-agent",
+      "type": "record"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The clinic asks for the full record",
+      "change": {
+        "script": [
+          {
+            "id": "clinic-asks-for-full-record",
+            "agent": "clinic-agent",
+            "type": "start",
+            "peer": "practice-agent",
+            "kind": "invoke",
+            "operation": "urn:op:referral-more",
+            "contents": {
+              "items": [
+                "whole-record"
+              ]
+            },
+            "purpose": "urn:purpose:health-referral",
+            "intent": {
+              "action": "read",
+              "operation": "urn:op:referral-more",
+              "target": "urn:op:referral-more",
+              "recipient": "urn:fictional:practice",
+              "purpose": "urn:purpose:health-referral",
+              "parameters": {},
+              "conversation": "urn:scenario:health-referral:task"
+            }
+          },
+          {
+            "id": "full-record-request-arrives",
+            "agent": "practice-agent",
+            "type": "receive",
+            "from": "clinic-agent"
+          },
+          {
+            "id": "registered-role",
+            "agent": "practice-agent",
+            "type": "admit",
+            "statements": [
+              "role"
+            ],
+            "purpose": "urn:purpose:health-referral",
+            "subject": "urn:fictional:clinician"
+          },
+          {
+            "id": "select-relevant-history",
+            "agent": "practice-agent",
+            "type": "start",
+            "peer": "clinic-agent",
+            "kind": "invoke",
+            "operation": "urn:op:health-referral",
+            "contents": {
+              "reference": {
+                "$ref": "grants.history-grant"
+              }
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:health-referral",
+              "target": "urn:op:health-referral",
+              "recipient": "urn:fictional:clinic",
+              "purpose": "urn:purpose:health-referral",
+              "parameters": {
+                "resource": "urn:resource:patient-history",
+                "items": [
+                  "urn:scenario:health-referral:history",
+                  "urn:scenario:health-referral:full"
+                ],
+                "grantDigest": {
+                  "$ref": "grantDigests.history-grant"
+                }
+              },
+              "conversation": "urn:scenario:health-referral:task"
+            },
+            "purpose": "urn:purpose:health-referral"
+          }
+        ],
+        "grants": [
+          {
+            "id": "history-grant",
+            "holder": "record-holder",
+            "ref": "urn:resource:patient-history",
+            "reader": "clinic-agent",
+            "statements": [
+              "history",
+              "full"
+            ],
+            "purpose": "urn:purpose:health-referral",
+            "validUntil": "2026-11-14T00:00:00.000Z"
+          }
+        ],
+        "traceSteps": {
+          "1": "The specialist clinic’s agent sends a signed request.",
+          "2": "The family practice’s agent checks the incoming message and prepares a response.",
+          "3": "The family practice’s agent checks and admits the signed statements.",
+          "4": "The family practice’s agent sends a signed request."
+        }
+      },
+      "expect": {
+        "outcome": "ask-principal",
+        "check": "limits-approval",
+        "reason": "approval-required"
+      },
+      "outline": [
+        {
+          "agent": "clinic-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "principal",
+          "kind": "ask-principal",
+          "reason": "approval-required"
+        }
+      ]
+    },
+    {
+      "id": "branch-2",
+      "what": "The referrer is not on the professional register",
+      "change": {
+        "script": [
+          {
+            "id": "registered-role",
+            "agent": "practice-agent",
+            "type": "admit",
+            "statements": [
+              "role"
+            ],
+            "purpose": "urn:purpose:health-referral",
+            "subject": "urn:fictional:clinician"
+          },
+          {
+            "id": "select-relevant-history",
+            "agent": "practice-agent",
+            "type": "start",
+            "peer": "clinic-agent",
+            "kind": "invoke",
+            "operation": "urn:op:health-referral",
+            "contents": {
+              "reference": {
+                "$ref": "grants.history-grant"
+              }
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:health-referral",
+              "target": "urn:op:health-referral",
+              "recipient": "urn:fictional:clinic",
+              "purpose": "urn:purpose:health-referral",
+              "parameters": {
+                "resource": "urn:resource:patient-history",
+                "items": [
+                  "urn:scenario:health-referral:history"
+                ],
+                "grantDigest": {
+                  "$ref": "grantDigests.history-grant"
+                }
+              },
+              "conversation": "urn:scenario:health-referral:task"
+            },
+            "purpose": "urn:purpose:health-referral"
+          }
+        ],
+        "trust": {
+          "sources": {
+            "practice-agent": []
+          },
+          "root": {
+            "id": "urn:fictional:professional-register-root",
+            "name": "Local professional register root",
+            "delegates": []
+          }
+        },
+        "traceSteps": {
+          "1": "The family practice’s agent checks and admits the signed statements.",
+          "2": "The family practice’s agent sends a signed request."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "source",
+        "reason": "source-unknown"
+      },
+      "outline": [
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "practice-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "practice-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "disclosure",
+    "recipient",
+    "terms"
+  ],
+  "suites": {
+    "data-access": "by-reference-local-holder"
+  },
+  "assurance": null,
+  "blocked": [],
+  "resources": [
+    {
+      "ref": "urn:resource:patient-history",
+      "holder": "record-holder",
+      "statements": [
+        "history",
+        "full"
+      ]
+    }
+  ],
+  "grants": [
+    {
+      "id": "history-grant",
+      "holder": "record-holder",
+      "ref": "urn:resource:patient-history",
+      "reader": "clinic-agent",
+      "statements": [
+        "history"
+      ],
+      "purpose": "urn:purpose:health-referral",
+      "validUntil": "2026-11-14T00:00:00.000Z"
+    }
+  ],
+  "useCase": "health-referral",
+  "traceSteps": {
+    "1": "The family practice’s agent checks and admits the signed statements.",
+    "2": "The family practice’s agent sends a signed request.",
+    "3": "The family practice’s agent obtains a staff approval.",
+    "4": "The specialist clinic’s agent checks the incoming message and prepares a response.",
+    "5": "The specialist clinic’s agent requests the permitted record item.",
+    "6": "The specialist clinic’s agent checks the observed result.",
+    "7": "The specialist clinic’s agent checks the durable record."
+  }
+}

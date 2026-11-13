@@ -1,0 +1,103 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "pay-an-invoice",
+  "claims": [
+    {
+      "kind": "payee-account",
+      "sources": [
+        "urn:fictional:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "invoice",
+      "sources": [
+        "urn:fictional:supplier"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:pay-an-invoice",
+      "claims": [
+        "payee-account",
+        "invoice"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.payee": {
+      "type": "identifier"
+    },
+    "input.reference": {
+      "type": "identifier"
+    },
+    "input.account": {
+      "type": "identifier",
+      "claimType": "payee-account"
+    },
+    "input.amount": {
+      "type": "number"
+    },
+    "input.currency": {
+      "type": "code",
+      "values": [
+        "GBP"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "submitted"
+      ]
+    },
+    "output.reference": {
+      "type": "identifier"
+    },
+    "observed.status": {
+      "type": "code",
+      "values": [
+        "submitted"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:payment",
+      "version": "0.1",
+      "label": "pay-an-invoice",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:pay-an-invoice"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Payment bank and account directory",
+      "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
+    }
+  ],
+  "parties": {
+    "business": "The business",
+    "business-agent": "The business’s agent",
+    "bank": "The supplier’s bank",
+    "bank-agent": "The supplier’s bank’s agent",
+    "supplier": "The supplier",
+    "email": "An unverified email sender"
+  }
+}

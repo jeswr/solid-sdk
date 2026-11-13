@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The personal-to-personal slice as executable cases for the demo report. Each case runs
  * real agents (fresh synthetic keys, real JWS verification, persistent or memory stores)
@@ -42,7 +43,7 @@ function terms(
 ) {
   return buildMeetingTerms({
     calendar: a.calendar,
-    title: "Synthetic catch-up",
+    title: "catch-up",
     durationMinutes: 30,
     window,
     now: now.toISOString(),

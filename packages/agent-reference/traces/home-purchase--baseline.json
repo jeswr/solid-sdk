@@ -1,0 +1,1963 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "home-purchase",
+  "path": "main",
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The buyer"
+    },
+    {
+      "id": "receiver",
+      "name": "The seller"
+    },
+    {
+      "id": "bank",
+      "name": "The conveyancer’s deposit bank"
+    },
+    {
+      "id": "email",
+      "name": "The unverified account sender"
+    },
+    {
+      "id": "land-register",
+      "name": "The fictional land registry"
+    },
+    {
+      "id": "other-person",
+      "name": "The other fictional owner"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The buyer’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The seller’s agent"
+    },
+    {
+      "id": "coordinator",
+      "name": "The conveyancer and conditional escrow register"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The conveyancer and conditional escrow register’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "home-purchase",
+    "title": "Buying a home",
+    "steps": {
+      "1": "The parties complete and collect their signed agreement.",
+      "2": "The parties complete and collect their signed agreement.",
+      "3": "The parties complete and collect their signed agreement.",
+      "4": "The parties complete and collect their signed agreement.",
+      "5": "The parties complete and collect their signed agreement.",
+      "6": "The parties complete and collect their signed agreement.",
+      "7": "The parties complete and collect their signed agreement.",
+      "8": "The parties complete and collect their signed agreement.",
+      "9": "The parties complete and collect their signed agreement."
+    }
+  },
+  "configuration": {
+    "id": "home-purchase-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "agreement-credential",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The buyer’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The seller’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The conveyancer and conditional escrow register’s agent",
+      "actsFor": "coordinator",
+      "role": "agent"
+    },
+    {
+      "id": "coordinator",
+      "name": "The conveyancer and conditional escrow register",
+      "actsFor": "coordinator",
+      "role": "source"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    },
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Conveyancing source preflights",
+      "replacedBy": "An email author signs an unauthoritative deposit account; the registry signs ownership by someone other than the seller. No funds, escrow or completion are simulated"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The conveyancer and conditional escrow register's mandate covers this action."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The conveyancer and conditional escrow register a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The conveyancer and conditional escrow register's own list",
+            "kind": "own-list",
+            "says": "The conveyancer and conditional escrow register is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:c7d9225f3daa446a37b259ffcca16707aa4f93e7162e086008bac4fbd8c81df3",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The buyer's mandate covers this action."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The conveyancer and conditional escrow register a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The buyer's own list",
+            "kind": "own-list",
+            "says": "The conveyancer and conditional escrow register is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 18,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 19,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 20,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The buyer's limits."
+    },
+    {
+      "seq": 21,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:d028a3bcfb77931e7850ff6abaf3c25fbb0b72811c70c57cf111f7045926ea9d",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 23,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 24,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 25,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 26,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 27,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 28,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The seller's mandate covers this action."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The conveyancer and conditional escrow register a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The seller's own list",
+            "kind": "own-list",
+            "says": "The conveyancer and conditional escrow register is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 32,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 33,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 34,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The seller's limits."
+    },
+    {
+      "seq": 35,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:bf9a6b9d91b5b7421075d1ad9e50b4983b21d07d26e6c64926da0eec1ad27251",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 36,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 37,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 38,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 39,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 40,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 41,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 42,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 43,
+      "step": 4,
+      "agent": "coordinator-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 44,
+      "step": 4,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The conveyancer and conditional escrow register's mandate covers this action."
+    },
+    {
+      "seq": 45,
+      "step": 4,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The conveyancer and conditional escrow register a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The conveyancer and conditional escrow register's own list",
+            "kind": "own-list",
+            "says": "The conveyancer and conditional escrow register is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 46,
+      "step": 4,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 47,
+      "step": 4,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 48,
+      "step": 4,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits."
+    },
+    {
+      "seq": 49,
+      "step": 4,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:4dbdf9931c5111bb764dc6520458233d1e4412a313c4c3577e20bcb17ec16599",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 50,
+      "step": 4,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 51,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 52,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 53,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 54,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 55,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 56,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 57,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 58,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The conveyancer and conditional escrow register's mandate covers this action."
+    },
+    {
+      "seq": 59,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The conveyancer and conditional escrow register a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The conveyancer and conditional escrow register's own list",
+            "kind": "own-list",
+            "says": "The conveyancer and conditional escrow register is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 60,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 61,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 62,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits."
+    },
+    {
+      "seq": 63,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:c14faac8bc7dcf17718dd2e807697ca48bdf59ee785f8576d8a5559c35354a43",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 64,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 65,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 66,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 67,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 68,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 69,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 70,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 71,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 72,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 73,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 74,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 75,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 76,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 77,
+      "step": 7,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 78,
+      "step": 7,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The buyer's mandate covers this action."
+    },
+    {
+      "seq": 79,
+      "step": 7,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The conveyancer and conditional escrow register a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The buyer's own list",
+            "kind": "own-list",
+            "says": "The conveyancer and conditional escrow register is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 80,
+      "step": 7,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 81,
+      "step": 7,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 82,
+      "step": 7,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The buyer's limits."
+    },
+    {
+      "seq": 83,
+      "step": 7,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:ff7ffc44347afc01279f995622924f20b9b9670bdb9941b061cf05d9dd3f0932",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 84,
+      "step": 7,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 85,
+      "step": 7,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 86,
+      "step": 7,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 87,
+      "step": 7,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 88,
+      "step": 7,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 89,
+      "step": 7,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 90,
+      "step": 7,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 91,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 92,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The seller's mandate covers this action."
+    },
+    {
+      "seq": 93,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The conveyancer and conditional escrow register a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The seller's own list",
+            "kind": "own-list",
+            "says": "The conveyancer and conditional escrow register is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 94,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 95,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 96,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The seller's limits."
+    },
+    {
+      "seq": 97,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:7b5a21433f904d11a6dd78c6d8ee80f3dfe0f37404a4a586b4e8c427fe0c8d42",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 98,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 99,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 100,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 101,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 102,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 103,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 104,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 105,
+      "step": 9,
+      "agent": "coordinator-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 106,
+      "step": 9,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The conveyancer and conditional escrow register's mandate covers this action."
+    },
+    {
+      "seq": 107,
+      "step": 9,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The conveyancer and conditional escrow register a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The conveyancer and conditional escrow register's own list",
+            "kind": "own-list",
+            "says": "The conveyancer and conditional escrow register is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 108,
+      "step": 9,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 109,
+      "step": 9,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 110,
+      "step": 9,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits."
+    },
+    {
+      "seq": 111,
+      "step": 9,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:8df1521131511ae079acab2101b58c8f4c6e3c2235faa912f24b991613de0b7e",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 112,
+      "step": 9,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+    },
+    {
+      "seq": 113,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 114,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 115,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 116,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 117,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 118,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    }
+  ]
+}

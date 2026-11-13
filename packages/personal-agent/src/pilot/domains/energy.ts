@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Domain adapter: UC-03 public energy-plan comparison (synthetic retailers and tariffs).
  *
@@ -62,6 +63,49 @@ export const planSchema = z.strictObject({
 });
 export type Plan = z.infer<typeof planSchema>;
 
+/** Public catalogue vocabulary: names/IDs are finite terms from the installed catalogue. */
+export function energyContent(plans: readonly JsonObject[] = []) {
+  const code = (values: readonly (string | number | boolean)[]) => ({
+    type: "code" as const,
+    values,
+  });
+  return {
+    identifiers: [ENERGY_PLANS_OP.id, CDS_SUBSET.id, PURPOSE.priceComparison],
+    purposes: { [PURPOSE.priceComparison]: [] },
+    vocabulary: {
+      "input.fuelType": code(["ELECTRICITY"]),
+      "input.effective": code(["CURRENT"]),
+      "output.retailer": { type: "identifier" as const },
+      "output.schema.id": { type: "identifier" as const },
+      "output.schema.version": code([CDS_SUBSET.version, CDS_SUBSET_OLD.version]),
+      "output.retrievedAt": { type: "date" as const },
+      "output.plans.*.planId": code(plans.map((p) => String(p.planId))),
+      "output.plans.*.displayName": {
+        type: "term" as const,
+        values: plans.map((p) => String(p.displayName)),
+      },
+      "output.plans.*.lastUpdated": { type: "date" as const },
+      "output.plans.*.fuelType": code(["ELECTRICITY"]),
+      "output.plans.*.customerType": code(["RESIDENTIAL"]),
+      "output.plans.*.geography.distributors.*": code(["CitiPower", "Jemena", "Powercor"]),
+      "output.plans.*.tariff.type": code(["SINGLE_RATE", "TIME_OF_USE"]),
+      "output.plans.*.tariff.dailySupplyChargeCents": { type: "number" as const },
+      "output.plans.*.tariff.rates.*.band": code(["ALL", "PEAK", "SHOULDER", "OFFPEAK"]),
+      "output.plans.*.tariff.rates.*.centsPerKWh": { type: "number" as const },
+      "output.plans.*.tariff.rates.*.unit": code(["KWH"]),
+      "output.plans.*.tariff.rates.*.window.*": code(
+        Array.from(
+          { length: 48 },
+          (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`,
+        ),
+      ),
+      "output.plans.*.discounts.*.type": code(["CONDITIONAL", "GUARANTEED"]),
+      "output.plans.*.discounts.*.condition": code(["PAY_ON_TIME"]),
+      "output.plans.*.discounts.*.percentOfUsage": { type: "number" as const },
+    },
+  };
+}
+
 export function plansDescription(
   access: "public" | "represented",
   model: { id: string; version: string } = CDS_SUBSET,
@@ -83,6 +127,7 @@ export function plansDescription(
 
 /** A retailer's public plan service. Serves the same list to everyone; asks for nothing. */
 export class RetailerPlansHandler implements OperationHandler {
+  readonly contentProfile;
   readonly description: OperationDescription;
   readonly inputSchema = z.strictObject({
     fuelType: z.literal("ELECTRICITY"),
@@ -97,6 +142,7 @@ export class RetailerPlansHandler implements OperationHandler {
     model: { id: string; version: string } = CDS_SUBSET,
   ) {
     this.description = plansDescription(access, model);
+    this.contentProfile = energyContent(plans);
   }
 
   onInvoke(ctx: HandlerContext, _body: InvokeBody): HandlerReply {
@@ -173,6 +219,7 @@ export interface ComparatorState {
 }
 
 export class ComparatorHandler implements OperationHandler {
+  readonly contentProfile = energyContent();
   readonly description: OperationDescription = {
     ...plansDescription("public"),
     roles: ["initiator"],

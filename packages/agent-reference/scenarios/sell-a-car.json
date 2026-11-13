@@ -1,0 +1,747 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "sell-a-car",
+  "useCase": "sell-a-car",
+  "title": "Selling a used car to a stranger",
+  "profile": "sell-a-car",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:sell-a-car:owner",
+      "name": "The seller",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:sell-a-car:receiver",
+      "name": "The buyer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "vehicle-register",
+      "identity": "urn:fictional:sell-a-car:vehicle-register",
+      "name": "The fictional vehicle register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "other-owner",
+      "identity": "urn:fictional:sell-a-car:other-owner",
+      "name": "The other fictional keeper",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:sell-a-car:owner-agent",
+      "name": "The seller’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:sell-a-car:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:sell-a-car:receiver-agent",
+      "name": "The buyer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:sell-a-car:receiver-agent:actor",
+      "actsFor": "receiver"
+    },
+    {
+      "id": "finance-register",
+      "identity": "urn:fictional:sell-a-car:finance-register",
+      "name": "The complete finance-search register",
+      "role": "register",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "escrow",
+      "identity": "urn:fictional:sell-a-car:escrow",
+      "name": "The escrow register",
+      "role": "register",
+      "runs": "issuer-only"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:sell-a-car:receiver",
+          "tasks": [
+            "urn:op:sell-a-car",
+            "urn:op:sell-a-car:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:sell-a-car:owner",
+          "tasks": [
+            "urn:op:sell-a-car"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:sell-a-car:owner",
+          "tasks": [
+            "urn:op:sell-a-car",
+            "urn:op:sell-a-car:request"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:sell-a-car:vehicle.keeper",
+          "version": "1",
+          "source": "urn:fictional:sell-a-car:vehicle-register",
+          "claimTypes": [
+            "vehicle.keeper"
+          ],
+          "subjects": [
+            "urn:fictional:sell-a-car:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:sell-a-car:vehicle.keeper",
+          "version": "1",
+          "source": "urn:fictional:sell-a-car:vehicle-register",
+          "claimTypes": [
+            "vehicle.keeper"
+          ],
+          "subjects": [
+            "urn:fictional:sell-a-car:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "keeper",
+      "issuer": "vehicle-register",
+      "subject": "urn:fictional:sell-a-car:owner",
+      "kind": "vehicle.keeper",
+      "value": {
+        "vehicle": "urn:fictional:car",
+        "status": {
+          "ref": "urn:fictional:sell-a-car:ownership-status",
+          "id": "keeper"
+        }
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:sell-a-car:keeper",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:sell-a-car:keeper",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:sell-a-car"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:sell-a-car:keeper",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:sell-a-car"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "search",
+      "issuer": "finance-register",
+      "subject": "urn:fictional:car",
+      "kind": "finance.search",
+      "value": {
+        "financed": false
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:sell-a-car:search",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:sell-a-car:search",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:sell-a-car"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "complete",
+      "issuer": "finance-register",
+      "subject": "urn:fictional:car",
+      "kind": "finance.search.complete",
+      "value": {
+        "complete": true,
+        "forClaim": "finance.search"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:sell-a-car:complete",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:sell-a-car:complete",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:sell-a-car"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:sell-a-car"
+        },
+        {
+          "type": "permission",
+          "action": "read",
+          "target": "urn:op:sell-a-car"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:sell-a-car:request"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "keeper-preflight",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "keeper"
+      ],
+      "purpose": "urn:purpose:sell-a-car"
+    },
+    {
+      "id": "release-escrow",
+      "agent": "owner-agent",
+      "type": "effect",
+      "intent": {
+        "action": "read",
+        "operation": "urn:op:sell-a-car",
+        "target": "urn:op:sell-a-car",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "parameters": {
+          "item": "urn:fictional:sell-a-car:escrow-hold",
+          "amount": 7500,
+          "currency": "GBP"
+        }
+      },
+      "params": {
+        "item": "urn:fictional:sell-a-car:escrow-hold",
+        "amount": 7500,
+        "currency": "GBP"
+      },
+      "activityType": "urn:activity:vehicle-sale"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The seller is not the registered keeper",
+      "change": {
+        "suites": {
+          "commitments": "signed-offer-acceptance"
+        },
+        "script": [
+          {
+            "id": "keeper-preflight",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "keeper"
+            ],
+            "purpose": "urn:purpose:sell-a-car"
+          },
+          {
+            "id": "attempt-sale",
+            "agent": "owner-agent",
+            "type": "effect",
+            "intent": {
+              "action": "read",
+              "operation": "urn:op:sell-a-car",
+              "target": "urn:op:sell-a-car",
+              "recipient": "urn:fictional:sell-a-car:owner",
+              "purpose": "urn:purpose:sell-a-car",
+              "conversation": "urn:scenario:sell-a-car:task",
+              "parameters": {}
+            },
+            "params": {},
+            "activityType": "urn:activity:vehicle-sale"
+          }
+        ],
+        "traceSteps": {
+          "1": "The seller’s agent checks the signed statements.",
+          "2": "The seller’s agent proposes the local action."
+        },
+        "statements": [
+          {
+            "id": "keeper",
+            "issuer": "vehicle-register",
+            "subject": "urn:fictional:sell-a-car:other-owner",
+            "kind": "vehicle.keeper",
+            "value": {
+              "vehicle": "urn:fictional:car"
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:sell-a-car:keeper",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:sell-a-car:keeper",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:sell-a-car"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:sell-a-car:keeper",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:sell-a-car"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "source-not-authoritative",
+        "check": "fitness"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "escrow",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "source",
+    "fitness"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Escrow-free keeper preflight",
+      "replacedBy": "The vehicle register signs the actual other keeper; the source rule is scoped to the seller and refuses it before any sale, payment or escrow release"
+    }
+  ],
+  "traceSteps": {
+    "1": "Check the vehicle keeper.",
+    "2": "Release the escrow hold only after every condition and both acceptances."
+  },
+  "documents": [
+    {
+      "id": "urn:fictional:sell-a-car:ownership-status",
+      "issuer": "vehicle-register",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:sell-a-car:ownership-status",
+        "issuer": "urn:fictional:sell-a-car:vehicle-register",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "keeper": "active"
+        }
+      }
+    }
+  ],
+  "singleUseRegisters": [
+    {
+      "party": "escrow",
+      "maxAgeSeconds": 60,
+      "items": [
+        {
+          "id": "urn:fictional:sell-a-car:escrow-hold",
+          "issuer": "owner",
+          "state": "active",
+          "roleStatement": "keeper",
+          "roleSource": "urn:fictional:sell-a-car:vehicle-register",
+          "roleClaim": "vehicle.keeper",
+          "escrow": {
+            "parties": [
+              "urn:fictional:sell-a-car:owner",
+              "urn:fictional:sell-a-car:receiver"
+            ],
+            "termsDigest": "sha-256:fc19a508065fadc0ed0649e1e261cd49e81a10d7bdd19c002baec7cb2a430644",
+            "conditions": [
+              {
+                "kind": "vehicle.keeper",
+                "issuer": "urn:fictional:sell-a-car:vehicle-register",
+                "subject": "urn:fictional:sell-a-car:owner"
+              },
+              {
+                "kind": "finance.search",
+                "issuer": "urn:fictional:sell-a-car:finance-register",
+                "subject": "urn:fictional:car",
+                "equals": {
+                  "financed": false
+                }
+              },
+              {
+                "kind": "finance.search.complete",
+                "issuer": "urn:fictional:sell-a-car:finance-register",
+                "subject": "urn:fictional:car",
+                "completeFor": "finance.search"
+              }
+            ]
+          },
+          "redeemers": [
+            "urn:fictional:sell-a-car:owner"
+          ],
+          "purposes": [
+            "urn:purpose:sell-a-car"
+          ]
+        }
+      ],
+      "acceptances": [
+        {
+          "party": "owner",
+          "item": "urn:fictional:sell-a-car:escrow-hold",
+          "termsDigest": "sha-256:fc19a508065fadc0ed0649e1e261cd49e81a10d7bdd19c002baec7cb2a430644"
+        },
+        {
+          "party": "receiver",
+          "item": "urn:fictional:sell-a-car:escrow-hold",
+          "termsDigest": "sha-256:fc19a508065fadc0ed0649e1e261cd49e81a10d7bdd19c002baec7cb2a430644"
+        }
+      ]
+    }
+  ]
+}

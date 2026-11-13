@@ -1,0 +1,127 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "supplier-onboarding",
+  "claims": [
+    {
+      "kind": "company.exists",
+      "sources": [
+        "urn:fictional:company-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "bank.account-owner",
+      "sources": [
+        "urn:fictional:supplier-bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "certificate",
+      "sources": [
+        "urn:fictional:certifier"
+      ],
+      "methods": [
+        "attested"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:supplier-onboarding",
+      "claims": [
+        "company.exists",
+        "bank.account-owner",
+        "certificate"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.entity": {
+      "type": "identifier"
+    },
+    "input.support.*": {
+      "type": "identifier"
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "onboarded"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:onboard-supplier",
+      "version": "0.1",
+      "label": "urn:op:onboard-supplier",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:supplier-onboarding"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "organizations": {
+    "registrar": "urn:fictional:registrar",
+    "maxStatusAgeSeconds": 3600,
+    "requiredRoles": {
+      "urn:op:onboard-supplier": [
+        "supplier-signatory"
+      ]
+    },
+    "statusClaims": [
+      "certificate"
+    ],
+    "actionKinds": {
+      "urn:op:onboard-supplier": "onboard-supplier"
+    }
+  },
+  "actionClaims": [
+    {
+      "action": "use",
+      "claims": [
+        "company.exists",
+        "bank.account-owner",
+        "certificate"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Organization identifier resolution and company registrar",
+      "replacedBy": "Fictional registrar party serves signed current-key and delegated-agent documents through a local resolver; no live DID method"
+    },
+    {
+      "what": "Issuer credential and certificate status services",
+      "replacedBy": "Fictional organizations publish signed status lists through the local resolver"
+    },
+    {
+      "what": "Company register, bank and certificate authority",
+      "replacedBy": "Separately keyed fictional issuer-only sources"
+    }
+  ],
+  "parties": {
+    "supplier": "The supplier",
+    "buyer": "The buyer",
+    "company-register": "The fictional company register",
+    "supplier-bank": "The supplier’s bank",
+    "certifier": "The fictional certifier",
+    "registrar": "The local registrar",
+    "supplier-agent": "The supplier’s agent",
+    "buyer-agent": "The buyer’s agent"
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "cross-department-request",
+  "parties": {
+    "owner": "The finance department",
+    "receiver": "The people team",
+    "owner-agent": "The finance department’s agent",
+    "receiver-agent": "The people team’s agent"
+  },
+  "claims": [
+    {
+      "kind": "salary.team-total",
+      "sources": [
+        "urn:fictional:cross-department-request:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "salary.named-person",
+      "sources": [
+        "urn:fictional:cross-department-request:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:cross-department-request",
+      "claims": [
+        "salary.team-total"
+      ]
+    },
+    {
+      "id": "urn:purpose:payroll-administration",
+      "claims": [
+        "salary.named-person"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "salary.team-total",
+        "salary.named-person"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:cross-department-request",
+      "version": "0.1",
+      "label": "One department's agent asks another's for data",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:cross-department-request"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:cross-department-request:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:cross-department-request"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

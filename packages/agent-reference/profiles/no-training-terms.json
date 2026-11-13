@@ -1,0 +1,99 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "no-training-terms",
+  "parties": {
+    "owner": "The publisher",
+    "receiver": "The model developer",
+    "owner-agent": "The publisher’s agent",
+    "receiver-agent": "The model developer’s agent"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:no-training-terms:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:no-training-terms",
+      "claims": [
+        "unstructured-content"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:no-training-terms",
+      "version": "0.1",
+      "label": "Content that must not be used for training",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:no-training-terms"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:no-training-terms:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:no-training-terms"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:no-training-terms:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:no-training-terms"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [],
+  "readings": [
+    {
+      "claimType": "content.opinion",
+      "type": "code",
+      "values": [
+        "requires-review"
+      ]
+    }
+  ]
+}

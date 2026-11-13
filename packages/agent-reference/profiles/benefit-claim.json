@@ -1,0 +1,122 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "benefit-claim",
+  "parties": {
+    "owner": "The claimant",
+    "receiver": "The benefits office",
+    "employer": "The employer",
+    "landlord": "The landlord",
+    "household-register": "The household register",
+    "owner-agent": "The claimant’s agent",
+    "receiver-agent": "The benefits office’s agent"
+  },
+  "claims": [
+    {
+      "kind": "benefit.income",
+      "sources": [
+        "urn:fictional:benefit-claim:employer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "benefit.rent",
+      "sources": [
+        "urn:fictional:benefit-claim:landlord"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "benefit.household",
+      "sources": [
+        "urn:fictional:benefit-claim:household-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:benefit-claim",
+      "claims": [
+        "benefit.income",
+        "benefit.rent",
+        "benefit.household"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "benefit.income",
+        "benefit.rent",
+        "benefit.household"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:benefit-claim",
+      "version": "0.1",
+      "label": "Claiming a benefit",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:benefit-claim"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:benefit-claim:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:benefit-claim"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "distribute",
+      "claims": [
+        "benefit.income",
+        "benefit.rent",
+        "benefit.household"
+      ]
+    },
+    {
+      "action": "urn:op:benefit-claim",
+      "claims": [
+        "benefit.income",
+        "benefit.rent",
+        "benefit.household"
+      ]
+    }
+  ]
+}

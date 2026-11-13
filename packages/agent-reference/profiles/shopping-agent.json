@@ -1,0 +1,119 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "shopping-agent",
+  "claims": [
+    {
+      "kind": "payee-account",
+      "sources": [
+        "urn:fictional:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "invoice",
+      "sources": [
+        "urn:fictional:supplier"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "other-offer",
+      "sources": [
+        "urn:fictional:other-merchant"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 7
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:shopping-agent",
+      "claims": [
+        "payee-account",
+        "invoice",
+        "other-offer"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.payee": {
+      "type": "identifier"
+    },
+    "input.reference": {
+      "type": "identifier"
+    },
+    "input.account": {
+      "type": "identifier",
+      "claimType": "payee-account"
+    },
+    "input.amount": {
+      "type": "number"
+    },
+    "input.currency": {
+      "type": "code",
+      "values": [
+        "GBP"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "submitted"
+      ]
+    },
+    "output.reference": {
+      "type": "identifier"
+    },
+    "observed.status": {
+      "type": "code",
+      "values": [
+        "submitted"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:payment",
+      "version": "0.1",
+      "label": "shopping-agent",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:shopping-agent"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Payment bank and account directory",
+      "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
+    },
+    {
+      "what": "Checkout and payment settlement",
+      "replacedBy": "Two source-signed merchant prices and a gated local payment-provider submission; no live checkout or settlement is claimed"
+    }
+  ],
+  "parties": {
+    "business": "The shopper",
+    "business-agent": "The shopper’s agent",
+    "bank": "The payment provider",
+    "bank-agent": "The payment provider’s agent",
+    "supplier": "The chosen merchant",
+    "email": "The unverified account sender",
+    "other-merchant": "The other merchant"
+  }
+}

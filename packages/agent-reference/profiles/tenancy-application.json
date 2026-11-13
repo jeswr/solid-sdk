@@ -1,0 +1,113 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "tenancy-application",
+  "parties": {
+    "owner": "The tenant",
+    "receiver": "The letting agency",
+    "bank": "The tenant’s bank",
+    "owner-agent": "The tenant’s agent",
+    "receiver-agent": "The letting agency’s agent"
+  },
+  "claims": [
+    {
+      "kind": "bank.full-statements",
+      "sources": [
+        "urn:fictional:tenancy-application:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:tenancy-application",
+      "claims": []
+    },
+    {
+      "id": "urn:purpose:tenant-finances",
+      "claims": [
+        "bank.full-statements"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "bank.full-statements"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "terms.purpose": {
+      "type": "identifier"
+    },
+    "terms.evidenceRequest.*.claimType": {
+      "type": "code",
+      "values": [
+        "tenancy.application"
+      ]
+    },
+    "terms.topic": {
+      "type": "code",
+      "values": [
+        "application-request"
+      ]
+    },
+    "terms.turn": {
+      "type": "number"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:tenancy-application",
+      "version": "0.1",
+      "label": "Applying to rent a home",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true,
+      "agreementDelivery": "acceptor"
+    },
+    {
+      "id": "urn:op:tenancy-application:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:tenancy-application:raw",
+      "version": "0.1",
+      "label": "Attempt raw-statement disclosure",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "content-licence",
+  "parties": {
+    "owner": "The publisher",
+    "receiver": "The sister company",
+    "photographer": "The photographer",
+    "owner-agent": "The publisher’s agent",
+    "receiver-agent": "The sister company’s agent",
+    "coordinator": "The licence registrar",
+    "coordinator-agent": "The licence registrar’s agent",
+    "photographer-agent": "The photographer’s agent",
+    "external-receiver": "The publishing platform",
+    "external-receiver-agent": "The publishing platform’s agent"
+  },
+  "claims": [
+    {
+      "kind": "photo.licensed-asset",
+      "sources": [
+        "urn:fictional:content-licence:photographer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:content-licence",
+      "claims": [
+        "photo.licensed-asset"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "photo.licensed-asset"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:content-licence",
+      "version": "0.1",
+      "label": "Licensing a photograph",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:content-licence"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:content-licence:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:content-licence"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:agreement",
+      "version": "0.1",
+      "label": "Accepting the same agreement terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:content-licence"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    }
+  ]
+}

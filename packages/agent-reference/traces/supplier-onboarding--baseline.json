@@ -1,0 +1,1930 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "supplier-onboarding",
+  "path": "main",
+  "parties": [
+    {
+      "id": "supplier",
+      "name": "The supplier"
+    },
+    {
+      "id": "buyer",
+      "name": "The buyer"
+    },
+    {
+      "id": "company-register",
+      "name": "The fictional company register"
+    },
+    {
+      "id": "supplier-bank",
+      "name": "The supplier’s bank"
+    },
+    {
+      "id": "certifier",
+      "name": "The fictional certifier"
+    },
+    {
+      "id": "registrar",
+      "name": "The local registrar"
+    },
+    {
+      "id": "supplier-agent",
+      "name": "The supplier’s agent"
+    },
+    {
+      "id": "buyer-agent",
+      "name": "The buyer’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "supplier-onboarding",
+    "title": "Taking on a new supplier",
+    "steps": {
+      "1": "The supplier’s agent checks and admits the signed statements.",
+      "2": "The supplier’s agent sends a signed request.",
+      "3": "The buyer’s agent checks the incoming message and prepares a response.",
+      "4": "The buyer’s agent proposes the local action.",
+      "5": "The buyer’s agent checks the observed result.",
+      "6": "The buyer’s agent checks the durable record."
+    }
+  },
+  "configuration": {
+    "id": "supplier-onboarding-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "organization-document-local",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-credential",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "supplier-agent",
+      "name": "The supplier’s agent",
+      "actsFor": "supplier",
+      "role": "agent"
+    },
+    {
+      "id": "buyer-agent",
+      "name": "The buyer’s agent",
+      "actsFor": "buyer",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Organization identifier resolution and company registrar",
+      "replacedBy": "Fictional registrar party serves signed current-key and delegated-agent documents through a local resolver; no live DID method"
+    },
+    {
+      "what": "Issuer credential and certificate status services",
+      "replacedBy": "Fictional organizations publish signed status lists through the local resolver"
+    },
+    {
+      "what": "Company register, bank and certificate authority",
+      "replacedBy": "Separately keyed fictional issuer-only sources"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The fictional company register's company.exists statement is intact and signed with The fictional company register's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:company-register",
+        "text": "The fictional company register is accepted for company.exists claims."
+      },
+      "resolution": {
+        "question": "Is The fictional company register an authority for company.exists claims about The supplier?",
+        "path": [
+          {
+            "at": "The supplier's own list",
+            "kind": "own-list",
+            "says": "The fictional company register is accepted for company.exists."
+          }
+        ],
+        "answer": "Accepted, for company.exists claims only."
+      },
+      "caption": "The fictional company register's company.exists statement: The fictional company register is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The fictional company register's company.exists statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:company",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The fictional company register's company.exists statement: its terms allow this: ."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:supplier-onboarding:company.exists",
+        "text": "Accept company.exists from urn:fictional:company-register by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The fictional company register's company.exists statement is fit for urn:scenario:supplier-onboarding:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The fictional company register's company.exists statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:supplier-onboarding:company",
+        "label": "The fictional company register's company.exists statement",
+        "claimType": "company.exists",
+        "subject": "urn:fictional:supplier",
+        "value": null,
+        "source": "urn:fictional:company-register",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:company",
+          "summary": ""
+        },
+        "provenance": "signed by The fictional company register"
+      },
+      "caption": "The fictional company register's company.exists statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The supplier’s bank's bank.account-owner statement is intact and signed with The supplier’s bank's pinned key."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:supplier-bank",
+        "text": "The supplier’s bank is accepted for bank.account-owner claims."
+      },
+      "resolution": {
+        "question": "Is The supplier’s bank an authority for bank.account-owner claims about The supplier?",
+        "path": [
+          {
+            "at": "The supplier's own list",
+            "kind": "own-list",
+            "says": "The supplier’s bank is accepted for bank.account-owner."
+          }
+        ],
+        "answer": "Accepted, for bank.account-owner claims only."
+      },
+      "caption": "The supplier’s bank's bank.account-owner statement: The supplier’s bank is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The supplier’s bank's bank.account-owner statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:account",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The supplier’s bank's bank.account-owner statement: its terms allow this: ."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:supplier-onboarding:bank.account-owner",
+        "text": "Accept bank.account-owner from urn:fictional:supplier-bank by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The supplier’s bank's bank.account-owner statement is fit for urn:scenario:supplier-onboarding:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The supplier’s bank's bank.account-owner statement is admitted."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:supplier-onboarding:account",
+        "label": "The supplier’s bank's bank.account-owner statement",
+        "claimType": "bank.account-owner",
+        "subject": "urn:fictional:supplier",
+        "value": null,
+        "source": "urn:fictional:supplier-bank",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:account",
+          "summary": ""
+        },
+        "provenance": "signed by The supplier’s bank"
+      },
+      "caption": "The supplier’s bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 15,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The fictional certifier's certificate statement is intact and signed with The fictional certifier's pinned key."
+    },
+    {
+      "seq": 16,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:certifier",
+        "text": "The fictional certifier is accepted for certificate claims."
+      },
+      "resolution": {
+        "question": "Is The fictional certifier an authority for certificate claims about The supplier?",
+        "path": [
+          {
+            "at": "The supplier's own list",
+            "kind": "own-list",
+            "says": "The fictional certifier is accepted for certificate."
+          }
+        ],
+        "answer": "Accepted, for certificate claims only."
+      },
+      "caption": "The fictional certifier's certificate statement: The fictional certifier is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 17,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The fictional certifier's certificate statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 18,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:certificate",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The fictional certifier's certificate statement: its terms allow this: ."
+    },
+    {
+      "seq": 19,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:supplier-onboarding:certificate",
+        "text": "Accept certificate from urn:fictional:certifier by attested, at most 30 days old."
+      },
+      "caption": "The fictional certifier's certificate statement is fit for urn:scenario:supplier-onboarding:task: attested, 0 days old."
+    },
+    {
+      "seq": 20,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The fictional certifier's certificate statement is admitted."
+    },
+    {
+      "seq": 21,
+      "step": 1,
+      "agent": "supplier-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:supplier-onboarding:certificate",
+        "label": "The fictional certifier's certificate statement",
+        "claimType": "certificate",
+        "subject": "urn:fictional:supplier",
+        "value": null,
+        "source": "urn:fictional:certifier",
+        "method": "attested",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:certificate",
+          "summary": ""
+        },
+        "provenance": "signed by The fictional certifier"
+      },
+      "caption": "The fictional certifier's certificate statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:onboard supplier with The buyer."
+    },
+    {
+      "seq": 23,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The supplier's mandate covers this action."
+    },
+    {
+      "seq": 24,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The buyer a party I can send urn:op:onboard-supplier to?",
+        "path": [
+          {
+            "at": "The supplier's own list",
+            "kind": "own-list",
+            "says": "The buyer is accepted for urn:op:onboard-supplier."
+          }
+        ],
+        "answer": "Accepted, for urn:op:onboard-supplier only."
+      },
+      "reason": "recipient-established",
+      "caption": "The buyer: Accepted, for urn:op:onboard-supplier only."
+    },
+    {
+      "seq": 25,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 26,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 27,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The supplier's limits."
+    },
+    {
+      "seq": 28,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 29,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:company",
+        "text": "The issuer's terms: . They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The fictional company register's company.exists statement: its terms allow this: ."
+    },
+    {
+      "seq": 30,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 31,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:account",
+        "text": "The issuer's terms: . They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The supplier’s bank's bank.account-owner statement: its terms allow this: ."
+    },
+    {
+      "seq": 32,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 33,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:certificate",
+        "text": "The issuer's terms: . They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The fictional certifier's certificate statement: its terms allow this: ."
+    },
+    {
+      "seq": 34,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 35,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The supplier’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 36,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The buyer’s agent."
+    },
+    {
+      "seq": 37,
+      "step": 2,
+      "agent": "supplier-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0002",
+        "from": "The supplier’s agent",
+        "to": "The buyer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:f5fb4310621…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The supplier’s agent to The buyer’s agent; invoke; signed (JWS EdDSA, pinned key qN-9ZYIgnDNX…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-supplier-onboarding-main:supplier-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0002",
+              "conversation": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:supplier-agent:agent",
+                "onBehalfOf": "urn:fictional:supplier"
+              },
+              "to": {
+                "actor": "urn:fictional:buyer-agent:agent",
+                "party": "urn:fictional:buyer"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "qN-9ZYIgnDNXfFoaM0ldUuXvqQT30FnQsuP4g8dK118",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:e78c8e808c574723ed0650e57c3f1eafd159f3a2ee66840cbe8f54a660a76155"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The supplier says The supplier’s agent acts for it.",
+            "raw": [
+              {
+                "type": "OrganizationMandate",
+                "id": "urn:credential:supplier-onboarding:supplier-agent",
+                "issuer": "urn:fictional:supplier",
+                "actor": "urn:fictional:supplier-agent:agent",
+                "subjectKey": "qN-9ZYIgnDNXfFoaM0ldUuXvqQT30FnQsuP4g8dK118",
+                "entity": "urn:fictional:supplier",
+                "roles": [
+                  "supplier-signatory"
+                ],
+                "actions": [
+                  "onboard-supplier"
+                ],
+                "validFrom": "2026-11-01T00:00:00.000Z",
+                "validUntil": "2026-12-01T00:00:00.000Z",
+                "status": {
+                  "ref": "urn:status:supplier",
+                  "id": "signatory"
+                }
+              }
+            ],
+            "digest": "sha-256:b86cd57b54eb2df4af24ddac4baf90f6a71a36c35d1b7b02ad42f34612a8df63"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:onboard-supplier",
+                "version": "0.1"
+              },
+              "input": {
+                "entity": "urn:fictional:supplier",
+                "support": [
+                  "urn:scenario:supplier-onboarding:company",
+                  "urn:scenario:supplier-onboarding:account",
+                  "urn:scenario:supplier-onboarding:certificate"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:supplier-onboarding"
+            },
+            "digest": "sha-256:9a2784631d46a9b307620e274582f0249247055e8c6ad4c196ef20b485093f0a"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "3 statement(s) signed by their sources: company.exists from The fictional company register; bank.account-owner from The supplier’s bank; certificate from The fictional certifier.",
+            "raw": [
+              {
+                "value": true,
+                "id": "urn:scenario:supplier-onboarding:company",
+                "issuer": "urn:fictional:company-register",
+                "subject": "urn:fictional:supplier",
+                "claimType": "company.exists",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:company",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:supplier-onboarding:company"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:supplier-onboarding:company"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "account": "urn:account:supplier",
+                "entity": "urn:fictional:supplier",
+                "id": "urn:scenario:supplier-onboarding:account",
+                "issuer": "urn:fictional:supplier-bank",
+                "subject": "urn:fictional:supplier",
+                "claimType": "bank.account-owner",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:account",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:supplier-onboarding:account"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:supplier-onboarding:account"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "value": "insured",
+                "status": {
+                  "ref": "urn:status:certifier",
+                  "id": "insurance"
+                },
+                "id": "urn:scenario:supplier-onboarding:certificate",
+                "issuer": "urn:fictional:certifier",
+                "subject": "urn:fictional:supplier",
+                "claimType": "certificate",
+                "method": "attested",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:certificate",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:supplier-onboarding:certificate"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:supplier-onboarding:certificate"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:ad4b0d06c5f689014465f793a6f4a18b26c19acf2f1a45fc2c494b3c8394708f"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The supplier’s agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:supplier-onboarding:company",
+                  "issuer": "urn:fictional:company-register",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                },
+                {
+                  "id": "urn:scenario:supplier-onboarding:account",
+                  "issuer": "urn:fictional:supplier-bank",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                },
+                {
+                  "id": "urn:scenario:supplier-onboarding:certificate",
+                  "issuer": "urn:fictional:certifier",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The supplier’s agent sends an invoke message to The buyer’s agent."
+    },
+    {
+      "seq": 38,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0002",
+        "from": "The supplier’s agent",
+        "to": "The buyer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:f5fb4310621…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The supplier’s agent to The buyer’s agent; invoke; signed (JWS EdDSA, pinned key qN-9ZYIgnDNX…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-supplier-onboarding-main:supplier-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0002",
+              "conversation": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:supplier-agent:agent",
+                "onBehalfOf": "urn:fictional:supplier"
+              },
+              "to": {
+                "actor": "urn:fictional:buyer-agent:agent",
+                "party": "urn:fictional:buyer"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "qN-9ZYIgnDNXfFoaM0ldUuXvqQT30FnQsuP4g8dK118",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:e78c8e808c574723ed0650e57c3f1eafd159f3a2ee66840cbe8f54a660a76155"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The supplier says The supplier’s agent acts for it.",
+            "raw": [
+              {
+                "type": "OrganizationMandate",
+                "id": "urn:credential:supplier-onboarding:supplier-agent",
+                "issuer": "urn:fictional:supplier",
+                "actor": "urn:fictional:supplier-agent:agent",
+                "subjectKey": "qN-9ZYIgnDNXfFoaM0ldUuXvqQT30FnQsuP4g8dK118",
+                "entity": "urn:fictional:supplier",
+                "roles": [
+                  "supplier-signatory"
+                ],
+                "actions": [
+                  "onboard-supplier"
+                ],
+                "validFrom": "2026-11-01T00:00:00.000Z",
+                "validUntil": "2026-12-01T00:00:00.000Z",
+                "status": {
+                  "ref": "urn:status:supplier",
+                  "id": "signatory"
+                }
+              }
+            ],
+            "digest": "sha-256:b86cd57b54eb2df4af24ddac4baf90f6a71a36c35d1b7b02ad42f34612a8df63"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:onboard-supplier\"; \"urn:fictional:supplier\"; \"urn:scenario:supplier-onboarding:company\"; \"urn:scenario:supplier-onboarding:account\"; \"urn:scenario:supplier-onboarding:certificate\"; \"urn:purpose:supplier-onboarding\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:onboard-supplier",
+                "version": "0.1"
+              },
+              "input": {
+                "entity": "urn:fictional:supplier",
+                "support": [
+                  "urn:scenario:supplier-onboarding:company",
+                  "urn:scenario:supplier-onboarding:account",
+                  "urn:scenario:supplier-onboarding:certificate"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:supplier-onboarding"
+            },
+            "digest": "sha-256:9a2784631d46a9b307620e274582f0249247055e8c6ad4c196ef20b485093f0a",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:onboard-supplier"
+              },
+              {
+                "path": "input.entity",
+                "text": "urn:fictional:supplier"
+              },
+              {
+                "path": "input.support.0",
+                "text": "urn:scenario:supplier-onboarding:company"
+              },
+              {
+                "path": "input.support.1",
+                "text": "urn:scenario:supplier-onboarding:account"
+              },
+              {
+                "path": "input.support.2",
+                "text": "urn:scenario:supplier-onboarding:certificate"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:supplier-onboarding"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "3 statement(s) signed by their sources: company.exists from The fictional company register; bank.account-owner from The supplier’s bank; certificate from The fictional certifier.",
+            "raw": [
+              {
+                "value": true,
+                "id": "urn:scenario:supplier-onboarding:company",
+                "issuer": "urn:fictional:company-register",
+                "subject": "urn:fictional:supplier",
+                "claimType": "company.exists",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:company",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:supplier-onboarding:company"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:supplier-onboarding:company"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "account": "urn:account:supplier",
+                "entity": "urn:fictional:supplier",
+                "id": "urn:scenario:supplier-onboarding:account",
+                "issuer": "urn:fictional:supplier-bank",
+                "subject": "urn:fictional:supplier",
+                "claimType": "bank.account-owner",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:account",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:supplier-onboarding:account"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:supplier-onboarding:account"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "value": "insured",
+                "status": {
+                  "ref": "urn:status:certifier",
+                  "id": "insurance"
+                },
+                "id": "urn:scenario:supplier-onboarding:certificate",
+                "issuer": "urn:fictional:certifier",
+                "subject": "urn:fictional:supplier",
+                "claimType": "certificate",
+                "method": "attested",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:certificate",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:supplier-onboarding:certificate"
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:supplier-onboarding:certificate"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:ad4b0d06c5f689014465f793a6f4a18b26c19acf2f1a45fc2c494b3c8394708f"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The supplier’s agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:supplier-onboarding:company",
+                  "issuer": "urn:fictional:company-register",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                },
+                {
+                  "id": "urn:scenario:supplier-onboarding:account",
+                  "issuer": "urn:fictional:supplier-bank",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                },
+                {
+                  "id": "urn:scenario:supplier-onboarding:certificate",
+                  "issuer": "urn:fictional:certifier",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The supplier’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 39,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The supplier’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 40,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:company-register",
+        "text": "The fictional company register is accepted for company.exists claims."
+      },
+      "resolution": {
+        "question": "Is The fictional company register an authority for company.exists claims about The supplier?",
+        "path": [
+          {
+            "at": "The buyer's own list",
+            "kind": "own-list",
+            "says": "The fictional company register is accepted for company.exists."
+          }
+        ],
+        "answer": "Accepted, for company.exists claims only."
+      },
+      "caption": "The fictional company register's company.exists statement: The fictional company register is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 41,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:supplier-bank",
+        "text": "The supplier’s bank is accepted for bank.account-owner claims."
+      },
+      "resolution": {
+        "question": "Is The supplier’s bank an authority for bank.account-owner claims about The supplier?",
+        "path": [
+          {
+            "at": "The buyer's own list",
+            "kind": "own-list",
+            "says": "The supplier’s bank is accepted for bank.account-owner."
+          }
+        ],
+        "answer": "Accepted, for bank.account-owner claims only."
+      },
+      "caption": "The supplier’s bank's bank.account-owner statement: The supplier’s bank is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 42,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:certifier",
+        "text": "The fictional certifier is accepted for certificate claims."
+      },
+      "resolution": {
+        "question": "Is The fictional certifier an authority for certificate claims about The supplier?",
+        "path": [
+          {
+            "at": "The buyer's own list",
+            "kind": "own-list",
+            "says": "The fictional certifier is accepted for certificate."
+          }
+        ],
+        "answer": "Accepted, for certificate claims only."
+      },
+      "caption": "The fictional certifier's certificate statement: The fictional certifier is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 43,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:credential:supplier-onboarding:supplier-agent",
+        "text": "A representation statement signed with The supplier's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The supplier signed a statement that The supplier’s agent acts for them in this operation."
+    },
+    {
+      "seq": 44,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:company",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The fictional company register's company.exists statement: its terms allow this: ."
+    },
+    {
+      "seq": 45,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:account",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The supplier’s bank's bank.account-owner statement: its terms allow this: ."
+    },
+    {
+      "seq": 46,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:certificate",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The fictional certifier's certificate statement: its terms allow this: ."
+    },
+    {
+      "seq": 47,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:supplier-onboarding:company.exists",
+        "text": "Accept company.exists from urn:fictional:company-register by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The fictional company register's company.exists statement is fit for urn:op:onboard-supplier: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 48,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:supplier-onboarding:bank.account-owner",
+        "text": "Accept bank.account-owner from urn:fictional:supplier-bank by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The supplier’s bank's bank.account-owner statement is fit for urn:op:onboard-supplier: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 49,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:supplier-onboarding:certificate",
+        "text": "Accept certificate from urn:fictional:certifier by attested, at most 30 days old."
+      },
+      "caption": "The fictional certifier's certificate statement is fit for urn:op:onboard-supplier: attested, 0 days old."
+    },
+    {
+      "seq": 50,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 51,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:supplier-onboarding:company",
+        "label": "The fictional company register's company.exists statement",
+        "claimType": "company.exists",
+        "subject": "urn:fictional:supplier",
+        "value": null,
+        "source": "urn:fictional:company-register",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:company",
+          "summary": ""
+        },
+        "provenance": "signed by The fictional company register"
+      },
+      "caption": "The fictional company register's company.exists statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 52,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:supplier-onboarding:account",
+        "label": "The supplier’s bank's bank.account-owner statement",
+        "claimType": "bank.account-owner",
+        "subject": "urn:fictional:supplier",
+        "value": null,
+        "source": "urn:fictional:supplier-bank",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:account",
+          "summary": ""
+        },
+        "provenance": "signed by The supplier’s bank"
+      },
+      "caption": "The supplier’s bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 53,
+      "step": 3,
+      "agent": "buyer-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:supplier-onboarding:certificate",
+        "label": "The fictional certifier's certificate statement",
+        "claimType": "certificate",
+        "subject": "urn:fictional:supplier",
+        "value": null,
+        "source": "urn:fictional:certifier",
+        "method": "attested",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:certificate",
+          "summary": ""
+        },
+        "provenance": "signed by The fictional certifier"
+      },
+      "caption": "The fictional certifier's certificate statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 54,
+      "step": 4,
+      "agent": "buyer-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:onboard supplier with The supplier."
+    },
+    {
+      "seq": 55,
+      "step": 4,
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The buyer's mandate covers this action."
+    },
+    {
+      "seq": 56,
+      "step": 4,
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The supplier a party I can send urn:op:onboard-supplier to?",
+        "path": [
+          {
+            "at": "The buyer's own list",
+            "kind": "own-list",
+            "says": "The supplier is accepted for urn:op:onboard-supplier."
+          }
+        ],
+        "answer": "Accepted, for urn:op:onboard-supplier only."
+      },
+      "reason": "recipient-established",
+      "caption": "The supplier: Accepted, for urn:op:onboard-supplier only."
+    },
+    {
+      "seq": 57,
+      "step": 4,
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 58,
+      "step": 4,
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 59,
+      "step": 4,
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The buyer's limits."
+    },
+    {
+      "seq": 60,
+      "step": 4,
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:c28330973c7c4819ce9491d040f36199b59433f490441cb2e7c8d4c53fababf7",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 61,
+      "step": 4,
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: use urn:op:onboard supplier with The supplier."
+    },
+    {
+      "seq": 62,
+      "step": 6,
+      "agent": "buyer-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "43 entries in this agent's hash-chained record; the chain verifies."
+    }
+  ]
+}

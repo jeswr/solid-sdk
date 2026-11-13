@@ -1,0 +1,196 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "fee-dispute",
+  "parties": {
+    "owner": "Sam",
+    "lender": "The lender"
+  },
+  "claims": [
+    {
+      "kind": "forum.decision",
+      "sources": [
+        "urn:fictional:fee-dispute:forum"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:fee-dispute",
+      "claims": []
+    },
+    {
+      "id": "urn:purpose:duties",
+      "claims": []
+    },
+    {
+      "id": "urn:purpose:redress",
+      "claims": [
+        "forum.decision"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "terms.purpose": {
+      "type": "identifier"
+    },
+    "terms.duties.*.kind": {
+      "type": "code",
+      "values": [
+        "inform-onward",
+        "notify",
+        "delete"
+      ]
+    },
+    "terms.duties.*.parties.*": {
+      "type": "identifier"
+    },
+    "terms.duties.*.items.*": {
+      "type": "identifier"
+    },
+    "terms.duties.*.withinSeconds": {
+      "type": "number"
+    },
+    "terms.duties.*.event": {
+      "type": "code",
+      "values": [
+        "security-incident"
+      ]
+    },
+    "input.subject": {
+      "type": "identifier"
+    },
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.onward": {
+      "type": "code",
+      "values": [
+        true
+      ]
+    },
+    "input.duty": {
+      "type": "code"
+    },
+    "input.event": {
+      "type": "code",
+      "values": [
+        "security-incident"
+      ]
+    },
+    "output.acknowledgement": {
+      "type": "code"
+    },
+    "output.subject": {
+      "type": "identifier"
+    },
+    "output.parts.*.item": {
+      "type": "identifier"
+    },
+    "output.parts.*.recipient": {
+      "type": "identifier"
+    },
+    "output.parts.*.outcome": {
+      "type": "code",
+      "values": [
+        "done",
+        "pending",
+        "stop"
+      ]
+    },
+    "output.parts.*.reason": {
+      "type": "code",
+      "values": [
+        "no-agreement"
+      ]
+    },
+    "terms.fee": {
+      "type": "number"
+    },
+    "input.fee": {
+      "type": "number"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:fee-dispute:agreement",
+      "version": "0.1",
+      "label": "Form the data-use agreement",
+      "pattern": "negotiate",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:fee-dispute",
+        "urn:purpose:duties"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:erasure-request",
+      "version": "0.1",
+      "label": "Erase subject data",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:fee-dispute",
+        "urn:purpose:duties"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:general-notice",
+      "version": "0.1",
+      "label": "Acknowledge an incident notice",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:fee-dispute",
+        "urn:purpose:duties"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:forum-claim",
+      "version": "0.1",
+      "label": "Release an exact record segment to the forum",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:redress"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:forum-answer",
+      "version": "0.1",
+      "label": "Release an exact record segment to the forum",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:redress"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Companies, onward recipients, customers and regulator",
+      "replacedBy": "Independently keyed fictional runtimes exchanging locally gated signed messages; no claim of remote deletion or human readership."
+    },
+    {
+      "what": "Regulator-claim forum and record release transport",
+      "replacedBy": "A separately keyed local forum using signed control requests and source-verified record segments. Each record release is an exact owner-approved effect through the releasing runtime\u2019s gate; no network or legal adjudication is claimed."
+    }
+  ],
+  "forum": {
+    "party": "forum",
+    "responseSeconds": 60,
+    "observers": []
+  }
+}

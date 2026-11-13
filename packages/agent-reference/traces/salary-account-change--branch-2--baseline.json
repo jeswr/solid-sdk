@@ -1,0 +1,1760 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "salary-account-change",
+  "path": {
+    "index": 2,
+    "what": "It is signed, but not under the employee's mandate"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The employee"
+    },
+    {
+      "id": "receiver",
+      "name": "The employer"
+    },
+    {
+      "id": "bank",
+      "name": "The employee’s bank"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The employee’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The employer’s agent"
+    },
+    {
+      "id": "attacker",
+      "name": "The fictional attacker"
+    }
+  ],
+  "scenario": {
+    "id": "salary-account-change--branch-2",
+    "title": "A request to change where salary is paid: It is signed, but not under the employee's mandate",
+    "steps": {
+      "1": "The employee’s agent checks the signed statements.",
+      "2": "The employer’s agent sends the signed request.",
+      "3": "The employee’s agent checks the message and prepares a response.",
+      "4": "The employee’s agent sends the signed request.",
+      "5": "The employer’s agent checks the message and prepares a response.",
+      "6": "The employer’s agent proposes the local action.",
+      "7": "The employer’s agent checks the observed result."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The employee’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The employer’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Payroll database and email arrival",
+      "replacedBy": "A local update adapter after bank-backed signed instruction; the unsigned-email branch strips the real request signature before inbound verification. No live email is sent."
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The employee’s bank's salary.account statement is intact and signed with The employee’s bank's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:salary-account-change:salary.account",
+        "text": "The employee’s bank is accepted for salary.account claims."
+      },
+      "resolution": {
+        "question": "Is The employee’s bank an authority for salary.account claims about The employee?",
+        "path": [
+          {
+            "at": "The employee's own list",
+            "kind": "own-list",
+            "says": "The employee’s bank is accepted for salary.account."
+          }
+        ],
+        "answer": "Accepted, for salary.account claims only."
+      },
+      "caption": "The employee’s bank's salary.account statement: The employee’s bank is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The employee’s bank's salary.account statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:salary-account-change:account",
+        "text": "Its terms allow this: use for urn:purpose:salary account change; share for urn:purpose:salary account change."
+      },
+      "caption": "The employee’s bank's salary.account statement: its terms allow this: use for urn:purpose:salary account change; share for urn:purpose:salary account change."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:salary-account-change:salary.account",
+        "text": "Accept salary.account from urn:fictional:salary-account-change:bank by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The employee’s bank's salary.account statement is fit for urn:scenario:salary-account-change:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The employee’s bank's salary.account statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:salary-account-change:account",
+        "label": "The employee’s bank's salary.account statement",
+        "claimType": "salary.account",
+        "subject": "urn:fictional:salary-account-change:owner",
+        "value": null,
+        "source": "urn:fictional:salary-account-change:bank",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:salary-account-change:account",
+          "summary": "use for urn:purpose:salary account change; share for urn:purpose:salary account change"
+        },
+        "provenance": "signed by The employee’s bank"
+      },
+      "caption": "The employee’s bank's salary.account statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Request the needed information with The employee."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The employer's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The employee a party I can send Request the needed information to?",
+        "path": [
+          {
+            "at": "The employer's own list",
+            "kind": "own-list",
+            "says": "The employee is accepted for Request the needed information."
+          }
+        ],
+        "answer": "Accepted, for Request the needed information only."
+      },
+      "reason": "recipient-established",
+      "caption": "The employee: Accepted, for Request the needed information only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The employer's limits."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The employer’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The employee’s agent."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0002",
+        "from": "The employer’s agent",
+        "to": "The employee’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:162f3e9796b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The employer’s agent to The employee’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-salary-account-change-branch-2:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0002",
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:salary-account-change:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:salary-account-change:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:salary-account-change:owner-agent:actor",
+                "party": "urn:fictional:salary-account-change:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:1794db55b071861c513c3f064370e5ee3610a6b58327f5e5599188e5036785cf"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The employer says The employer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:be603e667d52ca4a663827f5569d3989:1794560400000",
+                "party": "urn:fictional:salary-account-change:receiver",
+                "actor": "urn:fictional:salary-account-change:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:salary-account-change",
+                  "urn:op:salary-account-change:request",
+                  "urn:op:salary-account-change:update"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:2c3b8dcef7211b2b1a48f5b9451405fa5cedb9597a0fc5ad8e9323b638d602e2"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:salary-account-change:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "salary.account"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:salary-account-change"
+            },
+            "digest": "sha-256:06989121d0fb4a82e9c398c1e8cebcc6000d96c1be25e6a146e7aaae69992a1f"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The employer’s agent sends an invoke message to The employee’s agent."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0002",
+        "from": "The employer’s agent",
+        "to": "The employee’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:162f3e9796b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The employer’s agent to The employee’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-salary-account-change-branch-2:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0002",
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:salary-account-change:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:salary-account-change:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:salary-account-change:owner-agent:actor",
+                "party": "urn:fictional:salary-account-change:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:1794db55b071861c513c3f064370e5ee3610a6b58327f5e5599188e5036785cf"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The employer says The employer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:be603e667d52ca4a663827f5569d3989:1794560400000",
+                "party": "urn:fictional:salary-account-change:receiver",
+                "actor": "urn:fictional:salary-account-change:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:salary-account-change",
+                  "urn:op:salary-account-change:request",
+                  "urn:op:salary-account-change:update"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:2c3b8dcef7211b2b1a48f5b9451405fa5cedb9597a0fc5ad8e9323b638d602e2"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:salary-account-change:request\"; \"urn:purpose:salary-account-change\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:salary-account-change:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "salary.account"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:salary-account-change"
+            },
+            "digest": "sha-256:06989121d0fb4a82e9c398c1e8cebcc6000d96c1be25e6a146e7aaae69992a1f",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:salary-account-change:request"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:salary-account-change"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The employer’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The employer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:be603e667d52ca4a663827f5569d3989:1794560400000",
+        "text": "A representation statement signed with The employer's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The employer signed a statement that The employer’s agent acts for them in this operation."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 25,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:salary account change with The employer."
+    },
+    {
+      "seq": 26,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The employee's mandate covers this action."
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The employer a party I can send A request to change where salary is paid to?",
+        "path": [
+          {
+            "at": "The employee's own list",
+            "kind": "own-list",
+            "says": "The employer is accepted for A request to change where salary is paid."
+          }
+        ],
+        "answer": "Accepted, for A request to change where salary is paid only."
+      },
+      "reason": "recipient-established",
+      "caption": "The employer: Accepted, for A request to change where salary is paid only."
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The employee's limits."
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:salary-account-change:account",
+        "text": "The issuer's terms: use for urn:purpose:salary account change; share for urn:purpose:salary account change. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The employee’s bank's salary.account statement: its terms allow this: use for urn:purpose:salary account change; share for urn:purpose:salary account change."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The employee’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The employer’s agent."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0002",
+        "from": "The employee’s agent",
+        "to": "The employer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:b058a8686e5…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The employee’s agent to The employer’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-salary-account-change-branch-2:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0002",
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:salary-account-change:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:salary-account-change:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:salary-account-change:receiver-agent:actor",
+                "party": "urn:fictional:salary-account-change:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:64f39e606686e9999ba2f7cbdc523bdff2607bb75bf7474df549a5eb80267a3c"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The employee says The employee’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:b728ea530043b236bf0df2ada42e36a8:1794560400000",
+                "party": "urn:fictional:salary-account-change:owner",
+                "actor": "urn:fictional:salary-account-change:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:salary-account-change",
+                  "urn:op:salary-account-change:request",
+                  "urn:op:salary-account-change:update"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:73654bfb7e59a7ca4d89a2a0d93eac20d1dfe16e69e5897600e129a1e233434d"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:salary-account-change",
+                "version": "0.1"
+              },
+              "input": {
+                "items": [
+                  "urn:scenario:salary-account-change:account"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:salary-account-change"
+            },
+            "digest": "sha-256:1e5f559efd10b803ff44dcc648ce6d4a117fe493672f330b556c5ba9486fca10"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: salary.account from The employee’s bank.",
+            "raw": [
+              {
+                "account": "urn:fictional:employee-new-account",
+                "id": "urn:scenario:salary-account-change:account",
+                "issuer": "urn:fictional:salary-account-change:bank",
+                "subject": "urn:fictional:salary-account-change:owner",
+                "claimType": "salary.account",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:salary-account-change:account",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:salary-account-change:account",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:salary-account-change"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:salary-account-change:account",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:salary-account-change"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:0ed305f1d773094ed17a1b20a48b6f977e75085ddd9310d9dff6c82967af1f33"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The employee’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:salary-account-change:account",
+                  "issuer": "urn:fictional:salary-account-change:bank",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The employee’s agent sends an invoke message to The employer’s agent."
+    },
+    {
+      "seq": 37,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0002",
+        "from": "The employee’s agent",
+        "to": "The employer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:d4d1db73440…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The employee’s agent to The employer’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-salary-account-change-branch-2:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0002",
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:salary-account-change:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:salary-account-change:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:salary-account-change:receiver-agent:actor",
+                "party": "urn:fictional:salary-account-change:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:2d966f4fb60ad6ea1b507160aafa421425e5830cd7da7ef69bca465692bd8c5d"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:salary-account-change\"; \"urn:scenario:salary-account-change:account\"; \"urn:purpose:salary-account-change\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:salary-account-change",
+                "version": "0.1"
+              },
+              "input": {
+                "items": [
+                  "urn:scenario:salary-account-change:account"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:salary-account-change"
+            },
+            "digest": "sha-256:1e5f559efd10b803ff44dcc648ce6d4a117fe493672f330b556c5ba9486fca10",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:salary-account-change"
+              },
+              {
+                "path": "input.items.0",
+                "text": "urn:scenario:salary-account-change:account"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:salary-account-change"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: salary.account from The employee’s bank.",
+            "raw": [
+              {
+                "account": "urn:fictional:employee-new-account",
+                "id": "urn:scenario:salary-account-change:account",
+                "issuer": "urn:fictional:salary-account-change:bank",
+                "subject": "urn:fictional:salary-account-change:owner",
+                "claimType": "salary.account",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:salary-account-change:account",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:salary-account-change:account",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:salary-account-change"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:salary-account-change:account",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:salary-account-change"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:0ed305f1d773094ed17a1b20a48b6f977e75085ddd9310d9dff6c82967af1f33"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The employee’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:salary-account-change:account",
+                  "issuer": "urn:fictional:salary-account-change:bank",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The employee’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 38,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The employee’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 39,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:salary-account-change:salary.account",
+        "text": "The employee’s bank is accepted for salary.account claims."
+      },
+      "resolution": {
+        "question": "Is The employee’s bank an authority for salary.account claims about The employee?",
+        "path": [
+          {
+            "at": "The employer's own list",
+            "kind": "own-list",
+            "says": "The employee’s bank is accepted for salary.account."
+          }
+        ],
+        "answer": "Accepted, for salary.account claims only."
+      },
+      "caption": "The employee’s bank's salary.account statement: The employee’s bank is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 40,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "representation-missing",
+      "rule": {
+        "id": "urn:op:salary-account-change",
+        "text": "A representation statement signed with The employee's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The sender has not shown that it acts for The employee here."
+    },
+    {
+      "seq": 41,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "refuse",
+      "reason": "representation-missing",
+      "caption": "The message is refused (representation-missing: representation not accepted); the core never sees it."
+    },
+    {
+      "seq": 42,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This protocol message proposes no additional action."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The employee a party I can send A request to change where salary is paid to?",
+        "path": [
+          {
+            "at": "The employer's own list",
+            "kind": "own-list",
+            "says": "The employee is accepted for A request to change where salary is paid."
+          }
+        ],
+        "answer": "Accepted, for A request to change where salary is paid only."
+      },
+      "reason": "recipient-established",
+      "caption": "The employee: Accepted, for A request to change where salary is paid only."
+    },
+    {
+      "seq": 44,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate finds no personal data in this protocol message."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate finds no data terms to apply."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The message release check is complete."
+    },
+    {
+      "seq": 47,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The employer’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 48,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The refuse message goes to The employee’s agent."
+    },
+    {
+      "seq": 49,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0003",
+        "from": "The employer’s agent",
+        "to": "The employee’s agent",
+        "kind": "refuse",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:32620f98d5e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The employer’s agent to The employee’s agent; refuse; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-salary-account-change-branch-2:receiver-agent:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-salary-account-change-branch-2:receiver-agent:0003",
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0001",
+              "kind": "refuse",
+              "from": {
+                "actor": "urn:fictional:salary-account-change:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:salary-account-change:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:salary-account-change:owner-agent:actor",
+                "party": "urn:fictional:salary-account-change:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:a4088a6206081b77b7af3b8c7abb8bdcd0789d435cb52fdca9697882ca281ace"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Closes the conversation (refuse): representation-missing.",
+            "raw": {
+              "ref": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0002",
+              "reason": "representation-missing"
+            },
+            "digest": "sha-256:26a6026cd9171bad12b985d4c274e38ca3d34de731d1fdf81ad972ae6b9f5f51"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-salary-account-change-branch-2:owner-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0001",
+              "inReplyTo": "urn:awp:engine-salary-account-change-branch-2:owner-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The employer’s agent sends a refuse message to The employee’s agent."
+    },
+    {
+      "seq": 50,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Update this employee’s payroll account with The employer."
+    },
+    {
+      "seq": 51,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The employer's mandate covers this action."
+    },
+    {
+      "seq": 52,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "reason": "evidence-invalid",
+      "caption": "The proposed action relies on a statement that was not admitted."
+    },
+    {
+      "seq": 53,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "evidence-invalid",
+      "caption": "Unaccepted support cannot authorize an action."
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "disruption-rebooking",
+  "parties": {
+    "owner": "The traveller",
+    "receiver": "The airline",
+    "owner-agent": "The traveller’s agent",
+    "receiver-agent": "The airline’s agent"
+  },
+  "claims": [
+    {
+      "kind": "traveller.margin",
+      "sources": [
+        "urn:fictional:disruption-rebooking:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:disruption-rebooking",
+      "claims": []
+    },
+    {
+      "id": "urn:purpose:traveller-planning",
+      "claims": [
+        "traveller.margin"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "traveller.margin"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "terms.price": {
+      "type": "number"
+    },
+    "terms.currency": {
+      "type": "code",
+      "values": [
+        "GBP"
+      ]
+    },
+    "terms.item": {
+      "type": "code",
+      "values": [
+        "replacement-flight"
+      ]
+    },
+    "terms.travelDate": {
+      "type": "date"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:disruption-rebooking",
+      "version": "0.1",
+      "label": "Rebooking after a cancelled flight",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:disruption-rebooking"
+      ],
+      "requiresRepresentation": true,
+      "agreementDelivery": "offeror"
+    },
+    {
+      "id": "urn:op:disruption-rebooking:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:disruption-rebooking"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:disruption-rebooking:disclose",
+      "version": "0.1",
+      "label": "Disclose sale information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:disruption-rebooking"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

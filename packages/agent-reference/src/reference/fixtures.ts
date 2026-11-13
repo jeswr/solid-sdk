@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Synthetic fixtures for the reference runs: the issuers named in the explorer model
@@ -131,11 +132,12 @@ export function decisionInPrinciple(input: {
   amount: number;
   at: string;
   conversation: Iri;
+  id?: Iri;
 }): JsonObject {
   const validUntil = new Date(Date.parse(input.at) + 92 * 86_400_000).toISOString();
   return {
     type: "DecisionInPrinciple",
-    id: `${input.conversation}#decision-in-principle`,
+    id: input.id ?? `${input.conversation}#decision-in-principle`,
     issuer: NORTH.party,
     subject: SAM.party,
     claimType: DECISION_CLAIM,
@@ -301,3 +303,5 @@ export function tellSam(s: Readonly<Record<string, unknown>>): string | undefine
   const d = s.decision as { amount: number; currency: string };
   return `North Bank has given you a decision in principle: they would lend up to $${d.amount.toLocaleString("en-US")}. It is valid until ${dateWords(String(s.validUntil))}, and it is not a binding offer.`;
 }
+
+export { MORTGAGE_CONTENT, MORTGAGE_PROFILE } from "../profile/mortgage.js";

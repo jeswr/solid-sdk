@@ -117,7 +117,7 @@ async function toProposal(
   const b = await openBob(bobStore, wrap);
   const terms = buildMeetingTerms({
     calendar: a.calendar,
-    title: "x",
+    title: "meeting",
     durationMinutes: 30,
     window: OVERLAP,
     now: clock.now().toISOString(),
@@ -223,7 +223,7 @@ describe("finding 3 — mandate revocation persists", () => {
     const terms = (a: PersonalAgent) =>
       buildMeetingTerms({
         calendar: a.calendar,
-        title: "x",
+        title: "meeting",
         durationMinutes: 30,
         window: OVERLAP,
         now: clock.now().toISOString(),
@@ -241,7 +241,9 @@ describe("finding 3 — mandate revocation persists", () => {
       configuration: CONFIG_ED25519,
     });
     expect(blocked.outbound).toHaveLength(0);
-    expect(a.runtime.conversation(blocked.conversation as string)?.closedReason).toMatch(/revoked/);
+    expect(a.runtime.conversation(blocked.conversation as string)?.closedReason).toMatch(
+      /mandate-withdrawn/,
+    );
     // Reloading the same mandate does not restore it; a re-issued version 2 does.
     await a.runtime.reloadMandate(alice.mandateJws);
     const v2 = await signMandate(alice.ownerKey, {
@@ -272,7 +274,7 @@ describe("finding 3 — mandate revocation persists", () => {
     const a = await startAgent(alice, londonCalendar(), { now: clock.now, accepted: ED });
     const terms = buildMeetingTerms({
       calendar: a.calendar,
-      title: "x",
+      title: "meeting",
       durationMinutes: 30,
       window: OVERLAP,
       now: clock.now().toISOString(),

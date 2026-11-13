@@ -1,0 +1,76 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "false-but-signed",
+  "claims": [
+    {
+      "kind": "annual-income",
+      "sources": [
+        "urn:fictional:employer",
+        "urn:fictional:tax-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30,
+      "corroboration": {
+        "sources": 2,
+        "independent": true
+      }
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:false-but-signed",
+      "claims": [
+        "annual-income"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.request": {
+      "type": "code",
+      "values": [
+        "income"
+      ]
+    },
+    "output.statement": {
+      "type": "identifier"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:income-decision",
+      "version": "0.1",
+      "label": "false-but-signed",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:false-but-signed"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Employer records",
+      "replacedBy": "Fictional employer agent with its own keys and gates"
+    },
+    {
+      "what": "Tax register",
+      "replacedBy": "Fictional tax-register, issuer-only key"
+    }
+  ],
+  "parties": {
+    "lender": "The lender",
+    "lender-agent": "The lender’s agent",
+    "employer": "The employer",
+    "tax-register": "The fictional tax register",
+    "employee": "The employee",
+    "employer-agent": "The employer’s agent"
+  }
+}

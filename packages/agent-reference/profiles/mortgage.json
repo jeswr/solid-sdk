@@ -1,0 +1,669 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "mortgage",
+  "claims": [
+    {
+      "kind": "income.*",
+      "sources": [],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 92
+    },
+    {
+      "kind": "deposit.*",
+      "sources": [],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 31
+    },
+    {
+      "kind": "mortgage.decision-in-principle",
+      "sources": [
+        "https://northbank.example/#org"
+      ],
+      "methods": [
+        "decided-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "mortgage.product",
+      "sources": [
+        "https://northbank.example/#org",
+        "https://harbourbank.example/#org"
+      ],
+      "methods": [
+        "published-by-lender"
+      ],
+      "maxAgeDays": 31
+    },
+    {
+      "kind": "identity.*",
+      "sources": [],
+      "methods": [
+        "certified-face-check"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+      "claims": [
+        "income.gross.monthly-series",
+        "deposit.balance",
+        "mortgage.decision-in-principle",
+        "mortgage.application",
+        "mortgage.assessment",
+        "identity.approval"
+      ]
+    },
+    {
+      "id": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+      "claims": [
+        "income.gross.monthly-series",
+        "deposit.balance",
+        "mortgage.decision-in-principle",
+        "mortgage.application",
+        "mortgage.assessment"
+      ]
+    },
+    {
+      "id": "https://w3id.org/jeswr/awp#purpose/product-search",
+      "claims": [
+        "mortgage.product"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "https://w3id.org/jeswr/awp#rule/annualise-12-consecutive-months",
+      "template": "annualise-consecutive-months",
+      "params": {
+        "input": "income.gross.monthly-series",
+        "months": 12,
+        "field": "gross"
+      },
+      "output": "income.gross.annual.derived",
+      "inputsFrom": [
+        "https://paywell.example/#org"
+      ],
+      "assurances": [
+        "recomputed"
+      ]
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "terms.model": {
+      "type": "identifier"
+    },
+    "terms.applicant": {
+      "type": "identifier"
+    },
+    "terms.application.model": {
+      "type": "identifier"
+    },
+    "terms.application.applicant": {
+      "type": "identifier"
+    },
+    "terms.applicationId": {
+      "type": "identifier"
+    },
+    "terms.purpose": {
+      "type": "identifier"
+    },
+    "terms.recipients.*": {
+      "type": "identifier"
+    },
+    "terms.onward.*.recipient": {
+      "type": "identifier"
+    },
+    "terms.onward.*.purpose": {
+      "type": "identifier"
+    },
+    "terms.prohibitedPurposes.*": {
+      "type": "identifier"
+    },
+    "output.products.*.id": {
+      "type": "identifier"
+    },
+    "output.products.*.lender": {
+      "type": "identifier"
+    },
+    "output.products.*.retrievedFrom": {
+      "type": "identifier"
+    },
+    "output.statement": {
+      "type": "identifier"
+    },
+    "output.accountHolder": {
+      "type": "identifier"
+    },
+    "observed.checked.*.id": {
+      "type": "identifier"
+    },
+    "observed.checked.*.issuer": {
+      "type": "identifier"
+    },
+    "observed.checked.*.protectedObject": {
+      "type": "identifier"
+    },
+    "observed.derived.rule": {
+      "type": "identifier"
+    },
+    "observed.derived.derivedFrom": {
+      "type": "identifier"
+    },
+    "observed.decided.by": {
+      "type": "identifier"
+    },
+    "terms.currency": {
+      "type": "code",
+      "values": [
+        "USD"
+      ]
+    },
+    "terms.application.currency": {
+      "type": "code",
+      "values": [
+        "USD"
+      ]
+    },
+    "terms.evidenceRequest.*.currency": {
+      "type": "code",
+      "values": [
+        "USD"
+      ]
+    },
+    "observed.derived.currency": {
+      "type": "code",
+      "values": [
+        "USD"
+      ]
+    },
+    "terms.modelVersion": {
+      "type": "code",
+      "values": [
+        "0.1"
+      ]
+    },
+    "terms.evidenceRequest.*.claimType": {
+      "type": "code",
+      "values": [
+        "income.gross.monthly-series",
+        "deposit.balance"
+      ]
+    },
+    "observed.checked.*.claimType": {
+      "type": "code",
+      "values": [
+        "income.gross.monthly-series",
+        "deposit.balance"
+      ]
+    },
+    "terms.onward.*.fields.*": {
+      "type": "code",
+      "values": [
+        "annualGrossIncome",
+        "depositBalance"
+      ]
+    },
+    "input.propertyUse": {
+      "type": "code",
+      "values": [
+        "residential"
+      ]
+    },
+    "output.query.propertyUse": {
+      "type": "code",
+      "values": [
+        "residential"
+      ]
+    },
+    "input.rateType": {
+      "type": "code",
+      "values": [
+        "fixed"
+      ]
+    },
+    "output.query.rateType": {
+      "type": "code",
+      "values": [
+        "fixed"
+      ]
+    },
+    "input.account": {
+      "type": "code",
+      "values": [
+        "current account"
+      ]
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "decision-in-principle"
+      ]
+    },
+    "output.provenance": {
+      "type": "code",
+      "values": [
+        "relayed-source-statements"
+      ]
+    },
+    "observed.stage": {
+      "type": "code",
+      "values": [
+        "decided",
+        "received-and-checked",
+        "underwriting-result-received"
+      ]
+    },
+    "observed.checked.*.integrity": {
+      "type": "code",
+      "values": [
+        "valid",
+        "invalid"
+      ]
+    },
+    "observed.checked.*.sourceAuthority": {
+      "type": "code",
+      "values": [
+        "accepted",
+        "not-accepted"
+      ]
+    },
+    "observed.completeness": {
+      "type": "code",
+      "values": [
+        "all-requested-types-accepted",
+        "incomplete"
+      ]
+    },
+    "observed.notClaimed.*": {
+      "type": "code",
+      "values": [
+        "approval",
+        "truth-of-evidence",
+        "loan-approval",
+        "complete-financial-picture",
+        "complete-finances",
+        "truth-of-income"
+      ]
+    },
+    "observed.decided.status": {
+      "type": "code",
+      "values": [
+        "indicatively-eligible",
+        "not-eligible"
+      ],
+      "claimType": "mortgage.assessment"
+    },
+    "observed.decided.basis": {
+      "type": "code",
+      "values": [
+        "synthetic-decision-in-principle"
+      ]
+    },
+    "input.asOf": {
+      "type": "date"
+    },
+    "output.aggregatedAt": {
+      "type": "date"
+    },
+    "output.products.*.publishedAt": {
+      "type": "date"
+    },
+    "terms.propertyPrice": {
+      "type": "number",
+      "claimType": "mortgage.application"
+    },
+    "terms.loanAmount": {
+      "type": "number",
+      "claimType": "mortgage.application"
+    },
+    "terms.synthetic": {
+      "type": "code",
+      "values": [
+        true
+      ]
+    },
+    "terms.application.propertyPrice": {
+      "type": "number",
+      "claimType": "mortgage.application"
+    },
+    "terms.application.loanAmount": {
+      "type": "number",
+      "claimType": "mortgage.application"
+    },
+    "terms.application.synthetic": {
+      "type": "code",
+      "values": [
+        true
+      ]
+    },
+    "terms.fee.amount": {
+      "type": "number"
+    },
+    "terms.retentionDays": {
+      "type": "number"
+    },
+    "terms.evidenceRequest.*.periodMonths": {
+      "type": "number"
+    },
+    "observed.derived.annualGrossIncome": {
+      "type": "number",
+      "claimType": "mortgage.assessment"
+    },
+    "output.evidenceCount": {
+      "type": "number"
+    },
+    "observed.received": {
+      "type": "number"
+    },
+    "observed.missing.*": {
+      "type": "code",
+      "values": [
+        "income.gross.monthly-series",
+        "deposit.balance"
+      ]
+    },
+    "observed.checked.*.accepted": {
+      "type": "code",
+      "values": [
+        true,
+        false
+      ]
+    },
+    "terms.applicationRef": {
+      "type": "identifier"
+    },
+    "terms.fields.annualGrossIncome.rule": {
+      "type": "identifier"
+    },
+    "terms.fields.annualGrossIncome.derivedFrom.*": {
+      "type": "identifier"
+    },
+    "terms.basis.consumerAgreement": {
+      "type": "identifier"
+    },
+    "terms.basis.onwardRule": {
+      "type": "identifier"
+    },
+    "terms.basis.attestedBy": {
+      "type": "identifier"
+    },
+    "output.rule": {
+      "type": "identifier"
+    },
+    "observed.underwriting.by": {
+      "type": "identifier"
+    },
+    "terms.payee": {
+      "type": "identifier"
+    },
+    "terms.fields.annualGrossIncome.value": {
+      "type": "number",
+      "claimType": "mortgage.assessment"
+    },
+    "terms.fields.depositBalance.value": {
+      "type": "number",
+      "claimType": "mortgage.assessment"
+    },
+    "terms.fields.loanAmount": {
+      "type": "number",
+      "claimType": "mortgage.assessment"
+    },
+    "terms.fields.propertyPrice": {
+      "type": "number",
+      "claimType": "mortgage.assessment"
+    },
+    "output.ratios.loanToValue": {
+      "type": "number",
+      "claimType": "mortgage.assessment"
+    },
+    "output.ratios.incomeMultiple": {
+      "type": "number",
+      "claimType": "mortgage.assessment"
+    },
+    "terms.fee": {
+      "type": "number"
+    },
+    "terms.fields.annualGrossIncome.currency": {
+      "type": "code",
+      "values": [
+        "USD"
+      ]
+    },
+    "terms.fields.depositBalance.currency": {
+      "type": "code",
+      "values": [
+        "USD"
+      ]
+    },
+    "terms.noRedistribution": {
+      "type": "code",
+      "values": [
+        true
+      ]
+    },
+    "output.result": {
+      "type": "code",
+      "values": [
+        "pass",
+        "refer"
+      ],
+      "claimType": "mortgage.assessment"
+    },
+    "output.ratios.depositCoversGap": {
+      "type": "code",
+      "values": [
+        true,
+        false
+      ],
+      "claimType": "mortgage.assessment"
+    },
+    "output.limitations.*": {
+      "type": "code",
+      "values": [
+        "synthetic-thresholds",
+        "lender-attested-income",
+        "not-a-lending-decision"
+      ]
+    },
+    "observed.sourceAuthority": {
+      "type": "code",
+      "values": [
+        "accepted"
+      ]
+    },
+    "observed.underwriting.result": {
+      "type": "code",
+      "values": [
+        "pass",
+        "refer",
+        "none"
+      ]
+    },
+    "terms.fee.currency": {
+      "type": "code",
+      "values": [
+        "USD"
+      ]
+    },
+    "terms.payment.currency": {
+      "type": "code",
+      "values": [
+        "USD"
+      ]
+    },
+    "observed.activity": {
+      "type": "code",
+      "values": [
+        "payment instruction submission"
+      ]
+    },
+    "observed.instruction": {
+      "type": "code",
+      "values": [
+        "submitted"
+      ]
+    },
+    "observed.settlement": {
+      "type": "code",
+      "values": [
+        "unknown"
+      ]
+    },
+    "observed.fulfilmentConclusion": {
+      "type": "code",
+      "values": [
+        "unresolved"
+      ]
+    },
+    "terms.fields.annualGrossIncome.derivation": {
+      "type": "identifier"
+    },
+    "observed.checked.*.reason": {
+      "type": "code",
+      "values": [
+        "source-not-authoritative",
+        "evidence-invalid",
+        "subject-mismatch",
+        "excessive-scope"
+      ]
+    },
+    "observed.synthetic": {
+      "type": "code",
+      "values": [
+        true
+      ]
+    },
+    "terms.fee.payableBy": {
+      "type": "code",
+      "values": [
+        "applicant"
+      ]
+    },
+    "observed.instructionStatus": {
+      "type": "code",
+      "values": [
+        "submitted"
+      ]
+    },
+    "observed.currency": {
+      "type": "code",
+      "values": [
+        "USD"
+      ]
+    },
+    "terms.valuer": {
+      "type": "identifier"
+    },
+    "observed.instructionKey": {
+      "type": "identifier"
+    },
+    "observed.amount": {
+      "type": "number"
+    }
+  },
+  "operations": [
+    {
+      "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+      "version": "0.1",
+      "label": "Mortgage decision in principle",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [
+        {
+          "id": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+          "version": "0.1"
+        }
+      ],
+      "purposes": [
+        "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+        "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+      ],
+      "requiresRepresentation": true,
+      "agreementDelivery": "acceptor"
+    },
+    {
+      "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+      "version": "0.1",
+      "label": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+      "pattern": "invoke",
+      "access": "public",
+      "models": [
+        {
+          "id": "https://w3id.org/jeswr/awp#model/mortgage-product-record",
+          "version": "0.1"
+        }
+      ],
+      "purposes": [
+        "https://w3id.org/jeswr/awp#purpose/product-search"
+      ],
+      "requiresRepresentation": false
+    },
+    {
+      "id": "https://w3id.org/jeswr/awp#op/balance-statement",
+      "version": "0.1",
+      "label": "https://w3id.org/jeswr/awp#op/balance-statement",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [
+        {
+          "id": "https://w3id.org/jeswr/awp#model/balance-statement",
+          "version": "0.1"
+        }
+      ],
+      "purposes": [
+        "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "identifiers": [
+    "https://w3id.org/jeswr/awp#model/mortgage-application",
+    "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+    "https://w3id.org/jeswr/awp#model/mortgage-evidence-annual-income",
+    "https://w3id.org/jeswr/awp#model/underwriting-check",
+    "https://w3id.org/jeswr/awp#model/valuation-order",
+    "https://w3id.org/jeswr/awp#purpose/marketing",
+    "https://w3id.org/jeswr/awp#purpose/product-development",
+    "https://w3id.org/jeswr/awp#rule/annualise-12-consecutive-months",
+    "https://w3id.org/dpv#Marketing",
+    "https://w3id.org/jeswr/awp#rule/synthetic-underwriting-thresholds/1",
+    "https://w3id.org/jeswr/awp#rule/annualise-12-consecutive-months"
+  ],
+  "standIns": [
+    {
+      "what": "Lender, bank, payroll, product index, register and identity-provider services",
+      "replacedBy": "Fictional separately keyed local parties and issuer-only sources, serving the same checked mortgage protocol"
+    }
+  ],
+  "storeAssessments": [
+    {
+      "id": "urn:assessment:mortgage-indicative",
+      "template": "loan-ratio-and-equity",
+      "maxLoanIncomeRatio": 4.5,
+      "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+      "annualRule": "https://w3id.org/jeswr/awp#rule/annualise-12-consecutive-months"
+    }
+  ],
+  "parties": {
+    "sam": "Sam, the fictional applicant",
+    "north": "The fictional lender",
+    "sam-agent": "Sam’s agent",
+    "north-agent": "The fictional lender’s agent",
+    "paywell": "The fictional payroll provider",
+    "harbour": "Sam’s fictional bank",
+    "index": "The mortgage product index",
+    "identity-provider": "The fictional identity provider",
+    "index-agent": "The mortgage product index’s agent",
+    "harbour-agent": "Sam’s fictional bank’s agent"
+  }
+}

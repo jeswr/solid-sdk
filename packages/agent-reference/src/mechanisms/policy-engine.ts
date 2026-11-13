@@ -101,6 +101,26 @@ export const solidOdrlEngine: PolicyEngine = {
   module: SOLID_ODRL_MODULE,
   availability: () => ({ status: "ready" }),
   evaluate(policy, request) {
+    // The payment extension is an exact mandate action. The ODRL library has compensate,
+    // so normalize only explicit pay rules; a generic use/transfer grant never creates it.
+    if (request.action === "pay") {
+      policy = {
+        ...policy,
+        permissions: (policy.permissions ?? [])
+          .filter((r) => String(r.action) === "pay")
+          .map((r) => ({ ...r, action: "compensate" })),
+        prohibitions: (policy.prohibitions ?? [])
+          .filter((r) => String(r.action) === "pay" || r.action === "use")
+          .map((r) => (String(r.action) === "pay" ? { ...r, action: "compensate" } : r)),
+      };
+      request = { ...request, action: "compensate" };
+    } else {
+      policy = {
+        ...policy,
+        permissions: (policy.permissions ?? []).filter((r) => String(r.action) !== "pay"),
+        prohibitions: (policy.prohibitions ?? []).filter((r) => String(r.action) !== "pay"),
+      };
+    }
     const missing = missingContext(policy, request);
     if (missing.length > 0)
       return { effect: "indeterminate", reason: `missing-context: ${missing.join(", ")}` };

@@ -1,0 +1,162 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "onward-leak",
+  "parties": {
+    "owner": "The lender",
+    "receiver": "The marketing company",
+    "bank": "The person\u2019s bank",
+    "owner-agent": "The lender\u2019s agent",
+    "receiver-agent": "The marketing company\u2019s agent"
+  },
+  "claims": [
+    {
+      "kind": "income.total",
+      "sources": [
+        "urn:fictional:onward-leak:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "forum.decision",
+      "sources": [
+        "urn:fictional:onward-leak:forum"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:onward-leak",
+      "claims": [
+        "income.total"
+      ]
+    },
+    {
+      "id": "urn:purpose:lending",
+      "claims": [
+        "income.total"
+      ]
+    },
+    {
+      "id": "urn:purpose:lending",
+      "claims": [
+        "income.total"
+      ]
+    },
+    {
+      "id": "urn:purpose:redress",
+      "claims": [
+        "forum.decision",
+        "income.total"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "income.total"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "terms.protectedDigest": {
+      "type": "identifier"
+    },
+    "terms.forbiddenRecipient": {
+      "type": "identifier"
+    },
+    "terms.purpose": {
+      "type": "identifier"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:onward-leak",
+      "version": "0.1",
+      "label": "A receiver passes data on against its terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:onward-leak"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:onward-leak:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:onward-leak"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:onward-leak:agreement",
+      "version": "0.1",
+      "label": "Agree the lender\u2019s restrictions",
+      "pattern": "negotiate",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:lending"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:forum-claim",
+      "version": "0.1",
+      "label": "Release an exact record segment to the forum",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:redress"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:forum-answer",
+      "version": "0.1",
+      "label": "Release an exact record segment to the forum",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:redress"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "forum": {
+    "party": "forum",
+    "responseSeconds": 60,
+    "observers": [
+      "urn:fictional:onward-leak:observer"
+    ]
+  },
+  "standIns": [
+    {
+      "what": "Regulator-claim forum and record release transport",
+      "replacedBy": "A separately keyed local forum using signed control requests and source-verified record segments. Each record release is an exact owner-approved effect through the releasing runtime\u2019s gate; no network or legal adjudication is claimed."
+    }
+  ]
+}

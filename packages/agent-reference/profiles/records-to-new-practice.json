@@ -1,0 +1,62 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "records-to-new-practice",
+  "parties": {
+    "patient": "The patient",
+    "clinician": "The clinician",
+    "holder": "The old practice holding original statements",
+    "practice": "The new practice"
+  },
+  "claims": [
+    {
+      "kind": "health.allergy",
+      "sources": [
+        "urn:fictional:records-to-new-practice:patient",
+        "urn:fictional:records-to-new-practice:clinician"
+      ],
+      "methods": [
+        "reported-by-subject",
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 365,
+      "precedence": {
+        "sources": [
+          "urn:fictional:records-to-new-practice:clinician",
+          "urn:fictional:records-to-new-practice:patient"
+        ],
+        "freshness": "source-first"
+      }
+    },
+    {
+      "kind": "old.estimate",
+      "sources": [
+        "urn:fictional:records-to-new-practice:holder"
+      ],
+      "methods": [
+        "estimated"
+      ],
+      "maxAgeDays": 365
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:health-record",
+      "claims": [
+        "health.allergy",
+        "old.estimate"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": [],
+  "standIns": [
+    {
+      "what": "Old practice resource holder",
+      "replacedBy": "A separately keyed local holder returning original source-signed statements inside its signed envelope, under an item/reader/purpose/expiry grant. This replaces by-reference-solid; no Solid endpoint is claimed."
+    }
+  ]
+}

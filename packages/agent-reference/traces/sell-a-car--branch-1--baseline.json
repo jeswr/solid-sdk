@@ -1,0 +1,253 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "sell-a-car",
+  "path": {
+    "index": 1,
+    "what": "The seller is not the registered keeper"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The seller"
+    },
+    {
+      "id": "receiver",
+      "name": "The buyer"
+    },
+    {
+      "id": "vehicle-register",
+      "name": "The fictional vehicle register"
+    },
+    {
+      "id": "other-owner",
+      "name": "The other fictional keeper"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The seller’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The buyer’s agent"
+    },
+    {
+      "id": "finance-register",
+      "name": "The complete finance-search register"
+    },
+    {
+      "id": "escrow",
+      "name": "The escrow register"
+    }
+  ],
+  "scenario": {
+    "id": "sell-a-car--branch-1",
+    "title": "Selling a used car to a stranger: The seller is not the registered keeper",
+    "steps": {
+      "1": "The seller’s agent checks the signed statements.",
+      "2": "The seller’s agent proposes the local action."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The seller’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The buyer’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    },
+    {
+      "id": "escrow",
+      "name": "The escrow register",
+      "actsFor": "escrow",
+      "role": "register"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Vehicle/finance registers and escrow holding GBP 7500",
+      "replacedBy": "Independent synthetic signing parties, a signed complete finance search and local escrow CAS release; no real money moves."
+    },
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Escrow-free keeper preflight",
+      "replacedBy": "The vehicle register signs the actual other keeper; the source rule is scoped to the seller and refuses it before any sale, payment or escrow release"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The fictional vehicle register's vehicle.keeper statement is intact and signed with The fictional vehicle register's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-not-authoritative",
+      "resolution": {
+        "question": "Is The fictional vehicle register an authority for vehicle.keeper claims about The other fictional keeper?",
+        "path": [
+          {
+            "at": "The seller's own list",
+            "kind": "own-list",
+            "says": "source is recognised, but not for this claim type/subject/period"
+          }
+        ],
+        "answer": "Not accepted for vehicle.keeper."
+      },
+      "caption": "The fictional vehicle register's vehicle.keeper statement: The fictional vehicle register is not accepted as a source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The fictional vehicle register's vehicle.keeper statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "refuse",
+      "reason": "source-not-authoritative",
+      "caption": "The fictional vehicle register's vehicle.keeper statement is refused and kept out of memory."
+    },
+    {
+      "seq": 5,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Selling a used car to a stranger with The seller."
+    },
+    {
+      "seq": 6,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The seller's mandate covers this action."
+    },
+    {
+      "seq": 7,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "source-not-authoritative",
+      "caption": "Required vehicle.keeper was refused: source-not-authoritative."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "source-not-authoritative",
+      "caption": "A refused source cannot authorize the action."
+    }
+  ]
+}

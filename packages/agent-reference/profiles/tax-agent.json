@@ -1,0 +1,81 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "tax-agent",
+  "parties": {
+    "subject": "A taxpayer",
+    "holder": "An accountant",
+    "receiver": "The tax authority",
+    "register": "The local register of client engagements",
+    "second-holder": "The accountant\u2019s firm"
+  },
+  "sources": {
+    "authority-register": "urn:fictional:tax-agent:register"
+  },
+  "claims": [],
+  "purposes": [
+    {
+      "id": "urn:purpose:tax-agent",
+      "claims": []
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.subject": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "organise-care",
+        "file-return",
+        "trip-consent"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "identifiers": [
+    "urn:fictional:tax-agent:subject",
+    "urn:fictional:tax-agent:another-subject"
+  ],
+  "operations": [
+    {
+      "id": "urn:op:tax-agent",
+      "version": "0.1",
+      "label": "An accountant files a tax return",
+      "pattern": "invoke",
+      "access": "represented",
+      "purposes": [
+        "urn:purpose:tax-agent"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "authorityChains": {
+    "roots": [
+      {
+        "issuer": "urn:fictional:tax-agent:register",
+        "entity": "urn:fictional:tax-agent:subject",
+        "operations": [
+          "urn:op:tax-agent"
+        ]
+      }
+    ],
+    "maxStatusAgeSeconds": 60,
+    "holders": "any",
+    "objectionRole": "school-safeguarding-lead"
+  },
+  "standIns": [
+    {
+      "what": "Public authority register and care/tax/school endpoints",
+      "replacedBy": "Declared fictional parties with independent introduced keys and local signed current-status documents; no live service or legal authority claim."
+    }
+  ]
+}

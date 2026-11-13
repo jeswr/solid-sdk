@@ -1,0 +1,411 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "trial-eligibility",
+  "useCase": "trial-eligibility",
+  "title": "Proving eligibility for a clinical trial",
+  "profile": "trial-eligibility",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:trial-eligibility:owner",
+      "name": "The volunteer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:trial-eligibility:receiver",
+      "name": "The trial sponsor",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "practice",
+      "identity": "urn:fictional:trial-eligibility:practice",
+      "name": "The family practice",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:trial-eligibility:owner-agent",
+      "name": "The volunteer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:trial-eligibility:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:trial-eligibility:receiver-agent",
+      "name": "The trial sponsor’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:trial-eligibility:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:trial-eligibility:receiver",
+          "tasks": [
+            "urn:op:trial-eligibility",
+            "urn:op:trial-eligibility:request"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:trial-eligibility:owner",
+          "tasks": [
+            "urn:op:trial-eligibility",
+            "urn:op:trial-eligibility:request"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:trial-eligibility:medication.list",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "medication.list"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:medication.completeness",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "medication.completeness"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:trial-eligibility:medication.list",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "medication.list"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        },
+        {
+          "id": "urn:source:trial-eligibility:medication.completeness",
+          "version": "1",
+          "source": "urn:fictional:trial-eligibility:practice",
+          "claimTypes": [
+            "medication.completeness"
+          ],
+          "subjects": [
+            "urn:fictional:trial-eligibility:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "medicines",
+      "issuer": "practice",
+      "subject": "urn:fictional:trial-eligibility:owner",
+      "kind": "medication.list",
+      "value": {
+        "items": [
+          "urn:fictional:medicine-a"
+        ],
+        "period": {
+          "start": "2026-11-01",
+          "end": "2026-11-13"
+        }
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:trial-eligibility:medicines",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:trial-eligibility:medicines",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:trial-eligibility:medicines",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "completeness",
+      "issuer": "practice",
+      "subject": "urn:fictional:trial-eligibility:owner",
+      "kind": "medication.completeness",
+      "value": {
+        "complete": false,
+        "forClaim": "medication.list",
+        "period": {
+          "start": "2026-11-01",
+          "end": "2026-11-13"
+        }
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:trial-eligibility:completeness",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:trial-eligibility:completeness",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:trial-eligibility:completeness",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:trial-eligibility"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:trial-eligibility"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:trial-eligibility:request"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The practice cannot state the medication list is complete",
+      "change": {
+        "assurance": null,
+        "suites": {
+          "authenticity": "jws"
+        },
+        "script": [
+          {
+            "id": "check-completeness",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "completeness",
+              "medicines"
+            ],
+            "purpose": "urn:purpose:trial-eligibility"
+          }
+        ],
+        "traceSteps": {
+          "1": "The volunteer’s agent checks the signed statements."
+        }
+      },
+      "expect": {
+        "outcome": "ask-more",
+        "reason": "completeness-not-established",
+        "check": "fitness"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "ask-more",
+          "reason": "completeness-not-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "ask-more",
+          "reason": "completeness-not-established"
+        }
+      ]
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "source",
+    "fitness"
+  ],
+  "suites": {
+    "authenticity": "zk-query-proof"
+  },
+  "assurance": "proved",
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "needs a proof system"
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Proof-free preflight",
+      "replacedBy": "The branch runs only source, terms, method and completeness checks on the practice’s signed list; no eligibility proof is made or disclosed"
+    }
+  ],
+  "traceSteps": {}
+}

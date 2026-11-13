@@ -1,0 +1,100 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "joint-mortgage",
+  "parties": {
+    "owner": "The first applicant",
+    "receiver": "The lender",
+    "employer": "The second applicant’s employer",
+    "owner-agent": "The first applicant’s agent",
+    "receiver-agent": "The lender’s agent",
+    "second-applicant": "The second applicant",
+    "coordinator": "The joint agreement coordinator",
+    "coordinator-agent": "The joint agreement coordinator’s agent",
+    "second-applicant-agent": "The second applicant’s agent"
+  },
+  "claims": [
+    {
+      "kind": "income.payslip",
+      "sources": [
+        "urn:fictional:joint-mortgage:employer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:joint-mortgage",
+      "claims": [
+        "income.payslip"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "income.payslip"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:joint-mortgage",
+      "version": "0.1",
+      "label": "A joint mortgage for two people",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:joint-mortgage"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:joint-mortgage:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:joint-mortgage"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:agreement",
+      "version": "0.1",
+      "label": "Accepting the same agreement terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:joint-mortgage"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    }
+  ]
+}

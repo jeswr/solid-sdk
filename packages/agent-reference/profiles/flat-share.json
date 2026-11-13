@@ -1,0 +1,52 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "flat-share",
+  "claims": [],
+  "purposes": [
+    {
+      "id": "urn:purpose:flat-share",
+      "claims": []
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "terms.purpose": {
+      "type": "identifier"
+    },
+    "terms.depositSplit": {
+      "type": "number"
+    },
+    "terms.moveIn": {
+      "type": "date"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:flat-share",
+      "version": "0.1",
+      "label": "flat-share",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:flat-share"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "trust": {
+    "levels": [
+      "own-list"
+    ],
+    "onUnknown": "ask-principal"
+  },
+  "parties": {
+    "alex": "Alex, a fictional flatmate",
+    "alex-agent": "Alex’s agent",
+    "blair": "Blair, a fictional flatmate",
+    "blair-agent": "Blair’s agent"
+  }
+}

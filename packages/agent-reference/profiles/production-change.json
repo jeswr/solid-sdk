@@ -1,0 +1,99 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "production-change",
+  "parties": {
+    "owner": "The monitoring service",
+    "receiver": "The operations team",
+    "owner-agent": "The monitoring service’s agent",
+    "receiver-agent": "The operations team’s agent"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:production-change:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:production-change",
+      "claims": [
+        "unstructured-content"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:production-change",
+      "version": "0.1",
+      "label": "An operations agent changes a live system",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:production-change"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:production-change:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:production-change"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:production-change:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:production-change"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [],
+  "readings": [
+    {
+      "claimType": "content.opinion",
+      "type": "code",
+      "values": [
+        "requires-review"
+      ]
+    }
+  ]
+}

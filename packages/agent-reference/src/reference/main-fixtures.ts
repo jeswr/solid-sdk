@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The extra parties and fixtures of `mortgage-main`: the mortgage product index, Harbour Bank
@@ -93,6 +94,19 @@ export function productRecord(input: {
     id: `urn:awp:product:${input.slug}`,
     issuer: input.lender,
     claimType: PRODUCT_CLAIM,
+    terms: {
+      policy: {
+        id: `urn:awp:product-terms:${input.slug}`,
+        permissions: ["use", "distribute"].map((action) => ({
+          type: "permission",
+          action,
+          target: `urn:awp:product:${input.slug}`,
+          constraints: [
+            { leftOperand: "purpose", operator: "eq", rightOperand: PURPOSE.productSearch },
+          ],
+        })),
+      },
+    },
     method: "published-by-lender",
     issuedAt: "2026-11-01T09:00:00Z",
     product: {
@@ -112,16 +126,39 @@ export function faceCheckAttestation(input: {
   at: string;
   actionDigest: string;
   operation: Iri;
+  challenge?: JsonObject;
 }): JsonObject {
+  const id = `urn:awp:attestation:face-check:${input.actionDigest.slice(0, 16)}`;
   return {
     type: "ApprovalAttestation",
-    id: `urn:awp:attestation:face-check:${input.actionDigest.slice(0, 16)}`,
+    id,
+    terms: {
+      policy: {
+        id: `${id}:terms`,
+        permissions: ["use", "distribute"].map((action) => ({
+          type: "permission",
+          action,
+          target: id,
+          constraints: [
+            { leftOperand: "purpose", operator: "eq", rightOperand: PURPOSE.mortgageApplication },
+            ...(action === "distribute"
+              ? [{ leftOperand: "recipient", operator: "eq", rightOperand: HARBOUR }]
+              : []),
+          ],
+        })),
+      },
+    },
     issuer: IDP,
     claimType: APPROVAL_CLAIM,
     subject: SAM.party,
     method: "certified-face-check",
     level: FACE_CHECK,
-    approves: { actor: SAM.actor, operation: input.operation, actionDigest: input.actionDigest },
+    approves: {
+      actor: SAM.actor,
+      operation: input.operation,
+      actionDigest: input.actionDigest,
+      ...(input.challenge ? { challenge: input.challenge } : {}),
+    },
     issuedAt: input.at,
     validUntil: new Date(Date.parse(input.at) + 3_600_000).toISOString(),
     synthetic: true,
@@ -286,6 +323,9 @@ function statementDescription(roles: ("initiator" | "responder")[]): OperationDe
  * account holder, and only on an approval at the face-check level (CORE-IN-8).
  */
 export class BalanceStatementHandler implements OperationHandler {
+  get contentProfile() {
+    return { vocabulary: {}, identifiers: [this.statement.id] };
+  }
   readonly description = statementDescription(["responder"]);
   readonly requiresRepresentation = true;
   readonly requiredApproval = {

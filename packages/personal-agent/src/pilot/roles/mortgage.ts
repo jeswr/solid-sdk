@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * SYNTHETIC mortgage roles for persistent, independently initialised agents: consumer, lender
  * intake and underwriter. Each role composes the EXISTING mortgage handlers
@@ -84,13 +85,19 @@ export const MORTGAGE_CONSUMER_ROLE: RoleDefinition = {
   identity: { party: SAM.party, actor: SAM.actor, operator: SAM.operator },
   mandate: samMortgageMandate,
   representationOperations: [PREQUAL_OP.id],
-  async init({ trust, options }) {
+  async init({ trust, now, options }) {
     if (!options.wallet)
       throw new Error("mortgage-consumer init needs --wallet FILE (synthetic issuance)");
     const wallet = walletFile.parse(JSON.parse(readFileSync(options.wallet, "utf8")));
     if (wallet.items.some((i) => i.statement.subject !== SAM.party))
       throw new Error("wallet contains statements about a different subject");
-    return { trust, files: { [WALLET_FILE]: wallet } };
+    if (!options.issuers)
+      throw new Error(
+        "mortgage-consumer init needs --issuers FILE (reviewed public issuer anchors)",
+      );
+    let next = pinIssuersFromFiles(trust, options.issuers, "consumer-reviewed wallet issuers");
+    for (const rule of lenderSourceRules(sourceRuleHorizon(now))) next = addSourceRule(next, rule);
+    return { trust: next, files: { [WALLET_FILE]: wallet } };
   },
   build(ctx) {
     const wallet = walletFile.parse(JSON.parse(readFileSync(join(ctx.dir, WALLET_FILE), "utf8")))
@@ -117,6 +124,11 @@ export const MORTGAGE_CONSUMER_ROLE: RoleDefinition = {
           },
           async run(raw) {
             const args = raw as { lenderActor: string; propertyPrice: number; loanAmount: number };
+            await op.rt.admitStatements(wallet, {
+              subject: ctx.party,
+              task: "mortgage application",
+              purpose: PURPOSE.mortgageApplication,
+            });
             const peer = op.pinnedPeer(args.lenderActor);
             const step = await op.rt.startNegotiation({
               peer,
@@ -363,8 +375,11 @@ export const MORTGAGE_LENDER_ROLE: RoleDefinition = {
                 throw new Error("no agreed application for this conversation");
               const uwActor = op.trust.keys.find((k) => k.role === "actor" && k.party === UW.party);
               if (!uwActor) throw new Error("the underwriter is not pinned");
+              op.rt.domainState(scoped(PREQUAL_OP, `grant:${app}`));
               const terms = underwritingTermsFor({
-                applicationRef: `${app}#application`,
+                applicationRef: String(
+                  op.rt.agreements().find((a) => a.conversation === app)?.terms.applicationId,
+                ),
                 annualGrossIncome: Number(values[derived]?.value),
                 derivedFrom: [derived],
                 depositBalance: Number(values[deposit]?.balance),
@@ -419,7 +434,7 @@ export const MORTGAGE_LENDER_ROLE: RoleDefinition = {
               if (entry.decisionSentAt) throw new Error("decision receipt already sent");
               if (entry.decisionRequestedAt && !entry.decisionIntent)
                 throw new Error(`decision receipt: ${UNRECONCILABLE}`);
-              const activity = `${app}#decision`;
+              const activity = entry.decisionIntent?.activity ?? (await op.rt.mintIdentifier());
               if (entry.decisionIntent) {
                 const { decisionIntent: _i, ...rest } = entry;
                 const emitted = op.rt
@@ -496,10 +511,10 @@ export const MORTGAGE_LENDER_ROLE: RoleDefinition = {
                   decided: {
                     status: indicative,
                     by: NORTH.party,
-                    basis: "synthetic prequalification rule; indicative only",
+                    basis: "synthetic-decision-in-principle",
                   },
                   underwriting: { result: result.result, by: UW.party },
-                  notClaimed: ["loan approval", "truth of evidence", "complete financial picture"],
+                  notClaimed: ["loan-approval", "truth-of-evidence", "complete-financial-picture"],
                   synthetic: true,
                 },
               });

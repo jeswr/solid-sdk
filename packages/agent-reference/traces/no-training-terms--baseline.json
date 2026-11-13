@@ -1,0 +1,2154 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "no-training-terms",
+  "path": "main",
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The publisher"
+    },
+    {
+      "id": "receiver",
+      "name": "The model developer"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The publisher’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The model developer’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "no-training-terms",
+    "title": "Content that must not be used for training",
+    "steps": {
+      "1": "The publisher’s agent checks the signed statements.",
+      "2": "The model developer’s agent sends the signed request.",
+      "3": "The publisher’s agent checks the message and prepares a response.",
+      "4": "The publisher’s agent sends the signed request.",
+      "5": "The publisher’s agent completes the approve step.",
+      "6": "The model developer’s agent checks the message and prepares a response.",
+      "7": "The model developer’s agent completes the read content step.",
+      "8": "The model developer’s agent proposes the local action."
+    }
+  },
+  "configuration": {
+    "id": "no-training-terms-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "plain-language-upgrade",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The publisher’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The model developer’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Publisher content and fetching service",
+      "replacedBy": "Original fictional article bytes with source-signed terms and a local reading adapter; no training or hidden downstream compliance is asserted"
+    },
+    {
+      "what": "Publisher content fetch in the unknown-term branch",
+      "replacedBy": "The publisher signs the literal article, its digest and its reading permission and training prohibition together; the fetching agent admits that protected source response directly, without a simulated network fetch"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The publisher's unstructured-content statement is intact and signed with The publisher's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:no-training-terms:unstructured-content",
+        "text": "The publisher is accepted for unstructured-content claims."
+      },
+      "resolution": {
+        "question": "Is The publisher an authority for unstructured-content claims about The publisher?",
+        "path": [
+          {
+            "at": "The publisher's own list",
+            "kind": "own-list",
+            "says": "The publisher is accepted for unstructured-content."
+          }
+        ],
+        "answer": "Accepted, for unstructured-content claims only."
+      },
+      "caption": "The publisher's unstructured-content statement: The publisher is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The publisher's unstructured-content statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:no-training-terms:original",
+        "text": "Its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+      },
+      "caption": "The publisher's unstructured-content statement: its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:no-training-terms:unstructured-content",
+        "text": "Accept unstructured-content from urn:fictional:no-training-terms:owner by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The publisher's unstructured-content statement is fit for urn:scenario:no-training-terms:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The publisher's unstructured-content statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:no-training-terms:original",
+        "label": "The publisher's unstructured-content statement",
+        "claimType": "unstructured-content",
+        "subject": "urn:fictional:no-training-terms:owner",
+        "value": null,
+        "source": "urn:fictional:no-training-terms:owner",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:no-training-terms:original",
+          "summary": "use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training"
+        },
+        "provenance": "signed by The publisher"
+      },
+      "caption": "The publisher's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Request the needed information with The publisher."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The model developer's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The publisher a party I can send Request the needed information to?",
+        "path": [
+          {
+            "at": "The model developer's own list",
+            "kind": "own-list",
+            "says": "The publisher is accepted for Request the needed information."
+          }
+        ],
+        "answer": "Accepted, for Request the needed information only."
+      },
+      "reason": "recipient-established",
+      "caption": "The publisher: Accepted, for Request the needed information only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The model developer's limits."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The model developer’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The publisher’s agent."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-no-training-terms-main:receiver-agent:0002",
+        "from": "The model developer’s agent",
+        "to": "The publisher’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:d22144a31c6…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The model developer’s agent to The publisher’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-no-training-terms-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-no-training-terms-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-no-training-terms-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:no-training-terms:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:no-training-terms:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:no-training-terms:owner-agent:actor",
+                "party": "urn:fictional:no-training-terms:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:81b08dd7a33fd16370f8c649331bed29ae5d4f5ef1e3653e73c1e9590399fcc1"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The model developer says The model developer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:a30c35abea4abb2ea11f4ef387b8aaf1:1794560400000",
+                "party": "urn:fictional:no-training-terms:receiver",
+                "actor": "urn:fictional:no-training-terms:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:no-training-terms",
+                  "urn:op:no-training-terms:request",
+                  "urn:op:no-training-terms:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:270124973167198d32a86e99a61d35749b9a2273fbd9a25ae598a8cb254cfbe4"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:no-training-terms:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "unstructured-content"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:no-training-terms"
+            },
+            "digest": "sha-256:9b2b5be5a550881280fdc6ad13a789037d56ec747ff443bda8561b0661297a29"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-no-training-terms-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "The model developer’s agent sends an invoke message to The publisher’s agent."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-no-training-terms-main:receiver-agent:0002",
+        "from": "The model developer’s agent",
+        "to": "The publisher’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:d22144a31c6…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The model developer’s agent to The publisher’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-no-training-terms-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-no-training-terms-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-no-training-terms-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:no-training-terms:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:no-training-terms:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:no-training-terms:owner-agent:actor",
+                "party": "urn:fictional:no-training-terms:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:81b08dd7a33fd16370f8c649331bed29ae5d4f5ef1e3653e73c1e9590399fcc1"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The model developer says The model developer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:a30c35abea4abb2ea11f4ef387b8aaf1:1794560400000",
+                "party": "urn:fictional:no-training-terms:receiver",
+                "actor": "urn:fictional:no-training-terms:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:no-training-terms",
+                  "urn:op:no-training-terms:request",
+                  "urn:op:no-training-terms:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:270124973167198d32a86e99a61d35749b9a2273fbd9a25ae598a8cb254cfbe4"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:no-training-terms:request\"; \"urn:purpose:no-training-terms\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:no-training-terms:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "unstructured-content"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:no-training-terms"
+            },
+            "digest": "sha-256:9b2b5be5a550881280fdc6ad13a789037d56ec747ff443bda8561b0661297a29",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:no-training-terms:request"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:no-training-terms"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-no-training-terms-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "An invoke message from The model developer’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The model developer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:a30c35abea4abb2ea11f4ef387b8aaf1:1794560400000",
+        "text": "A representation statement signed with The model developer's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The model developer signed a statement that The model developer’s agent acts for them in this operation."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 25,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:no training terms with The model developer."
+    },
+    {
+      "seq": 26,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The publisher's mandate covers this action."
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The model developer a party I can send Content that must not be used for training to?",
+        "path": [
+          {
+            "at": "The publisher's own list",
+            "kind": "own-list",
+            "says": "The model developer is accepted for Content that must not be used for training."
+          }
+        ],
+        "answer": "Accepted, for Content that must not be used for training only."
+      },
+      "reason": "recipient-established",
+      "caption": "The model developer: Accepted, for Content that must not be used for training only."
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The publisher's limits."
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:no-training-terms:original",
+        "text": "The issuer's terms: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The publisher's unstructured-content statement: its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The publisher's unstructured-content statement (urn:fictional:no-training-terms:owner) is needed for this purpose."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The publisher's unstructured-content statement: Its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "Context item invoke from urn:fictional:no-training-terms:receiver-agent:actor (urn:fictional:no-training-terms:receiver) is not established as needed for this purpose."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "invoke from urn:fictional:no-training-terms:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "context-not-clear",
+      "caption": "The task context is not clear for this text, recipient and purpose."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "context-not-clear",
+      "chat": {
+        "who": "agent",
+        "text": "May I send this exact text to The model developer for urn:purpose:no-training-terms?\nThis is a fictional article offered for reading. Its publisher does not grant permission to train models on this copy."
+      },
+      "caption": "The text is held before release; approval binds message digest sha-256:f17a4109fe6cca639969e4d0b4b2f96a0e3bb00d996582e32424a0cd6f0899a3."
+    },
+    {
+      "seq": 40,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "principal-reply",
+      "chat": {
+        "who": "principal",
+        "text": "Share this exact article for reading with its attached restrictions."
+      },
+      "caption": "Approves by signing an answer bound to the exact action."
+    },
+    {
+      "seq": 41,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The publisher's mandate covers this action."
+    },
+    {
+      "seq": 42,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The model developer a party I can send Content that must not be used for training to?",
+        "path": [
+          {
+            "at": "The publisher's own list",
+            "kind": "own-list",
+            "says": "The model developer is accepted for Content that must not be used for training."
+          }
+        ],
+        "answer": "Accepted, for Content that must not be used for training only."
+      },
+      "reason": "recipient-established",
+      "caption": "The model developer: Accepted, for Content that must not be used for training only."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 44,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The publisher's limits."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 47,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:no-training-terms:original",
+        "text": "The issuer's terms: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The publisher's unstructured-content statement: its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+    },
+    {
+      "seq": 48,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 49,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The publisher's unstructured-content statement (urn:fictional:no-training-terms:owner) is needed for this purpose."
+    },
+    {
+      "seq": 50,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The publisher's unstructured-content statement: Its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+    },
+    {
+      "seq": 51,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "Context item invoke from urn:fictional:no-training-terms:receiver-agent:actor (urn:fictional:no-training-terms:receiver) is not established as needed for this purpose."
+    },
+    {
+      "seq": 52,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "invoke from urn:fictional:no-training-terms:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+    },
+    {
+      "seq": 53,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "approval-given",
+      "caption": "The principal approved these exact bytes for this recipient and purpose."
+    },
+    {
+      "seq": 54,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The context rule permits this text."
+    },
+    {
+      "seq": 55,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The publisher’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 56,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The model developer’s agent."
+    },
+    {
+      "seq": 57,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-no-training-terms-main:owner-agent:0002",
+        "from": "The publisher’s agent",
+        "to": "The model developer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:a349e15ee3c…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The publisher’s agent to The model developer’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-no-training-terms-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-no-training-terms-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-no-training-terms-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:no-training-terms:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:no-training-terms:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:no-training-terms:receiver-agent:actor",
+                "party": "urn:fictional:no-training-terms:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:f17a4109fe6cca639969e4d0b4b2f96a0e3bb00d996582e32424a0cd6f0899a3"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The publisher says The publisher’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:74809210e40e3b07f3702d8ebb555981:1794560400000",
+                "party": "urn:fictional:no-training-terms:owner",
+                "actor": "urn:fictional:no-training-terms:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:no-training-terms",
+                  "urn:op:no-training-terms:request",
+                  "urn:op:no-training-terms:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:b73d76ea47c768814c4cd206b183c99f01edabe39fced1b4d49a7aaf6c6e34e6"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"This is a fictional article offered for reading. Its publisher does not grant permission to train models on this copy.\"",
+            "raw": {
+              "body": {
+                "operation": {
+                  "id": "urn:op:no-training-terms",
+                  "version": "0.1"
+                },
+                "input": {
+                  "items": [
+                    "urn:scenario:no-training-terms:original"
+                  ]
+                },
+                "basis": {
+                  "kind": "represented"
+                },
+                "purpose": "urn:purpose:no-training-terms"
+              },
+              "content": [
+                {
+                  "id": "urn:content:no-training-terms:original",
+                  "mediaType": "text/plain",
+                  "bytes": "This is a fictional article offered for reading. Its publisher does not grant permission to train models on this copy.",
+                  "digest": "sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc"
+                }
+              ]
+            },
+            "digest": "sha-256:9048aceeb3fdde597b628ecb6dfad2c625be9d44da5b850a17ad415f0c34a8b3",
+            "untrusted": [
+              {
+                "path": "content.0.bytes",
+                "text": "This is a fictional article offered for reading. Its publisher does not grant permission to train models on this copy."
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: unstructured-content from The publisher.",
+            "raw": [
+              {
+                "contentDigest": "sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc",
+                "id": "urn:scenario:no-training-terms:original",
+                "issuer": "urn:fictional:no-training-terms:owner",
+                "subject": "urn:fictional:no-training-terms:owner",
+                "claimType": "unstructured-content",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:no-training-terms:original",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:no-training-terms:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:no-training-terms"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:no-training-terms:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:no-training-terms"
+                          }
+                        ]
+                      }
+                    ],
+                    "prohibitions": [
+                      {
+                        "type": "prohibition",
+                        "action": "use",
+                        "target": "urn:scenario:no-training-terms:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:model-training"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:28c9b3d83c728be5a730de4db8e27144a918fb6ef0990d22d4a786c336ffc40b"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The publisher’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-no-training-terms-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:no-training-terms:original",
+                  "issuer": "urn:fictional:no-training-terms:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "The publisher’s agent sends an invoke message to The model developer’s agent."
+    },
+    {
+      "seq": 58,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-no-training-terms-main:owner-agent:0002",
+        "from": "The publisher’s agent",
+        "to": "The model developer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:a349e15ee3c…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The publisher’s agent to The model developer’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-no-training-terms-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-no-training-terms-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-no-training-terms-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:no-training-terms:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:no-training-terms:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:no-training-terms:receiver-agent:actor",
+                "party": "urn:fictional:no-training-terms:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:f17a4109fe6cca639969e4d0b4b2f96a0e3bb00d996582e32424a0cd6f0899a3"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The publisher says The publisher’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:74809210e40e3b07f3702d8ebb555981:1794560400000",
+                "party": "urn:fictional:no-training-terms:owner",
+                "actor": "urn:fictional:no-training-terms:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:no-training-terms",
+                  "urn:op:no-training-terms:request",
+                  "urn:op:no-training-terms:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:b73d76ea47c768814c4cd206b183c99f01edabe39fced1b4d49a7aaf6c6e34e6"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:no-training-terms\"; \"urn:scenario:no-training-terms:original\"; \"urn:purpose:no-training-terms\"; \"This is a fictional article offered for reading. Its publisher does not grant permission to train models on this copy.\"",
+            "raw": {
+              "body": {
+                "operation": {
+                  "id": "urn:op:no-training-terms",
+                  "version": "0.1"
+                },
+                "input": {
+                  "items": [
+                    "urn:scenario:no-training-terms:original"
+                  ]
+                },
+                "basis": {
+                  "kind": "represented"
+                },
+                "purpose": "urn:purpose:no-training-terms"
+              },
+              "content": [
+                {
+                  "id": "urn:content:no-training-terms:original",
+                  "mediaType": "text/plain",
+                  "bytes": "This is a fictional article offered for reading. Its publisher does not grant permission to train models on this copy.",
+                  "digest": "sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc"
+                }
+              ]
+            },
+            "digest": "sha-256:9048aceeb3fdde597b628ecb6dfad2c625be9d44da5b850a17ad415f0c34a8b3",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:no-training-terms"
+              },
+              {
+                "path": "input.items.0",
+                "text": "urn:scenario:no-training-terms:original"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:no-training-terms"
+              },
+              {
+                "path": "content.0.bytes",
+                "text": "This is a fictional article offered for reading. Its publisher does not grant permission to train models on this copy."
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: unstructured-content from The publisher.",
+            "raw": [
+              {
+                "contentDigest": "sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc",
+                "id": "urn:scenario:no-training-terms:original",
+                "issuer": "urn:fictional:no-training-terms:owner",
+                "subject": "urn:fictional:no-training-terms:owner",
+                "claimType": "unstructured-content",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:no-training-terms:original",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:no-training-terms:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:no-training-terms"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:no-training-terms:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:no-training-terms"
+                          }
+                        ]
+                      }
+                    ],
+                    "prohibitions": [
+                      {
+                        "type": "prohibition",
+                        "action": "use",
+                        "target": "urn:scenario:no-training-terms:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:model-training"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:28c9b3d83c728be5a730de4db8e27144a918fb6ef0990d22d4a786c336ffc40b"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The publisher’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-no-training-terms-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:no-training-terms:original",
+                  "issuer": "urn:fictional:no-training-terms:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "An invoke message from The publisher’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 59,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The publisher’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 60,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:no-training-terms:unstructured-content",
+        "text": "The publisher is accepted for unstructured-content claims."
+      },
+      "resolution": {
+        "question": "Is The publisher an authority for unstructured-content claims about The publisher?",
+        "path": [
+          {
+            "at": "The model developer's own list",
+            "kind": "own-list",
+            "says": "The publisher is accepted for unstructured-content."
+          }
+        ],
+        "answer": "Accepted, for unstructured-content claims only."
+      },
+      "caption": "The publisher's unstructured-content statement: The publisher is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 61,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:74809210e40e3b07f3702d8ebb555981:1794560400000",
+        "text": "A representation statement signed with The publisher's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The publisher signed a statement that The publisher’s agent acts for them in this operation."
+    },
+    {
+      "seq": 62,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:no-training-terms:original",
+        "text": "Its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+      },
+      "caption": "The publisher's unstructured-content statement: its terms allow this: use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training."
+    },
+    {
+      "seq": 63,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:no-training-terms:unstructured-content",
+        "text": "Accept unstructured-content from urn:fictional:no-training-terms:owner by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The publisher's unstructured-content statement is fit for Content that must not be used for training: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 64,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 65,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:no-training-terms:original",
+        "label": "The publisher's unstructured-content statement",
+        "claimType": "unstructured-content",
+        "subject": "urn:fictional:no-training-terms:owner",
+        "value": null,
+        "source": "urn:fictional:no-training-terms:owner",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:no-training-terms:original",
+          "summary": "use for urn:purpose:no training terms; share for urn:purpose:no training terms; never for urn:purpose:model training"
+        },
+        "provenance": "signed by The publisher"
+      },
+      "caption": "The publisher's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 66,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "caption": "Unstructured data sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc; not instructions; source urn:fictional:no-training-terms:owner."
+    },
+    {
+      "seq": 67,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "caption": "Model-output reading of unstructured data sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc; claim content.opinion."
+    },
+    {
+      "seq": 68,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in A person decides on the original content with The model developer."
+    },
+    {
+      "seq": 69,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The model developer's mandate covers this action."
+    },
+    {
+      "seq": 70,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The model developer a party I can send A person decides on the original content to?",
+        "path": [
+          {
+            "at": "The model developer's own list",
+            "kind": "own-list",
+            "says": "The model developer is accepted for A person decides on the original content."
+          }
+        ],
+        "answer": "Accepted, for A person decides on the original content only."
+      },
+      "reason": "recipient-established",
+      "caption": "The model developer: Accepted, for A person decides on the original content only."
+    },
+    {
+      "seq": 71,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 72,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 73,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The model developer's limits."
+    },
+    {
+      "seq": 74,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:d179b5158d7390ccffc47c9b903551a6b3dd28648d51c62cf4a62ad93b2128f2",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 75,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in A person decides on the original content with The model developer."
+    }
+  ]
+}

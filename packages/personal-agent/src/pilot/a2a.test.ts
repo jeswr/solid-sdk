@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The optional local A2A binding in-process: agents run the loopback listener of the official
  * `@a2a-js/sdk` against their AgentHost and dispatch through the runtime transmission boundary.
@@ -773,6 +774,8 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
       "mortgage-consumer",
       "--wallet",
       issuance.wallet,
+      "--issuers",
+      issuance.issuers,
       "--owner-dir",
       owners,
       ...common,

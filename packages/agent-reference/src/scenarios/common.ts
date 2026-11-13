@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Helpers shared by the extension scenarios: provision parties/agents with bounded
  * mandates, perform the reviewed introductions, pin issuers and source rules, start
@@ -38,6 +39,8 @@ export function mandateOf(
   autonomousRules: OdrlRule[],
   withApprovalRules: OdrlRule[] = [],
   prohibitionRules: OdrlRule[] = [],
+  standing: readonly import("../mechanisms/mandate.js").StandingRule[] = [],
+  duties: readonly import("../runtime/duties.js").DutyRule[] = [],
 ) {
   return (ids: Ids): OwnerMandate => {
     const mint = (rules: OdrlRule[]): OdrlRule[] =>
@@ -60,6 +63,8 @@ export function mandateOf(
       subject: ids.actor,
       validFrom: ids.validFrom,
       validUntil: ids.validUntil,
+      ...(standing.length ? { standing: [...standing] } : {}),
+      ...(duties.length ? { duties: [...duties] } : {}),
       autonomous: {
         id: scopedUrn("policy", ids.actor, `${label}/autonomous`),
         type: "Set",
@@ -210,7 +215,10 @@ export class Cast {
     handlers: OperationHandler[],
     effects: EffectAdapter[] = [],
     accepted: string[] = [CONFIG_ED25519],
-    extra: Pick<AgentRuntimeOptions, "gates"> = {},
+    extra: Pick<
+      AgentRuntimeOptions,
+      "gates" | "core" | "disclosureChecks" | "sourceKey" | "organizationMandateJws"
+    > = {},
   ): Promise<{ runtime: AgentRuntime; ledger: MemoryLedger }> {
     const p = this.get(name);
     const ledger = new MemoryLedger();

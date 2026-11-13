@@ -1,0 +1,1164 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "benefit-claim",
+  "path": {
+    "index": 1,
+    "what": "Household composition is self-reported only"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The claimant"
+    },
+    {
+      "id": "receiver",
+      "name": "The benefits office"
+    },
+    {
+      "id": "employer",
+      "name": "The employer"
+    },
+    {
+      "id": "landlord",
+      "name": "The landlord"
+    },
+    {
+      "id": "household-register",
+      "name": "The household register"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The claimant’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The benefits office’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "benefit-claim--branch-1",
+    "title": "Claiming a benefit: Household composition is self-reported only",
+    "steps": {
+      "1": "The claimant’s agent checks the signed statements.",
+      "2": "The benefits office’s agent sends the signed request.",
+      "3": "The claimant’s agent checks the message and prepares a response.",
+      "4": "The claimant’s agent sends the signed request.",
+      "5": "The benefits office’s agent checks the message and prepares a response.",
+      "6": "The claimant’s agent checks the message and prepares a response.",
+      "7": "The benefits office’s agent checks the durable record."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The claimant’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The benefits office’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Benefits intake and public-body data",
+      "replacedBy": "The fictional office directly accepts employer, landlord and register-signed scoped claims, with a signed acknowledgement; no statutory award or public-system integration is claimed"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The employer's benefit.income statement is intact and signed with The employer's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:benefit-claim:benefit.income",
+        "text": "The employer is accepted for benefit.income claims."
+      },
+      "resolution": {
+        "question": "Is The employer an authority for benefit.income claims about The claimant?",
+        "path": [
+          {
+            "at": "The claimant's own list",
+            "kind": "own-list",
+            "says": "The employer is accepted for benefit.income."
+          }
+        ],
+        "answer": "Accepted, for benefit.income claims only."
+      },
+      "caption": "The employer's benefit.income statement: The employer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The employer's benefit.income statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:benefit-claim:income",
+        "text": "Its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+      },
+      "caption": "The employer's benefit.income statement: its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:benefit-claim:benefit.income",
+        "text": "Accept benefit.income from urn:fictional:benefit-claim:employer by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The employer's benefit.income statement is fit for urn:scenario:benefit-claim:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The employer's benefit.income statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:benefit-claim:income",
+        "label": "The employer's benefit.income statement",
+        "claimType": "benefit.income",
+        "subject": "urn:fictional:benefit-claim:owner",
+        "value": null,
+        "source": "urn:fictional:benefit-claim:employer",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:benefit-claim:income",
+          "summary": "use for urn:purpose:benefit claim; share for urn:purpose:benefit claim"
+        },
+        "provenance": "signed by The employer"
+      },
+      "caption": "The employer's benefit.income statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The landlord's benefit.rent statement is intact and signed with The landlord's pinned key."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:benefit-claim:benefit.rent",
+        "text": "The landlord is accepted for benefit.rent claims."
+      },
+      "resolution": {
+        "question": "Is The landlord an authority for benefit.rent claims about The claimant?",
+        "path": [
+          {
+            "at": "The claimant's own list",
+            "kind": "own-list",
+            "says": "The landlord is accepted for benefit.rent."
+          }
+        ],
+        "answer": "Accepted, for benefit.rent claims only."
+      },
+      "caption": "The landlord's benefit.rent statement: The landlord is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The landlord's benefit.rent statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:benefit-claim:rent",
+        "text": "Its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+      },
+      "caption": "The landlord's benefit.rent statement: its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:benefit-claim:benefit.rent",
+        "text": "Accept benefit.rent from urn:fictional:benefit-claim:landlord by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The landlord's benefit.rent statement is fit for urn:scenario:benefit-claim:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The landlord's benefit.rent statement is admitted."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:benefit-claim:rent",
+        "label": "The landlord's benefit.rent statement",
+        "claimType": "benefit.rent",
+        "subject": "urn:fictional:benefit-claim:owner",
+        "value": null,
+        "source": "urn:fictional:benefit-claim:landlord",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:benefit-claim:rent",
+          "summary": "use for urn:purpose:benefit claim; share for urn:purpose:benefit claim"
+        },
+        "provenance": "signed by The landlord"
+      },
+      "caption": "The landlord's benefit.rent statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 15,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The household register's benefit.household statement is intact and signed with The household register's pinned key."
+    },
+    {
+      "seq": 16,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:benefit-claim:benefit.household",
+        "text": "The household register is accepted for benefit.household claims."
+      },
+      "resolution": {
+        "question": "Is The household register an authority for benefit.household claims about The claimant?",
+        "path": [
+          {
+            "at": "The claimant's own list",
+            "kind": "own-list",
+            "says": "The household register is accepted for benefit.household."
+          }
+        ],
+        "answer": "Accepted, for benefit.household claims only."
+      },
+      "caption": "The household register's benefit.household statement: The household register is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 17,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The household register's benefit.household statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 18,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:benefit-claim:household",
+        "text": "Its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+      },
+      "caption": "The household register's benefit.household statement: its terms allow this: use for urn:purpose:benefit claim; share for urn:purpose:benefit claim."
+    },
+    {
+      "seq": 19,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "method-not-accepted",
+      "rule": {
+        "id": "urn:profile:benefit-claim:benefit.household",
+        "text": "Accept benefit.household from urn:fictional:benefit-claim:household-register by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The household register's benefit.household statement was not produced in a way urn:scenario:benefit-claim:task accepts."
+    },
+    {
+      "seq": 20,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "outcome": "ask-more",
+      "reason": "method-not-accepted",
+      "caption": "Required claim: benefit.household. Accepted sources: urn:fictional:benefit-claim:household-register. Accepted methods: recorded-by-authority."
+    },
+    {
+      "seq": 21,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Request the needed information with The claimant."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The benefits office's mandate covers this action."
+    },
+    {
+      "seq": 23,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The claimant a party I can send Request the needed information to?",
+        "path": [
+          {
+            "at": "The benefits office's own list",
+            "kind": "own-list",
+            "says": "The claimant is accepted for Request the needed information."
+          }
+        ],
+        "answer": "Accepted, for Request the needed information only."
+      },
+      "reason": "recipient-established",
+      "caption": "The claimant: Accepted, for Request the needed information only."
+    },
+    {
+      "seq": 24,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 25,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 26,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The benefits office's limits."
+    },
+    {
+      "seq": 27,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 28,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The benefits office’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 29,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The claimant’s agent."
+    },
+    {
+      "seq": 30,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
+        "from": "The benefits office’s agent",
+        "to": "The claimant’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:712d009ce3f…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The benefits office’s agent to The claimant’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
+              "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:benefit-claim:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:benefit-claim:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:benefit-claim:owner-agent:actor",
+                "party": "urn:fictional:benefit-claim:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:48a66aa026225e4295d309e4747715c2b4dabdd2f77c2f26b59683d9e4a7b02b"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The benefits office says The benefits office’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:af38094fde4131076f66fa88cc357539:1794560400000",
+                "party": "urn:fictional:benefit-claim:receiver",
+                "actor": "urn:fictional:benefit-claim:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:benefit-claim",
+                  "urn:op:benefit-claim:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:2af729cf15ba9c27773683200864820a3cc5df397f44f863b8578d69e27300f6"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:benefit-claim:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "benefit.income"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:benefit-claim"
+            },
+            "digest": "sha-256:0c5d9d5f574f3f8723f238646fb4bd37be0354ca85d8157fdac13455905b8a5b"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The benefits office’s agent sends an invoke message to The claimant’s agent."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
+        "from": "The benefits office’s agent",
+        "to": "The claimant’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:712d009ce3f…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The benefits office’s agent to The claimant’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
+              "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:benefit-claim:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:benefit-claim:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:benefit-claim:owner-agent:actor",
+                "party": "urn:fictional:benefit-claim:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:48a66aa026225e4295d309e4747715c2b4dabdd2f77c2f26b59683d9e4a7b02b"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The benefits office says The benefits office’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:af38094fde4131076f66fa88cc357539:1794560400000",
+                "party": "urn:fictional:benefit-claim:receiver",
+                "actor": "urn:fictional:benefit-claim:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:benefit-claim",
+                  "urn:op:benefit-claim:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:2af729cf15ba9c27773683200864820a3cc5df397f44f863b8578d69e27300f6"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:benefit-claim:request\"; \"urn:purpose:benefit-claim\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:benefit-claim:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "benefit.income"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:benefit-claim"
+            },
+            "digest": "sha-256:0c5d9d5f574f3f8723f238646fb4bd37be0354ca85d8157fdac13455905b8a5b",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:benefit-claim:request"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:benefit-claim"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The benefits office’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 32,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The benefits office’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 33,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 34,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:af38094fde4131076f66fa88cc357539:1794560400000",
+        "text": "A representation statement signed with The benefits office's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The benefits office signed a statement that The benefits office’s agent acts for them in this operation."
+    },
+    {
+      "seq": 35,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 36,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 37,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:benefit claim with The benefits office."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The claimant's mandate covers this action."
+    },
+    {
+      "seq": 40,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "method-not-accepted",
+      "caption": "Required benefit.household was refused: method-not-accepted."
+    },
+    {
+      "seq": 41,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "method-not-accepted",
+      "caption": "A refused source cannot authorize the action."
+    }
+  ]
+}

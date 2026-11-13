@@ -1,0 +1,129 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "sell-a-car",
+  "parties": {
+    "owner": "The seller",
+    "receiver": "The buyer",
+    "vehicle-register": "The fictional vehicle register",
+    "other-owner": "The other fictional keeper",
+    "owner-agent": "The seller\u2019s agent",
+    "receiver-agent": "The buyer\u2019s agent"
+  },
+  "claims": [
+    {
+      "kind": "vehicle.keeper",
+      "sources": [
+        "urn:fictional:sell-a-car:vehicle-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "finance.search",
+      "sources": [
+        "urn:fictional:sell-a-car:finance-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    },
+    {
+      "kind": "finance.search.complete",
+      "sources": [
+        "urn:fictional:sell-a-car:finance-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:sell-a-car",
+      "claims": [
+        "vehicle.keeper",
+        "finance.search",
+        "finance.search.complete"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "vehicle.keeper"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:sell-a-car",
+      "version": "0.1",
+      "label": "Selling a used car to a stranger",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:sell-a-car"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:sell-a-car:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:sell-a-car"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "read",
+      "claims": [
+        "vehicle.keeper"
+      ]
+    }
+  ],
+  "singleUse": [
+    {
+      "action": "read",
+      "register": "urn:fictional:sell-a-car:escrow",
+      "item": "urn:fictional:sell-a-car:escrow-hold",
+      "operation": "release",
+      "maxAgeSeconds": 60,
+      "parameters": {
+        "item": "urn:fictional:sell-a-car:escrow-hold",
+        "amount": 7500,
+        "currency": "GBP"
+      }
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Vehicle/finance registers and escrow holding GBP 7500",
+      "replacedBy": "Independent synthetic signing parties, a signed complete finance search and local escrow CAS release; no real money moves."
+    }
+  ]
+}

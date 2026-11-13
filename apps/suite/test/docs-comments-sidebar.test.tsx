@@ -131,7 +131,7 @@ it("shows profile names for comment authors and replies, retaining the WebID as 
     { ...thread, replies: [{ ...root, url: "reply", kind: "reply" }] },
   ]);
   render(<Harness />);
-  fireEvent.click(button("Comments (0 open)"));
+  fireEvent.click(button("Comments, 0 open"));
   await waitFor(() => expect(screen.getAllByText("Alice Profile")).toHaveLength(2));
   for (const author of screen.getAllByText("Alice Profile")) {
     expect(author.title).toBe(webId);

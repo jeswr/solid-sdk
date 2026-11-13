@@ -1,0 +1,2662 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "find-a-time",
+  "path": "main",
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The first person"
+    },
+    {
+      "id": "receiver",
+      "name": "The second person"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The first person’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The second person’s agent"
+    },
+    {
+      "id": "calendar-service",
+      "name": "The fictional shared calendar service"
+    },
+    {
+      "id": "calendar-agent",
+      "name": "The calendar service’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "find-a-time",
+    "title": "Two people's agents find a time to meet",
+    "steps": {
+      "1": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "2": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "3": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "4": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "5": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "6": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "7": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "8": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "9": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "10": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+      "11": "The calendar service signs the free-slot derivation, and each receiving agent verifies it."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The first person’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The second person’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    },
+    {
+      "id": "calendar-agent",
+      "name": "The calendar service’s agent",
+      "actsFor": "calendar-service",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Attested calendar derivation",
+      "replacedBy": "A separately keyed fictional calendar service holds both synthetic availability records, evaluates the installed all-of rule for a named candidate slot, signs its derivation and releases only that free-slot result through both receiving agents’ gates. No hardware attestation or joint computation is claimed."
+    },
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Attestation-free calendar privacy preflight",
+      "replacedBy": "The real signed request cannot widen meeting coordination to a held private appointment; no attested free/busy predicate is made"
+    },
+    {
+      "what": "Attested calendar derivation",
+      "replacedBy": "A separately keyed fictional calendar service holds both synthetic availability records, evaluates the installed all-of rule for a named candidate slot, signs its derivation and releases only that free-slot result through both receiving agents’ gates. No hardware attestation or joint computation is claimed."
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The fictional shared calendar service's calendar.first-free statement is intact and signed with The fictional shared calendar service's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:fictional:find-a-time:calendar-source",
+        "text": "The fictional shared calendar service is accepted for calendar.first-free claims."
+      },
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The fictional shared calendar service's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.first-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.first-free claims only."
+      },
+      "caption": "The fictional shared calendar service's calendar.first-free statement: The fictional shared calendar service is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The fictional shared calendar service's calendar.first-free statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:fictional:find-a-time:calendar.first-free-terms",
+        "text": "Its terms allow this: use for urn:purpose:find a time; share for urn:purpose:find a time."
+      },
+      "caption": "The fictional shared calendar service's calendar.first-free statement: its terms allow this: use for urn:purpose:find a time; share for urn:purpose:find a time."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:find-a-time:calendar.first-free",
+        "text": "Accept calendar.first-free from urn:fictional:find-a-time:calendar-service by recorded-by-authority, at most 1 days old."
+      },
+      "caption": "The fictional shared calendar service's calendar.first-free statement is fit for urn:scenario:find-a-time:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The fictional shared calendar service's calendar.first-free statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:find-a-time:first-free",
+        "label": "The fictional shared calendar service's calendar.first-free statement",
+        "claimType": "calendar.first-free",
+        "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+        "value": null,
+        "source": "urn:fictional:find-a-time:calendar-service",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:fictional:find-a-time:calendar.first-free-terms",
+          "summary": "use for urn:purpose:find a time; share for urn:purpose:find a time"
+        },
+        "provenance": "signed by The fictional shared calendar service"
+      },
+      "caption": "The fictional shared calendar service's calendar.first-free statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The fictional shared calendar service's calendar.second-free statement is intact and signed with The fictional shared calendar service's pinned key."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:fictional:find-a-time:calendar-source",
+        "text": "The fictional shared calendar service is accepted for calendar.second-free claims."
+      },
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The fictional shared calendar service's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.second-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.second-free claims only."
+      },
+      "caption": "The fictional shared calendar service's calendar.second-free statement: The fictional shared calendar service is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The fictional shared calendar service's calendar.second-free statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:fictional:find-a-time:calendar.second-free-terms",
+        "text": "Its terms allow this: use for urn:purpose:find a time; share for urn:purpose:find a time."
+      },
+      "caption": "The fictional shared calendar service's calendar.second-free statement: its terms allow this: use for urn:purpose:find a time; share for urn:purpose:find a time."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:find-a-time:calendar.second-free",
+        "text": "Accept calendar.second-free from urn:fictional:find-a-time:calendar-service by recorded-by-authority, at most 1 days old."
+      },
+      "caption": "The fictional shared calendar service's calendar.second-free statement is fit for urn:scenario:find-a-time:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The fictional shared calendar service's calendar.second-free statement is admitted."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "calendar-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:find-a-time:second-free",
+        "label": "The fictional shared calendar service's calendar.second-free statement",
+        "claimType": "calendar.second-free",
+        "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+        "value": null,
+        "source": "urn:fictional:find-a-time:calendar-service",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:fictional:find-a-time:calendar.second-free-terms",
+          "summary": "use for urn:purpose:find a time; share for urn:purpose:find a time"
+        },
+        "provenance": "signed by The fictional shared calendar service"
+      },
+      "caption": "The fictional shared calendar service's calendar.second-free statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 15,
+      "step": 3,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The fictional shared calendar service's calendar.slot-free statement is intact and signed with The fictional shared calendar service's pinned key."
+    },
+    {
+      "seq": 16,
+      "step": 3,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The fictional shared calendar service's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.second-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.second-free claims only."
+      },
+      "caption": "The receiver checks each original input issuer for the claim the rule read."
+    },
+    {
+      "seq": 17,
+      "step": 3,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The fictional shared calendar service's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.first-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.first-free claims only."
+      },
+      "caption": "The receiver checks each original input issuer for the claim the rule read."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:fictional:find-a-time:calendar-source",
+        "text": "The fictional shared calendar service is accepted for calendar.slot-free claims."
+      },
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The fictional shared calendar service's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.slot-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.slot-free claims only."
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: The fictional shared calendar service is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The fictional shared calendar service's calendar.slot-free statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: its terms allow this: ."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:find-a-time:calendar.slot-free",
+        "text": "Accept calendar.slot-free from urn:fictional:find-a-time:calendar-service by derived, at most 1 days old."
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement is fit for urn:scenario:find-a-time:task: derived, 0 days old."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The fictional shared calendar service's calendar.slot-free statement is admitted."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "calendar-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+        "label": "The fictional shared calendar service's calendar.slot-free statement",
+        "claimType": "calendar.slot-free",
+        "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+        "value": null,
+        "source": "urn:fictional:find-a-time:calendar-service",
+        "method": "derived",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae",
+          "summary": ""
+        },
+        "provenance": "signed by The fictional shared calendar service"
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 24,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:find a time:slots with The first person."
+    },
+    {
+      "seq": 25,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The fictional shared calendar service's mandate covers this action."
+    },
+    {
+      "seq": 26,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The first person a party I can send Share a signed free-slot derivation to?",
+        "path": [
+          {
+            "at": "The fictional shared calendar service's own list",
+            "kind": "own-list",
+            "says": "The first person is accepted for Share a signed free-slot derivation."
+          }
+        ],
+        "answer": "Accepted, for Share a signed free-slot derivation only."
+      },
+      "reason": "recipient-established",
+      "caption": "The first person: Accepted, for Share a signed free-slot derivation only."
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The fictional shared calendar service's limits."
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae",
+        "text": "The issuer's terms: . They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: its terms allow this: ."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: Its terms allow this: ."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The vocabulary identifies only the necessary claims: calendar.slot-free."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The calendar service’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The first person’s agent."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "calendar-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-find-a-time-main:calendar-agent:0002",
+        "from": "The calendar service’s agent",
+        "to": "The first person’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:e83ca443a6f…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The calendar service’s agent to The first person’s agent; invoke; signed (JWS EdDSA, pinned key bA3ZfCHbf8BQ…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-find-a-time-main:calendar-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-find-a-time-main:calendar-agent:0002",
+              "conversation": "urn:awp:engine-find-a-time-main:calendar-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:find-a-time:calendar-agent:actor",
+                "onBehalfOf": "urn:fictional:find-a-time:calendar-service"
+              },
+              "to": {
+                "actor": "urn:fictional:find-a-time:owner-agent:actor",
+                "party": "urn:fictional:find-a-time:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "bA3ZfCHbf8BQDKzXqoH2OWpnMog1M8UOhX3NFMU0DBE",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:625e4a1398cde778dc83281943104092c89125a5743653789cc34b8b9ea23462"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The fictional shared calendar service says The calendar service’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:b7eaeaaaa858cf00e7e1ef0aadf46594:1794560400000",
+                "party": "urn:fictional:find-a-time:calendar-service",
+                "actor": "urn:fictional:find-a-time:calendar-agent:actor",
+                "actorKid": "bA3ZfCHbf8BQDKzXqoH2OWpnMog1M8UOhX3NFMU0DBE",
+                "operations": [
+                  "urn:op:find-a-time",
+                  "urn:op:find-a-time:request",
+                  "urn:op:find-a-time:slots"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:03db4716a2ac39befc1eabf6fc86c2018c6ac09d8081839dbb895b33eaa5499c"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:find-a-time:slots",
+                "version": "0.1"
+              },
+              "input": {
+                "slot": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+                "free": true
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:find-a-time"
+            },
+            "digest": "sha-256:9cd93267c4040de0ef06dd924862369050b3ad619371a0e8cd54859acf01e938"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: calendar.slot-free from The fictional shared calendar service.",
+            "raw": [
+              {
+                "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+                "issuer": "urn:fictional:find-a-time:calendar-service",
+                "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+                "claimType": "calendar.slot-free",
+                "value": true,
+                "method": "derived",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae"
+                  },
+                  "inherited": [
+                    {
+                      "target": "urn:scenario:find-a-time:second-free",
+                      "terms": {
+                        "policy": {
+                          "id": "urn:fictional:find-a-time:calendar.second-free-terms",
+                          "permissions": [
+                            {
+                              "type": "permission",
+                              "action": "use",
+                              "target": "urn:scenario:find-a-time:second-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "permission",
+                              "action": "distribute",
+                              "target": "urn:scenario:find-a-time:second-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "target": "urn:scenario:find-a-time:first-free",
+                      "terms": {
+                        "policy": {
+                          "id": "urn:fictional:find-a-time:calendar.first-free-terms",
+                          "permissions": [
+                            {
+                              "type": "permission",
+                              "action": "use",
+                              "target": "urn:scenario:find-a-time:first-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "permission",
+                              "action": "distribute",
+                              "target": "urn:scenario:find-a-time:first-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                "derivation": {
+                  "rule": "urn:fictional:find-a-time:both-free-rule",
+                  "ruleDigest": "sha-256:334c0421f0cc79f2f0384613748977ae3f3cdf1712c41226c95b50ef71d327b9",
+                  "params": {
+                    "inputs": [
+                      "calendar.first-free",
+                      "calendar.second-free"
+                    ]
+                  },
+                  "chain": [],
+                  "inputs": [
+                    {
+                      "id": "urn:scenario:find-a-time:second-free",
+                      "digest": "sha-256:0816ca92cd23f06f063fc0ea57e399ef27beb6bfd6978a477f094c15bf88a195",
+                      "issuer": "urn:fictional:find-a-time:calendar-service",
+                      "claimType": "calendar.second-free",
+                      "method": "recorded-by-authority",
+                      "asOf": "2026-11-13T09:00:00.000Z",
+                      "period": null,
+                      "currency": null,
+                      "validUntil": null
+                    },
+                    {
+                      "id": "urn:scenario:find-a-time:first-free",
+                      "digest": "sha-256:a386b4634ffacea2e119b8283b27387aec9f1370dffe226bb81c81610cf58f6a",
+                      "issuer": "urn:fictional:find-a-time:calendar-service",
+                      "claimType": "calendar.first-free",
+                      "method": "recorded-by-authority",
+                      "asOf": "2026-11-13T09:00:00.000Z",
+                      "period": null,
+                      "currency": null,
+                      "validUntil": null
+                    }
+                  ],
+                  "assurance": "attested",
+                  "deriver": "urn:fictional:find-a-time:calendar-service",
+                  "at": "2026-11-13T09:00:00.000Z",
+                  "outputDigest": "sha-256:b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+                  "basis": [
+                    "recorded-by-authority",
+                    "recorded-by-authority"
+                  ]
+                }
+              }
+            ],
+            "digest": "sha-256:f820e4d12037e8da62a5270174ac218a58c838df9074e77e80aa964628842253"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The calendar service’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-find-a-time-main:calendar-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+                  "issuer": "urn:fictional:find-a-time:calendar-service",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The calendar service’s agent sends an invoke message to The first person’s agent."
+    },
+    {
+      "seq": 37,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-find-a-time-main:calendar-agent:0002",
+        "from": "The calendar service’s agent",
+        "to": "The first person’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:e83ca443a6f…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The calendar service’s agent to The first person’s agent; invoke; signed (JWS EdDSA, pinned key bA3ZfCHbf8BQ…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-find-a-time-main:calendar-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-find-a-time-main:calendar-agent:0002",
+              "conversation": "urn:awp:engine-find-a-time-main:calendar-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:find-a-time:calendar-agent:actor",
+                "onBehalfOf": "urn:fictional:find-a-time:calendar-service"
+              },
+              "to": {
+                "actor": "urn:fictional:find-a-time:owner-agent:actor",
+                "party": "urn:fictional:find-a-time:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "bA3ZfCHbf8BQDKzXqoH2OWpnMog1M8UOhX3NFMU0DBE",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:625e4a1398cde778dc83281943104092c89125a5743653789cc34b8b9ea23462"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The fictional shared calendar service says The calendar service’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:b7eaeaaaa858cf00e7e1ef0aadf46594:1794560400000",
+                "party": "urn:fictional:find-a-time:calendar-service",
+                "actor": "urn:fictional:find-a-time:calendar-agent:actor",
+                "actorKid": "bA3ZfCHbf8BQDKzXqoH2OWpnMog1M8UOhX3NFMU0DBE",
+                "operations": [
+                  "urn:op:find-a-time",
+                  "urn:op:find-a-time:request",
+                  "urn:op:find-a-time:slots"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:03db4716a2ac39befc1eabf6fc86c2018c6ac09d8081839dbb895b33eaa5499c"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:find-a-time:slots\"; \"urn:fictional:find-a-time:slot:2026-11-17T10-00\"; \"urn:purpose:find-a-time\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:find-a-time:slots",
+                "version": "0.1"
+              },
+              "input": {
+                "slot": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+                "free": true
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:find-a-time"
+            },
+            "digest": "sha-256:9cd93267c4040de0ef06dd924862369050b3ad619371a0e8cd54859acf01e938",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:find-a-time:slots"
+              },
+              {
+                "path": "input.slot",
+                "text": "urn:fictional:find-a-time:slot:2026-11-17T10-00"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:find-a-time"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: calendar.slot-free from The fictional shared calendar service.",
+            "raw": [
+              {
+                "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+                "issuer": "urn:fictional:find-a-time:calendar-service",
+                "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+                "claimType": "calendar.slot-free",
+                "value": true,
+                "method": "derived",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae"
+                  },
+                  "inherited": [
+                    {
+                      "target": "urn:scenario:find-a-time:second-free",
+                      "terms": {
+                        "policy": {
+                          "id": "urn:fictional:find-a-time:calendar.second-free-terms",
+                          "permissions": [
+                            {
+                              "type": "permission",
+                              "action": "use",
+                              "target": "urn:scenario:find-a-time:second-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "permission",
+                              "action": "distribute",
+                              "target": "urn:scenario:find-a-time:second-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "target": "urn:scenario:find-a-time:first-free",
+                      "terms": {
+                        "policy": {
+                          "id": "urn:fictional:find-a-time:calendar.first-free-terms",
+                          "permissions": [
+                            {
+                              "type": "permission",
+                              "action": "use",
+                              "target": "urn:scenario:find-a-time:first-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "permission",
+                              "action": "distribute",
+                              "target": "urn:scenario:find-a-time:first-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                "derivation": {
+                  "rule": "urn:fictional:find-a-time:both-free-rule",
+                  "ruleDigest": "sha-256:334c0421f0cc79f2f0384613748977ae3f3cdf1712c41226c95b50ef71d327b9",
+                  "params": {
+                    "inputs": [
+                      "calendar.first-free",
+                      "calendar.second-free"
+                    ]
+                  },
+                  "chain": [],
+                  "inputs": [
+                    {
+                      "id": "urn:scenario:find-a-time:second-free",
+                      "digest": "sha-256:0816ca92cd23f06f063fc0ea57e399ef27beb6bfd6978a477f094c15bf88a195",
+                      "issuer": "urn:fictional:find-a-time:calendar-service",
+                      "claimType": "calendar.second-free",
+                      "method": "recorded-by-authority",
+                      "asOf": "2026-11-13T09:00:00.000Z",
+                      "period": null,
+                      "currency": null,
+                      "validUntil": null
+                    },
+                    {
+                      "id": "urn:scenario:find-a-time:first-free",
+                      "digest": "sha-256:a386b4634ffacea2e119b8283b27387aec9f1370dffe226bb81c81610cf58f6a",
+                      "issuer": "urn:fictional:find-a-time:calendar-service",
+                      "claimType": "calendar.first-free",
+                      "method": "recorded-by-authority",
+                      "asOf": "2026-11-13T09:00:00.000Z",
+                      "period": null,
+                      "currency": null,
+                      "validUntil": null
+                    }
+                  ],
+                  "assurance": "attested",
+                  "deriver": "urn:fictional:find-a-time:calendar-service",
+                  "at": "2026-11-13T09:00:00.000Z",
+                  "outputDigest": "sha-256:b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+                  "basis": [
+                    "recorded-by-authority",
+                    "recorded-by-authority"
+                  ]
+                }
+              }
+            ],
+            "digest": "sha-256:f820e4d12037e8da62a5270174ac218a58c838df9074e77e80aa964628842253"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The calendar service’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-find-a-time-main:calendar-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+                  "issuer": "urn:fictional:find-a-time:calendar-service",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The calendar service’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 38,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The calendar service’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 39,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The first person's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.second-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.second-free claims only."
+      },
+      "caption": "The receiver checks each original input issuer for the claim the rule read."
+    },
+    {
+      "seq": 40,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The first person's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.first-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.first-free claims only."
+      },
+      "caption": "The receiver checks each original input issuer for the claim the rule read."
+    },
+    {
+      "seq": 41,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:fictional:find-a-time:calendar-source",
+        "text": "The fictional shared calendar service is accepted for calendar.slot-free claims."
+      },
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The first person's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.slot-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.slot-free claims only."
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: The fictional shared calendar service is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 42,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:b7eaeaaaa858cf00e7e1ef0aadf46594:1794560400000",
+        "text": "A representation statement signed with The fictional shared calendar service's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The fictional shared calendar service signed a statement that The calendar service’s agent acts for them in this operation."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: its terms allow this: ."
+    },
+    {
+      "seq": 44,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:find-a-time:calendar.slot-free",
+        "text": "Accept calendar.slot-free from urn:fictional:find-a-time:calendar-service by derived, at most 1 days old."
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement is fit for Share a signed free-slot derivation: derived, 0 days old."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+        "label": "The fictional shared calendar service's calendar.slot-free statement",
+        "claimType": "calendar.slot-free",
+        "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+        "value": null,
+        "source": "urn:fictional:find-a-time:calendar-service",
+        "method": "derived",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae",
+          "summary": ""
+        },
+        "provenance": "signed by The fictional shared calendar service"
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 47,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:find a time:slots with The second person."
+    },
+    {
+      "seq": 48,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The fictional shared calendar service's mandate covers this action."
+    },
+    {
+      "seq": 49,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The second person a party I can send Share a signed free-slot derivation to?",
+        "path": [
+          {
+            "at": "The fictional shared calendar service's own list",
+            "kind": "own-list",
+            "says": "The second person is accepted for Share a signed free-slot derivation."
+          }
+        ],
+        "answer": "Accepted, for Share a signed free-slot derivation only."
+      },
+      "reason": "recipient-established",
+      "caption": "The second person: Accepted, for Share a signed free-slot derivation only."
+    },
+    {
+      "seq": 50,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 51,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 52,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The fictional shared calendar service's limits."
+    },
+    {
+      "seq": 53,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 54,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae",
+        "text": "The issuer's terms: . They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: its terms allow this: ."
+    },
+    {
+      "seq": 55,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: Its terms allow this: ."
+    },
+    {
+      "seq": 56,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The vocabulary identifies only the necessary claims: calendar.slot-free."
+    },
+    {
+      "seq": 57,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The calendar service’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 58,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The second person’s agent."
+    },
+    {
+      "seq": 59,
+      "step": 6,
+      "agent": "calendar-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-find-a-time-main:calendar-agent:0004",
+        "from": "The calendar service’s agent",
+        "to": "The second person’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:f0a921f582b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The calendar service’s agent to The second person’s agent; invoke; signed (JWS EdDSA, pinned key bA3ZfCHbf8BQ…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-find-a-time-main:calendar-agent:0004.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-find-a-time-main:calendar-agent:0004",
+              "conversation": "urn:awp:engine-find-a-time-main:calendar-agent:0003",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:find-a-time:calendar-agent:actor",
+                "onBehalfOf": "urn:fictional:find-a-time:calendar-service"
+              },
+              "to": {
+                "actor": "urn:fictional:find-a-time:receiver-agent:actor",
+                "party": "urn:fictional:find-a-time:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "bA3ZfCHbf8BQDKzXqoH2OWpnMog1M8UOhX3NFMU0DBE",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:04f18469102455c3f75c4d3a05041f667010fe1edbff2cb18b0e7f3422a92cc1"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The fictional shared calendar service says The calendar service’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:b7eaeaaaa858cf00e7e1ef0aadf46594:1794560400000",
+                "party": "urn:fictional:find-a-time:calendar-service",
+                "actor": "urn:fictional:find-a-time:calendar-agent:actor",
+                "actorKid": "bA3ZfCHbf8BQDKzXqoH2OWpnMog1M8UOhX3NFMU0DBE",
+                "operations": [
+                  "urn:op:find-a-time",
+                  "urn:op:find-a-time:request",
+                  "urn:op:find-a-time:slots"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:03db4716a2ac39befc1eabf6fc86c2018c6ac09d8081839dbb895b33eaa5499c"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:find-a-time:slots",
+                "version": "0.1"
+              },
+              "input": {
+                "slot": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+                "free": true
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:find-a-time"
+            },
+            "digest": "sha-256:9cd93267c4040de0ef06dd924862369050b3ad619371a0e8cd54859acf01e938"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: calendar.slot-free from The fictional shared calendar service.",
+            "raw": [
+              {
+                "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+                "issuer": "urn:fictional:find-a-time:calendar-service",
+                "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+                "claimType": "calendar.slot-free",
+                "value": true,
+                "method": "derived",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae"
+                  },
+                  "inherited": [
+                    {
+                      "target": "urn:scenario:find-a-time:second-free",
+                      "terms": {
+                        "policy": {
+                          "id": "urn:fictional:find-a-time:calendar.second-free-terms",
+                          "permissions": [
+                            {
+                              "type": "permission",
+                              "action": "use",
+                              "target": "urn:scenario:find-a-time:second-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "permission",
+                              "action": "distribute",
+                              "target": "urn:scenario:find-a-time:second-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "target": "urn:scenario:find-a-time:first-free",
+                      "terms": {
+                        "policy": {
+                          "id": "urn:fictional:find-a-time:calendar.first-free-terms",
+                          "permissions": [
+                            {
+                              "type": "permission",
+                              "action": "use",
+                              "target": "urn:scenario:find-a-time:first-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "permission",
+                              "action": "distribute",
+                              "target": "urn:scenario:find-a-time:first-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                "derivation": {
+                  "rule": "urn:fictional:find-a-time:both-free-rule",
+                  "ruleDigest": "sha-256:334c0421f0cc79f2f0384613748977ae3f3cdf1712c41226c95b50ef71d327b9",
+                  "params": {
+                    "inputs": [
+                      "calendar.first-free",
+                      "calendar.second-free"
+                    ]
+                  },
+                  "chain": [],
+                  "inputs": [
+                    {
+                      "id": "urn:scenario:find-a-time:second-free",
+                      "digest": "sha-256:0816ca92cd23f06f063fc0ea57e399ef27beb6bfd6978a477f094c15bf88a195",
+                      "issuer": "urn:fictional:find-a-time:calendar-service",
+                      "claimType": "calendar.second-free",
+                      "method": "recorded-by-authority",
+                      "asOf": "2026-11-13T09:00:00.000Z",
+                      "period": null,
+                      "currency": null,
+                      "validUntil": null
+                    },
+                    {
+                      "id": "urn:scenario:find-a-time:first-free",
+                      "digest": "sha-256:a386b4634ffacea2e119b8283b27387aec9f1370dffe226bb81c81610cf58f6a",
+                      "issuer": "urn:fictional:find-a-time:calendar-service",
+                      "claimType": "calendar.first-free",
+                      "method": "recorded-by-authority",
+                      "asOf": "2026-11-13T09:00:00.000Z",
+                      "period": null,
+                      "currency": null,
+                      "validUntil": null
+                    }
+                  ],
+                  "assurance": "attested",
+                  "deriver": "urn:fictional:find-a-time:calendar-service",
+                  "at": "2026-11-13T09:00:00.000Z",
+                  "outputDigest": "sha-256:b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+                  "basis": [
+                    "recorded-by-authority",
+                    "recorded-by-authority"
+                  ]
+                }
+              }
+            ],
+            "digest": "sha-256:f820e4d12037e8da62a5270174ac218a58c838df9074e77e80aa964628842253"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The calendar service’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-find-a-time-main:calendar-agent:0003",
+              "statements": [
+                {
+                  "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+                  "issuer": "urn:fictional:find-a-time:calendar-service",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The calendar service’s agent sends an invoke message to The second person’s agent."
+    },
+    {
+      "seq": 60,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-find-a-time-main:calendar-agent:0004",
+        "from": "The calendar service’s agent",
+        "to": "The second person’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:f0a921f582b…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The calendar service’s agent to The second person’s agent; invoke; signed (JWS EdDSA, pinned key bA3ZfCHbf8BQ…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-find-a-time-main:calendar-agent:0004.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-find-a-time-main:calendar-agent:0004",
+              "conversation": "urn:awp:engine-find-a-time-main:calendar-agent:0003",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:find-a-time:calendar-agent:actor",
+                "onBehalfOf": "urn:fictional:find-a-time:calendar-service"
+              },
+              "to": {
+                "actor": "urn:fictional:find-a-time:receiver-agent:actor",
+                "party": "urn:fictional:find-a-time:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "bA3ZfCHbf8BQDKzXqoH2OWpnMog1M8UOhX3NFMU0DBE",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:04f18469102455c3f75c4d3a05041f667010fe1edbff2cb18b0e7f3422a92cc1"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The fictional shared calendar service says The calendar service’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:b7eaeaaaa858cf00e7e1ef0aadf46594:1794560400000",
+                "party": "urn:fictional:find-a-time:calendar-service",
+                "actor": "urn:fictional:find-a-time:calendar-agent:actor",
+                "actorKid": "bA3ZfCHbf8BQDKzXqoH2OWpnMog1M8UOhX3NFMU0DBE",
+                "operations": [
+                  "urn:op:find-a-time",
+                  "urn:op:find-a-time:request",
+                  "urn:op:find-a-time:slots"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:03db4716a2ac39befc1eabf6fc86c2018c6ac09d8081839dbb895b33eaa5499c"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:find-a-time:slots\"; \"urn:fictional:find-a-time:slot:2026-11-17T10-00\"; \"urn:purpose:find-a-time\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:find-a-time:slots",
+                "version": "0.1"
+              },
+              "input": {
+                "slot": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+                "free": true
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:find-a-time"
+            },
+            "digest": "sha-256:9cd93267c4040de0ef06dd924862369050b3ad619371a0e8cd54859acf01e938",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:find-a-time:slots"
+              },
+              {
+                "path": "input.slot",
+                "text": "urn:fictional:find-a-time:slot:2026-11-17T10-00"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:find-a-time"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: calendar.slot-free from The fictional shared calendar service.",
+            "raw": [
+              {
+                "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+                "issuer": "urn:fictional:find-a-time:calendar-service",
+                "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+                "claimType": "calendar.slot-free",
+                "value": true,
+                "method": "derived",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae"
+                  },
+                  "inherited": [
+                    {
+                      "target": "urn:scenario:find-a-time:second-free",
+                      "terms": {
+                        "policy": {
+                          "id": "urn:fictional:find-a-time:calendar.second-free-terms",
+                          "permissions": [
+                            {
+                              "type": "permission",
+                              "action": "use",
+                              "target": "urn:scenario:find-a-time:second-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "permission",
+                              "action": "distribute",
+                              "target": "urn:scenario:find-a-time:second-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "target": "urn:scenario:find-a-time:first-free",
+                      "terms": {
+                        "policy": {
+                          "id": "urn:fictional:find-a-time:calendar.first-free-terms",
+                          "permissions": [
+                            {
+                              "type": "permission",
+                              "action": "use",
+                              "target": "urn:scenario:find-a-time:first-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "permission",
+                              "action": "distribute",
+                              "target": "urn:scenario:find-a-time:first-free",
+                              "constraints": [
+                                {
+                                  "leftOperand": "purpose",
+                                  "operator": "eq",
+                                  "rightOperand": "urn:purpose:find-a-time"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                "derivation": {
+                  "rule": "urn:fictional:find-a-time:both-free-rule",
+                  "ruleDigest": "sha-256:334c0421f0cc79f2f0384613748977ae3f3cdf1712c41226c95b50ef71d327b9",
+                  "params": {
+                    "inputs": [
+                      "calendar.first-free",
+                      "calendar.second-free"
+                    ]
+                  },
+                  "chain": [],
+                  "inputs": [
+                    {
+                      "id": "urn:scenario:find-a-time:second-free",
+                      "digest": "sha-256:0816ca92cd23f06f063fc0ea57e399ef27beb6bfd6978a477f094c15bf88a195",
+                      "issuer": "urn:fictional:find-a-time:calendar-service",
+                      "claimType": "calendar.second-free",
+                      "method": "recorded-by-authority",
+                      "asOf": "2026-11-13T09:00:00.000Z",
+                      "period": null,
+                      "currency": null,
+                      "validUntil": null
+                    },
+                    {
+                      "id": "urn:scenario:find-a-time:first-free",
+                      "digest": "sha-256:a386b4634ffacea2e119b8283b27387aec9f1370dffe226bb81c81610cf58f6a",
+                      "issuer": "urn:fictional:find-a-time:calendar-service",
+                      "claimType": "calendar.first-free",
+                      "method": "recorded-by-authority",
+                      "asOf": "2026-11-13T09:00:00.000Z",
+                      "period": null,
+                      "currency": null,
+                      "validUntil": null
+                    }
+                  ],
+                  "assurance": "attested",
+                  "deriver": "urn:fictional:find-a-time:calendar-service",
+                  "at": "2026-11-13T09:00:00.000Z",
+                  "outputDigest": "sha-256:b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+                  "basis": [
+                    "recorded-by-authority",
+                    "recorded-by-authority"
+                  ]
+                }
+              }
+            ],
+            "digest": "sha-256:f820e4d12037e8da62a5270174ac218a58c838df9074e77e80aa964628842253"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The calendar service’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-find-a-time-main:calendar-agent:0003",
+              "statements": [
+                {
+                  "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+                  "issuer": "urn:fictional:find-a-time:calendar-service",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The calendar service’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 61,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The calendar service’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 62,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The second person's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.second-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.second-free claims only."
+      },
+      "caption": "The receiver checks each original input issuer for the claim the rule read."
+    },
+    {
+      "seq": 63,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The second person's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.first-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.first-free claims only."
+      },
+      "caption": "The receiver checks each original input issuer for the claim the rule read."
+    },
+    {
+      "seq": 64,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:fictional:find-a-time:calendar-source",
+        "text": "The fictional shared calendar service is accepted for calendar.slot-free claims."
+      },
+      "resolution": {
+        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about urn:fictional:find-a-time:slot:2026-11-17T10-00?",
+        "path": [
+          {
+            "at": "The second person's own list",
+            "kind": "own-list",
+            "says": "The fictional shared calendar service is accepted for calendar.slot-free."
+          }
+        ],
+        "answer": "Accepted, for calendar.slot-free claims only."
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: The fictional shared calendar service is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 65,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:b7eaeaaaa858cf00e7e1ef0aadf46594:1794560400000",
+        "text": "A representation statement signed with The fictional shared calendar service's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The fictional shared calendar service signed a statement that The calendar service’s agent acts for them in this operation."
+    },
+    {
+      "seq": 66,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement: its terms allow this: ."
+    },
+    {
+      "seq": 67,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:find-a-time:calendar.slot-free",
+        "text": "Accept calendar.slot-free from urn:fictional:find-a-time:calendar-service by derived, at most 1 days old."
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement is fit for Share a signed free-slot derivation: derived, 0 days old."
+    },
+    {
+      "seq": 68,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 69,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:derived:fda7d686a7861f4f0166fd031ed58e8f8a5daa591aa7181c16e88ac7745c0449",
+        "label": "The fictional shared calendar service's calendar.slot-free statement",
+        "claimType": "calendar.slot-free",
+        "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+        "value": null,
+        "source": "urn:fictional:find-a-time:calendar-service",
+        "method": "derived",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:derived-terms:87f43e5c2c48d4cc554cd410c2a7652785dd40808e61c0d4a5dcf6d5f705bbae",
+          "summary": ""
+        },
+        "provenance": "signed by The fictional shared calendar service"
+      },
+      "caption": "The fictional shared calendar service's calendar.slot-free statement is stored with its source, how it was produced, its date and its terms."
+    }
+  ]
+}

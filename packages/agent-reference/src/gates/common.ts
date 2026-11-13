@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * What both gates share: the verdict record every check returns, the context a runtime hands
@@ -6,6 +7,7 @@
  */
 import type { OdrlRule } from "@jeswr/solid-odrl";
 import type { Iri } from "../core/types.js";
+import { type ContentVocabulary, identifiersIn } from "../profile/content.js";
 import type { Configuration, LayerId } from "../suites/registry.js";
 import type { Namer } from "../trace/packet.js";
 import type { TraceSink } from "../trace/recorder.js";
@@ -30,6 +32,9 @@ export interface PrincipalLimits {
   readonly id: Iri;
   /** Longest retention the principal accepts without being asked. */
   readonly maxRetentionDays?: number;
+  readonly commitments?: Readonly<
+    Record<Iri, { readonly maxAmount: number; readonly currency: string }>
+  >;
 }
 
 /** The closed list of reasons a `not-applicable` verdict may carry (core section 9). */
@@ -63,8 +68,15 @@ export interface RelianceRule {
   readonly claimType: string;
   readonly methods: readonly string[];
   readonly maxAgeDays: number;
+  readonly precedence?: {
+    readonly sources: readonly string[];
+    readonly freshness: "source-first" | "newer-first";
+  };
   /** Plain words for the rule, shown with the verdict. */
   readonly text: string;
+  readonly corroboration?: { readonly sources: number; readonly independent: boolean };
+  /** An independently admitted, same-subject/period completeness claim required in this batch. */
+  readonly completeness?: string;
 }
 
 export interface RelianceProfile {
@@ -74,6 +86,7 @@ export interface RelianceProfile {
 
 /** Terms an issuer attaches to a statement: ODRL (pilot subset) plus a deletion duty. */
 export interface ItemTerms {
+  readonly inherited?: readonly { readonly target: string; readonly terms: ItemTerms | null }[];
   readonly policy: import("@jeswr/solid-odrl").OdrlPolicy;
   /**
    * Superseded by an ODRL obligation in `policy` (`delete` with an `elapsedTime` constraint);
@@ -86,21 +99,113 @@ export interface ItemTerms {
 
 /** A fact the inbound gate admitted, with its labels (shared with the outbound gate). */
 export interface AdmittedFact {
+  readonly supersededBy?: string;
+  readonly disputedWith?: readonly string[];
   readonly id: string;
   readonly label: string;
   readonly claimType: string;
   readonly source: string;
+  readonly digest?: string;
+  readonly subject?: string;
   readonly method?: string;
   readonly asOf?: string;
   readonly terms?: ItemTerms;
+  readonly identifiers?: readonly string[];
+  readonly admittedPurpose?: string;
+  readonly statement?: import("../core/types.js").JsonObject;
 }
 
-/** What the two gates of one agent share: the labels of admitted facts. */
+/** A request for replacement evidence, built only from the receiver's profile. */
+export function claimRequest(
+  ctx: GateContext,
+  claimType: string,
+  sources = ctx.claimSources?.[claimType],
+): string {
+  const rule = ctx.reliance?.rules.find((r) =>
+    r.claimType.endsWith(".*")
+      ? claimType.startsWith(r.claimType.slice(0, -1))
+      : r.claimType === claimType,
+  );
+  return `Required claim: ${claimType}. Accepted sources: ${(sources ?? []).join(", ") || "a source accepted by the trust profile"}. Accepted methods: ${rule?.methods.join(", ") || "a method accepted by the reliance profile"}.`;
+}
+
+export const CURABLE_CLAIM_FAILURES = new Set([
+  "source-unknown",
+  "source-not-authoritative",
+  "method-not-accepted",
+  "stale-data",
+  "confidence-too-low",
+  "completeness-not-established",
+  "superseded-by-better-source",
+  "representation-out-of-scope",
+]);
+
+/** Every item actually shown to the core, with labels retained across restarts. */
+export interface ContextItem extends AdmittedFact {
+  readonly kind: "statement" | "memory" | "message" | "reading" | "content";
+  readonly accepted?: boolean;
+  readonly digest: string;
+}
+
+/** Gate-held evidence for a person to inspect; never a fact or a core context item. */
+export interface RelianceHold {
+  readonly task: string;
+  readonly statement: import("../core/types.js").JsonObject;
+  readonly digest: string;
+  readonly reason: string;
+}
+
 export class GateMemory {
   readonly facts = new Map<string, AdmittedFact>();
+  constructor(
+    readonly contexts: Record<string, ContextItem[]> = {},
+    readonly identifiers: Record<string, string[]> = {},
+    readonly refusals: Record<string, string> = {},
+    readonly relianceHolds: Record<string, RelianceHold> = {},
+    readonly relianceBindings: Record<string, string> = {},
+    readonly precedenceHolds: Record<string, AdmittedFact> = {},
+  ) {}
+  rememberIdentifiers(scope: string, value: unknown): void {
+    this.identifiers[scope] = [
+      ...new Set([...(this.identifiers[scope] ?? []), ...identifiersIn(value)]),
+    ];
+  }
+  knownIdentifiers(task: string, conversation: string, profile: unknown): Set<string> {
+    return new Set([
+      ...(this.identifiers["*"] ?? []),
+      ...(this.identifiers[task] ?? []),
+      ...(this.identifiers[conversation] ?? []),
+      ...identifiersIn(profile),
+      ...this.context(task).flatMap((item) => identifiersIn(item)),
+    ]);
+  }
+  context(task: string): readonly ContextItem[] {
+    return [...(this.contexts["*"] ?? []), ...(this.contexts[task] ?? [])];
+  }
+  enter(task: string, item: ContextItem): void {
+    this.contexts[task] ??= [];
+    const items = this.contexts[task];
+    const index = items.findIndex((prior) => prior.id === item.id && prior.digest === item.digest);
+    if (index < 0) items.push(item);
+    else if (item.accepted === true) items[index] = item;
+  }
 }
 
 export interface GateContext {
+  readonly attestedDerivers?: readonly {
+    readonly deriver: string;
+    readonly rule: string;
+    readonly purposes: readonly string[];
+  }[];
+  readonly codeMappings?: {
+    readonly policy: import("../mechanisms/code-mapping.js").MappingPolicy;
+    readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;
+  };
+  readonly email?: {
+    readonly pins: readonly string[];
+    readonly from: string;
+    readonly structuredReply: string;
+  };
   readonly sink?: TraceSink;
   readonly configuration?: Configuration;
   /**
@@ -118,6 +223,75 @@ export interface GateContext {
   /** Plain name for a statement ("Harbour Bank's balance at 31 October 2026"). */
   readonly claimLabel?: (statement: Readonly<Record<string, unknown>>) => string;
   readonly reliance?: RelianceProfile;
+  readonly claimSources?: Readonly<Record<string, readonly Iri[]>>;
+  /** Shared across conversations only when the hosting application declares one task. */
+  readonly taskId?: Iri;
+  readonly vocabulary?: ContentVocabulary;
+  readonly identifiers?: readonly string[];
+  /** The claims necessary for each declared purpose. Unknown purposes never pass. */
+  readonly purposes?: Readonly<Record<Iri, readonly string[]>>;
+  readonly freeTextApproval?: boolean;
+  readonly sourceAliases?: Readonly<Record<string, string>>;
+  readonly rules?: readonly import("../derive/rules.js").DerivationRule[];
+  readonly personDecisions?: readonly {
+    readonly action: string;
+    readonly decider: "principal" | { readonly role: string };
+  }[];
+  readonly requester?: string;
+  readonly singleUse?: {
+    readonly actions: readonly {
+      action: string;
+      register: string;
+      item: string;
+      operation: "redeem" | "release";
+      maxAgeSeconds: number;
+      parameters?: import("../core/types.js").JsonObject;
+    }[];
+    readonly registers: Readonly<
+      Record<string, import("../mechanisms/single-use.js").SingleUseRegister>
+    >;
+    readonly evidence: readonly string[];
+    readonly acceptances: readonly string[];
+  };
+  readonly agreementDeadlineSeconds?: number;
+  readonly referenceAction?: string;
+  readonly authorityChains?: {
+    readonly policy: import("../mechanisms/authority-chain.js").ChainPolicy;
+    readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;
+  };
+  readonly organizations?: {
+    readonly policy: import("../mechanisms/organizations.js").OrganizationPolicy;
+    readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;
+  };
+  readonly notificationRecipients?: Readonly<
+    Record<string, { readonly actor: string; readonly party: string }>
+  >;
+  readonly readings?: readonly {
+    readonly claimType: string;
+    readonly type: "code" | "number" | "date" | "term";
+    readonly values?: readonly (string | number | boolean)[];
+  }[];
+  readonly personMayRelyOn?: readonly string[];
+  readonly termsAcceptance?: { readonly purposes: readonly string[] };
+  /** Action names declare outbound requirements; operation IRIs declare inbound requirements. */
+  readonly actionClaims?: readonly {
+    readonly action: string;
+    readonly claims: readonly string[];
+  }[];
+  readonly trust?: { readonly levels: readonly ["own-list"]; readonly onUnknown: "ask-principal" };
+  readonly pins?: readonly {
+    readonly kid: string;
+    readonly party: string;
+    readonly purpose: string;
+    readonly expiresAt: string;
+  }[];
+  readonly assessments?: readonly {
+    readonly id: string;
+    readonly rule: string;
+    readonly purpose: string;
+    readonly keep: readonly "output"[];
+    readonly discardInputsAfter: "evaluation";
+  }[];
   /** What the agent tells its principal when a claim is admitted, if anything. */
   readonly tellPrincipal?: (statement: Readonly<Record<string, unknown>>) => string | undefined;
 }

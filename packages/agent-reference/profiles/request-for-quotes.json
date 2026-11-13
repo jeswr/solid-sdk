@@ -1,0 +1,151 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "request-for-quotes",
+  "parties": {
+    "owner": "The buyer company",
+    "owner-agent": "The buyer company’s agent",
+    "supplier-1": "Fictional supplier 1",
+    "supplier-1-agent": "Fictional supplier 1’s agent",
+    "supplier-2": "Fictional supplier 2",
+    "supplier-2-agent": "Fictional supplier 2’s agent",
+    "supplier-3": "Fictional supplier 3",
+    "supplier-3-agent": "Fictional supplier 3’s agent",
+    "supplier-4": "Fictional supplier 4",
+    "supplier-4-agent": "Fictional supplier 4’s agent",
+    "supplier-5": "Fictional supplier 5",
+    "supplier-5-agent": "Fictional supplier 5’s agent"
+  },
+  "claims": [
+    {
+      "kind": "quote.supplier-1",
+      "sources": [
+        "urn:fictional:request-for-quotes:supplier-1"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 7
+    },
+    {
+      "kind": "quote.supplier-2",
+      "sources": [
+        "urn:fictional:request-for-quotes:supplier-2"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 7
+    },
+    {
+      "kind": "quote.supplier-3",
+      "sources": [
+        "urn:fictional:request-for-quotes:supplier-3"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 7
+    },
+    {
+      "kind": "quote.supplier-4",
+      "sources": [
+        "urn:fictional:request-for-quotes:supplier-4"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 7
+    },
+    {
+      "kind": "quote.supplier-5",
+      "sources": [
+        "urn:fictional:request-for-quotes:supplier-5"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 7
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:request-for-quotes",
+      "claims": [
+        "quote.supplier-1",
+        "quote.supplier-2",
+        "quote.supplier-3",
+        "quote.supplier-4",
+        "quote.supplier-5"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.request": {
+      "type": "code",
+      "values": [
+        "quote"
+      ]
+    },
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "output.items.*": {
+      "type": "identifier"
+    },
+    "terms.amount": {
+      "type": "number"
+    },
+    "terms.currency": {
+      "type": "code",
+      "values": [
+        "GBP"
+      ]
+    },
+    "terms.quantity": {
+      "type": "number"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:request-for-quotes",
+      "version": "0.1",
+      "label": "Asking suppliers for quotes",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:request-for-quotes"
+      ],
+      "requiresRepresentation": true,
+      "agreementDelivery": "offeror"
+    },
+    {
+      "id": "urn:op:request-for-quotes:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:request-for-quotes"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:request-for-quotes:share",
+      "version": "0.1",
+      "label": "Attempt to share a quote",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:request-for-quotes"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

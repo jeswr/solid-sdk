@@ -1,0 +1,147 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "home-purchase",
+  "parties": {
+    "owner": "The buyer",
+    "receiver": "The seller",
+    "bank": "The conveyancer’s deposit bank",
+    "email": "The unverified account sender",
+    "land-register": "The fictional land registry",
+    "other-person": "The other fictional owner",
+    "owner-agent": "The buyer’s agent",
+    "receiver-agent": "The seller’s agent",
+    "coordinator": "The conveyancer and conditional escrow register",
+    "coordinator-agent": "The conveyancer and conditional escrow register’s agent"
+  },
+  "claims": [
+    {
+      "kind": "deposit.account",
+      "sources": [
+        "urn:fictional:home-purchase:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "land.ownership",
+      "sources": [
+        "urn:fictional:home-purchase:land-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "searches.complete",
+      "sources": [
+        "urn:fictional:home-purchase:land-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    },
+    {
+      "kind": "funds.held",
+      "sources": [
+        "urn:fictional:home-purchase:coordinator"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:home-purchase",
+      "claims": [
+        "deposit.account",
+        "land.ownership"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "deposit.account",
+        "land.ownership"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:home-purchase",
+      "version": "0.1",
+      "label": "Buying a home",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:home-purchase"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:home-purchase:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:home-purchase"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:agreement",
+      "version": "0.1",
+      "label": "Accepting the same agreement terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:home-purchase"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "transfer",
+      "claims": [
+        "deposit.account"
+      ]
+    },
+    {
+      "action": "read",
+      "claims": [
+        "land.ownership"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    }
+  ]
+}

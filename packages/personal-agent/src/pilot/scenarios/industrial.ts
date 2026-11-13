@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * UC-05 executable workflow: Alpine (user: planner + data-authority agent), Orbis (data
  * holder: telemetry provider) and NordWerk (recipient: contracting + diagnostic agents).
@@ -11,10 +12,13 @@ import {
   AlpinePlannerHandler,
   ASSET,
   DATA_OFFER_OP,
+  DATASET_READ_OP,
+  DiagnosticReaderHandler,
   diagnose,
   EQUIPMENT_HEALTH,
   INTERNAL_TPA_OP,
   NordWerkContractHandler,
+  NordWerkDatasetHandler,
   NordWerkDiagnosticHandler,
   OFFER_ID,
   type OfferTerms,
@@ -84,6 +88,14 @@ export async function runIndustrial(clock: { now: () => Date; advance: (ms: numb
   cast.introduce("nordwerk-contracting", "orbis-telemetry");
   cast.introduce("nordwerk-diagnostic", "orbis-telemetry");
   cast.introduce("nordwerk-diagnostic", "alpine-planner");
+  cast.introduce("nordwerk-diagnostic", "nordwerk-contracting");
+  cast.pinIssuer(
+    "nordwerk-contracting",
+    ALPINE_ISSUER,
+    alpineIssuer,
+    "Alpine authorisation issuer",
+  );
+  cast.pinIssuer("alpine-authority", ALPINE_ISSUER, alpineIssuer, "own issuing key");
   cast.pinIssuer("orbis-telemetry", PROGRAMME, programmeKey, "synthetic programme test issuer");
   cast.pinIssuer(
     "orbis-telemetry",
@@ -152,8 +164,14 @@ export async function runIndustrial(clock: { now: () => Date; advance: (ms: numb
     new AlpineAuthorityHandler({ user: ALPINE, issuer: ALPINE_ISSUER, issuerKey: alpineIssuer }),
   ]);
   const orbis = await cast.runtime("orbis-telemetry", [orbisOffer, orbisTransfer]);
-  const nw = await cast.runtime("nordwerk-contracting", [nwOffer, nwTransfer]);
+  const nw = await cast.runtime("nordwerk-contracting", [
+    nwOffer,
+    nwTransfer,
+    new NordWerkDatasetHandler({ organisation: NORDWERK, store: nwStore }),
+  ]);
+  cast.pinIssuer("nordwerk-diagnostic", ALPINE_ISSUER, alpineIssuer, "Alpine authorisation issuer");
   const diag = await cast.runtime("nordwerk-diagnostic", [
+    new DiagnosticReaderHandler(),
     new NordWerkDiagnosticHandler(),
     new NordWerkContractHandler(DATA_OFFER_OP, {
       holder: ORBIS,
@@ -217,6 +235,8 @@ export async function runIndustrial(clock: { now: () => Date; advance: (ms: numb
     issued: Boolean(plannerTpa.authorisation),
   };
   const tpa = plannerTpa.authorisation as string;
+  await nw.runtime.readProtectedTerm(DATA_OFFER_OP, "output.authorisation", tpa);
+  await diag.runtime.readProtectedTerm(DATA_OFFER_OP, "output.authorisation", tpa);
   const tpaId = JSON.parse(Buffer.from(tpa.split(".")[1] ?? "", "base64url").toString("utf8"))
     .id as string;
   // (hand-over of the authorisation from Alpine to NordWerk happens out of band in this pilot)
@@ -401,6 +421,20 @@ export async function runIndustrial(clock: { now: () => Date; advance: (ms: numb
     redistribution: redistribute.decision,
   };
 
+  // Give the diagnostic core the actual gate-checked dataset, rather than assigning its ID off-ledger.
+  diag.runtime.instruct("Inspect the principal-selected dataset.", { dataset: datasetId });
+  const diagnosticRead = await diag.runtime.startInvocation({
+    peer: { actor: NW_CONTRACT.actor, party: NORDWERK },
+    operation: DATASET_READ_OP,
+    input: { dataset: datasetId, purpose: PURPOSE.maintenance },
+    basis: { kind: "represented" },
+    purpose: PURPOSE.maintenance,
+    models: [EQUIPMENT_HEALTH],
+    discover: false,
+    configuration: CONFIG_ED25519,
+  });
+  bus.send(diag.runtime, diagnosticRead);
+  await bus.run();
   // 9. Diagnosis (a modelled assertion), recommendation, acceptance, work order, performance.
   const samples = ((diagRead.items?.[0]?.data as { samples?: TelemetrySample[] })?.samples ??
     []) as TelemetrySample[];

@@ -1,0 +1,81 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "probing-counterparty",
+  "claims": [
+    {
+      "kind": "contact",
+      "sources": [
+        "urn:fictional:rowan"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:service-query",
+      "claims": [
+        "contact"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "terms.purpose": {
+      "type": "identifier"
+    },
+    "terms.evidenceRequest.*.claimType": {
+      "type": "code",
+      "values": [
+        "contact"
+      ]
+    },
+    "output.items.*": {
+      "type": "identifier"
+    },
+    "terms.topic": {
+      "type": "code",
+      "values": [
+        "contact-request"
+      ]
+    },
+    "terms.turn": {
+      "type": "number"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "private-history"
+      ]
+    },
+    "input.sequence": {
+      "type": "number"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:operation:service-query",
+      "version": "0.1",
+      "label": "A bounded request for contact details",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:service-query"
+      ],
+      "requiresRepresentation": true,
+      "agreementDelivery": "acceptor"
+    }
+  ],
+  "parties": {
+    "rowan": "Rowan, a fictional customer",
+    "cedar": "The fictional service",
+    "person-agent": "Rowan’s agent",
+    "service-agent": "The service’s agent"
+  }
+}

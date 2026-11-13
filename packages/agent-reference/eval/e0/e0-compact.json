@@ -1,0 +1,4245 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-e0/1",
+  "evaluationSourceDigest": "sha-256:5dd7fa4fe4f4d5c86f36be01ca3daea42be5a222c2f9b2f8cbe4784f95e5e287",
+  "seed": 20261113,
+  "randomPerPath": 200,
+  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "manifestStatuses": [
+    "runs",
+    "agrees",
+    "disagrees"
+  ],
+  "manifestDigest": "sha-256:0a1373ac2670cb30810d304032eb3a126d204eb0a199209d040d4b890a591370",
+  "command": "pnpm --filter @jeswr/agent-reference eval:e0 --seed=20261113 --n=200",
+  "paths": [
+    {
+      "scenario": "age-check",
+      "useCase": "age-check",
+      "path": "branch-1",
+      "sector": "commerce",
+      "trace": "age-check--branch-1--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 12,
+        "disagreements": 55,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "agent-handoff",
+      "useCase": "agent-handoff",
+      "path": "main",
+      "sector": "enterprise",
+      "trace": "agent-handoff--baseline.json",
+      "a": {
+        "tried": 210,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 23,
+        "specified": 21,
+        "exact": 16,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 1
+      }
+    },
+    {
+      "scenario": "agent-handoff",
+      "useCase": "agent-handoff",
+      "path": "branch-1",
+      "sector": "enterprise",
+      "trace": "agent-handoff--branch-1--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 11,
+        "disagreements": 43,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 13,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "agent-handoff",
+      "useCase": "agent-handoff",
+      "path": "branch-2",
+      "sector": "enterprise",
+      "trace": "agent-handoff--branch-2--baseline.json",
+      "a": {
+        "tried": 210,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 23,
+        "specified": 21,
+        "exact": 12,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 2,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "benefit-claim",
+      "useCase": "benefit-claim",
+      "path": "main",
+      "sector": "public",
+      "trace": "benefit-claim--baseline.json",
+      "a": {
+        "tried": 222,
+        "violations": 0,
+        "disagreements": 51,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 74,
+        "specified": 68,
+        "exact": 50,
+        "falseAdmits": 3,
+        "wrongReasons": 18,
+        "wrongChecks": 0,
+        "unspecified": 8
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "benefit-claim",
+      "useCase": "benefit-claim",
+      "path": "branch-1",
+      "sector": "public",
+      "trace": "benefit-claim--branch-1--baseline.json",
+      "a": {
+        "tried": 221,
+        "violations": 0,
+        "disagreements": 42,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 39,
+        "specified": 36,
+        "exact": 12,
+        "falseAdmits": 0,
+        "wrongReasons": 24,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "cancel-subscription",
+      "useCase": "cancel-subscription",
+      "path": "main",
+      "sector": "commerce",
+      "trace": "cancel-subscription--baseline.json",
+      "a": {
+        "tried": 225,
+        "violations": 8,
+        "disagreements": 28,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "cancel-subscription",
+      "useCase": "cancel-subscription",
+      "path": "branch-1",
+      "sector": "commerce",
+      "trace": "cancel-subscription--branch-1--baseline.json",
+      "a": {
+        "tried": 235,
+        "violations": 11,
+        "disagreements": 38,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 43,
+        "specified": 41,
+        "exact": 36,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 5
+      },
+      "c": {
+        "tried": 4,
+        "correct": 3,
+        "cannotTell": 1,
+        "receiverRefused": 1
+      }
+    },
+    {
+      "scenario": "care-abroad",
+      "useCase": "care-abroad",
+      "path": "main",
+      "sector": "health",
+      "trace": "care-abroad--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 200,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 4,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "care-abroad",
+      "useCase": "care-abroad",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "care-abroad--branch-1--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 200,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 4,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "carer-acts-for-parent",
+      "useCase": "carer-acts-for-parent",
+      "path": "main",
+      "sector": "health",
+      "trace": "carer-acts-for-parent--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 7,
+        "specified": 7,
+        "exact": 7,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "carer-acts-for-parent",
+      "useCase": "carer-acts-for-parent",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "carer-acts-for-parent--branch-1--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 7,
+        "specified": 7,
+        "exact": 7,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "carer-acts-for-parent",
+      "useCase": "carer-acts-for-parent",
+      "path": "branch-2",
+      "sector": "health",
+      "trace": "carer-acts-for-parent--branch-2--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 7,
+        "specified": 7,
+        "exact": 6,
+        "falseAdmits": 0,
+        "wrongReasons": 1,
+        "wrongChecks": 0,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "change-of-address",
+      "useCase": "change-of-address",
+      "path": "main",
+      "sector": "public",
+      "trace": "change-of-address--baseline.json",
+      "a": {
+        "tried": 1330,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 410,
+        "specified": 389,
+        "exact": 365,
+        "falseAdmits": 0,
+        "wrongReasons": 24,
+        "wrongChecks": 0,
+        "unspecified": 41
+      },
+      "c": {
+        "tried": 22,
+        "correct": 22,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "change-of-address",
+      "useCase": "change-of-address",
+      "path": "branch-1",
+      "sector": "public",
+      "trace": "change-of-address--branch-1--baseline.json",
+      "a": {
+        "tried": 247,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 5,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "consent-for-a-child",
+      "useCase": "consent-for-a-child",
+      "path": "main",
+      "sector": "education",
+      "trace": "consent-for-a-child--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 7,
+        "specified": 7,
+        "exact": 7,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "consent-for-a-child",
+      "useCase": "consent-for-a-child",
+      "path": "branch-1",
+      "sector": "education",
+      "trace": "consent-for-a-child--branch-1--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 7,
+        "specified": 7,
+        "exact": 7,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "content-licence",
+      "useCase": "content-licence",
+      "path": "main",
+      "sector": "media",
+      "trace": "content-licence--baseline.json",
+      "a": {
+        "tried": 308,
+        "violations": 20,
+        "disagreements": 75,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 72,
+        "specified": 72,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 32,
+        "wrongChecks": 8,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 12,
+        "correct": 6,
+        "cannotTell": 6,
+        "receiverRefused": 6
+      }
+    },
+    {
+      "scenario": "content-licence",
+      "useCase": "content-licence",
+      "path": "branch-1",
+      "sector": "media",
+      "trace": "content-licence--branch-1--baseline.json",
+      "a": {
+        "tried": 226,
+        "violations": 6,
+        "disagreements": 50,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "contract-wording",
+      "useCase": "contract-wording",
+      "path": "main",
+      "sector": "rights",
+      "trace": "contract-wording--baseline.json",
+      "a": {
+        "tried": 227,
+        "violations": 7,
+        "disagreements": 20,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "contract-wording",
+      "useCase": "contract-wording",
+      "path": "branch-1",
+      "sector": "rights",
+      "trace": "contract-wording--branch-1--baseline.json",
+      "a": {
+        "tried": 227,
+        "violations": 8,
+        "disagreements": 30,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "credit-file-dispute",
+      "useCase": "credit-file-dispute",
+      "path": "main",
+      "sector": "finance",
+      "trace": "credit-file-dispute--baseline.json",
+      "a": {
+        "tried": 236,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 58,
+        "specified": 55,
+        "exact": 45,
+        "falseAdmits": 0,
+        "wrongReasons": 10,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "credit-file-dispute",
+      "useCase": "credit-file-dispute",
+      "path": "branch-1",
+      "sector": "finance",
+      "trace": "credit-file-dispute--branch-1--baseline.json",
+      "a": {
+        "tried": 212,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 35,
+        "specified": 32,
+        "exact": 22,
+        "falseAdmits": 0,
+        "wrongReasons": 10,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 2,
+        "correct": 1,
+        "cannotTell": 1,
+        "receiverRefused": 1
+      }
+    },
+    {
+      "scenario": "cross-department-request",
+      "useCase": "cross-department-request",
+      "path": "main",
+      "sector": "enterprise",
+      "trace": "cross-department-request--baseline.json",
+      "a": {
+        "tried": 216,
+        "violations": 15,
+        "disagreements": 51,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 39,
+        "specified": 37,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "cross-department-request",
+      "useCase": "cross-department-request",
+      "path": "branch-1",
+      "sector": "enterprise",
+      "trace": "cross-department-request--branch-1--baseline.json",
+      "a": {
+        "tried": 216,
+        "violations": 19,
+        "disagreements": 55,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "degree-recognition",
+      "useCase": "degree-recognition",
+      "path": "branch-1",
+      "sector": "education",
+      "trace": "degree-recognition--branch-1--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 2,
+        "falseAdmits": 0,
+        "wrongReasons": 7,
+        "wrongChecks": 2,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "discharge-letter",
+      "useCase": "discharge-letter",
+      "path": "main",
+      "sector": "health",
+      "trace": "discharge-letter--baseline.json",
+      "a": {
+        "tried": 233,
+        "violations": 0,
+        "disagreements": 30,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 45,
+        "specified": 42,
+        "exact": 33,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "discharge-letter",
+      "useCase": "discharge-letter",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "discharge-letter--branch-1--baseline.json",
+      "a": {
+        "tried": 221,
+        "violations": 0,
+        "disagreements": 59,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 35,
+        "specified": 32,
+        "exact": 23,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 1,
+        "correct": 1,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "disruption-rebooking",
+      "useCase": "disruption-rebooking",
+      "path": "main",
+      "sector": "travel",
+      "trace": "disruption-rebooking--baseline.json",
+      "a": {
+        "tried": 220,
+        "violations": 14,
+        "disagreements": 48,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 28,
+        "specified": 27,
+        "exact": 23,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "disruption-rebooking",
+      "useCase": "disruption-rebooking",
+      "path": "branch-1",
+      "sector": "travel",
+      "trace": "disruption-rebooking--branch-1--baseline.json",
+      "a": {
+        "tried": 220,
+        "violations": 13,
+        "disagreements": 39,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 2,
+        "correct": 1,
+        "cannotTell": 1,
+        "receiverRefused": 1
+      }
+    },
+    {
+      "scenario": "emergency-access",
+      "useCase": "emergency-access",
+      "path": "main",
+      "sector": "health",
+      "trace": "emergency-access--baseline.json",
+      "a": {
+        "tried": 229,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 15
+      },
+      "b": {
+        "tried": 70,
+        "specified": 61,
+        "exact": 47,
+        "falseAdmits": 0,
+        "wrongReasons": 14,
+        "wrongChecks": 0,
+        "unspecified": 10
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "emergency-access",
+      "useCase": "emergency-access",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "emergency-access--branch-1--baseline.json",
+      "a": {
+        "tried": 229,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 15
+      },
+      "b": {
+        "tried": 70,
+        "specified": 61,
+        "exact": 47,
+        "falseAdmits": 0,
+        "wrongReasons": 14,
+        "wrongChecks": 0,
+        "unspecified": 10
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "emergency-access",
+      "useCase": "emergency-access",
+      "path": "branch-2",
+      "sector": "health",
+      "trace": "emergency-access--branch-2--baseline.json",
+      "a": {
+        "tried": 227,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 14
+      },
+      "b": {
+        "tried": 35,
+        "specified": 32,
+        "exact": 23,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 1,
+        "correct": 1,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "employment-reference",
+      "useCase": "employment-reference",
+      "path": "main",
+      "sector": "work",
+      "trace": "employment-reference--baseline.json",
+      "a": {
+        "tried": 230,
+        "violations": 5,
+        "disagreements": 19,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "employment-reference",
+      "useCase": "employment-reference",
+      "path": "branch-1",
+      "sector": "work",
+      "trace": "employment-reference--branch-1--baseline.json",
+      "a": {
+        "tried": 230,
+        "violations": 1,
+        "disagreements": 12,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "energy-switch",
+      "useCase": "energy-switch",
+      "path": "main",
+      "sector": "utilities",
+      "trace": "energy-switch--baseline.json",
+      "a": {
+        "tried": 308,
+        "violations": 14,
+        "disagreements": 75,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 72,
+        "specified": 72,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 32,
+        "wrongChecks": 8,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 12,
+        "correct": 6,
+        "cannotTell": 6,
+        "receiverRefused": 6
+      }
+    },
+    {
+      "scenario": "energy-switch",
+      "useCase": "energy-switch",
+      "path": "branch-1",
+      "sector": "utilities",
+      "trace": "energy-switch--branch-1--baseline.json",
+      "a": {
+        "tried": 226,
+        "violations": 5,
+        "disagreements": 42,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "erasure-request",
+      "useCase": "erasure-request",
+      "path": "main",
+      "sector": "rights",
+      "trace": "erasure-request--baseline.json",
+      "a": {
+        "tried": 364,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 154,
+        "specified": 150,
+        "exact": 143,
+        "falseAdmits": 0,
+        "wrongReasons": 7,
+        "wrongChecks": 0,
+        "unspecified": 16
+      },
+      "c": {
+        "tried": 8,
+        "correct": 4,
+        "cannotTell": 4,
+        "receiverRefused": 4
+      }
+    },
+    {
+      "scenario": "erasure-request",
+      "useCase": "erasure-request",
+      "path": "branch-1",
+      "sector": "rights",
+      "trace": "erasure-request--branch-1--baseline.json",
+      "a": {
+        "tried": 332,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 126,
+        "specified": 122,
+        "exact": 115,
+        "falseAdmits": 0,
+        "wrongReasons": 7,
+        "wrongChecks": 0,
+        "unspecified": 14
+      },
+      "c": {
+        "tried": 8,
+        "correct": 4,
+        "cannotTell": 4,
+        "receiverRefused": 4
+      }
+    },
+    {
+      "scenario": "expenses",
+      "useCase": "expenses",
+      "path": "main",
+      "sector": "work",
+      "trace": "expenses--baseline.json",
+      "a": {
+        "tried": 277,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 61,
+        "specified": 55,
+        "exact": 42,
+        "falseAdmits": 0,
+        "wrongReasons": 13,
+        "wrongChecks": 0,
+        "unspecified": 8
+      },
+      "c": {
+        "tried": 4,
+        "correct": 4,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "expenses",
+      "useCase": "expenses",
+      "path": "branch-1",
+      "sector": "work",
+      "trace": "expenses--branch-1--baseline.json",
+      "a": {
+        "tried": 228,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 47,
+        "specified": 41,
+        "exact": 28,
+        "falseAdmits": 0,
+        "wrongReasons": 13,
+        "wrongChecks": 0,
+        "unspecified": 7
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "false-but-signed",
+      "useCase": "false-but-signed",
+      "path": "main",
+      "sector": "adversarial",
+      "trace": "false-but-signed--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 18,
+        "specified": 16,
+        "exact": 0,
+        "falseAdmits": 0,
+        "wrongReasons": 13,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "false-but-signed",
+      "useCase": "false-but-signed",
+      "path": "branch-1",
+      "sector": "adversarial",
+      "trace": "false-but-signed--branch-1--baseline.json",
+      "a": {
+        "tried": 216,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 30,
+        "specified": 28,
+        "exact": 23,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "fee-dispute",
+      "useCase": "fee-dispute",
+      "path": "main",
+      "sector": "rights",
+      "trace": "fee-dispute--baseline.json",
+      "a": {
+        "tried": 250,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 38,
+        "specified": 37,
+        "exact": 33,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "fee-dispute",
+      "useCase": "fee-dispute",
+      "path": "branch-1",
+      "sector": "rights",
+      "trace": "fee-dispute--branch-1--baseline.json",
+      "a": {
+        "tried": 250,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 38,
+        "specified": 37,
+        "exact": 33,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "find-a-time",
+      "useCase": "find-a-time",
+      "path": "main",
+      "sector": "personal",
+      "trace": "find-a-time--baseline.json",
+      "a": {
+        "tried": 226,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 69,
+        "specified": 64,
+        "exact": 44,
+        "falseAdmits": 0,
+        "wrongReasons": 20,
+        "wrongChecks": 3,
+        "unspecified": 7
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "find-a-time",
+      "useCase": "find-a-time",
+      "path": "branch-1",
+      "sector": "personal",
+      "trace": "find-a-time--branch-1--baseline.json",
+      "a": {
+        "tried": 222,
+        "violations": 14,
+        "disagreements": 49,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "fit-note-to-employer",
+      "useCase": "fit-note-to-employer",
+      "path": "main",
+      "sector": "health",
+      "trace": "fit-note-to-employer--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 8,
+        "disagreements": 46,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 39,
+        "specified": 37,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "fit-note-to-employer",
+      "useCase": "fit-note-to-employer",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "fit-note-to-employer--branch-1--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 12,
+        "disagreements": 50,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "flat-share",
+      "useCase": "flat-share",
+      "path": "main",
+      "sector": "housing",
+      "trace": "flat-share--baseline.json",
+      "a": {
+        "tried": 211,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 18,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 3
+      }
+    },
+    {
+      "scenario": "flat-share",
+      "useCase": "flat-share",
+      "path": "branch-1",
+      "sector": "housing",
+      "trace": "flat-share--branch-1--baseline.json",
+      "a": {
+        "tried": 205,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 9,
+        "specified": 9,
+        "exact": 5,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 2,
+        "correct": 1,
+        "cannotTell": 1,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "hardship-request",
+      "useCase": "hardship-request",
+      "path": "main",
+      "sector": "finance",
+      "trace": "hardship-request--baseline.json",
+      "a": {
+        "tried": 227,
+        "violations": 0,
+        "disagreements": 28,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "hardship-request",
+      "useCase": "hardship-request",
+      "path": "branch-1",
+      "sector": "finance",
+      "trace": "hardship-request--branch-1--baseline.json",
+      "a": {
+        "tried": 216,
+        "violations": 0,
+        "disagreements": 32,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "health-referral",
+      "useCase": "health-referral",
+      "path": "main",
+      "sector": "health",
+      "trace": "health-referral--baseline.json",
+      "a": {
+        "tried": 220,
+        "violations": 35,
+        "disagreements": 104,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 36,
+        "specified": 32,
+        "exact": 19,
+        "falseAdmits": 0,
+        "wrongReasons": 13,
+        "wrongChecks": 0,
+        "unspecified": 5
+      },
+      "c": {
+        "tried": 2,
+        "correct": 1,
+        "cannotTell": 1,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "health-referral",
+      "useCase": "health-referral",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "health-referral--branch-1--baseline.json",
+      "a": {
+        "tried": 220,
+        "violations": 9,
+        "disagreements": 56,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 21,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "health-referral",
+      "useCase": "health-referral",
+      "path": "branch-2",
+      "sector": "health",
+      "trace": "health-referral--branch-2--baseline.json",
+      "a": {
+        "tried": 209,
+        "violations": 34,
+        "disagreements": 95,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 12,
+        "specified": 9,
+        "exact": 2,
+        "falseAdmits": 0,
+        "wrongReasons": 7,
+        "wrongChecks": 2,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "home-purchase",
+      "useCase": "home-purchase",
+      "path": "main",
+      "sector": "housing",
+      "trace": "home-purchase--baseline.json",
+      "a": {
+        "tried": 304,
+        "violations": 0,
+        "disagreements": 81,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 72,
+        "specified": 72,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 32,
+        "wrongChecks": 8,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 12,
+        "correct": 6,
+        "cannotTell": 6,
+        "receiverRefused": 6
+      }
+    },
+    {
+      "scenario": "home-purchase",
+      "useCase": "home-purchase",
+      "path": "branch-1",
+      "sector": "housing",
+      "trace": "home-purchase--branch-1--baseline.json",
+      "a": {
+        "tried": 213,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 2,
+        "falseAdmits": 0,
+        "wrongReasons": 7,
+        "wrongChecks": 2,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "home-purchase",
+      "useCase": "home-purchase",
+      "path": "branch-2",
+      "sector": "housing",
+      "trace": "home-purchase--branch-2--baseline.json",
+      "a": {
+        "tried": 213,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 2,
+        "falseAdmits": 0,
+        "wrongReasons": 7,
+        "wrongChecks": 2,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "incident-notice",
+      "useCase": "incident-notice",
+      "path": "main",
+      "sector": "trade",
+      "trace": "incident-notice--baseline.json",
+      "a": {
+        "tried": 314,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 96,
+        "specified": 96,
+        "exact": 96,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 9
+      },
+      "c": {
+        "tried": 8,
+        "correct": 4,
+        "cannotTell": 4,
+        "receiverRefused": 4
+      }
+    },
+    {
+      "scenario": "incident-notice",
+      "useCase": "incident-notice",
+      "path": "branch-1",
+      "sector": "trade",
+      "trace": "incident-notice--branch-1--baseline.json",
+      "a": {
+        "tried": 314,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 82,
+        "specified": 82,
+        "exact": 82,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 8
+      },
+      "c": {
+        "tried": 8,
+        "correct": 4,
+        "cannotTell": 4,
+        "receiverRefused": 4
+      }
+    },
+    {
+      "scenario": "insurance-claim-photos",
+      "useCase": "insurance-claim-photos",
+      "path": "main",
+      "sector": "finance",
+      "trace": "insurance-claim-photos--baseline.json",
+      "a": {
+        "tried": 239,
+        "violations": 8,
+        "disagreements": 23,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 67,
+        "specified": 61,
+        "exact": 45,
+        "falseAdmits": 1,
+        "wrongReasons": 16,
+        "wrongChecks": 0,
+        "unspecified": 8
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "insurance-claim-photos",
+      "useCase": "insurance-claim-photos",
+      "path": "branch-1",
+      "sector": "finance",
+      "trace": "insurance-claim-photos--branch-1--baseline.json",
+      "a": {
+        "tried": 237,
+        "violations": 3,
+        "disagreements": 18,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 50,
+        "specified": 46,
+        "exact": 36,
+        "falseAdmits": 0,
+        "wrongReasons": 10,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "insurance-claim-photos",
+      "useCase": "insurance-claim-photos",
+      "path": "branch-2",
+      "sector": "finance",
+      "trace": "insurance-claim-photos--branch-2--baseline.json",
+      "a": {
+        "tried": 233,
+        "violations": 85,
+        "disagreements": 26,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 67,
+        "specified": 61,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 25,
+        "wrongChecks": 9,
+        "unspecified": 8
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "insurance-quote",
+      "useCase": "insurance-quote",
+      "path": "branch-1",
+      "sector": "finance",
+      "trace": "insurance-quote--branch-1--baseline.json",
+      "a": {
+        "tried": 220,
+        "violations": 11,
+        "disagreements": 63,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "insurance-quote",
+      "useCase": "insurance-quote",
+      "path": "branch-2",
+      "sector": "finance",
+      "trace": "insurance-quote--branch-2--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 20,
+        "specified": 18,
+        "exact": 4,
+        "falseAdmits": 0,
+        "wrongReasons": 14,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "introduction",
+      "useCase": "introduction",
+      "path": "branch-1",
+      "sector": "personal",
+      "trace": "introduction--branch-1--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 15,
+        "specified": 14,
+        "exact": 6,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 5,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 1,
+        "correct": 1,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "invoice-finance",
+      "useCase": "invoice-finance",
+      "path": "main",
+      "sector": "trade",
+      "trace": "invoice-finance--baseline.json",
+      "a": {
+        "tried": 211,
+        "violations": 9,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 5,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "invoice-finance",
+      "useCase": "invoice-finance",
+      "path": "branch-1",
+      "sector": "trade",
+      "trace": "invoice-finance--branch-1--baseline.json",
+      "a": {
+        "tried": 222,
+        "violations": 15,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 20,
+        "specified": 18,
+        "exact": 10,
+        "falseAdmits": 0,
+        "wrongReasons": 8,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "joint-mortgage",
+      "useCase": "joint-mortgage",
+      "path": "main",
+      "sector": "finance",
+      "trace": "joint-mortgage--baseline.json",
+      "a": {
+        "tried": 310,
+        "violations": 26,
+        "disagreements": 120,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 90,
+        "specified": 90,
+        "exact": 40,
+        "falseAdmits": 0,
+        "wrongReasons": 40,
+        "wrongChecks": 10,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 16,
+        "correct": 8,
+        "cannotTell": 8,
+        "receiverRefused": 8
+      }
+    },
+    {
+      "scenario": "joint-mortgage",
+      "useCase": "joint-mortgage",
+      "path": "branch-1",
+      "sector": "finance",
+      "trace": "joint-mortgage--branch-1--baseline.json",
+      "a": {
+        "tried": 224,
+        "violations": 5,
+        "disagreements": 48,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "joint-mortgage",
+      "useCase": "joint-mortgage",
+      "path": "branch-2",
+      "sector": "finance",
+      "trace": "joint-mortgage--branch-2--baseline.json",
+      "a": {
+        "tried": 224,
+        "violations": 10,
+        "disagreements": 53,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "master-data-change",
+      "useCase": "master-data-change",
+      "path": "main",
+      "sector": "enterprise",
+      "trace": "master-data-change--baseline.json",
+      "a": {
+        "tried": 262,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 64,
+        "specified": 53,
+        "exact": 33,
+        "falseAdmits": 0,
+        "wrongReasons": 20,
+        "wrongChecks": 0,
+        "unspecified": 12
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "master-data-change",
+      "useCase": "master-data-change",
+      "path": "branch-1",
+      "sector": "enterprise",
+      "trace": "master-data-change--branch-1--baseline.json",
+      "a": {
+        "tried": 232,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 40,
+        "specified": 30,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 16,
+        "wrongChecks": 0,
+        "unspecified": 10
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "master-data-change",
+      "useCase": "master-data-change",
+      "path": "branch-2",
+      "sector": "enterprise",
+      "trace": "master-data-change--branch-2--baseline.json",
+      "a": {
+        "tried": 215,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 40,
+        "specified": 30,
+        "exact": 5,
+        "falseAdmits": 0,
+        "wrongReasons": 23,
+        "wrongChecks": 17,
+        "unspecified": 10
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "meeting-notes",
+      "useCase": "meeting-notes",
+      "path": "main",
+      "sector": "enterprise",
+      "trace": "meeting-notes--baseline.json",
+      "a": {
+        "tried": 230,
+        "violations": 14,
+        "disagreements": 40,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 44,
+        "specified": 41,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 0,
+        "unspecified": 5
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "meeting-notes",
+      "useCase": "meeting-notes",
+      "path": "branch-1",
+      "sector": "enterprise",
+      "trace": "meeting-notes--branch-1--baseline.json",
+      "a": {
+        "tried": 230,
+        "violations": 6,
+        "disagreements": 25,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 44,
+        "specified": 41,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 0,
+        "unspecified": 5
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "mortgage-core",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "sector": "finance",
+      "trace": "mortgage-core--baseline.json",
+      "a": {
+        "tried": 274,
+        "violations": 219,
+        "disagreements": 28,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 108,
+        "specified": 102,
+        "exact": 91,
+        "falseAdmits": 0,
+        "wrongReasons": 11,
+        "wrongChecks": 0,
+        "unspecified": 10
+      },
+      "c": {
+        "tried": 8,
+        "correct": 5,
+        "cannotTell": 3,
+        "receiverRefused": 4
+      }
+    },
+    {
+      "scenario": "mortgage-injected-fee",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "sector": "finance",
+      "trace": "mortgage-injected-fee--baseline.json",
+      "a": {
+        "tried": 294,
+        "violations": 248,
+        "disagreements": 20,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 108,
+        "specified": 102,
+        "exact": 91,
+        "falseAdmits": 0,
+        "wrongReasons": 11,
+        "wrongChecks": 0,
+        "unspecified": 10
+      },
+      "c": {
+        "tried": 8,
+        "correct": 5,
+        "cannotTell": 3,
+        "receiverRefused": 4
+      }
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "sector": "finance",
+      "trace": "mortgage-main--baseline.json",
+      "a": {
+        "tried": 378,
+        "violations": 306,
+        "disagreements": 31,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 191,
+        "specified": 177,
+        "exact": 155,
+        "falseAdmits": 0,
+        "wrongReasons": 22,
+        "wrongChecks": 0,
+        "unspecified": 20
+      },
+      "c": {
+        "tried": 9,
+        "correct": 6,
+        "cannotTell": 3,
+        "receiverRefused": 4
+      }
+    },
+    {
+      "scenario": "mortgage-out-of-limit",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "sector": "finance",
+      "trace": "mortgage-out-of-limit--baseline.json",
+      "a": {
+        "tried": 239,
+        "violations": 160,
+        "disagreements": 19,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 54,
+        "specified": 52,
+        "exact": 44,
+        "falseAdmits": 0,
+        "wrongReasons": 8,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "mortgage-over-ask",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "sector": "finance",
+      "trace": "mortgage-over-ask--baseline.json",
+      "a": {
+        "tried": 239,
+        "violations": 162,
+        "disagreements": 23,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 54,
+        "specified": 52,
+        "exact": 44,
+        "falseAdmits": 0,
+        "wrongReasons": 8,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "no-agent-on-the-other-side",
+      "useCase": "no-agent-on-the-other-side",
+      "path": "main",
+      "sector": "adversarial",
+      "trace": "no-agent-on-the-other-side--baseline.json",
+      "a": {
+        "tried": 205,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 0,
+        "specified": 0,
+        "exact": 0,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "no-agent-on-the-other-side",
+      "useCase": "no-agent-on-the-other-side",
+      "path": "branch-1",
+      "sector": "adversarial",
+      "trace": "no-agent-on-the-other-side--branch-1--baseline.json",
+      "a": {
+        "tried": 211,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 0,
+        "specified": 0,
+        "exact": 0,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "no-training-terms",
+      "useCase": "no-training-terms",
+      "path": "main",
+      "sector": "media",
+      "trace": "no-training-terms--baseline.json",
+      "a": {
+        "tried": 230,
+        "violations": 7,
+        "disagreements": 31,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "no-training-terms",
+      "useCase": "no-training-terms",
+      "path": "branch-1",
+      "sector": "media",
+      "trace": "no-training-terms--branch-1--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 3,
+        "falseAdmits": 0,
+        "wrongReasons": 6,
+        "wrongChecks": 0,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "onward-leak",
+      "useCase": "onward-leak",
+      "path": "main",
+      "sector": "adversarial",
+      "trace": "onward-leak--baseline.json",
+      "a": {
+        "tried": 274,
+        "violations": 1,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 54,
+        "specified": 51,
+        "exact": 42,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 5,
+        "correct": 3,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "onward-leak",
+      "useCase": "onward-leak",
+      "path": "branch-1",
+      "sector": "adversarial",
+      "trace": "onward-leak--branch-1--baseline.json",
+      "a": {
+        "tried": 226,
+        "violations": 8,
+        "disagreements": 43,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "pay-an-invoice",
+      "useCase": "pay-an-invoice",
+      "path": "main",
+      "sector": "finance",
+      "trace": "pay-an-invoice--baseline.json",
+      "a": {
+        "tried": 252,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 44,
+        "specified": 39,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 12,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "pay-an-invoice",
+      "useCase": "pay-an-invoice",
+      "path": "branch-1",
+      "sector": "finance",
+      "trace": "pay-an-invoice--branch-1--baseline.json",
+      "a": {
+        "tried": 212,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 16,
+        "exact": 3,
+        "falseAdmits": 0,
+        "wrongReasons": 11,
+        "wrongChecks": 7,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "pay-an-invoice",
+      "useCase": "pay-an-invoice",
+      "path": "branch-2",
+      "sector": "finance",
+      "trace": "pay-an-invoice--branch-2--baseline.json",
+      "a": {
+        "tried": 213,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 16,
+        "exact": 8,
+        "falseAdmits": 0,
+        "wrongReasons": 8,
+        "wrongChecks": 0,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "permit-application",
+      "useCase": "permit-application",
+      "path": "main",
+      "sector": "public",
+      "trace": "permit-application--baseline.json",
+      "a": {
+        "tried": 232,
+        "violations": 7,
+        "disagreements": 23,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 50,
+        "specified": 46,
+        "exact": 36,
+        "falseAdmits": 0,
+        "wrongReasons": 10,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "permit-application",
+      "useCase": "permit-application",
+      "path": "branch-1",
+      "sector": "public",
+      "trace": "permit-application--branch-1--baseline.json",
+      "a": {
+        "tried": 232,
+        "violations": 8,
+        "disagreements": 32,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 50,
+        "specified": 46,
+        "exact": 36,
+        "falseAdmits": 0,
+        "wrongReasons": 10,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "platform-income",
+      "useCase": "platform-income",
+      "path": "branch-1",
+      "sector": "work",
+      "trace": "platform-income--branch-1--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 4,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "prescription-dispensing",
+      "useCase": "prescription-dispensing",
+      "path": "main",
+      "sector": "health",
+      "trace": "prescription-dispensing--baseline.json",
+      "a": {
+        "tried": 211,
+        "violations": 15,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 5,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "prescription-dispensing",
+      "useCase": "prescription-dispensing",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "prescription-dispensing--branch-1--baseline.json",
+      "a": {
+        "tried": 222,
+        "violations": 14,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 20,
+        "specified": 18,
+        "exact": 10,
+        "falseAdmits": 0,
+        "wrongReasons": 8,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "prescription-dispensing",
+      "useCase": "prescription-dispensing",
+      "path": "branch-2",
+      "sector": "health",
+      "trace": "prescription-dispensing--branch-2--baseline.json",
+      "a": {
+        "tried": 211,
+        "violations": 16,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 5,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "price-negotiation",
+      "useCase": "price-negotiation",
+      "path": "main",
+      "sector": "commerce",
+      "trace": "price-negotiation--baseline.json",
+      "a": {
+        "tried": 220,
+        "violations": 13,
+        "disagreements": 35,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 28,
+        "specified": 27,
+        "exact": 23,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "price-negotiation",
+      "useCase": "price-negotiation",
+      "path": "branch-1",
+      "sector": "commerce",
+      "trace": "price-negotiation--branch-1--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 14,
+        "disagreements": 32,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "probing-counterparty",
+      "useCase": "probing-counterparty",
+      "path": "main",
+      "sector": "adversarial",
+      "trace": "probing-counterparty--baseline.json",
+      "a": {
+        "tried": 222,
+        "violations": 152,
+        "disagreements": 32,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 40,
+        "specified": 38,
+        "exact": 33,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 5,
+        "correct": 3,
+        "cannotTell": 2,
+        "receiverRefused": 3
+      }
+    },
+    {
+      "scenario": "probing-counterparty",
+      "useCase": "probing-counterparty",
+      "path": "tenth-request",
+      "sector": "adversarial",
+      "trace": "probing-counterparty--tenth-request--baseline.json",
+      "a": {
+        "tried": 353,
+        "violations": 14,
+        "disagreements": 68,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 78,
+        "specified": 78,
+        "exact": 78,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "probing-counterparty",
+      "useCase": "probing-counterparty",
+      "path": "round-limit",
+      "sector": "adversarial",
+      "trace": "probing-counterparty--round-limit--baseline.json",
+      "a": {
+        "tried": 228,
+        "violations": 9,
+        "disagreements": 101,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 28,
+        "specified": 28,
+        "exact": 28,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "production-change",
+      "useCase": "production-change",
+      "path": "main",
+      "sector": "enterprise",
+      "trace": "production-change--baseline.json",
+      "a": {
+        "tried": 224,
+        "violations": 8,
+        "disagreements": 60,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "production-change",
+      "useCase": "production-change",
+      "path": "branch-1",
+      "sector": "enterprise",
+      "trace": "production-change--branch-1--baseline.json",
+      "a": {
+        "tried": 224,
+        "violations": 12,
+        "disagreements": 36,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "production-change",
+      "useCase": "production-change",
+      "path": "branch-2",
+      "sector": "enterprise",
+      "trace": "production-change--branch-2--baseline.json",
+      "a": {
+        "tried": 224,
+        "violations": 9,
+        "disagreements": 73,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "recall-notice",
+      "useCase": "recall-notice",
+      "path": "main",
+      "sector": "commerce",
+      "trace": "recall-notice--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 8,
+        "disagreements": 67,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 39,
+        "specified": 37,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "recall-notice",
+      "useCase": "recall-notice",
+      "path": "branch-1",
+      "sector": "commerce",
+      "trace": "recall-notice--branch-1--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 2,
+        "falseAdmits": 0,
+        "wrongReasons": 7,
+        "wrongChecks": 2,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "records-to-new-practice",
+      "useCase": "records-to-new-practice",
+      "path": "main",
+      "sector": "health",
+      "trace": "records-to-new-practice--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 200,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 42,
+        "specified": 39,
+        "exact": 15,
+        "falseAdmits": 0,
+        "wrongReasons": 24,
+        "wrongChecks": 0,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 2,
+        "correct": 1,
+        "cannotTell": 1,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "records-to-new-practice",
+      "useCase": "records-to-new-practice",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "records-to-new-practice--branch-1--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 200,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 42,
+        "specified": 39,
+        "exact": 15,
+        "falseAdmits": 0,
+        "wrongReasons": 24,
+        "wrongChecks": 0,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 2,
+        "correct": 1,
+        "cannotTell": 1,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "recycled-content",
+      "useCase": "recycled-content",
+      "path": "branch-1",
+      "sector": "trade",
+      "trace": "recycled-content--branch-1--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 3,
+        "falseAdmits": 0,
+        "wrongReasons": 6,
+        "wrongChecks": 0,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "repair-request",
+      "useCase": "repair-request",
+      "path": "main",
+      "sector": "housing",
+      "trace": "repair-request--baseline.json",
+      "a": {
+        "tried": 229,
+        "violations": 7,
+        "disagreements": 27,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 44,
+        "specified": 41,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 0,
+        "unspecified": 5
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "repair-request",
+      "useCase": "repair-request",
+      "path": "branch-1",
+      "sector": "housing",
+      "trace": "repair-request--branch-1--baseline.json",
+      "a": {
+        "tried": 229,
+        "violations": 7,
+        "disagreements": 27,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 44,
+        "specified": 41,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 0,
+        "unspecified": 5
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "request-for-quotes",
+      "useCase": "request-for-quotes",
+      "path": "main",
+      "sector": "trade",
+      "trace": "request-for-quotes--baseline.json",
+      "a": {
+        "tried": 340,
+        "violations": 31,
+        "disagreements": 66,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 168,
+        "specified": 158,
+        "exact": 133,
+        "falseAdmits": 0,
+        "wrongReasons": 25,
+        "wrongChecks": 0,
+        "unspecified": 17
+      },
+      "c": {
+        "tried": 13,
+        "correct": 11,
+        "cannotTell": 2,
+        "receiverRefused": 7
+      }
+    },
+    {
+      "scenario": "request-for-quotes",
+      "useCase": "request-for-quotes",
+      "path": "branch-1",
+      "sector": "trade",
+      "trace": "request-for-quotes--branch-1--baseline.json",
+      "a": {
+        "tried": 320,
+        "violations": 26,
+        "disagreements": 58,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 150,
+        "specified": 140,
+        "exact": 115,
+        "falseAdmits": 0,
+        "wrongReasons": 25,
+        "wrongChecks": 0,
+        "unspecified": 15
+      },
+      "c": {
+        "tried": 11,
+        "correct": 11,
+        "cannotTell": 0,
+        "receiverRefused": 5
+      }
+    },
+    {
+      "scenario": "request-for-quotes",
+      "useCase": "request-for-quotes",
+      "path": "branch-2",
+      "sector": "trade",
+      "trace": "request-for-quotes--branch-2--baseline.json",
+      "a": {
+        "tried": 322,
+        "violations": 24,
+        "disagreements": 59,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 150,
+        "specified": 140,
+        "exact": 115,
+        "falseAdmits": 0,
+        "wrongReasons": 25,
+        "wrongChecks": 0,
+        "unspecified": 15
+      },
+      "c": {
+        "tried": 11,
+        "correct": 11,
+        "cannotTell": 0,
+        "receiverRefused": 5
+      }
+    },
+    {
+      "scenario": "research-data-access",
+      "useCase": "research-data-access",
+      "path": "main",
+      "sector": "trade",
+      "trace": "research-data-access--baseline.json",
+      "a": {
+        "tried": 205,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 21,
+        "specified": 20,
+        "exact": 10,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 2,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 2,
+        "correct": 1,
+        "cannotTell": 1,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "research-data-access",
+      "useCase": "research-data-access",
+      "path": "branch-1",
+      "sector": "trade",
+      "trace": "research-data-access--branch-1--baseline.json",
+      "a": {
+        "tried": 205,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 8,
+        "specified": 8,
+        "exact": 4,
+        "falseAdmits": 0,
+        "wrongReasons": 3,
+        "wrongChecks": 1,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 2,
+        "correct": 1,
+        "cannotTell": 1,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "research-data-access",
+      "useCase": "research-data-access",
+      "path": "branch-2",
+      "sector": "trade",
+      "trace": "research-data-access--branch-2--baseline.json",
+      "a": {
+        "tried": 210,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 16,
+        "specified": 16,
+        "exact": 8,
+        "falseAdmits": 0,
+        "wrongReasons": 6,
+        "wrongChecks": 2,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 2,
+        "correct": 1,
+        "cannotTell": 1,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "return-and-refund",
+      "useCase": "return-and-refund",
+      "path": "main",
+      "sector": "commerce",
+      "trace": "return-and-refund--baseline.json",
+      "a": {
+        "tried": 228,
+        "violations": 8,
+        "disagreements": 23,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 50,
+        "specified": 46,
+        "exact": 36,
+        "falseAdmits": 0,
+        "wrongReasons": 10,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "return-and-refund",
+      "useCase": "return-and-refund",
+      "path": "branch-1",
+      "sector": "commerce",
+      "trace": "return-and-refund--branch-1--baseline.json",
+      "a": {
+        "tried": 228,
+        "violations": 7,
+        "disagreements": 30,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 50,
+        "specified": 46,
+        "exact": 36,
+        "falseAdmits": 0,
+        "wrongReasons": 10,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "right-to-work",
+      "useCase": "right-to-work",
+      "path": "main",
+      "sector": "work",
+      "trace": "right-to-work--baseline.json",
+      "a": {
+        "tried": 209,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 9,
+        "specified": 9,
+        "exact": 9,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 1,
+        "correct": 1,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "right-to-work",
+      "useCase": "right-to-work",
+      "path": "branch-1",
+      "sector": "work",
+      "trace": "right-to-work--branch-1--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 9,
+        "specified": 9,
+        "exact": 9,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "salary-account-change",
+      "useCase": "salary-account-change",
+      "path": "main",
+      "sector": "work",
+      "trace": "salary-account-change--baseline.json",
+      "a": {
+        "tried": 231,
+        "violations": 5,
+        "disagreements": 17,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "salary-account-change",
+      "useCase": "salary-account-change",
+      "path": "branch-1",
+      "sector": "work",
+      "trace": "salary-account-change--branch-1--baseline.json",
+      "a": {
+        "tried": 229,
+        "violations": 2,
+        "disagreements": 25,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 21,
+        "specified": 20,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 6,
+        "wrongChecks": 2,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "salary-account-change",
+      "useCase": "salary-account-change",
+      "path": "branch-2",
+      "sector": "work",
+      "trace": "salary-account-change--branch-2--baseline.json",
+      "a": {
+        "tried": 229,
+        "violations": 6,
+        "disagreements": 22,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 30,
+        "specified": 28,
+        "exact": 19,
+        "falseAdmits": 0,
+        "wrongReasons": 9,
+        "wrongChecks": 2,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "sell-a-car",
+      "useCase": "sell-a-car",
+      "path": "main",
+      "sector": "personal",
+      "trace": "sell-a-car--baseline.json",
+      "a": {
+        "tried": 213,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 5,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "sell-a-car",
+      "useCase": "sell-a-car",
+      "path": "branch-1",
+      "sector": "personal",
+      "trace": "sell-a-car--branch-1--baseline.json",
+      "a": {
+        "tried": 212,
+        "violations": 0,
+        "disagreements": 1,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 2,
+        "falseAdmits": 0,
+        "wrongReasons": 7,
+        "wrongChecks": 2,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "shopping-agent",
+      "useCase": "shopping-agent",
+      "path": "main",
+      "sector": "commerce",
+      "trace": "shopping-agent--baseline.json",
+      "a": {
+        "tried": 258,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 52,
+        "specified": 46,
+        "exact": 30,
+        "falseAdmits": 0,
+        "wrongReasons": 16,
+        "wrongChecks": 0,
+        "unspecified": 7
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "shopping-agent",
+      "useCase": "shopping-agent",
+      "path": "branch-1",
+      "sector": "commerce",
+      "trace": "shopping-agent--branch-1--baseline.json",
+      "a": {
+        "tried": 215,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 38,
+        "specified": 32,
+        "exact": 16,
+        "falseAdmits": 0,
+        "wrongReasons": 16,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "shopping-agent",
+      "useCase": "shopping-agent",
+      "path": "branch-2",
+      "sector": "commerce",
+      "trace": "shopping-agent--branch-2--baseline.json",
+      "a": {
+        "tried": 215,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 38,
+        "specified": 32,
+        "exact": 16,
+        "falseAdmits": 0,
+        "wrongReasons": 16,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "small-business-loan",
+      "useCase": "small-business-loan",
+      "path": "main",
+      "sector": "finance",
+      "trace": "small-business-loan--baseline.json",
+      "a": {
+        "tried": 226,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 61,
+        "specified": 54,
+        "exact": 37,
+        "falseAdmits": 2,
+        "wrongReasons": 17,
+        "wrongChecks": 0,
+        "unspecified": 7
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "small-business-loan",
+      "useCase": "small-business-loan",
+      "path": "branch-1",
+      "sector": "finance",
+      "trace": "small-business-loan--branch-1--baseline.json",
+      "a": {
+        "tried": 226,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 56,
+        "specified": 49,
+        "exact": 22,
+        "falseAdmits": 0,
+        "wrongReasons": 27,
+        "wrongChecks": 2,
+        "unspecified": 7
+      },
+      "c": {
+        "tried": 2,
+        "correct": 2,
+        "cannotTell": 0,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "small-business-loan",
+      "useCase": "small-business-loan",
+      "path": "branch-2",
+      "sector": "finance",
+      "trace": "small-business-loan--branch-2--baseline.json",
+      "a": {
+        "tried": 212,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 32,
+        "specified": 27,
+        "exact": 4,
+        "falseAdmits": 0,
+        "wrongReasons": 20,
+        "wrongChecks": 14,
+        "unspecified": 5
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "subject-access-request",
+      "useCase": "subject-access-request",
+      "path": "main",
+      "sector": "rights",
+      "trace": "subject-access-request--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 30,
+        "specified": 28,
+        "exact": 23,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 1
+      }
+    },
+    {
+      "scenario": "subject-access-request",
+      "useCase": "subject-access-request",
+      "path": "branch-1",
+      "sector": "rights",
+      "trace": "subject-access-request--branch-1--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 20,
+        "disagreements": 50,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "supplier-onboarding",
+      "useCase": "supplier-onboarding",
+      "path": "main",
+      "sector": "trade",
+      "trace": "supplier-onboarding--baseline.json",
+      "a": {
+        "tried": 225,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 60,
+        "specified": 54,
+        "exact": 38,
+        "falseAdmits": 0,
+        "wrongReasons": 16,
+        "wrongChecks": 0,
+        "unspecified": 6
+      },
+      "c": {
+        "tried": 1,
+        "correct": 1,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "supplier-onboarding",
+      "useCase": "supplier-onboarding",
+      "path": "branch-1",
+      "sector": "trade",
+      "trace": "supplier-onboarding--branch-1--baseline.json",
+      "a": {
+        "tried": 211,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 31,
+        "specified": 28,
+        "exact": 2,
+        "falseAdmits": 0,
+        "wrongReasons": 26,
+        "wrongChecks": 2,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "supplier-onboarding",
+      "useCase": "supplier-onboarding",
+      "path": "branch-2",
+      "sector": "trade",
+      "trace": "supplier-onboarding--branch-2--baseline.json",
+      "a": {
+        "tried": 211,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 31,
+        "specified": 28,
+        "exact": 8,
+        "falseAdmits": 0,
+        "wrongReasons": 17,
+        "wrongChecks": 8,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "tax-agent",
+      "useCase": "tax-agent",
+      "path": "main",
+      "sector": "public",
+      "trace": "tax-agent--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 7,
+        "specified": 7,
+        "exact": 7,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "tax-agent",
+      "useCase": "tax-agent",
+      "path": "branch-1",
+      "sector": "public",
+      "trace": "tax-agent--branch-1--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 7,
+        "specified": 7,
+        "exact": 7,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 0
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "telecom-fault",
+      "useCase": "telecom-fault",
+      "path": "main",
+      "sector": "utilities",
+      "trace": "telecom-fault--baseline.json",
+      "a": {
+        "tried": 217,
+        "violations": 119,
+        "disagreements": 31,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 39,
+        "specified": 37,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "telecom-fault",
+      "useCase": "telecom-fault",
+      "path": "branch-1",
+      "sector": "utilities",
+      "trace": "telecom-fault--branch-1--baseline.json",
+      "a": {
+        "tried": 217,
+        "violations": 124,
+        "disagreements": 33,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "tenancy-application",
+      "useCase": "tenancy-application",
+      "path": "branch-1",
+      "sector": "housing",
+      "trace": "tenancy-application--branch-1--baseline.json",
+      "a": {
+        "tried": 217,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "tenancy-application",
+      "useCase": "tenancy-application",
+      "path": "branch-2",
+      "sector": "housing",
+      "trace": "tenancy-application--branch-2--baseline.json",
+      "a": {
+        "tried": 232,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 28,
+        "specified": 28,
+        "exact": 28,
+        "falseAdmits": 0,
+        "wrongReasons": 0,
+        "wrongChecks": 0,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 4,
+        "correct": 2,
+        "cannotTell": 2,
+        "receiverRefused": 2
+      }
+    },
+    {
+      "scenario": "trial-eligibility",
+      "useCase": "trial-eligibility",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "trial-eligibility--branch-1--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 20,
+        "specified": 18,
+        "exact": 4,
+        "falseAdmits": 0,
+        "wrongReasons": 14,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "trip-booking",
+      "useCase": "trip-booking",
+      "path": "main",
+      "sector": "travel",
+      "trace": "trip-booking--baseline.json",
+      "a": {
+        "tried": 355,
+        "violations": 17,
+        "disagreements": 70,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 115,
+        "specified": 113,
+        "exact": 58,
+        "falseAdmits": 0,
+        "wrongReasons": 45,
+        "wrongChecks": 10,
+        "unspecified": 3
+      },
+      "c": {
+        "tried": 18,
+        "correct": 10,
+        "cannotTell": 8,
+        "receiverRefused": 8
+      }
+    },
+    {
+      "scenario": "trip-booking",
+      "useCase": "trip-booking",
+      "path": "branch-1",
+      "sector": "travel",
+      "trace": "trip-booking--branch-1--baseline.json",
+      "a": {
+        "tried": 248,
+        "violations": 4,
+        "disagreements": 25,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 34,
+        "specified": 32,
+        "exact": 27,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "trip-booking",
+      "useCase": "trip-booking",
+      "path": "branch-2",
+      "sector": "travel",
+      "trace": "trip-booking--branch-2--baseline.json",
+      "a": {
+        "tried": 230,
+        "violations": 3,
+        "disagreements": 31,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "visa-application",
+      "useCase": "visa-application",
+      "path": "branch-1",
+      "sector": "travel",
+      "trace": "visa-application--branch-1--baseline.json",
+      "a": {
+        "tried": 200,
+        "violations": 0,
+        "disagreements": 0,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 10,
+        "specified": 9,
+        "exact": 2,
+        "falseAdmits": 0,
+        "wrongReasons": 7,
+        "wrongChecks": 2,
+        "unspecified": 1
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "wearable-data",
+      "useCase": "wearable-data",
+      "path": "main",
+      "sector": "health",
+      "trace": "wearable-data--baseline.json",
+      "a": {
+        "tried": 218,
+        "violations": 7,
+        "disagreements": 50,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 39,
+        "specified": 37,
+        "exact": 32,
+        "falseAdmits": 0,
+        "wrongReasons": 5,
+        "wrongChecks": 0,
+        "unspecified": 4
+      },
+      "c": {
+        "tried": 3,
+        "correct": 3,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    },
+    {
+      "scenario": "wearable-data",
+      "useCase": "wearable-data",
+      "path": "branch-1",
+      "sector": "health",
+      "trace": "wearable-data--branch-1--baseline.json",
+      "a": {
+        "tried": 208,
+        "violations": 18,
+        "disagreements": 99,
+        "unresolvedReadings": 0
+      },
+      "b": {
+        "tried": 19,
+        "specified": 18,
+        "exact": 14,
+        "falseAdmits": 0,
+        "wrongReasons": 4,
+        "wrongChecks": 0,
+        "unspecified": 2
+      },
+      "c": {
+        "tried": 0,
+        "correct": 0,
+        "cannotTell": 0,
+        "receiverRefused": 0
+      }
+    }
+  ]
+}

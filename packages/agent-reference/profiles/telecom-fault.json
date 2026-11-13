@@ -1,0 +1,90 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "telecom-fault",
+  "parties": {
+    "owner": "The customer",
+    "receiver": "The broadband provider",
+    "owner-agent": "The customer’s agent",
+    "receiver-agent": "The broadband provider’s agent"
+  },
+  "claims": [
+    {
+      "kind": "router.light",
+      "sources": [
+        "urn:fictional:telecom-fault:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:telecom-fault",
+      "claims": [
+        "router.light"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "router.light",
+        "account-settings"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:telecom-fault",
+      "version": "0.1",
+      "label": "Fixing a broadband fault together",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:telecom-fault"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:telecom-fault:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:telecom-fault"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:telecom-fault:account-settings",
+      "version": "0.1",
+      "label": "Change broadband account settings",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:telecom-fault"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

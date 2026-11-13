@@ -1,0 +1,127 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "energy-switch",
+  "parties": {
+    "owner": "The household",
+    "receiver": "The energy supplier",
+    "meter-service": "The meter data service",
+    "owner-agent": "The household’s agent",
+    "receiver-agent": "The energy supplier’s agent",
+    "coordinator": "The switching service",
+    "coordinator-agent": "The switching service’s agent",
+    "external-receiver": "The old supplier",
+    "external-receiver-agent": "The old supplier’s agent"
+  },
+  "claims": [
+    {
+      "kind": "energy.annual-total",
+      "sources": [
+        "urn:fictional:energy-switch:meter-service"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "energy.half-hourly",
+      "sources": [
+        "urn:fictional:energy-switch:meter-service"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "switch.date",
+      "sources": [
+        "urn:fictional:energy-switch:coordinator"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:energy-switch",
+      "claims": [
+        "energy.annual-total"
+      ]
+    },
+    {
+      "id": "urn:purpose:meter-billing",
+      "claims": [
+        "energy.half-hourly"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "energy.annual-total",
+        "energy.half-hourly"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:energy-switch",
+      "version": "0.1",
+      "label": "Switching energy supplier",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:energy-switch"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:energy-switch:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:energy-switch"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:agreement",
+      "version": "0.1",
+      "label": "Accepting the same agreement terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:energy-switch"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    }
+  ]
+}

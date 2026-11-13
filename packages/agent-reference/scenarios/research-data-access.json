@@ -1,0 +1,1078 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "research-data-access",
+  "useCase": "research-data-access",
+  "title": "A researcher queries sensitive data",
+  "profile": "research-data-access",
+  "parties": [
+    {
+      "id": "party-1",
+      "identity": "urn:fictional:research-data-access:party-1",
+      "name": "A researcher",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-2",
+      "identity": "urn:fictional:research-data-access:party-2",
+      "name": "A data holder",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-3",
+      "identity": "urn:fictional:research-data-access:party-3",
+      "name": "An ethics board",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "reader-agent",
+      "identity": "urn:fictional:research-data-access:reader-agent",
+      "actor": "urn:fictional:research-data-access:reader-agent:actor",
+      "name": "The researcher’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "party-1"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {
+      "reader-agent": [
+        {
+          "party": "urn:fictional:research-data-access:party-2",
+          "tasks": [
+            "urn:op:dataset-query"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "reader-agent": [
+        {
+          "id": "urn:fictional:research-data-access:holder-source",
+          "version": "1",
+          "source": "urn:fictional:research-data-access:party-2",
+          "claimTypes": [
+            "research.count",
+            "research.measurement",
+            "research.complete"
+          ],
+          "subjects": [
+            "urn:fictional:research-data-access:dataset"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [],
+  "mandates": [
+    {
+      "agent": "reader-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:dataset-query"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "approved-question",
+      "agent": "reader-agent",
+      "type": "dataset-query",
+      "holder": "party-2",
+      "grant": "grant",
+      "purpose": "urn:purpose:approved-research",
+      "protocol": {
+        "rules": [
+          {
+            "id": "urn:fictional:research-data-access:count-rule",
+            "template": "count",
+            "output": "research.count",
+            "inputsFrom": [
+              "urn:fictional:research-data-access:party-2"
+            ],
+            "assurances": [
+              "by-source"
+            ],
+            "params": {
+              "input": "research.measurement",
+              "field": "value",
+              "completeness": "research.complete",
+              "period": {
+                "start": "2026-01-01",
+                "end": "2026-12-31"
+              }
+            }
+          }
+        ],
+        "rule": "urn:fictional:research-data-access:count-rule",
+        "cohort": {
+          "field": "group",
+          "equals": "approved"
+        }
+      }
+    },
+    {
+      "id": "admit-answer",
+      "agent": "reader-agent",
+      "type": "admit-derived",
+      "jws": {
+        "$ref": "steps.approved-question.jws"
+      },
+      "purpose": "urn:purpose:approved-research"
+    },
+    {
+      "id": "answer-released",
+      "agent": "reader-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.approved-question.ok"
+      },
+      "expected": true
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "A query is outside the approved protocol",
+      "change": {
+        "script": [
+          {
+            "id": "approved-question",
+            "agent": "reader-agent",
+            "type": "dataset-query",
+            "holder": "party-2",
+            "grant": "grant",
+            "purpose": "urn:purpose:approved-research",
+            "protocol": {
+              "rules": [
+                {
+                  "id": "urn:fictional:research-data-access:count-rule",
+                  "template": "count",
+                  "output": "research.count",
+                  "inputsFrom": [
+                    "urn:fictional:research-data-access:party-2"
+                  ],
+                  "assurances": [
+                    "by-source"
+                  ],
+                  "params": {
+                    "input": "research.measurement",
+                    "field": "value",
+                    "completeness": "research.complete",
+                    "period": {
+                      "start": "2026-02-01",
+                      "end": "2026-12-31"
+                    }
+                  }
+                }
+              ],
+              "rule": "urn:fictional:research-data-access:count-rule",
+              "cohort": {
+                "field": "group",
+                "equals": "approved"
+              }
+            }
+          }
+        ],
+        "traceSteps": {
+          "1": "The holder checks the approved question and releases only its signed answer."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "purpose-not-permitted",
+        "check": "data-terms"
+      },
+      "outline": [
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "fail",
+          "reason": "purpose-not-permitted"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "reason": "purpose-not-permitted"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "stop",
+        "reason": "purpose-not-permitted"
+      }
+    },
+    {
+      "id": "branch-2",
+      "what": "The number of related queries passes the cap",
+      "change": {
+        "script": [
+          {
+            "id": "approved-question",
+            "agent": "reader-agent",
+            "type": "dataset-query",
+            "holder": "party-2",
+            "grant": "grant",
+            "purpose": "urn:purpose:approved-research",
+            "protocol": {
+              "rules": [
+                {
+                  "id": "urn:fictional:research-data-access:count-rule",
+                  "template": "count",
+                  "output": "research.count",
+                  "inputsFrom": [
+                    "urn:fictional:research-data-access:party-2"
+                  ],
+                  "assurances": [
+                    "by-source"
+                  ],
+                  "params": {
+                    "input": "research.measurement",
+                    "field": "value",
+                    "completeness": "research.complete",
+                    "period": {
+                      "start": "2026-01-01",
+                      "end": "2026-12-31"
+                    }
+                  }
+                }
+              ],
+              "rule": "urn:fictional:research-data-access:count-rule",
+              "cohort": {
+                "field": "group",
+                "equals": "approved"
+              }
+            }
+          },
+          {
+            "id": "second-related-question",
+            "agent": "reader-agent",
+            "type": "dataset-query",
+            "holder": "party-2",
+            "grant": "grant",
+            "purpose": "urn:purpose:approved-research",
+            "protocol": {
+              "rules": [
+                {
+                  "id": "urn:fictional:research-data-access:count-rule",
+                  "template": "count",
+                  "output": "research.count",
+                  "inputsFrom": [
+                    "urn:fictional:research-data-access:party-2"
+                  ],
+                  "assurances": [
+                    "by-source"
+                  ],
+                  "params": {
+                    "input": "research.measurement",
+                    "field": "value",
+                    "completeness": "research.complete",
+                    "period": {
+                      "start": "2026-01-01",
+                      "end": "2026-12-31"
+                    }
+                  }
+                }
+              ],
+              "rule": "urn:fictional:research-data-access:count-rule",
+              "cohort": {
+                "field": "group",
+                "equals": "approved"
+              }
+            }
+          }
+        ],
+        "traceSteps": {
+          "1": "The holder checks the approved question and releases only its signed answer.",
+          "2": "The holder checks the approved question and releases only its signed answer."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "limit-exceeded",
+        "check": "limits-approval"
+      },
+      "outline": [
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "party-2",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "fail",
+          "reason": "limit-exceeded"
+        },
+        {
+          "agent": "party-2",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "reason": "limit-exceeded"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "stop",
+        "reason": "limit-exceeded"
+      }
+    }
+  ],
+  "expect": [
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "data-terms",
+    "limits-approval",
+    "authority"
+  ],
+  "suites": {
+    "data-access": "by-query"
+  },
+  "assurance": null,
+  "blocked": [],
+  "datasets": [
+    {
+      "holder": "party-2",
+      "id": "urn:fictional:research-data-access:dataset",
+      "rows": [
+        {
+          "person": "urn:fictional:research-data-access:person-0",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 0,
+              "date": "2026-11-01"
+            }
+          ]
+        },
+        {
+          "person": "urn:fictional:research-data-access:person-1",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 1,
+              "date": "2026-11-01"
+            }
+          ]
+        },
+        {
+          "person": "urn:fictional:research-data-access:person-2",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 2,
+              "date": "2026-11-01"
+            }
+          ]
+        },
+        {
+          "person": "urn:fictional:research-data-access:person-3",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 3,
+              "date": "2026-11-01"
+            }
+          ]
+        },
+        {
+          "person": "urn:fictional:research-data-access:person-4",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 4,
+              "date": "2026-11-01"
+            }
+          ]
+        },
+        {
+          "person": "urn:fictional:research-data-access:person-5",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 5,
+              "date": "2026-11-01"
+            }
+          ]
+        },
+        {
+          "person": "urn:fictional:research-data-access:person-6",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 6,
+              "date": "2026-11-01"
+            }
+          ]
+        },
+        {
+          "person": "urn:fictional:research-data-access:person-7",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 7,
+              "date": "2026-11-01"
+            }
+          ]
+        },
+        {
+          "person": "urn:fictional:research-data-access:person-8",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 8,
+              "date": "2026-11-01"
+            }
+          ]
+        },
+        {
+          "person": "urn:fictional:research-data-access:person-9",
+          "labels": {
+            "group": "approved"
+          },
+          "claims": [
+            {
+              "claimType": "research.measurement",
+              "value": 9,
+              "date": "2026-11-01"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "queryGrants": [
+    {
+      "id": "grant",
+      "holder": "party-2",
+      "value": {
+        "id": "urn:fictional:research-data-access:grant",
+        "dataset": "urn:fictional:research-data-access:dataset",
+        "reader": "reader-agent",
+        "purpose": "urn:purpose:approved-research",
+        "protocol": [
+          {
+            "rules": [
+              {
+                "id": "urn:fictional:research-data-access:count-rule",
+                "template": "count",
+                "output": "research.count",
+                "inputsFrom": [
+                  "urn:fictional:research-data-access:party-2"
+                ],
+                "assurances": [
+                  "by-source"
+                ],
+                "params": {
+                  "input": "research.measurement",
+                  "field": "value",
+                  "completeness": "research.complete",
+                  "period": {
+                    "start": "2026-01-01",
+                    "end": "2026-12-31"
+                  }
+                }
+              }
+            ],
+            "rule": "urn:fictional:research-data-access:count-rule",
+            "cohort": {
+              "field": "group",
+              "equals": "approved"
+            }
+          }
+        ],
+        "minimumPeople": 5,
+        "relatedQueryCap": 1,
+        "validUntil": "2026-12-01T00:00:00.000Z"
+      }
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Sensitive research dataset holder",
+      "replacedBy": "A separately keyed fictional holder with private synthetic people, a source-signed protocol grant, closed rule evaluation and a durable counter. Only a signed aggregate answer is returned."
+    }
+  ],
+  "traceSteps": {
+    "1": "The holder checks the approved question and releases only its signed answer.",
+    "2": "The holder checks the approved question and releases only its signed answer.",
+    "3": "The holder checks the approved question and releases only its signed answer."
+  },
+  "result": {
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+  }
+}

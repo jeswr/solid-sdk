@@ -1,0 +1,124 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "expenses",
+  "claims": [
+    {
+      "kind": "payee-account",
+      "sources": [
+        "urn:fictional:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "invoice",
+      "sources": [
+        "urn:fictional:merchant"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:expenses",
+      "claims": [
+        "payee-account",
+        "invoice"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.payee": {
+      "type": "identifier"
+    },
+    "input.reference": {
+      "type": "identifier"
+    },
+    "input.account": {
+      "type": "identifier",
+      "claimType": "payee-account"
+    },
+    "input.amount": {
+      "type": "number"
+    },
+    "input.currency": {
+      "type": "code",
+      "values": [
+        "GBP"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "submitted"
+      ]
+    },
+    "output.reference": {
+      "type": "identifier"
+    },
+    "observed.status": {
+      "type": "code",
+      "values": [
+        "submitted"
+      ]
+    },
+    "input.receipt": {
+      "type": "identifier"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:payment",
+      "version": "0.1",
+      "label": "expenses",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:expenses"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:expenses-file",
+      "version": "0.1",
+      "label": "File the merchant receipt",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:expenses"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Payment bank and account directory",
+      "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
+    },
+    {
+      "what": "Expense receipt and reimbursement",
+      "replacedBy": "Merchant-signed structured receipt and a gated bank submission stand-in; no photographed receipt is promoted to merchant evidence and no settlement is claimed"
+    }
+  ],
+  "parties": {
+    "business": "The employer",
+    "business-agent": "The finance agent",
+    "bank": "The reimbursement bank",
+    "bank-agent": "The reimbursement bank’s agent",
+    "supplier": "The employee",
+    "email": "An unverified email sender",
+    "merchant": "The merchant",
+    "employee-agent": "The employee’s agent"
+  }
+}

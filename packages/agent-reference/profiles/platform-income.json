@@ -1,0 +1,95 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "platform-income",
+  "parties": {
+    "owner": "The self-employed worker",
+    "receiver": "The lender",
+    "tax-authority": "The fictional tax authority",
+    "owner-agent": "The self-employed worker’s agent",
+    "receiver-agent": "The lender’s agent",
+    "platform-1": "Fictional work platform 1",
+    "platform-2": "Fictional work platform 2",
+    "platform-3": "Fictional work platform 3",
+    "platform-4": "Fictional work platform 4"
+  },
+  "claims": [
+    {
+      "kind": "income.platform-list",
+      "sources": [
+        "urn:fictional:platform-income:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30,
+      "completeness": "income.completeness"
+    },
+    {
+      "kind": "income.completeness",
+      "sources": [
+        "urn:fictional:platform-income:tax-authority"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:platform-income",
+      "claims": [
+        "income.platform-list",
+        "income.completeness"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "income.platform-list",
+        "income.completeness"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:platform-income",
+      "version": "0.1",
+      "label": "Proving income from several platforms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:platform-income"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:platform-income:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:platform-income"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

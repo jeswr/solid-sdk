@@ -1,0 +1,873 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "tax-agent",
+  "path": {
+    "index": 1,
+    "what": "The agent reads another client's account by mistake"
+  },
+  "parties": [
+    {
+      "id": "subject",
+      "name": "A taxpayer"
+    },
+    {
+      "id": "holder",
+      "name": "An accountant"
+    },
+    {
+      "id": "receiver",
+      "name": "The tax authority"
+    },
+    {
+      "id": "register",
+      "name": "The local register of client engagements"
+    },
+    {
+      "id": "second-holder",
+      "name": "The accountant’s firm"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The representative’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The receiving agent"
+    }
+  ],
+  "scenario": {
+    "id": "tax-agent--branch-1",
+    "title": "An accountant files a tax return: The agent reads another client's account by mistake",
+    "steps": {
+      "1": "Request.",
+      "2": "Receive."
+    }
+  },
+  "configuration": {
+    "id": "tax-agent-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-credential",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The representative’s agent",
+      "actsFor": "subject",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The receiving agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Public authority register and care/tax/school endpoints",
+      "replacedBy": "Declared fictional parties with independent introduced keys and local signed current-status documents; no live service or legal authority claim."
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in An accountant files a tax return with The tax authority."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "A taxpayer's mandate covers this action."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The tax authority a party I can send An accountant files a tax return to?",
+        "path": [
+          {
+            "at": "A taxpayer's own list",
+            "kind": "own-list",
+            "says": "The tax authority is accepted for An accountant files a tax return."
+          }
+        ],
+        "answer": "Accepted, for An accountant files a tax return only."
+      },
+      "reason": "recipient-established",
+      "caption": "The tax authority: Accepted, for An accountant files a tax return only."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within A taxpayer's limits."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The representative’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The receiving agent."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-tax-agent-branch-1:owner-agent:0002",
+        "from": "The representative’s agent",
+        "to": "The receiving agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:6c32956b876…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The representative’s agent to The receiving agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-tax-agent-branch-1:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-tax-agent-branch-1:owner-agent:0002",
+              "conversation": "urn:awp:engine-tax-agent-branch-1:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:tax-agent:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:tax-agent:subject"
+              },
+              "to": {
+                "actor": "urn:fictional:tax-agent:receiver-agent:actor",
+                "party": "urn:fictional:tax-agent:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:68f22d6765350ef78726e79ea1ef703f5f448dfd1be2faac66aedbd0a13c5a5f"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): A taxpayer says A taxpayer acts for it.",
+            "raw": [
+              {
+                "id": "urn:fictional:tax-agent:power",
+                "issuer": "urn:fictional:tax-agent:register",
+                "subject": "urn:fictional:tax-agent:holder",
+                "entity": "urn:fictional:tax-agent:subject",
+                "actions": [
+                  "invoke"
+                ],
+                "scope": {
+                  "operations": [
+                    "urn:op:tax-agent"
+                  ],
+                  "subjects": [
+                    "urn:fictional:tax-agent:subject"
+                  ],
+                  "purposes": [
+                    "urn:purpose:tax-agent"
+                  ]
+                },
+                "validFrom": "2026-11-01T00:00:00.000Z",
+                "validUntil": "2026-12-01T00:00:00.000Z",
+                "status": {
+                  "ref": "urn:fictional:tax-agent:register-status",
+                  "id": "power"
+                },
+                "mayDelegate": {
+                  "depth": 2
+                },
+                "type": "MandateLink",
+                "subjectKey": "4536x475OtEuqMCHt01BySXG6-z7YV9PonSakTzVjeo"
+              }
+            ],
+            "digest": "sha-256:0e6d2ee18840c805bf5cebd8ab5f4303d167ae0b1d2d87066140ee45895b074d"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:tax-agent",
+                "version": "0.1"
+              },
+              "input": {
+                "subject": "urn:fictional:tax-agent:another-subject",
+                "request": "file-return"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:tax-agent"
+            },
+            "digest": "sha-256:a521de5734eb53db10dcede0ddf78e9a665c257789bf2c818ce1bf288e8d6e55"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-tax-agent-branch-1:owner-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The representative’s agent sends an invoke message to The receiving agent."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-tax-agent-branch-1:owner-agent:0002",
+        "from": "The representative’s agent",
+        "to": "The receiving agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:6c32956b876…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The representative’s agent to The receiving agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-tax-agent-branch-1:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-tax-agent-branch-1:owner-agent:0002",
+              "conversation": "urn:awp:engine-tax-agent-branch-1:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:tax-agent:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:tax-agent:subject"
+              },
+              "to": {
+                "actor": "urn:fictional:tax-agent:receiver-agent:actor",
+                "party": "urn:fictional:tax-agent:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:68f22d6765350ef78726e79ea1ef703f5f448dfd1be2faac66aedbd0a13c5a5f"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): A taxpayer says A taxpayer acts for it.",
+            "raw": [
+              {
+                "id": "urn:fictional:tax-agent:power",
+                "issuer": "urn:fictional:tax-agent:register",
+                "subject": "urn:fictional:tax-agent:holder",
+                "entity": "urn:fictional:tax-agent:subject",
+                "actions": [
+                  "invoke"
+                ],
+                "scope": {
+                  "operations": [
+                    "urn:op:tax-agent"
+                  ],
+                  "subjects": [
+                    "urn:fictional:tax-agent:subject"
+                  ],
+                  "purposes": [
+                    "urn:purpose:tax-agent"
+                  ]
+                },
+                "validFrom": "2026-11-01T00:00:00.000Z",
+                "validUntil": "2026-12-01T00:00:00.000Z",
+                "status": {
+                  "ref": "urn:fictional:tax-agent:register-status",
+                  "id": "power"
+                },
+                "mayDelegate": {
+                  "depth": 2
+                },
+                "type": "MandateLink",
+                "subjectKey": "4536x475OtEuqMCHt01BySXG6-z7YV9PonSakTzVjeo"
+              }
+            ],
+            "digest": "sha-256:0e6d2ee18840c805bf5cebd8ab5f4303d167ae0b1d2d87066140ee45895b074d"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:tax-agent\"; \"urn:fictional:tax-agent:another-subject\"; \"urn:purpose:tax-agent\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:tax-agent",
+                "version": "0.1"
+              },
+              "input": {
+                "subject": "urn:fictional:tax-agent:another-subject",
+                "request": "file-return"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:tax-agent"
+            },
+            "digest": "sha-256:a521de5734eb53db10dcede0ddf78e9a665c257789bf2c818ce1bf288e8d6e55",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:tax-agent"
+              },
+              {
+                "path": "input.subject",
+                "text": "urn:fictional:tax-agent:another-subject"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:tax-agent"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-tax-agent-branch-1:owner-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The representative’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The representative’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "representation-out-of-scope",
+      "rule": {
+        "id": "urn:op:tax-agent",
+        "text": "A representation statement signed with A taxpayer's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The sender has not shown that it acts for A taxpayer here."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "refuse",
+      "reason": "representation-out-of-scope",
+      "caption": "The message is refused (representation-out-of-scope: representation not accepted); the core never sees it."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This protocol message proposes no additional action."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is A taxpayer a party I can send An accountant files a tax return to?",
+        "path": [
+          {
+            "at": "The tax authority's own list",
+            "kind": "own-list",
+            "says": "A taxpayer is accepted for An accountant files a tax return."
+          }
+        ],
+        "answer": "Accepted, for An accountant files a tax return only."
+      },
+      "reason": "recipient-established",
+      "caption": "A taxpayer: Accepted, for An accountant files a tax return only."
+    },
+    {
+      "seq": 18,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate finds no personal data in this protocol message."
+    },
+    {
+      "seq": 19,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate finds no data terms to apply."
+    },
+    {
+      "seq": 20,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The message release check is complete."
+    },
+    {
+      "seq": 21,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The receiving agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The refuse message goes to The representative’s agent."
+    },
+    {
+      "seq": 23,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-tax-agent-branch-1:receiver-agent:0001",
+        "from": "The receiving agent",
+        "to": "The representative’s agent",
+        "kind": "refuse",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:ac35f6d219c…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The receiving agent to The representative’s agent; refuse; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-tax-agent-branch-1:receiver-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+              "id": "urn:awp:engine-tax-agent-branch-1:receiver-agent:0001",
+              "conversation": "urn:awp:engine-tax-agent-branch-1:owner-agent:0001",
+              "kind": "refuse",
+              "from": {
+                "actor": "urn:fictional:tax-agent:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:tax-agent:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:tax-agent:owner-agent:actor",
+                "party": "urn:fictional:tax-agent:subject"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-tax-agent-branch-1:owner-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:86670a61c4d0254c8373179bb432f49ea378b49b06a26d3189853c4a1d8d7e15"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Closes the conversation (refuse): representation-out-of-scope.",
+            "raw": {
+              "ref": "urn:awp:engine-tax-agent-branch-1:owner-agent:0002",
+              "reason": "representation-out-of-scope"
+            },
+            "digest": "sha-256:064dc5703c303d40948c87204220019d4ff7198fa5515f271a2338a4ace35a94"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-tax-agent-branch-1:owner-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-tax-agent-branch-1:owner-agent:0001",
+              "inReplyTo": "urn:awp:engine-tax-agent-branch-1:owner-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The receiving agent sends a refuse message to The representative’s agent."
+    }
+  ]
+}

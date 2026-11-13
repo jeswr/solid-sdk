@@ -1,0 +1,549 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "research-data-access",
+  "path": "main",
+  "parties": [
+    {
+      "id": "party-1",
+      "name": "A researcher"
+    },
+    {
+      "id": "party-2",
+      "name": "A data holder"
+    },
+    {
+      "id": "party-3",
+      "name": "An ethics board"
+    },
+    {
+      "id": "reader-agent",
+      "name": "The researcher’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "research-data-access",
+    "title": "A researcher queries sensitive data",
+    "steps": {
+      "1": "The holder checks the approved question and releases only its signed answer.",
+      "2": "The holder checks the approved question and releases only its signed answer.",
+      "3": "The holder checks the approved question and releases only its signed answer."
+    }
+  },
+  "configuration": {
+    "id": "research-data-access-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-query",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "reader-agent",
+      "name": "The researcher’s agent",
+      "actsFor": "party-1",
+      "role": "agent"
+    },
+    {
+      "id": "party-2",
+      "name": "A data holder",
+      "actsFor": "party-2",
+      "role": "principal"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Sensitive research dataset holder",
+      "replacedBy": "A separately keyed fictional holder with private synthetic people, a source-signed protocol grant, closed rule evaluation and a durable counter. Only a signed aggregate answer is returned."
+    },
+    {
+      "what": "Sensitive research dataset holder",
+      "replacedBy": "A separately keyed fictional holder with private synthetic people, a source-signed protocol grant, closed rule evaluation and a durable counter. Only a signed aggregate answer is returned."
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "reader-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Answer an approved research question with A data holder."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "A researcher's mandate covers this action."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is A data holder a party I can send Answer an approved research question to?",
+        "path": [
+          {
+            "at": "A researcher's own list",
+            "kind": "own-list",
+            "says": "A data holder is accepted for Answer an approved research question."
+          }
+        ],
+        "answer": "Accepted, for Answer an approved research question only."
+      },
+      "reason": "recipient-established",
+      "caption": "A data holder: Accepted, for Answer an approved research question only."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-query",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within A researcher's limits."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:6773c7c5c63110929b642c0225a682b0026adb7ec8723dee2ed6e060a8c41f0d",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Answer an approved research question with A data holder."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "party-2",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 15,
+      "step": 1,
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow",
+      "caption": "The holder checks the approved answer before release."
+    },
+    {
+      "seq": 16,
+      "step": 1,
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits",
+      "caption": "The holder checks the approved answer before release."
+    },
+    {
+      "seq": 17,
+      "step": 1,
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure",
+      "caption": "The holder checks the approved answer before release."
+    },
+    {
+      "seq": 18,
+      "step": 1,
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete",
+      "caption": "The holder checks the approved answer before release."
+    },
+    {
+      "seq": 19,
+      "step": 1,
+      "agent": "party-2",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "outcome": "go",
+      "reason": "evidence-complete",
+      "caption": "The holder releases only the signed derived answer after saving its counter."
+    },
+    {
+      "seq": 20,
+      "step": 2,
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "A data holder's research.count statement is intact and signed with A data holder's pinned key."
+    },
+    {
+      "seq": 21,
+      "step": 2,
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "resolution": {
+        "question": "Is A data holder an authority for research.measurement claims about urn:fictional:research-data-access:dataset?",
+        "path": [
+          {
+            "at": "A researcher's own list",
+            "kind": "own-list",
+            "says": "A data holder is accepted for research.measurement."
+          }
+        ],
+        "answer": "Accepted, for research.measurement claims only."
+      },
+      "caption": "The receiver checks each original input issuer for the claim the rule read."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:fictional:research-data-access:holder-source",
+        "text": "A data holder is accepted for research.count claims."
+      },
+      "resolution": {
+        "question": "Is A data holder an authority for research.count claims about urn:fictional:research-data-access:dataset?",
+        "path": [
+          {
+            "at": "A researcher's own list",
+            "kind": "own-list",
+            "says": "A data holder is accepted for research.count."
+          }
+        ],
+        "answer": "Accepted, for research.count claims only."
+      },
+      "caption": "A data holder's research.count statement: A data holder is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 23,
+      "step": 2,
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "A data holder's research.count statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 24,
+      "step": 2,
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:query-terms:1a3183768809967dd8a8cedf89ffd0d016d300d1ac426f5932898f5d0f20e351",
+        "text": "Its terms allow this: use for urn:purpose:approved research; share for urn:purpose:approved research."
+      },
+      "caption": "A data holder's research.count statement: its terms allow this: use for urn:purpose:approved research; share for urn:purpose:approved research."
+    },
+    {
+      "seq": 25,
+      "step": 2,
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:research-data-access:research.count",
+        "text": "Accept research.count from urn:fictional:research-data-access:party-2 by derived, at most 1 days old."
+      },
+      "caption": "A data holder's research.count statement is fit for urn:scenario:research-data-access:task: derived, 0 days old."
+    },
+    {
+      "seq": 26,
+      "step": 2,
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "A data holder's research.count statement is admitted."
+    },
+    {
+      "seq": 27,
+      "step": 2,
+      "agent": "reader-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:query-answer:d036e77105b0ce6c2daa4745d18096b1fb5e061b0c1bfdafab77c922f132cbe6",
+        "label": "A data holder's research.count statement",
+        "claimType": "research.count",
+        "subject": "urn:fictional:research-data-access:dataset",
+        "value": null,
+        "source": "urn:fictional:research-data-access:party-2",
+        "method": "derived",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:query-terms:1a3183768809967dd8a8cedf89ffd0d016d300d1ac426f5932898f5d0f20e351",
+          "summary": "use for urn:purpose:approved research; share for urn:purpose:approved research"
+        },
+        "provenance": "signed by A data holder"
+      },
+      "caption": "A data holder's research.count statement is stored with its source, how it was produced, its date and its terms."
+    }
+  ]
+}

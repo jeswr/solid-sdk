@@ -34,6 +34,7 @@ import type {
 } from "../core/types.js";
 import type { StatementCheck } from "../mechanisms/statements.js";
 import type { KeyRole, TrustStore } from "../mechanisms/trust.js";
+import type { ContentProfile } from "../profile/content.js";
 import type { OperationDescription } from "../profile/description.js";
 
 /**
@@ -118,6 +119,17 @@ export interface VerifiedEvidence {
   readonly verification?: VerificationResult;
 }
 
+/** What a handler may know about evidence the inbound gate refused (CORE-IN-20). */
+export interface RefusedEvidence {
+  readonly integrity: "valid" | "invalid";
+  readonly protectedObject: string;
+  readonly reason: string;
+  readonly id?: Iri;
+  readonly claimType?: string;
+  readonly issuer?: Iri;
+  readonly sourceAuthority?: "not-accepted";
+}
+
 export interface HandlerContext {
   readonly self: { readonly actor: Iri; readonly party?: Iri; readonly operator?: Iri };
   readonly peer: { readonly actor?: Iri; readonly party?: Iri };
@@ -128,6 +140,18 @@ export interface HandlerContext {
   readonly signerKid?: string;
   readonly representation?: RepresentationAssessment;
   readonly trust: TrustStore;
+  /** Runtime-minted identifiers are registered before any outgoing classification. */
+  mintIdentifier(): Iri;
+  admittedStatement(id: Iri, digest: string): boolean;
+  /**
+   * Gate-written summaries of evidence in this message that the inbound gate did not admit.
+   * Labels and the reason only: the refused claim's value never reaches a handler
+   * (CORE-IN-20). Labels are given only where the signature verified.
+   */
+  refusedEvidence?(): Promise<readonly RefusedEvidence[]>;
+  evaluateRule?(rule: Iri, subject: Iri, purpose: Iri): import("../derive/rules.js").DerivedResult;
+  /** A fixed-namespace, digest-derived identifier; the input cannot supply IRI words. */
+  identifierFor(value: Json): Iri;
   /** Handler-owned persistent state for this operation (JSON only). */
   getState<T extends Json>(key: string): T | undefined;
   /** Defaults to this conversation's ownership; null explicitly retains shared operation state. */
@@ -153,6 +177,8 @@ export interface HandlerContext {
 
 export interface OperationHandler {
   readonly description: OperationDescription;
+  /** Vocabulary and purpose boundaries of this operation's installed domain profile. */
+  readonly contentProfile?: ContentProfile;
   /** Validates proposal terms (negotiate) or invocation input (invoke). */
   readonly termsSchema?: z.ZodType<JsonObject>;
   readonly inputSchema?: z.ZodType<JsonObject>;
@@ -229,6 +255,11 @@ export type EffectResult =
  * state authoritatively that nothing was done.
  */
 export interface EffectAdapter {
+  /** Host-installed plain-text email boundary: exact parameters, endpoint pins, context and approval. */
+  readonly plainTextEmail?: boolean;
+  readonly bindsParameters?: boolean;
+  /** A record release binds all actual parameters and includes runtime-owned disclosure labels. */
+  readonly releasesRecord?: boolean;
   readonly id: string;
   execute(key: string, params: JsonObject): Promise<EffectResult>;
   /**

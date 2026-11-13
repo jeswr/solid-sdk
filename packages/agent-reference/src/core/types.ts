@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The transport-neutral interaction model (framework draft parts A1, A2, A4, A6, A8, A11).
  *
@@ -113,6 +114,30 @@ export const REASON_CODES = [
   "insufficient-scope",
   "purpose-not-permitted",
   "no-agreement",
+  "context-not-clear",
+  "terms-not-acceptable",
+  "structured-form-required",
+  "method-not-accepted",
+  "source-unknown",
+  "lookup-failed",
+  "status-withdrawn",
+  "mandate-withdrawn",
+  "prohibited",
+  "confidence-too-low",
+  "superseded-by-better-source",
+  "partial-result",
+  "completeness-not-established",
+  "rule-not-accepted",
+  "deriver-not-accepted",
+  "form-not-available",
+  "rule-unbounded",
+  "limit-exceeded",
+  "budget-exceeded",
+  "stopped-by-principal",
+  "record-unavailable",
+  "derivation-not-verified",
+  "result-uncertain",
+  "evidence-missing",
   // domain
   "invalid-terms",
   "no-acceptable-slot",
@@ -123,6 +148,91 @@ export const REASON_CODES = [
   "execution-failed",
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
+
+/** Core draft 0.5 section 9; old pilot extension codes above remain API compatible. */
+export const CORE_REASON_CODES = [
+  "malformed",
+  "bounds-exceeded",
+  "unsigned-not-allowed",
+  "unknown-key",
+  "bad-signature",
+  "configuration-mismatch",
+  "sender-key-mismatch",
+  "wrong-audience",
+  "expired",
+  "not-yet-valid",
+  "lifetime-too-long",
+  "replay-conflict",
+  "unsupported-configuration",
+  "unsupported-operation",
+  "unsupported-kind",
+  "unsupported-term",
+  "protocol-violation",
+  "terms-digest-mismatch",
+  "round-limit",
+  "conversation-closed",
+  "source-accepted",
+  "source-not-authoritative",
+  "source-unknown",
+  "lookup-failed",
+  "status-withdrawn",
+  "rule-not-accepted",
+  "deriver-not-accepted",
+  "representation-missing",
+  "representation-invalid",
+  "representation-expired",
+  "representation-out-of-scope",
+  "mandate-invalid",
+  "mandate-withdrawn",
+  "assurance-insufficient",
+  "not-authorised",
+  "prohibited",
+  "purpose-not-permitted",
+  "insufficient-scope",
+  "missing-context",
+  "indeterminate-policy",
+  "terms-not-acceptable",
+  "no-agreement",
+  "stale-data",
+  "method-not-accepted",
+  "confidence-too-low",
+  "superseded-by-better-source",
+  "partial-result",
+  "completeness-not-established",
+  "structured-form-required",
+  "excessive-scope",
+  "minimal-disclosure",
+  "form-not-available",
+  "rule-unbounded",
+  "context-not-clear",
+  "approval-required",
+  "approval-denied",
+  "limit-exceeded",
+  "budget-exceeded",
+  "stopped-by-principal",
+  "evidence-invalid",
+  "evidence-missing",
+  "record-unavailable",
+  "derivation-not-verified",
+  "execution-failed",
+  "result-uncertain",
+  "intact",
+  "authority-valid",
+  "terms-acceptable",
+  "fit-for-use",
+  "within-mandate",
+  "recipient-established",
+  "terms-allow",
+  "within-limits",
+  "approval-given",
+  "evidence-complete",
+  "established-earlier",
+  "no-action",
+  "no-claims",
+  "no-principal",
+  "no-data",
+  "no-personal-data",
+] as const;
 
 /** A protected statement carried alongside a message (A1 relay, A6 evidence). */
 export interface EvidenceItem {
@@ -180,8 +290,12 @@ export interface ChallengeBody {
   readonly ref: Iri;
   readonly reason: ReasonCode;
   readonly detail?: string;
-  /** The approval level asked for, and how a person would say it. */
-  readonly needs: { readonly approval: Iri; readonly label: string };
+  /** A stronger approval or replacement claim requested by the gate, with a bound retry. */
+  readonly needs: {
+    readonly id: Iri;
+    readonly nonce: Iri;
+    readonly expiresAt: string;
+  } & ({ readonly approval: Iri; readonly label: string } | { readonly claim: string });
 }
 
 export interface RefuseBody {
@@ -190,6 +304,7 @@ export interface RefuseBody {
   readonly detail?: string;
 }
 export interface InvokeBody {
+  readonly challenge?: { readonly id: Iri; readonly nonce: Iri };
   readonly operation: OperationRef;
   readonly input: JsonObject;
   readonly basis: Basis;
@@ -240,6 +355,14 @@ export interface BodyByKind {
  * protected by the selected integrity mechanism: profile, configuration, identity, kind,
  * audience, conversation, times, reply linkage, body and evidence.
  */
+export interface ContentPart {
+  readonly id: Iri;
+  readonly mediaType: string;
+  readonly digest: string;
+  /** UTF-8 text or raw byte values in this JSON binding. */
+  readonly bytes: string | readonly number[];
+}
+
 export interface Message<K extends MessageKind = MessageKind> {
   readonly profile: string;
   readonly configuration: string;
@@ -251,8 +374,10 @@ export interface Message<K extends MessageKind = MessageKind> {
   readonly createdAt: string;
   readonly expiresAt: string;
   readonly inReplyTo?: Iri;
+  readonly authorship?: { readonly method: "model-output"; readonly onBehalfOf: Iri };
   readonly body: BodyByKind[K];
   readonly evidence?: readonly EvidenceItem[];
+  readonly content?: readonly ContentPart[];
 }
 
 export type AnyMessage = { [K in MessageKind]: Message<K> }[MessageKind];
@@ -290,6 +415,7 @@ export type AssessmentOutcome = "accepted" | "not-accepted" | "unresolved";
 
 /** Does the evaluator accept that `actor` speaks for `party` for this operation (A1/A3)? */
 export interface RepresentationAssessment {
+  readonly deciderRole?: string;
   readonly type: "representation-assessment";
   readonly evaluator: Iri;
   readonly actor: Iri;
@@ -330,7 +456,12 @@ export interface ActionIntent {
   readonly conversation: Iri;
 }
 
-export type AuthorisationOutcome = "permit" | "deny" | "approval-required" | "indeterminate";
+export type AuthorisationOutcome =
+  | "permit"
+  | "deny"
+  | "approval-required"
+  | "indeterminate"
+  | "ask-more";
 
 export interface AuthorisationDecision {
   readonly type: "authorisation-decision";

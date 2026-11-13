@@ -1,0 +1,109 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "right-to-work",
+  "claims": [
+    {
+      "kind": "work.entitled",
+      "sources": [
+        "urn:fictional:immigration-office"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "degree",
+      "sources": [
+        "urn:fictional:university"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 3650
+    },
+    {
+      "kind": "passport.scan",
+      "sources": [
+        "urn:fictional:immigration-office"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "work.valid-until",
+      "sources": [
+        "urn:fictional:immigration-office"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:right-to-work",
+      "claims": [
+        "work.entitled",
+        "degree"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.claims.*": {
+      "type": "code",
+      "values": [
+        "work.entitled",
+        "degree",
+        "passport.scan"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:right-to-work",
+      "version": "0.1",
+      "label": "urn:op:right-to-work",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:employment-evidence-request",
+      "version": "0.1",
+      "label": "Request employment evidence",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Immigration authority and university credential issuance",
+      "replacedBy": "Separately keyed fictional issuer-only sources issuing salted-digest credentials; ordinary disclosure only, no hidden-value proofs"
+    }
+  ],
+  "parties": {
+    "candidate": "The candidate",
+    "employer": "The employer",
+    "immigration-office": "The fictional immigration office",
+    "university": "The fictional university",
+    "candidate-agent": "The candidate’s agent",
+    "employer-agent": "The employer’s agent"
+  }
+}

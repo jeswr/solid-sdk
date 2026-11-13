@@ -1,0 +1,435 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "care-abroad",
+  "useCase": "care-abroad",
+  "title": "Health data across a border",
+  "profile": "care-abroad",
+  "parties": [
+    {
+      "id": "party-1",
+      "identity": "urn:fictional:care-abroad:party-1",
+      "name": "A traveller",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-2",
+      "identity": "urn:fictional:care-abroad:party-2",
+      "name": "A home practice",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-3",
+      "identity": "urn:fictional:care-abroad:party-3",
+      "name": "A clinic abroad",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "clinic-agent",
+      "identity": "urn:fictional:care-abroad:clinic-agent",
+      "actor": "urn:fictional:care-abroad:clinic-agent:actor",
+      "name": "The clinic’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "party-3"
+    },
+    {
+      "id": "mapping-registry",
+      "identity": "urn:fictional:care-abroad:mapping-registry",
+      "name": "The fictional clinical mapping registry",
+      "role": "source",
+      "runs": "issuer-only"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {
+      "clinic-agent": []
+    },
+    "sources": {
+      "clinic-agent": [
+        {
+          "id": "urn:fictional:care-abroad:clinical-source",
+          "version": "1",
+          "source": "urn:fictional:care-abroad:party-2",
+          "claimTypes": [
+            "medicine.code"
+          ],
+          "subjects": [
+            "urn:fictional:care-abroad:party-1"
+          ]
+        },
+        {
+          "id": "urn:fictional:care-abroad:mapping-source",
+          "version": "1",
+          "source": "urn:fictional:care-abroad:mapping-registry",
+          "claimTypes": [
+            "code-mapping"
+          ],
+          "subjects": [
+            "urn:medicine-list:A"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "medicine",
+      "issuer": "party-2",
+      "subject": "urn:fictional:care-abroad:party-1",
+      "kind": "medicine.code",
+      "value": {
+        "codeList": "urn:medicine-list:A",
+        "code": "A1"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:fictional:care-abroad:medicine-terms",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:care-abroad:medicine",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:care-abroad"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:care-abroad:medicine",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:care-abroad"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "clinic-agent",
+      "autonomous": [],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "receive-medicine",
+      "agent": "clinic-agent",
+      "type": "admit",
+      "statements": [
+        "medicine"
+      ],
+      "purpose": "urn:purpose:care-abroad"
+    },
+    {
+      "id": "mapped-facts",
+      "agent": "clinic-agent",
+      "type": "facts"
+    },
+    {
+      "id": "mapped-code",
+      "agent": "clinic-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.mapped-facts.0.code"
+      },
+      "expected": "B7"
+    },
+    {
+      "id": "attested-map",
+      "agent": "clinic-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.mapped-facts.0.derivation.assurance"
+      },
+      "expected": "attested"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "No mapping exists for a medicine",
+      "change": {
+        "assurance": null,
+        "blocked": [],
+        "statements": [
+          {
+            "id": "medicine",
+            "issuer": "party-2",
+            "subject": "urn:fictional:care-abroad:party-1",
+            "kind": "medicine.code",
+            "value": {
+              "codeList": "urn:medicine-list:A",
+              "code": "UNMAPPED"
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:fictional:care-abroad:medicine-terms",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:care-abroad:medicine",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:care-abroad"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:care-abroad:medicine",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:care-abroad"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "script": [
+          {
+            "id": "receive-medicine",
+            "agent": "clinic-agent",
+            "type": "admit",
+            "statements": [
+              "medicine"
+            ],
+            "purpose": "urn:purpose:care-abroad"
+          }
+        ],
+        "traceSteps": {
+          "1": "The clinic checks the original source and asks the signed registry about the unsupported medicine code."
+        }
+      },
+      "expect": {
+        "outcome": "ask-more",
+        "reason": "unsupported-term",
+        "check": "fitness"
+      },
+      "outline": [
+        {
+          "agent": "clinic-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "ask-more",
+          "reason": "unsupported-term"
+        },
+        {
+          "agent": "clinic-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "ask-more",
+          "reason": "unsupported-term"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "ask-more",
+        "reason": "unsupported-term"
+      }
+    }
+  ],
+  "expect": [
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "fitness",
+    "source"
+  ],
+  "suites": {
+    "meaning": "registry-lookup"
+  },
+  "assurance": "attested",
+  "blocked": [],
+  "mappingTables": [
+    {
+      "issuer": "mapping-registry",
+      "value": {
+        "type": "CodeMappingTable",
+        "id": "urn:fictional:care-abroad:mapping-table",
+        "issuer": "urn:fictional:care-abroad:mapping-registry",
+        "version": "1",
+        "fromList": "urn:medicine-list:A",
+        "toList": "urn:medicine-list:B",
+        "validFrom": "2026-01-01T00:00:00.000Z",
+        "validUntil": "2027-01-01T00:00:00.000Z",
+        "entries": [
+          {
+            "from": "A1",
+            "to": "B7",
+            "relation": "exact"
+          },
+          {
+            "from": "A2",
+            "to": "B8",
+            "relation": "approximate"
+          }
+        ],
+        "status": {
+          "ref": "urn:fictional:care-abroad:mapping-status",
+          "id": "table-version-1"
+        }
+      }
+    }
+  ],
+  "documents": [
+    {
+      "id": "urn:fictional:care-abroad:mapping-status",
+      "issuer": "mapping-registry",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:care-abroad:mapping-status",
+        "issuer": "urn:fictional:care-abroad:mapping-registry",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-11-14T09:00:00.000Z",
+        "entries": {
+          "table-version-1": "active"
+        }
+      }
+    }
+  ],
+  "traceSteps": {
+    "1": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version.",
+    "2": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version.",
+    "3": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version.",
+    "4": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version."
+  },
+  "standIns": [
+    {
+      "what": "Cross-border clinical sources and mapping registry",
+      "replacedBy": "Separately keyed fictional clinical and registry sources publish the original signed medicine statement, a versioned signed mapping table and fresh signed status via a local resolver. Local explicit source rules replace the catalogue federation trust route; no federation transport is claimed."
+    },
+    {
+      "what": "An attested mapping result",
+      "replacedBy": "The fictional mapping registry is an issuer-only deriver with its own key. It verifies the actual original signature and computes the mapping from the signed table, then publishes a signed record bound to the original digest, table version and output; the clinic’s profile accepts it for this purpose."
+    }
+  ],
+  "result": {
+    "outcome": "admit",
+    "check": "fitness",
+    "reason": "fit-for-use"
+  }
+}

@@ -1,0 +1,2684 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "emergency-access",
+  "title": "Access to allergies in an emergency",
+  "profile": "emergency-access",
+  "parties": [
+    {
+      "id": "clinician",
+      "identity": "urn:fictional:clinician",
+      "name": "The clinician",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "patient",
+      "identity": "urn:fictional:patient",
+      "name": "The patient",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "contact",
+      "identity": "urn:fictional:contact",
+      "name": "The trusted contact",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "register",
+      "identity": "urn:fictional:register",
+      "name": "The professional register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "practice",
+      "identity": "urn:fictional:practice",
+      "name": "The family practice",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "clinician-agent",
+      "identity": "urn:fictional:clinician-agent",
+      "name": "The clinician’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:clinician-agent:agent",
+      "actsFor": "clinician"
+    },
+    {
+      "id": "record-agent",
+      "identity": "urn:fictional:record-agent",
+      "name": "The patient’s record agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:record-agent:agent",
+      "actsFor": "patient"
+    },
+    {
+      "id": "patient-agent",
+      "identity": "urn:fictional:patient-agent",
+      "name": "The patient’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:patient-agent:agent",
+      "actsFor": "patient"
+    },
+    {
+      "id": "contact-agent",
+      "identity": "urn:fictional:contact-agent",
+      "name": "The trusted contact’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:contact-agent:agent",
+      "actsFor": "contact"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "record-agent",
+        "clinician-agent"
+      ],
+      [
+        "record-agent",
+        "patient-agent"
+      ],
+      [
+        "record-agent",
+        "contact-agent"
+      ]
+    ],
+    "ownLists": {
+      "clinician-agent": [
+        {
+          "party": "urn:fictional:clinician",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:patient",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:patient",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:contact",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:register",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:practice",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        }
+      ],
+      "record-agent": [
+        {
+          "party": "urn:fictional:clinician",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:patient",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:patient",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:contact",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:register",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:practice",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        }
+      ],
+      "patient-agent": [
+        {
+          "party": "urn:fictional:clinician",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:patient",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:patient",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:contact",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:register",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:practice",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        }
+      ],
+      "contact-agent": [
+        {
+          "party": "urn:fictional:clinician",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:patient",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:patient",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:contact",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:register",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        },
+        {
+          "party": "urn:fictional:practice",
+          "tasks": [
+            "urn:op:emergency-read",
+            "urn:op:duty-notification"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "clinician-agent": [
+        {
+          "id": "urn:source:register",
+          "version": "1",
+          "source": "urn:fictional:register",
+          "claimTypes": [
+            "organization.role"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:clinician",
+          "version": "1",
+          "source": "urn:fictional:clinician",
+          "claimTypes": [
+            "emergency.declaration"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:practice",
+          "version": "1",
+          "source": "urn:fictional:practice",
+          "claimTypes": [
+            "clinical.summary"
+          ],
+          "subjects": "any"
+        }
+      ],
+      "record-agent": [
+        {
+          "id": "urn:source:register",
+          "version": "1",
+          "source": "urn:fictional:register",
+          "claimTypes": [
+            "organization.role"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:clinician",
+          "version": "1",
+          "source": "urn:fictional:clinician",
+          "claimTypes": [
+            "emergency.declaration"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:practice",
+          "version": "1",
+          "source": "urn:fictional:practice",
+          "claimTypes": [
+            "clinical.summary"
+          ],
+          "subjects": "any"
+        }
+      ],
+      "patient-agent": [
+        {
+          "id": "urn:source:register",
+          "version": "1",
+          "source": "urn:fictional:register",
+          "claimTypes": [
+            "organization.role"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:clinician",
+          "version": "1",
+          "source": "urn:fictional:clinician",
+          "claimTypes": [
+            "emergency.declaration"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:practice",
+          "version": "1",
+          "source": "urn:fictional:practice",
+          "claimTypes": [
+            "clinical.summary"
+          ],
+          "subjects": "any"
+        }
+      ],
+      "contact-agent": [
+        {
+          "id": "urn:source:register",
+          "version": "1",
+          "source": "urn:fictional:register",
+          "claimTypes": [
+            "organization.role"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:clinician",
+          "version": "1",
+          "source": "urn:fictional:clinician",
+          "claimTypes": [
+            "emergency.declaration"
+          ],
+          "subjects": "any"
+        },
+        {
+          "id": "urn:source:practice",
+          "version": "1",
+          "source": "urn:fictional:practice",
+          "claimTypes": [
+            "clinical.summary"
+          ],
+          "subjects": "any"
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "role",
+      "issuer": "register",
+      "subject": "urn:fictional:clinician",
+      "kind": "organization.role",
+      "value": {
+        "role": "registered-emergency-clinician",
+        "organization": "urn:fictional:register",
+        "actorKeyOf": "clinician-agent",
+        "validUntil": "2026-11-14T00:00:00.000Z",
+        "status": "active",
+        "validFrom": "2026-11-01T00:00:00.000Z"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:role",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:emergency-access:role"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:emergency-access:role"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "emergency",
+      "issuer": "clinician",
+      "subject": "urn:fictional:clinician",
+      "kind": "emergency.declaration",
+      "value": {
+        "declared": "emergency"
+      },
+      "method": "self-reported",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:emergency",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:emergency-access:emergency"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:emergency-access:emergency"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "summary",
+      "issuer": "practice",
+      "subject": "urn:fictional:patient",
+      "kind": "clinical.summary",
+      "value": {
+        "value": "none-known"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:summary",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:emergency-access:summary"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:emergency-access:summary"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "clinician-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:emergency-read"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:duty-notification"
+        }
+      ],
+      "withApproval": [],
+      "standingRules": []
+    },
+    {
+      "agent": "record-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:duty-notification"
+        }
+      ],
+      "withApproval": [],
+      "standingRules": [
+        {
+          "id": "urn:rule:emergency-read",
+          "when": {
+            "requesterRole": "registered-emergency-clinician",
+            "declared": "emergency"
+          },
+          "allows": {
+            "action": "read",
+            "items": [
+              "allergies",
+              "current-medicines"
+            ]
+          },
+          "duties": [
+            {
+              "notify": [
+                "principal",
+                "named-contact"
+              ],
+              "within": "PT1H"
+            }
+          ],
+          "expires": "2026-12-01T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "agent": "patient-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:emergency-read"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:duty-notification"
+        }
+      ],
+      "withApproval": [],
+      "standingRules": []
+    },
+    {
+      "agent": "contact-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:emergency-read"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:duty-notification"
+        }
+      ],
+      "withApproval": [],
+      "standingRules": []
+    }
+  ],
+  "script": [
+    {
+      "id": "clinician-evidence",
+      "agent": "clinician-agent",
+      "type": "admit",
+      "statements": [
+        "role",
+        "emergency"
+      ],
+      "purpose": "urn:purpose:emergency-access",
+      "subject": "urn:fictional:clinician"
+    },
+    {
+      "id": "patient-summary",
+      "agent": "record-agent",
+      "type": "admit",
+      "statements": [
+        "summary"
+      ],
+      "purpose": "urn:purpose:emergency-access",
+      "subject": "urn:fictional:patient"
+    },
+    {
+      "id": "request",
+      "agent": "clinician-agent",
+      "type": "start",
+      "peer": "record-agent",
+      "kind": "invoke",
+      "operation": "urn:op:emergency-read",
+      "contents": {
+        "items": [
+          "allergies",
+          "current-medicines"
+        ]
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:emergency-read",
+        "target": "urn:op:emergency-read",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "parameters": {},
+        "conversation": "urn:scenario:emergency-access:task"
+      },
+      "purpose": "urn:purpose:emergency-access",
+      "evidence": [
+        "role",
+        "emergency"
+      ]
+    },
+    {
+      "id": "record-answers",
+      "agent": "record-agent",
+      "type": "receive",
+      "from": "clinician-agent"
+    },
+    {
+      "id": "release-summary",
+      "agent": "record-agent",
+      "type": "message",
+      "conversation": {
+        "$ref": "steps.request.conversation"
+      },
+      "kind": "deliver",
+      "body": {
+        "ref": {
+          "$ref": "steps.request.outbound.0.id"
+        },
+        "basis": {
+          "kind": "invocation",
+          "invocation": {
+            "$ref": "steps.request.outbound.0.id"
+          }
+        },
+        "operation": {
+          "id": "urn:op:emergency-read",
+          "version": "0.1"
+        },
+        "output": {
+          "items": {
+            "allergies": "none-known",
+            "current-medicines": "none-known"
+          }
+        }
+      },
+      "intent": {
+        "action": "read",
+        "operation": "urn:op:emergency-read",
+        "target": "urn:op:emergency-read",
+        "recipient": "urn:fictional:clinician",
+        "purpose": "urn:purpose:emergency-access",
+        "parameters": {
+          "items": [
+            "allergies",
+            "current-medicines"
+          ]
+        },
+        "conversation": {
+          "$ref": "steps.request.conversation"
+        }
+      }
+    },
+    {
+      "id": "summary-received",
+      "agent": "clinician-agent",
+      "type": "receive",
+      "from": "record-agent"
+    },
+    {
+      "id": "notify",
+      "agent": "record-agent",
+      "type": "notifications"
+    },
+    {
+      "id": "patient-told",
+      "agent": "patient-agent",
+      "type": "receive",
+      "from": "record-agent"
+    },
+    {
+      "id": "contact-told",
+      "agent": "contact-agent",
+      "type": "receive",
+      "from": "record-agent"
+    },
+    {
+      "id": "duties",
+      "agent": "record-agent",
+      "type": "duties"
+    },
+    {
+      "id": "two-duties",
+      "agent": "record-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.duties.0.status"
+      },
+      "expected": "discharged"
+    },
+    {
+      "id": "second-duty",
+      "agent": "record-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.duties.1.status"
+      },
+      "expected": "discharged"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The request comes from a registered clinician with an emergency flag",
+      "change": {},
+      "expect": {
+        "outcome": "go",
+        "check": "source",
+        "reason": "source-accepted"
+      },
+      "outline": [
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "record-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "record-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "record-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "record-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "patient-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "contact-agent",
+          "part": "transport",
+          "kind": "message-out"
+        }
+      ]
+    },
+    {
+      "id": "branch-2",
+      "what": "The same flag is used by someone not on the register",
+      "change": {
+        "script": [
+          {
+            "id": "clinician-evidence",
+            "agent": "clinician-agent",
+            "type": "admit",
+            "statements": [
+              "emergency"
+            ],
+            "purpose": "urn:purpose:emergency-access",
+            "subject": "urn:fictional:clinician"
+          },
+          {
+            "id": "patient-summary",
+            "agent": "record-agent",
+            "type": "admit",
+            "statements": [
+              "summary"
+            ],
+            "purpose": "urn:purpose:emergency-access",
+            "subject": "urn:fictional:patient"
+          },
+          {
+            "id": "request",
+            "agent": "clinician-agent",
+            "type": "start",
+            "peer": "record-agent",
+            "kind": "invoke",
+            "operation": "urn:op:emergency-read",
+            "contents": {
+              "items": [
+                "allergies",
+                "current-medicines"
+              ]
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:emergency-read",
+              "target": "urn:op:emergency-read",
+              "recipient": "urn:fictional:patient",
+              "purpose": "urn:purpose:emergency-access",
+              "parameters": {},
+              "conversation": "urn:scenario:emergency-access:task"
+            },
+            "purpose": "urn:purpose:emergency-access",
+            "evidence": [
+              "emergency"
+            ]
+          },
+          {
+            "id": "record-answers",
+            "agent": "record-agent",
+            "type": "receive",
+            "from": "clinician-agent"
+          },
+          {
+            "id": "release-summary",
+            "agent": "record-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.request.conversation"
+            },
+            "kind": "deliver",
+            "body": {
+              "ref": {
+                "$ref": "steps.request.outbound.0.id"
+              },
+              "basis": {
+                "kind": "invocation",
+                "invocation": {
+                  "$ref": "steps.request.outbound.0.id"
+                }
+              },
+              "operation": {
+                "id": "urn:op:emergency-read",
+                "version": "0.1"
+              },
+              "output": {
+                "items": {
+                  "allergies": "none-known",
+                  "current-medicines": "none-known"
+                }
+              }
+            },
+            "intent": {
+              "action": "read",
+              "operation": "urn:op:emergency-read",
+              "target": "urn:op:emergency-read",
+              "recipient": "urn:fictional:clinician",
+              "purpose": "urn:purpose:emergency-access",
+              "parameters": {
+                "items": [
+                  "allergies",
+                  "current-medicines"
+                ]
+              },
+              "conversation": {
+                "$ref": "steps.request.conversation"
+              }
+            }
+          }
+        ],
+        "traceSteps": {
+          "1": "The clinician’s agent checks and admits the signed statements.",
+          "2": "The patient’s record agent checks and admits the signed statements.",
+          "3": "The clinician’s agent sends a signed request.",
+          "4": "The patient’s record agent checks the incoming message and prepares a response.",
+          "5": "The patient’s record agent completes the message step."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "source",
+        "reason": "source-unknown"
+      },
+      "outline": [
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "clinician-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "record-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "record-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "record-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "record-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "record-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "record-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "clinician-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "record-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "record-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "record-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "patient-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "contact-agent",
+      "part": "transport",
+      "kind": "message-out"
+    }
+  ],
+  "stress": [
+    "authority",
+    "limits-approval",
+    "evidence"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "useCase": "emergency-access",
+  "traceSteps": {
+    "1": "The clinician’s agent checks and admits the signed statements.",
+    "2": "The patient’s record agent checks and admits the signed statements.",
+    "3": "The clinician’s agent sends a signed request.",
+    "4": "The patient’s record agent checks the incoming message and prepares a response.",
+    "5": "The patient’s record agent completes the message step.",
+    "6": "The clinician’s agent checks the incoming message and prepares a response.",
+    "7": "The patient’s record agent completes the notifications step.",
+    "8": "The patient’s agent checks the incoming message and prepares a response.",
+    "9": "The trusted contact’s agent checks the incoming message and prepares a response.",
+    "10": "The patient’s record agent completes the duties step.",
+    "11": "The patient’s record agent checks the observed result.",
+    "12": "The patient’s record agent checks the observed result."
+  }
+}

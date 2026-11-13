@@ -1,0 +1,96 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "return-and-refund",
+  "parties": {
+    "owner": "The customer",
+    "receiver": "The merchant",
+    "owner-agent": "The customer’s agent",
+    "receiver-agent": "The merchant’s agent"
+  },
+  "claims": [
+    {
+      "kind": "merchant.receipt",
+      "sources": [
+        "urn:fictional:return-and-refund:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 365
+    },
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:return-and-refund:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 365
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:return-and-refund",
+      "claims": [
+        "merchant.receipt",
+        "unstructured-content"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "merchant.receipt"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:return-and-refund",
+      "version": "0.1",
+      "label": "Returning a faulty item",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:return-and-refund"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:return-and-refund:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:return-and-refund"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "transfer",
+      "claims": [
+        "merchant.receipt"
+      ]
+    }
+  ]
+}

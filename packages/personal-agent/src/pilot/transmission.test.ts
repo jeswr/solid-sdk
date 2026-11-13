@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Phase-2 review items 1 and 2: provider transmission is an effect boundary.
  *  1. Authorisation and expiry are re-decided when the message is actually transmitted
@@ -138,7 +139,7 @@ async function alicePropose(alice: PersonalAgent, bob: PersonalAgent, now: Date)
     operation: SCHEDULE_OP,
     terms: buildMeetingTerms({
       calendar: alice.calendar,
-      title: "Synthetic catch-up",
+      title: "catch-up",
       durationMinutes: 30,
       window: { start: "2026-10-20T13:00:00Z", end: "2026-10-20T17:00:00Z" },
       now: now.toISOString(),
@@ -196,7 +197,7 @@ describe("review item 1 — authorisation and expiry are re-decided at transmiss
     await alice.runtime.revokeMandate();
     const r = await adapter(alice, mb.transport).sendReviewed(i);
     expect(r.status).toBe("refused");
-    expect((r as { reason: string }).reason).toMatch(/^not-authorised: .*revoked/);
+    expect((r as { reason: string }).reason).toMatch(/^not-authorised: .*mandate-withdrawn/);
     // Two days later: still refused (now also expired) — and nothing ever reached the provider.
     clock.advance(2 * 86_400_000);
     const later = await adapter(alice, mb.transport).sendReviewed(i);

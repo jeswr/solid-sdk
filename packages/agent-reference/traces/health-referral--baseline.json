@@ -1,0 +1,1300 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "health-referral",
+  "path": "main",
+  "parties": [
+    {
+      "id": "practice",
+      "name": "The family practice"
+    },
+    {
+      "id": "clinic",
+      "name": "The specialist clinic"
+    },
+    {
+      "id": "record-holder",
+      "name": "The local record holder"
+    },
+    {
+      "id": "register",
+      "name": "The professional register"
+    },
+    {
+      "id": "clinician",
+      "name": "The clinician"
+    },
+    {
+      "id": "practice-agent",
+      "name": "The family practice’s agent"
+    },
+    {
+      "id": "clinic-agent",
+      "name": "The specialist clinic’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "health-referral",
+    "title": "A referral from a family doctor to a specialist",
+    "steps": {
+      "1": "The family practice’s agent checks and admits the signed statements.",
+      "2": "The family practice’s agent sends a signed request.",
+      "3": "The family practice’s agent obtains a staff approval.",
+      "4": "The specialist clinic’s agent checks the incoming message and prepares a response.",
+      "5": "The specialist clinic’s agent requests the permitted record item.",
+      "6": "The specialist clinic’s agent checks the observed result.",
+      "7": "The specialist clinic’s agent checks the durable record."
+    }
+  },
+  "configuration": {
+    "id": "health-referral-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-reference-local-holder",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "practice-agent",
+      "name": "The family practice’s agent",
+      "actsFor": "practice",
+      "role": "agent"
+    },
+    {
+      "id": "clinic-agent",
+      "name": "The specialist clinic’s agent",
+      "actsFor": "clinic",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "by-reference-solid catalogue store and Solid access control",
+      "replacedBy": "By-reference local resource-holder party with its own issuer key, signed reader/item/purpose/expiry grants and recorded authenticated reads; no Solid access-control claim"
+    },
+    {
+      "what": "Professional register",
+      "replacedBy": "Fictional issuer-only register signing current clinician roles"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The professional register's organization.role statement is intact and signed with The professional register's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:register:organization.role",
+        "text": "The professional register is accepted for organization.role claims."
+      },
+      "resolution": {
+        "question": "Is The professional register an authority for organization.role claims about The clinician?",
+        "path": [
+          {
+            "at": "The family practice's own list",
+            "kind": "own-list",
+            "says": "The professional register is accepted for organization.role."
+          }
+        ],
+        "answer": "Accepted, for organization.role claims only."
+      },
+      "caption": "The professional register's organization.role statement: The professional register is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The professional register's organization.role statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:role",
+        "text": "Its terms allow this: ."
+      },
+      "caption": "The professional register's organization.role statement: its terms allow this: ."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:health-referral:organization.role",
+        "text": "Accept organization.role from urn:fictional:register by recorded-by-authority, at most 90 days old."
+      },
+      "caption": "The professional register's organization.role statement is fit for urn:scenario:health-referral:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The professional register's organization.role statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "practice-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:health-referral:role",
+        "label": "The professional register's organization.role statement",
+        "claimType": "organization.role",
+        "subject": "urn:fictional:clinician",
+        "value": null,
+        "source": "urn:fictional:register",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:role",
+          "summary": ""
+        },
+        "provenance": "signed by The professional register"
+      },
+      "caption": "The professional register's organization.role statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:health referral with The specialist clinic."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:refer",
+        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "The family practice's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The specialist clinic a party I can send urn:op:health-referral to?",
+        "path": [
+          {
+            "at": "The family practice's own list",
+            "kind": "own-list",
+            "says": "The specialist clinic is accepted for urn:op:health-referral."
+          }
+        ],
+        "answer": "Accepted, for urn:op:health-referral only."
+      },
+      "reason": "recipient-established",
+      "caption": "The specialist clinic: Accepted, for urn:op:health-referral only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-reference-local-holder",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "approval-required",
+      "rule": {
+        "id": "urn:rule:refer",
+        "text": "Requires 1 approval(s) from clinician."
+      },
+      "caption": "The required people must decide this exact action."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "approval-required",
+      "caption": "The action is held for the named decision makers."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "practice-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "approval-required",
+      "chat": {
+        "who": "agent",
+        "text": "To clinician: The specialist clinic asks me to use urn:op:health referral with The specialist clinic for urn:purpose:health referral. May I go ahead? Action digest: sha-256:fbdaea6fb9795796bb0b9d7c2aa1bf62a9c808d8468a04ffcb5663b282f1115b. Parameters: {\"resource\":\"urn:resource:patient-history\",\"items\":[\"urn:scenario:health-referral:history\"],\"grantDigest\":\"sha-256:9e0d10a53932c0ec7658f805a44b5a911c86be7e4dac482f95a9170cde23b8b4\"}"
+      },
+      "caption": "The gate built this request from the action and the approval rule."
+    },
+    {
+      "seq": 16,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to use urn:op:health referral with The specialist clinic."
+    },
+    {
+      "seq": 17,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:refer",
+        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "The family practice's mandate covers this action."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The specialist clinic a party I can send urn:op:health-referral to?",
+        "path": [
+          {
+            "at": "The family practice's own list",
+            "kind": "own-list",
+            "says": "The specialist clinic is accepted for urn:op:health-referral."
+          }
+        ],
+        "answer": "Accepted, for urn:op:health-referral only."
+      },
+      "reason": "recipient-established",
+      "caption": "The specialist clinic: Accepted, for urn:op:health-referral only."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-reference-local-holder",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The family practice's limits."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:refer",
+        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "The family practice's mandate covers this action."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The specialist clinic a party I can send urn:op:health-referral to?",
+        "path": [
+          {
+            "at": "The family practice's own list",
+            "kind": "own-list",
+            "says": "The specialist clinic is accepted for urn:op:health-referral."
+          }
+        ],
+        "answer": "Accepted, for urn:op:health-referral only."
+      },
+      "reason": "recipient-established",
+      "caption": "The specialist clinic: Accepted, for urn:op:health-referral only."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-reference-local-holder",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 25,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 26,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The family practice's limits."
+    },
+    {
+      "seq": 27,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-reference-local-holder",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The vocabulary identifies only the necessary claims: referral.history."
+    },
+    {
+      "seq": 28,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-reference-local-holder",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The professional register's organization.role statement (urn:fictional:clinician) is needed for this purpose."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The professional register's organization.role statement: Its terms allow this: ."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The family practice’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The specialist clinic’s agent."
+    },
+    {
+      "seq": 32,
+      "step": 3,
+      "agent": "practice-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-health-referral-main:practice-agent:0002",
+        "from": "The family practice’s agent",
+        "to": "The specialist clinic’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:098578e3136…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The family practice’s agent to The specialist clinic’s agent; invoke; signed (JWS EdDSA, pinned key ym5YNP3DYgvr…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-health-referral-main:practice-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
+              "id": "urn:awp:engine-health-referral-main:practice-agent:0002",
+              "conversation": "urn:awp:engine-health-referral-main:practice-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:practice-agent:agent",
+                "onBehalfOf": "urn:fictional:practice"
+              },
+              "to": {
+                "actor": "urn:fictional:clinic-agent:agent",
+                "party": "urn:fictional:clinic"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "ym5YNP3DYgvrHp4XmAS3pHYf4JJ5_0b9sqnroABrSsU",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:b5e6e37508008f623c8d17d71ad0a36ce7d53caf394810b964156b3f657755c4"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The family practice says The family practice’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:b910d30a2623d9b16abca10c0dd34392:1794560400000",
+                "party": "urn:fictional:practice",
+                "actor": "urn:fictional:practice-agent:agent",
+                "actorKid": "ym5YNP3DYgvrHp4XmAS3pHYf4JJ5_0b9sqnroABrSsU",
+                "operations": [
+                  "urn:op:health-referral",
+                  "urn:op:referral-more"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:9825cd67c19317aa665fd170e91ee83a26e498c50c1273a2fc96b38be0b698e3"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:health-referral",
+                "version": "0.1"
+              },
+              "input": {
+                "reference": {
+                  "ref": "urn:resource:patient-history",
+                  "claimTypes": [
+                    "referral.history"
+                  ],
+                  "grant": "eyJhbGciOiJFZERTQSIsImtpZCI6IlFyUDlreW16THc3OGwyYmh2bVhlNVFoMENvYVg5MlBBemVObGI3bmpsUUUiLCJ0eXAiOiJhd3AtcmVzb3VyY2UtZ3JhbnQrandzIn0.eyJ0eXBlIjoiUmVzb3VyY2VHcmFudCIsImlkIjoidXJuOmdyYW50OmhlYWx0aC1yZWZlcnJhbDpoaXN0b3J5LWdyYW50IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpyZWNvcmQtaG9sZGVyIiwicmVmIjoidXJuOnJlc291cmNlOnBhdGllbnQtaGlzdG9yeSIsInJlYWRlciI6eyJhY3RvciI6InVybjpmaWN0aW9uYWw6Y2xpbmljLWFnZW50OmFnZW50IiwicGFydHkiOiJ1cm46ZmljdGlvbmFsOmNsaW5pYyJ9LCJpdGVtcyI6W3siaWQiOiJ1cm46c2NlbmFyaW86aGVhbHRoLXJlZmVycmFsOmhpc3RvcnkiLCJjbGFpbVR5cGUiOiJyZWZlcnJhbC5oaXN0b3J5In1dLCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6aGVhbHRoLXJlZmVycmFsIiwidmFsaWRVbnRpbCI6IjIwMjYtMTEtMTRUMDA6MDA6MDAuMDAwWiJ9.glGmuRjRdiIqzt8eLre8pJF-Jp8QW0GL5GfV-iQ92H-3lnoywbi9A9MFV4AAdz-doyPB0JyD9EFjznnHUwbIAg"
+                }
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:health-referral"
+            },
+            "digest": "sha-256:fb470a25b0adfe2b41e10128b94e6667d8b1e24525acd87b55f09db842f954b5"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-health-referral-main:practice-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-reference-local-holder"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The family practice’s agent sends an invoke message to The specialist clinic’s agent."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "clinic-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-health-referral-main:practice-agent:0002",
+        "from": "The family practice’s agent",
+        "to": "The specialist clinic’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:098578e3136…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The family practice’s agent to The specialist clinic’s agent; invoke; signed (JWS EdDSA, pinned key ym5YNP3DYgvr…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-health-referral-main:practice-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
+              "id": "urn:awp:engine-health-referral-main:practice-agent:0002",
+              "conversation": "urn:awp:engine-health-referral-main:practice-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:practice-agent:agent",
+                "onBehalfOf": "urn:fictional:practice"
+              },
+              "to": {
+                "actor": "urn:fictional:clinic-agent:agent",
+                "party": "urn:fictional:clinic"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "ym5YNP3DYgvrHp4XmAS3pHYf4JJ5_0b9sqnroABrSsU",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:b5e6e37508008f623c8d17d71ad0a36ce7d53caf394810b964156b3f657755c4"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The family practice says The family practice’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:b910d30a2623d9b16abca10c0dd34392:1794560400000",
+                "party": "urn:fictional:practice",
+                "actor": "urn:fictional:practice-agent:agent",
+                "actorKid": "ym5YNP3DYgvrHp4XmAS3pHYf4JJ5_0b9sqnroABrSsU",
+                "operations": [
+                  "urn:op:health-referral",
+                  "urn:op:referral-more"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:9825cd67c19317aa665fd170e91ee83a26e498c50c1273a2fc96b38be0b698e3"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:health-referral\"; \"urn:resource:patient-history\"; \"referral.history\"; \"eyJhbGciOiJFZERTQSIsImtpZCI6IlFyUDlreW16THc3OGwyYmh2bVhlNVFoMENvYVg5MlBBemVObGI3bmpsUUUiLCJ0eXAiOiJhd3AtcmVzb3VyY2UtZ3JhbnQrandzIn0.eyJ0eXBlIjoiUmVzb3VyY2VHcmFudCIsImlkIjoidXJuOmdyYW50OmhlYWx0aC1yZWZlcnJhbDpoaXN0b3J5LWdyYW50IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpyZWNvcmQtaG9sZGVyIiwicmVmIjoidXJuOnJlc291cmNlOnBhdGllbnQtaGlzdG9yeSIsInJlYWRlciI6eyJhY3RvciI6InVybjpmaWN0aW9uYWw6Y2xpbmljLWFnZW50OmFnZW50IiwicGFydHkiOiJ1cm46ZmljdGlvbmFsOmNsaW5pYyJ9LCJpdGVtcyI6W3siaWQiOiJ1cm46c2NlbmFyaW86aGVhbHRoLXJlZmVycmFsOmhpc3RvcnkiLCJjbGFpbVR5cGUiOiJyZWZlcnJhbC5oaXN0b3J5In1dLCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6aGVhbHRoLXJlZmVycmFsIiwidmFsaWRVbnRpbCI6IjIwMjYtMTEtMTRUMDA6MDA6MDAuMDAwWiJ9.glGmuRjRdiIqzt8eLre8pJF-Jp8QW0GL5GfV-iQ92H-3lnoywbi9A9MFV4AAdz-doyPB0JyD9EFjznnHUwbIAg\"; \"urn:purpose:health-referral\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:health-referral",
+                "version": "0.1"
+              },
+              "input": {
+                "reference": {
+                  "ref": "urn:resource:patient-history",
+                  "claimTypes": [
+                    "referral.history"
+                  ],
+                  "grant": "eyJhbGciOiJFZERTQSIsImtpZCI6IlFyUDlreW16THc3OGwyYmh2bVhlNVFoMENvYVg5MlBBemVObGI3bmpsUUUiLCJ0eXAiOiJhd3AtcmVzb3VyY2UtZ3JhbnQrandzIn0.eyJ0eXBlIjoiUmVzb3VyY2VHcmFudCIsImlkIjoidXJuOmdyYW50OmhlYWx0aC1yZWZlcnJhbDpoaXN0b3J5LWdyYW50IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpyZWNvcmQtaG9sZGVyIiwicmVmIjoidXJuOnJlc291cmNlOnBhdGllbnQtaGlzdG9yeSIsInJlYWRlciI6eyJhY3RvciI6InVybjpmaWN0aW9uYWw6Y2xpbmljLWFnZW50OmFnZW50IiwicGFydHkiOiJ1cm46ZmljdGlvbmFsOmNsaW5pYyJ9LCJpdGVtcyI6W3siaWQiOiJ1cm46c2NlbmFyaW86aGVhbHRoLXJlZmVycmFsOmhpc3RvcnkiLCJjbGFpbVR5cGUiOiJyZWZlcnJhbC5oaXN0b3J5In1dLCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6aGVhbHRoLXJlZmVycmFsIiwidmFsaWRVbnRpbCI6IjIwMjYtMTEtMTRUMDA6MDA6MDAuMDAwWiJ9.glGmuRjRdiIqzt8eLre8pJF-Jp8QW0GL5GfV-iQ92H-3lnoywbi9A9MFV4AAdz-doyPB0JyD9EFjznnHUwbIAg"
+                }
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:health-referral"
+            },
+            "digest": "sha-256:fb470a25b0adfe2b41e10128b94e6667d8b1e24525acd87b55f09db842f954b5",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:health-referral"
+              },
+              {
+                "path": "input.reference.ref",
+                "text": "urn:resource:patient-history"
+              },
+              {
+                "path": "input.reference.claimTypes.0",
+                "text": "referral.history"
+              },
+              {
+                "path": "input.reference.grant",
+                "text": "eyJhbGciOiJFZERTQSIsImtpZCI6IlFyUDlreW16THc3OGwyYmh2bVhlNVFoMENvYVg5MlBBemVObGI3bmpsUUUiLCJ0eXAiOiJhd3AtcmVzb3VyY2UtZ3JhbnQrandzIn0.eyJ0eXBlIjoiUmVzb3VyY2VHcmFudCIsImlkIjoidXJuOmdyYW50OmhlYWx0aC1yZWZlcnJhbDpoaXN0b3J5LWdyYW50IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpyZWNvcmQtaG9sZGVyIiwicmVmIjoidXJuOnJlc291cmNlOnBhdGllbnQtaGlzdG9yeSIsInJlYWRlciI6eyJhY3RvciI6InVybjpmaWN0aW9uYWw6Y2xpbmljLWFnZW50OmFnZW50IiwicGFydHkiOiJ1cm46ZmljdGlvbmFsOmNsaW5pYyJ9LCJpdGVtcyI6W3siaWQiOiJ1cm46c2NlbmFyaW86aGVhbHRoLXJlZmVycmFsOmhpc3RvcnkiLCJjbGFpbVR5cGUiOiJyZWZlcnJhbC5oaXN0b3J5In1dLCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6aGVhbHRoLXJlZmVycmFsIiwidmFsaWRVbnRpbCI6IjIwMjYtMTEtMTRUMDA6MDA6MDAuMDAwWiJ9.glGmuRjRdiIqzt8eLre8pJF-Jp8QW0GL5GfV-iQ92H-3lnoywbi9A9MFV4AAdz-doyPB0JyD9EFjznnHUwbIAg"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:health-referral"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-health-referral-main:practice-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-reference-local-holder"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The family practice’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The family practice’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:b910d30a2623d9b16abca10c0dd34392:1794560400000",
+        "text": "A representation statement signed with The family practice's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The family practice signed a statement that The family practice’s agent acts for them in this operation."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 40,
+      "step": 5,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The local record holder's referral.history statement is intact and signed with The local record holder's pinned key."
+    },
+    {
+      "seq": 41,
+      "step": 5,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:record-holder:referral.history",
+        "text": "The local record holder is accepted for referral.history claims."
+      },
+      "resolution": {
+        "question": "Is The local record holder an authority for referral.history claims about urn:fictional:patient?",
+        "path": [
+          {
+            "at": "The specialist clinic's own list",
+            "kind": "own-list",
+            "says": "The local record holder is accepted for referral.history."
+          }
+        ],
+        "answer": "Accepted, for referral.history claims only."
+      },
+      "caption": "The local record holder's referral.history statement: The local record holder is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 42,
+      "step": 5,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The local record holder's referral.history statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:grant:health-referral:history-grant",
+        "text": "Its terms allow this: use for urn:purpose:health referral."
+      },
+      "caption": "The local record holder's referral.history statement: its terms allow this: use for urn:purpose:health referral."
+    },
+    {
+      "seq": 44,
+      "step": 5,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:health-referral:referral.history",
+        "text": "Accept referral.history from urn:fictional:record-holder by recorded-by-authority, at most 90 days old."
+      },
+      "caption": "The local record holder's referral.history statement is fit for urn:scenario:health-referral:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "clinic-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The local record holder's referral.history statement is admitted."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "clinic-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:health-referral:history",
+        "label": "The local record holder's referral.history statement",
+        "claimType": "referral.history",
+        "subject": "urn:fictional:patient",
+        "value": null,
+        "source": "urn:fictional:record-holder",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:grant:health-referral:history-grant",
+          "summary": "use for urn:purpose:health referral"
+        },
+        "provenance": "signed by The local record holder"
+      },
+      "caption": "The local record holder's referral.history statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 47,
+      "step": 7,
+      "agent": "clinic-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "23 entries in this agent's hash-chained record; the chain verifies."
+    }
+  ]
+}

@@ -1,0 +1,287 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "visa-application",
+  "useCase": "visa-application",
+  "title": "Applying for a visa",
+  "profile": "visa-application",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:visa-application:owner",
+      "name": "The applicant",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:visa-application:receiver",
+      "name": "The consulate",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "bank",
+      "identity": "urn:fictional:visa-application:bank",
+      "name": "The foreign bank",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "employer",
+      "identity": "urn:fictional:visa-application:employer",
+      "name": "The employer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:visa-application:owner-agent",
+      "name": "The applicant’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:visa-application:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:visa-application:receiver-agent",
+      "name": "The consulate’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:visa-application:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:visa-application:receiver",
+          "tasks": [
+            "urn:op:visa-application",
+            "urn:op:visa-application:request"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:visa-application:owner",
+          "tasks": [
+            "urn:op:visa-application",
+            "urn:op:visa-application:request"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:visa-application:funds.balance",
+          "version": "1",
+          "source": "urn:fictional:visa-application:bank",
+          "claimTypes": [
+            "funds.balance"
+          ],
+          "subjects": [
+            "urn:fictional:visa-application:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:visa-application:funds.balance",
+          "version": "1",
+          "source": "urn:fictional:visa-application:bank",
+          "claimTypes": [
+            "funds.balance"
+          ],
+          "subjects": [
+            "urn:fictional:visa-application:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "funds",
+      "issuer": "bank",
+      "subject": "urn:fictional:visa-application:owner",
+      "kind": "funds.balance",
+      "value": {
+        "value": 12000,
+        "currency": "GBP"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:visa-application:funds",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:visa-application:funds",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:visa-application"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:visa-application:funds",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:visa-application"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:visa-application"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:visa-application:request"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The consulate cannot verify the foreign bank",
+      "change": {
+        "assurance": null,
+        "suites": {
+          "trust": "register-chain"
+        },
+        "trust": {
+          "sources": {
+            "receiver-agent": []
+          },
+          "root": {
+            "id": "urn:fictional:consular-trust-root",
+            "name": "The consulate’s local trust root",
+            "delegates": []
+          }
+        },
+        "script": [
+          {
+            "id": "foreign-source-preflight",
+            "agent": "receiver-agent",
+            "type": "admit",
+            "statements": [
+              "funds"
+            ],
+            "purpose": "urn:purpose:visa-application",
+            "operation": "urn:op:visa-application"
+          }
+        ],
+        "traceSteps": {
+          "1": "The consulate’s agent checks the signed statements."
+        }
+      },
+      "expect": {
+        "outcome": "ask-more",
+        "check": "source",
+        "reason": "source-unknown"
+      },
+      "outline": [
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "ask-more",
+          "reason": "source-unknown"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "ask-more",
+        "reason": "source-unknown"
+      }
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "source"
+  ],
+  "suites": {
+    "trust": "federation"
+  },
+  "assurance": "proved",
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "needs a proof system"
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Foreign source discovery preflight",
+      "replacedBy": "The known fictional bank key verifies authenticity, but the consulate’s local root has no chain to it; no foreign proof or completed visa application is fabricated"
+    }
+  ],
+  "traceSteps": {}
+}

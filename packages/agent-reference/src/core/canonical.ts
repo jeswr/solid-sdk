@@ -38,6 +38,11 @@ export function digestBytes(bytes: string | Uint8Array): Digest {
   return `sha-256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
+/** A content part's raw byte digest, with UTF-8 text as the convenient text binding. */
+export function digestContent(bytes: string | readonly number[]): Digest {
+  return digestBytes(typeof bytes === "string" ? bytes : Uint8Array.from(bytes));
+}
+
 /** A fresh `urn:uuid:` identifier. */
 export function newUrn(): string {
   return `urn:uuid:${randomUUID()}`;

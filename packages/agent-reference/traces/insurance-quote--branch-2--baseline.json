@@ -1,0 +1,410 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "insurance-quote",
+  "path": {
+    "index": 2,
+    "what": "No register can state completeness"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The driver"
+    },
+    {
+      "id": "receiver",
+      "name": "The insurer"
+    },
+    {
+      "id": "licensing",
+      "name": "The licensing authority"
+    },
+    {
+      "id": "claims-register",
+      "name": "The claims register"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The driver’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The insurer’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "insurance-quote--branch-2",
+    "title": "An insurance quote with the least disclosure: No register can state completeness",
+    "steps": {
+      "1": "The insurer’s agent checks the signed statements."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The driver’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The insurer’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Proof-free quote preflights",
+      "replacedBy": "Actual source/terms/disclosure and completeness checks run before proof construction; no age/risk/absence proof or quote based on one is made"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The claims register's claims.completeness statement is intact and signed with The claims register's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:insurance-quote:claims.completeness",
+        "text": "The claims register is accepted for claims.completeness claims."
+      },
+      "resolution": {
+        "question": "Is The claims register an authority for claims.completeness claims about The driver?",
+        "path": [
+          {
+            "at": "The insurer's own list",
+            "kind": "own-list",
+            "says": "The claims register is accepted for claims.completeness."
+          }
+        ],
+        "answer": "Accepted, for claims.completeness claims only."
+      },
+      "caption": "The claims register's claims.completeness statement: The claims register is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The claims register's claims.completeness statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:insurance-quote:complete",
+        "text": "Its terms allow this: use for urn:purpose:insurance quote; share for urn:purpose:insurance quote."
+      },
+      "caption": "The claims register's claims.completeness statement: its terms allow this: use for urn:purpose:insurance quote; share for urn:purpose:insurance quote."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:insurance-quote:claims.completeness",
+        "text": "Accept claims.completeness from urn:fictional:insurance-quote:claims-register by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The claims register's claims.completeness statement is fit for urn:scenario:insurance-quote:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The claims register's claims.completeness statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:insurance-quote:complete",
+        "label": "The claims register's claims.completeness statement",
+        "claimType": "claims.completeness",
+        "subject": "urn:fictional:insurance-quote:owner",
+        "value": null,
+        "source": "urn:fictional:insurance-quote:claims-register",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "period": {
+          "start": "2021-11-13",
+          "end": "2026-11-13"
+        },
+        "terms": {
+          "id": "urn:terms:insurance-quote:complete",
+          "summary": "use for urn:purpose:insurance quote; share for urn:purpose:insurance quote"
+        },
+        "provenance": "signed by The claims register"
+      },
+      "caption": "The claims register's claims.completeness statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The claims register's claims.list statement is intact and signed with The claims register's pinned key."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:insurance-quote:claims.list",
+        "text": "The claims register is accepted for claims.list claims."
+      },
+      "resolution": {
+        "question": "Is The claims register an authority for claims.list claims about The driver?",
+        "path": [
+          {
+            "at": "The insurer's own list",
+            "kind": "own-list",
+            "says": "The claims register is accepted for claims.list."
+          }
+        ],
+        "answer": "Accepted, for claims.list claims only."
+      },
+      "caption": "The claims register's claims.list statement: The claims register is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The claims register's claims.list statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:insurance-quote:claims",
+        "text": "Its terms allow this: use for urn:purpose:insurance quote; share for urn:purpose:insurance quote."
+      },
+      "caption": "The claims register's claims.list statement: its terms allow this: use for urn:purpose:insurance quote; share for urn:purpose:insurance quote."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:insurance-quote:claims.list",
+        "text": "Accept claims.list from urn:fictional:insurance-quote:claims-register by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The claims register's claims.list statement is fit for urn:scenario:insurance-quote:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "ask-more",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "completeness-not-established",
+      "caption": "An accepted completeness statement for claims.list, its subject and period is required."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "outcome": "ask-more",
+      "reason": "completeness-not-established",
+      "caption": "The claims register's claims.list statement is refused and kept out of memory."
+    }
+  ]
+}

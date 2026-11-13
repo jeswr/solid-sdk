@@ -1,0 +1,901 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "price-negotiation",
+  "useCase": "price-negotiation",
+  "title": "Negotiating a price",
+  "profile": "price-negotiation",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:price-negotiation:owner",
+      "name": "The buyer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:price-negotiation:receiver",
+      "name": "The seller",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:price-negotiation:owner-agent",
+      "name": "The buyer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:price-negotiation:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:price-negotiation:receiver-agent",
+      "name": "The seller’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:price-negotiation:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:price-negotiation:receiver",
+          "tasks": [
+            "urn:op:price-negotiation",
+            "urn:op:price-negotiation:request",
+            "urn:op:price-negotiation:disclose"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:price-negotiation:owner",
+          "tasks": [
+            "urn:op:price-negotiation",
+            "urn:op:price-negotiation:request",
+            "urn:op:price-negotiation:disclose"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:price-negotiation:buyer.ceiling",
+          "version": "1",
+          "source": "urn:fictional:price-negotiation:owner",
+          "claimTypes": [
+            "buyer.ceiling"
+          ],
+          "subjects": [
+            "urn:fictional:price-negotiation:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:price-negotiation:buyer.ceiling",
+          "version": "1",
+          "source": "urn:fictional:price-negotiation:owner",
+          "claimTypes": [
+            "buyer.ceiling"
+          ],
+          "subjects": [
+            "urn:fictional:price-negotiation:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "ceiling",
+      "issuer": "owner",
+      "subject": "urn:fictional:price-negotiation:owner",
+      "kind": "buyer.ceiling",
+      "value": {
+        "value": 100,
+        "currency": "GBP"
+      },
+      "method": "self-reported",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:price-negotiation:ceiling",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:price-negotiation:ceiling",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:buyer-planning"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "transfer",
+          "target": "urn:op:price-negotiation"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:price-negotiation:disclose"
+        }
+      ],
+      "withApproval": [],
+      "limits": {
+        "commitments": {
+          "urn:op:price-negotiation": {
+            "maxAmount": 100,
+            "currency": "GBP"
+          }
+        }
+      }
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:price-negotiation:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:price-negotiation"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "buyer-loads-private-ceiling",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "ceiling"
+      ],
+      "purpose": "urn:purpose:buyer-planning"
+    },
+    {
+      "id": "seller-offer",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "propose",
+      "operation": "urn:op:price-negotiation",
+      "contents": {
+        "price": 80,
+        "currency": "GBP",
+        "item": "fictional-bicycle"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:price-negotiation",
+        "target": "urn:op:price-negotiation",
+        "purpose": "urn:purpose:price-negotiation",
+        "recipient": "urn:fictional:price-negotiation:owner",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:price-negotiation"
+    },
+    {
+      "id": "buyer-accepts",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent",
+      "reply": {
+        "type": "accept",
+        "intent": {
+          "action": "transfer",
+          "operation": "urn:op:price-negotiation",
+          "target": "urn:op:price-negotiation",
+          "purpose": "urn:purpose:price-negotiation",
+          "recipient": {
+            "$ref": "current.peer.party"
+          },
+          "conversation": {
+            "$ref": "current.conversation.id"
+          },
+          "parameters": {
+            "amount": {
+              "$ref": "current.message.body.terms.price"
+            },
+            "currency": {
+              "$ref": "current.message.body.terms.currency"
+            },
+            "termsDigest": {
+              "$ref": "current.message.body.termsDigest"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "seller-verifies-acceptance",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    },
+    {
+      "id": "buyer-record",
+      "agent": "owner-agent",
+      "type": "record"
+    },
+    {
+      "id": "seller-record",
+      "agent": "receiver-agent",
+      "type": "record"
+    },
+    {
+      "id": "buyer-agreement",
+      "agent": "owner-agent",
+      "type": "conversation",
+      "conversation": {
+        "$ref": "steps.seller-offer.conversation"
+      }
+    },
+    {
+      "id": "seller-agreement",
+      "agent": "receiver-agent",
+      "type": "conversation",
+      "conversation": {
+        "$ref": "steps.seller-offer.conversation"
+      }
+    },
+    {
+      "id": "same-agreement",
+      "agent": "owner-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.buyer-agreement.agreement"
+      },
+      "expected": {
+        "$ref": "steps.seller-agreement.agreement"
+      }
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The seller's agent asks what the buyer's maximum is",
+      "change": {
+        "script": [
+          {
+            "id": "admit-source",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "ceiling"
+            ],
+            "purpose": "urn:purpose:buyer-planning"
+          },
+          {
+            "id": "request",
+            "agent": "receiver-agent",
+            "type": "start",
+            "peer": "owner-agent",
+            "kind": "invoke",
+            "operation": "urn:op:price-negotiation:request",
+            "contents": {
+              "request": "buyer.ceiling"
+            },
+            "intent": {
+              "action": "use",
+              "target": "urn:op:price-negotiation:request",
+              "operation": "urn:op:price-negotiation:request",
+              "recipient": "urn:fictional:price-negotiation:owner",
+              "purpose": "urn:purpose:price-negotiation",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:price-negotiation"
+          },
+          {
+            "id": "request-arrives",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "receiver-agent"
+          },
+          {
+            "id": "share",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "receiver-agent",
+            "kind": "invoke",
+            "operation": "urn:op:price-negotiation:disclose",
+            "contents": {
+              "items": [
+                "urn:scenario:price-negotiation:ceiling"
+              ]
+            },
+            "intent": {
+              "action": "distribute",
+              "target": "urn:op:price-negotiation:disclose",
+              "operation": "urn:op:price-negotiation:disclose",
+              "recipient": "urn:fictional:price-negotiation:receiver",
+              "purpose": "urn:purpose:price-negotiation",
+              "parameters": {},
+              "evidence": [
+                {
+                  "itemId": "urn:scenario:price-negotiation:ceiling",
+                  "claimType": "buyer.ceiling"
+                }
+              ]
+            },
+            "evidence": [
+              "ceiling"
+            ],
+            "purpose": "urn:purpose:price-negotiation"
+          }
+        ],
+        "traceSteps": {
+          "1": "The buyer’s agent checks the signed statements.",
+          "2": "The seller’s agent sends the signed request.",
+          "3": "The buyer’s agent checks the message and prepares a response.",
+          "4": "The buyer’s agent sends the signed request."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "indeterminate",
+          "reason": "excessive-scope"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "excessive-scope"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "disclosure",
+    "limits-approval"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Bicycle sale",
+      "replacedBy": "Fictional parties sign one GBP 80 offer and its exact acceptance; no physical delivery or payment settlement is simulated"
+    }
+  ],
+  "result": {
+    "outcome": "go",
+    "check": "limits-approval",
+    "reason": "within-limits"
+  },
+  "traceSteps": {
+    "1": "The buyer’s agent checks the signed statements.",
+    "2": "The seller’s agent sends the signed request.",
+    "3": "The buyer’s agent checks the message and prepares a response.",
+    "4": "The seller’s agent checks the message and prepares a response.",
+    "5": "The buyer’s agent checks the durable record.",
+    "6": "The seller’s agent checks the durable record.",
+    "7": "The buyer’s agent completes the conversation step.",
+    "8": "The seller’s agent completes the conversation step.",
+    "9": "The buyer’s agent checks the observed result."
+  }
+}

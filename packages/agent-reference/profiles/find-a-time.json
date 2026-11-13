@@ -1,0 +1,181 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "find-a-time",
+  "parties": {
+    "owner": "The first person",
+    "receiver": "The second person",
+    "owner-agent": "The first person’s agent",
+    "receiver-agent": "The second person’s agent",
+    "calendar-service": "The fictional shared calendar service",
+    "calendar-agent": "The calendar service’s agent"
+  },
+  "claims": [
+    {
+      "kind": "calendar.busy-reason",
+      "sources": [
+        "urn:fictional:find-a-time:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "calendar.first-free",
+      "sources": [
+        "urn:fictional:find-a-time:calendar-service"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    },
+    {
+      "kind": "calendar.second-free",
+      "sources": [
+        "urn:fictional:find-a-time:calendar-service"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    },
+    {
+      "kind": "calendar.slot-free",
+      "sources": [
+        "urn:fictional:find-a-time:calendar-service"
+      ],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:find-a-time",
+      "claims": [
+        "calendar.slot-free"
+      ]
+    },
+    {
+      "id": "urn:purpose:private-calendar",
+      "claims": [
+        "calendar.busy-reason"
+      ]
+    },
+    {
+      "id": "urn:purpose:calendar-service",
+      "claims": [
+        "calendar.first-free",
+        "calendar.second-free"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:fictional:find-a-time:both-free-rule",
+      "template": "all-of",
+      "output": "calendar.slot-free",
+      "inputsFrom": [
+        "urn:fictional:find-a-time:calendar-service"
+      ],
+      "assurances": [
+        "attested"
+      ],
+      "params": {
+        "inputs": [
+          "calendar.first-free",
+          "calendar.second-free"
+        ]
+      }
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "calendar.busy-reason"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "input.slot": {
+      "type": "identifier"
+    },
+    "input.free": {
+      "type": "code",
+      "values": [
+        true,
+        false
+      ],
+      "claimType": "calendar.slot-free"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:find-a-time",
+      "version": "0.1",
+      "label": "Two people's agents find a time to meet",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:find-a-time"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:find-a-time:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:find-a-time"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:find-a-time:slots",
+      "version": "0.1",
+      "label": "Share a signed free-slot derivation",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:find-a-time"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "attestedDerivers": [
+    {
+      "deriver": "urn:fictional:find-a-time:calendar-service",
+      "rule": "urn:fictional:find-a-time:both-free-rule",
+      "purposes": [
+        "urn:purpose:find-a-time"
+      ]
+    }
+  ],
+  "identifiers": [
+    "urn:fictional:find-a-time:slot:2026-11-17T10-00"
+  ],
+  "standIns": [
+    {
+      "what": "Attested calendar derivation",
+      "replacedBy": "A separately keyed fictional calendar service holds both synthetic availability records, evaluates the installed all-of rule for a named candidate slot, signs its derivation and releases only that free-slot result through both receiving agents’ gates. No hardware attestation or joint computation is claimed."
+    }
+  ]
+}

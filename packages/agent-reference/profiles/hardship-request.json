@@ -1,0 +1,121 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "hardship-request",
+  "parties": {
+    "owner": "The borrower",
+    "receiver": "The lender",
+    "owner-agent": "The borrower’s agent",
+    "receiver-agent": "The lender’s agent"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:hardship-request:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "health.diagnosis",
+      "sources": [
+        "urn:fictional:hardship-request:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:hardship-request",
+      "claims": [
+        "unstructured-content",
+        "health.diagnosis"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [
+    "consider-reduced-payments"
+  ],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:hardship-request",
+      "version": "0.1",
+      "label": "Asking a lender for breathing space",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:hardship-request"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:hardship-request:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:hardship-request"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:hardship-request:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:hardship-request"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [
+    {
+      "action": "transfer",
+      "decider": "principal"
+    },
+    {
+      "action": "distribute",
+      "decider": "principal"
+    }
+  ],
+  "readings": [
+    {
+      "claimType": "content.opinion",
+      "type": "code",
+      "values": [
+        "requires-review"
+      ]
+    }
+  ]
+}

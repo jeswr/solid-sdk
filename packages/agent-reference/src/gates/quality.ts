@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Fitness and item terms: the parts of the gates that read the quality information and the
@@ -5,10 +6,36 @@
  * kind of claim); item terms are ODRL policies in the pilot subset, decided by the same policy
  * engine as mandates.
  */
+import { z } from "zod";
 import type { Iri } from "../core/types.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
 import type { ItemTerms, RelianceProfile } from "./common.js";
 import { idWords } from "./common.js";
+
+const constraintShape = z
+  .object({
+    leftOperand: z.string(),
+    operator: z.string(),
+    rightOperand: z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]),
+  })
+  .passthrough();
+const ruleShape = z
+  .object({ action: z.string(), constraints: z.array(constraintShape).optional() })
+  .passthrough();
+const termsShape = z
+  .object({
+    policy: z
+      .object({
+        id: z.string(),
+        permissions: z.array(ruleShape).optional(),
+        prohibitions: z.array(ruleShape).optional(),
+        obligations: z.array(ruleShape).optional(),
+      })
+      .passthrough(),
+    deleteWithinDays: z.number().nonnegative().optional(),
+    recipientMustBe: z.object({ task: z.string(), label: z.string() }).optional(),
+  })
+  .passthrough();
 
 export interface QualityClaim {
   readonly claimType: string;
@@ -69,9 +96,102 @@ export interface TermsVerdict {
   readonly text: string;
 }
 
+/** Validate the entire attached policy before selecting matching rules (UNS-15). */
+export function unsupportedTerms(terms: ItemTerms): boolean {
+  const p = terms.policy;
+  if (
+    Object.keys(terms).some(
+      (key) => !["policy", "inherited", "deleteWithinDays", "recipientMustBe"].includes(key),
+    )
+  )
+    return true;
+  const actions = new Set(["pay", "use", "read", "distribute", "compensate", "transfer"]);
+  const operands = new Set(["dateTime", "purpose", "recipient"]);
+  const operators = new Set(["eq", "neq", "isAnyOf", "isNoneOf", "lt", "lteq", "gt", "gteq"]);
+  if (p.conflict && p.conflict !== "prohibit") return true;
+  if (p.type && !["Set", "Offer", "Agreement"].includes(p.type)) return true;
+  if (
+    Object.keys(p).some(
+      (key) =>
+        ![
+          "id",
+          "type",
+          "assigner",
+          "assignee",
+          "conflict",
+          "permissions",
+          "prohibitions",
+          "obligations",
+        ].includes(key),
+    )
+  )
+    return true;
+  for (const r of [...(p.permissions ?? []), ...(p.prohibitions ?? [])]) {
+    if (!actions.has(String(r.action))) return true;
+    if (r.type && !["permission", "prohibition"].includes(r.type)) return true;
+    if (
+      Object.keys(r).some(
+        (key) =>
+          !["id", "type", "action", "target", "assignee", "assigner", "constraints"].includes(key),
+      )
+    )
+      return true;
+    for (const c of r.constraints ?? [])
+      if (
+        !operands.has(c.leftOperand) ||
+        !operators.has(c.operator) ||
+        Object.keys(c).some((key) => !["leftOperand", "operator", "rightOperand"].includes(key))
+      )
+        return true;
+  }
+  for (const duty of p.obligations ?? []) {
+    if (
+      duty.action !== "delete" ||
+      !duty.constraints?.length ||
+      Object.keys(duty).some(
+        (key) => !["id", "type", "action", "target", "constraints"].includes(key),
+      )
+    )
+      return true;
+    for (const c of duty.constraints)
+      if (
+        c.leftOperand !== "elapsedTime" ||
+        c.operator !== "lteq" ||
+        !/^P\d+D$/.test(String(c.rightOperand)) ||
+        Object.keys(c).some((key) => !["leftOperand", "operator", "rightOperand"].includes(key))
+      )
+        return true;
+  }
+  return false;
+}
+
+/** Can the principal accept every use the request's offered terms would authorize? */
+export function acceptsOfferedTerms(terms: ItemTerms, allowedPurposes: readonly string[]): boolean {
+  for (const r of terms.policy.permissions ?? []) {
+    const purposes = (r.constraints ?? []).filter((c) => c.leftOperand === "purpose");
+    if (
+      !purposes.length ||
+      !purposes.some((c) => {
+        const values = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+        return (
+          ["eq", "isAnyOf"].includes(c.operator) &&
+          values.length > 0 &&
+          values.every((p) => allowedPurposes.includes(String(p)))
+        );
+      })
+    )
+      return false;
+  }
+  return (
+    !terms.inherited ||
+    terms.inherited.every((i) => !!i.terms && acceptsOfferedTerms(i.terms, allowedPurposes))
+  );
+}
+
 /** Plain words for an item's terms. */
 export function termsSummary(terms: ItemTerms | undefined): string {
   if (!terms) return "no terms attached";
+  if (!termsShape.safeParse(terms).success) return "unsupported terms";
   const uses = new Set<string>();
   const shares = new Set<string>();
   const never = new Set<string>();
@@ -114,14 +234,70 @@ export function evaluateItemTerms(
     readonly recipient?: Iri;
     readonly retentionDays?: number;
     readonly at: string;
+    readonly recipientAllowed?: (task: string) => boolean;
   },
   engine: PolicyEngine = solidOdrlEngine,
 ): TermsVerdict {
+  if (terms && !termsShape.safeParse(terms).success)
+    return {
+      verdict: "indeterminate",
+      reason: "indeterminate-policy",
+      text: "The attached terms are not understood.",
+    };
+  if (terms && unsupportedTerms(terms))
+    return {
+      verdict: "indeterminate",
+      reason: "unsupported-term",
+      text: "An attached term, prohibition or duty has no supported rule.",
+    };
+  if (!terms && need.action === "distribute")
+    return {
+      verdict: "fail",
+      reason: "purpose-not-permitted",
+      text: "Default terms permit this interaction only and prohibit onward sharing.",
+    };
   if (!terms)
     return {
       verdict: "pass",
       text: "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
     };
+  if (
+    need.action === "distribute" &&
+    terms.recipientMustBe &&
+    !need.recipientAllowed?.(terms.recipientMustBe.task)
+  )
+    return {
+      verdict: "fail",
+      reason: "not-authorised",
+      text: "The recipient does not satisfy the source's registration requirement.",
+    };
+  if (terms.inherited) {
+    if (
+      !Array.isArray(terms.inherited) ||
+      terms.inherited.length === 0 ||
+      terms.inherited.length > 128
+    )
+      return { verdict: "fail", reason: "indeterminate-policy", text: "Invalid inherited terms." };
+    for (const input of terms.inherited) {
+      if (
+        !input ||
+        typeof input !== "object" ||
+        typeof input.target !== "string" ||
+        !(input.terms === null || (input.terms && typeof input.terms === "object"))
+      )
+        return {
+          verdict: "fail",
+          reason: "indeterminate-policy",
+          text: "Invalid inherited terms.",
+        };
+      const result = evaluateItemTerms(
+        input.terms ?? undefined,
+        { ...need, target: input.target },
+        engine,
+      );
+      if (result.verdict !== "pass") return result;
+    }
+  }
   // The rules decide whether this use is allowed; the duties (deletion) are what the receiver
   // takes on, checked below against how long it would keep the data (CORE-IN-10).
   const { obligations: _duties, ...rules } = terms.policy;
@@ -142,7 +318,7 @@ export function evaluateItemTerms(
     };
   if (v.effect === "prohibited")
     return { verdict: "fail", reason: "prohibited", text: `Its terms forbid this (${summary}).` };
-  if (v.effect !== "permit")
+  if (v.effect !== "permit" && !(terms.inherited && !terms.policy.permissions?.length))
     return {
       verdict: "fail",
       reason: "purpose-not-permitted",

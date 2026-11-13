@@ -1,0 +1,73 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "invoice-finance",
+  "parties": {
+    "owner": "The first financier",
+    "second": "The second financier",
+    "issuer": "The supplier",
+    "authority": "The buyer",
+    "register": "The invoice register",
+    "subject": "The invoice supplier"
+  },
+  "claims": [
+    {
+      "kind": "invoice.valid",
+      "sources": [
+        "urn:fictional:invoice-finance:authority"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:invoice-finance",
+      "claims": [
+        "invoice.valid"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": [
+    {
+      "id": "urn:op:invoice-finance",
+      "version": "0.1",
+      "label": "Financing an invoice once",
+      "pattern": "invoke",
+      "access": "represented",
+      "requiresRepresentation": true,
+      "purposes": [
+        "urn:purpose:invoice-finance"
+      ]
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "use",
+      "claims": [
+        "invoice.valid"
+      ]
+    }
+  ],
+  "singleUse": [
+    {
+      "action": "use",
+      "register": "urn:fictional:invoice-finance:register",
+      "item": "urn:fictional:invoice-finance:item",
+      "operation": "redeem",
+      "maxAgeSeconds": 60
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Dispensing/financing register and local effects",
+      "replacedBy": "Separately keyed fictional register with its own five checks, signed current answers and durable compare-and-set state; the effect adapter records synthetic performance only."
+    }
+  ]
+}

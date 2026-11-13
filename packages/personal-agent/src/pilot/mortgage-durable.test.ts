@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The DURABLE synthetic mortgage slice in-process: independently initialised consumer, lender
  * intake and underwriter agent directories (roles), each opened by the same persistent runtime
@@ -79,6 +80,8 @@ async function provision() {
     "mortgage-consumer",
     "--wallet",
     issuance.wallet,
+    "--issuers",
+    issuance.issuers,
     ...common,
   ]);
   init.northbank = await cli([

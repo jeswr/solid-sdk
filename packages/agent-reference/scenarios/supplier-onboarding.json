@@ -1,0 +1,1689 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "supplier-onboarding",
+  "title": "Taking on a new supplier",
+  "profile": "supplier-onboarding",
+  "parties": [
+    {
+      "id": "supplier",
+      "identity": "urn:fictional:supplier",
+      "name": "The supplier",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "buyer",
+      "identity": "urn:fictional:buyer",
+      "name": "The buyer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "company-register",
+      "identity": "urn:fictional:company-register",
+      "name": "The fictional company register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "supplier-bank",
+      "identity": "urn:fictional:supplier-bank",
+      "name": "The supplier’s bank",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "certifier",
+      "identity": "urn:fictional:certifier",
+      "name": "The fictional certifier",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "registrar",
+      "identity": "urn:fictional:registrar",
+      "name": "The local registrar",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "supplier-agent",
+      "identity": "urn:fictional:supplier-agent",
+      "name": "The supplier’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:supplier-agent:agent",
+      "actsFor": "supplier"
+    },
+    {
+      "id": "buyer-agent",
+      "identity": "urn:fictional:buyer-agent",
+      "name": "The buyer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:buyer-agent:agent",
+      "actsFor": "buyer"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "supplier-agent",
+        "buyer-agent"
+      ]
+    ],
+    "ownLists": {
+      "supplier-agent": [
+        {
+          "party": "urn:fictional:supplier",
+          "tasks": [
+            "urn:op:onboard-supplier"
+          ]
+        },
+        {
+          "party": "urn:fictional:buyer",
+          "tasks": [
+            "urn:op:onboard-supplier"
+          ]
+        }
+      ],
+      "buyer-agent": [
+        {
+          "party": "urn:fictional:supplier",
+          "tasks": [
+            "urn:op:onboard-supplier"
+          ]
+        },
+        {
+          "party": "urn:fictional:buyer",
+          "tasks": [
+            "urn:op:onboard-supplier"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "supplier-agent": [
+        {
+          "id": "urn:source:company-register",
+          "version": "1",
+          "source": "urn:fictional:company-register",
+          "claimTypes": [
+            "company.exists"
+          ],
+          "subjects": [
+            "urn:fictional:supplier"
+          ]
+        },
+        {
+          "id": "urn:source:supplier-bank",
+          "version": "1",
+          "source": "urn:fictional:supplier-bank",
+          "claimTypes": [
+            "bank.account-owner"
+          ],
+          "subjects": [
+            "urn:fictional:supplier"
+          ]
+        },
+        {
+          "id": "urn:source:certifier",
+          "version": "1",
+          "source": "urn:fictional:certifier",
+          "claimTypes": [
+            "certificate"
+          ],
+          "subjects": [
+            "urn:fictional:supplier"
+          ]
+        }
+      ],
+      "buyer-agent": [
+        {
+          "id": "urn:source:company-register",
+          "version": "1",
+          "source": "urn:fictional:company-register",
+          "claimTypes": [
+            "company.exists"
+          ],
+          "subjects": [
+            "urn:fictional:supplier"
+          ]
+        },
+        {
+          "id": "urn:source:supplier-bank",
+          "version": "1",
+          "source": "urn:fictional:supplier-bank",
+          "claimTypes": [
+            "bank.account-owner"
+          ],
+          "subjects": [
+            "urn:fictional:supplier"
+          ]
+        },
+        {
+          "id": "urn:source:certifier",
+          "version": "1",
+          "source": "urn:fictional:certifier",
+          "claimTypes": [
+            "certificate"
+          ],
+          "subjects": [
+            "urn:fictional:supplier"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "company",
+      "issuer": "company-register",
+      "subject": "urn:fictional:supplier",
+      "kind": "company.exists",
+      "value": {
+        "value": true
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:company",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:supplier-onboarding:company"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:supplier-onboarding:company"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "account",
+      "issuer": "supplier-bank",
+      "subject": "urn:fictional:supplier",
+      "kind": "bank.account-owner",
+      "value": {
+        "account": "urn:account:supplier",
+        "entity": "urn:fictional:supplier"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:account",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:supplier-onboarding:account"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:supplier-onboarding:account"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "certificate",
+      "issuer": "certifier",
+      "subject": "urn:fictional:supplier",
+      "kind": "certificate",
+      "value": {
+        "value": "insured",
+        "status": {
+          "ref": "urn:status:certifier",
+          "id": "insurance"
+        }
+      },
+      "method": "attested",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:certificate",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:supplier-onboarding:certificate"
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:supplier-onboarding:certificate"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "supplier-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:onboard-supplier"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "buyer-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:onboard-supplier"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "supplier-evidence",
+      "agent": "supplier-agent",
+      "type": "admit",
+      "statements": [
+        "company",
+        "account",
+        "certificate"
+      ],
+      "purpose": "urn:purpose:supplier-onboarding",
+      "subject": "urn:fictional:supplier"
+    },
+    {
+      "id": "supplier-applies",
+      "agent": "supplier-agent",
+      "type": "start",
+      "peer": "buyer-agent",
+      "kind": "invoke",
+      "operation": "urn:op:onboard-supplier",
+      "contents": {
+        "entity": "urn:fictional:supplier",
+        "support": [
+          "urn:scenario:supplier-onboarding:company",
+          "urn:scenario:supplier-onboarding:account",
+          "urn:scenario:supplier-onboarding:certificate"
+        ]
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:onboard-supplier",
+        "target": "urn:op:onboard-supplier",
+        "recipient": "urn:fictional:buyer",
+        "purpose": "urn:purpose:supplier-onboarding",
+        "parameters": {
+          "support": [
+            "urn:scenario:supplier-onboarding:company",
+            "urn:scenario:supplier-onboarding:account",
+            "urn:scenario:supplier-onboarding:certificate"
+          ]
+        },
+        "conversation": "urn:scenario:supplier-onboarding:task"
+      },
+      "purpose": "urn:purpose:supplier-onboarding",
+      "evidence": [
+        "company",
+        "account",
+        "certificate"
+      ]
+    },
+    {
+      "id": "buyer-checks",
+      "agent": "buyer-agent",
+      "type": "receive",
+      "from": "supplier-agent"
+    },
+    {
+      "id": "buyer-onboards",
+      "agent": "buyer-agent",
+      "type": "effect",
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:onboard-supplier",
+        "target": "urn:op:onboard-supplier",
+        "recipient": "urn:fictional:supplier",
+        "purpose": "urn:purpose:supplier-onboarding",
+        "parameters": {
+          "support": [
+            "urn:scenario:supplier-onboarding:company",
+            "urn:scenario:supplier-onboarding:account",
+            "urn:scenario:supplier-onboarding:certificate"
+          ]
+        },
+        "conversation": {
+          "$ref": "steps.supplier-applies.conversation"
+        }
+      },
+      "params": {},
+      "activityType": "urn:activity:onboarding"
+    },
+    {
+      "id": "onboarded",
+      "agent": "buyer-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.buyer-onboards.effect.conclusion"
+      },
+      "expected": "completed"
+    },
+    {
+      "id": "buyer-record",
+      "agent": "buyer-agent",
+      "type": "record"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "A certificate was withdrawn last week",
+      "change": {
+        "documents": [
+          {
+            "id": "urn:fictional:supplier",
+            "issuer": "registrar",
+            "typ": "awp-organization-identifier+jws",
+            "value": {
+              "type": "OrganizationIdentifier",
+              "id": "urn:document:supplier",
+              "issuer": "urn:fictional:registrar",
+              "subject": "urn:fictional:supplier",
+              "validFrom": "2026-11-01T00:00:00.000Z",
+              "validUntil": "2026-12-01T00:00:00.000Z",
+              "keys": [
+                {
+                  "agent": "supplier-agent",
+                  "subject": "urn:fictional:supplier",
+                  "role": "party"
+                },
+                {
+                  "agent": "supplier-agent",
+                  "subject": "urn:fictional:supplier-agent:agent",
+                  "role": "actor"
+                }
+              ]
+            }
+          },
+          {
+            "id": "urn:fictional:buyer",
+            "issuer": "registrar",
+            "typ": "awp-organization-identifier+jws",
+            "value": {
+              "type": "OrganizationIdentifier",
+              "id": "urn:document:buyer",
+              "issuer": "urn:fictional:registrar",
+              "subject": "urn:fictional:buyer",
+              "validFrom": "2026-11-01T00:00:00.000Z",
+              "validUntil": "2026-12-01T00:00:00.000Z",
+              "keys": [
+                {
+                  "agent": "buyer-agent",
+                  "subject": "urn:fictional:buyer",
+                  "role": "party"
+                },
+                {
+                  "agent": "buyer-agent",
+                  "subject": "urn:fictional:buyer-agent:agent",
+                  "role": "actor"
+                }
+              ]
+            }
+          },
+          {
+            "id": "urn:fictional:company-register",
+            "issuer": "registrar",
+            "typ": "awp-organization-identifier+jws",
+            "value": {
+              "type": "OrganizationIdentifier",
+              "id": "urn:document:company-register",
+              "issuer": "urn:fictional:registrar",
+              "subject": "urn:fictional:company-register",
+              "validFrom": "2026-11-01T00:00:00.000Z",
+              "validUntil": "2026-12-01T00:00:00.000Z",
+              "keys": [
+                {
+                  "issuer": "company-register",
+                  "subject": "urn:fictional:company-register",
+                  "role": "issuer"
+                }
+              ]
+            }
+          },
+          {
+            "id": "urn:fictional:supplier-bank",
+            "issuer": "registrar",
+            "typ": "awp-organization-identifier+jws",
+            "value": {
+              "type": "OrganizationIdentifier",
+              "id": "urn:document:supplier-bank",
+              "issuer": "urn:fictional:registrar",
+              "subject": "urn:fictional:supplier-bank",
+              "validFrom": "2026-11-01T00:00:00.000Z",
+              "validUntil": "2026-12-01T00:00:00.000Z",
+              "keys": [
+                {
+                  "issuer": "supplier-bank",
+                  "subject": "urn:fictional:supplier-bank",
+                  "role": "issuer"
+                }
+              ]
+            }
+          },
+          {
+            "id": "urn:fictional:certifier",
+            "issuer": "registrar",
+            "typ": "awp-organization-identifier+jws",
+            "value": {
+              "type": "OrganizationIdentifier",
+              "id": "urn:document:certifier",
+              "issuer": "urn:fictional:registrar",
+              "subject": "urn:fictional:certifier",
+              "validFrom": "2026-11-01T00:00:00.000Z",
+              "validUntil": "2026-12-01T00:00:00.000Z",
+              "keys": [
+                {
+                  "issuer": "certifier",
+                  "subject": "urn:fictional:certifier",
+                  "role": "issuer"
+                }
+              ]
+            }
+          },
+          {
+            "id": "urn:status:supplier",
+            "issuer": "supplier",
+            "typ": "awp-status-list+jws",
+            "value": {
+              "type": "StatusList",
+              "id": "urn:status:supplier",
+              "issuer": "urn:fictional:supplier",
+              "issuedAt": "2026-11-13T09:00:00.000Z",
+              "validUntil": "2026-11-14T00:00:00.000Z",
+              "entries": {
+                "signatory": "active"
+              }
+            }
+          },
+          {
+            "id": "urn:status:buyer",
+            "issuer": "buyer",
+            "typ": "awp-status-list+jws",
+            "value": {
+              "type": "StatusList",
+              "id": "urn:status:buyer",
+              "issuer": "urn:fictional:buyer",
+              "issuedAt": "2026-11-13T09:00:00.000Z",
+              "validUntil": "2026-11-14T00:00:00.000Z",
+              "entries": {
+                "signatory": "active"
+              }
+            }
+          },
+          {
+            "id": "urn:status:certifier",
+            "issuer": "certifier",
+            "typ": "awp-status-list+jws",
+            "value": {
+              "type": "StatusList",
+              "id": "urn:status:certifier",
+              "issuer": "urn:fictional:certifier",
+              "issuedAt": "2026-11-13T09:00:00.000Z",
+              "validUntil": "2026-11-14T00:00:00.000Z",
+              "entries": {
+                "insurance": "withdrawn"
+              }
+            }
+          }
+        ],
+        "script": [
+          {
+            "id": "supplier-evidence",
+            "agent": "supplier-agent",
+            "type": "admit",
+            "statements": [
+              "company",
+              "account",
+              "certificate"
+            ],
+            "purpose": "urn:purpose:supplier-onboarding",
+            "subject": "urn:fictional:supplier"
+          },
+          {
+            "id": "supplier-applies",
+            "agent": "supplier-agent",
+            "type": "start",
+            "peer": "buyer-agent",
+            "kind": "invoke",
+            "operation": "urn:op:onboard-supplier",
+            "contents": {
+              "entity": "urn:fictional:supplier",
+              "support": [
+                "urn:scenario:supplier-onboarding:company",
+                "urn:scenario:supplier-onboarding:account",
+                "urn:scenario:supplier-onboarding:certificate"
+              ]
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:onboard-supplier",
+              "target": "urn:op:onboard-supplier",
+              "recipient": "urn:fictional:buyer",
+              "purpose": "urn:purpose:supplier-onboarding",
+              "parameters": {
+                "support": [
+                  "urn:scenario:supplier-onboarding:company",
+                  "urn:scenario:supplier-onboarding:account",
+                  "urn:scenario:supplier-onboarding:certificate"
+                ]
+              },
+              "conversation": "urn:scenario:supplier-onboarding:task"
+            },
+            "purpose": "urn:purpose:supplier-onboarding",
+            "evidence": [
+              "company",
+              "account",
+              "certificate"
+            ]
+          }
+        ],
+        "traceSteps": {
+          "1": "The supplier’s agent checks and admits the signed statements.",
+          "2": "The supplier’s agent sends a signed request."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "source",
+        "reason": "status-withdrawn"
+      },
+      "outline": [
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        }
+      ]
+    },
+    {
+      "id": "branch-2",
+      "what": "The account belongs to a different legal entity",
+      "change": {
+        "statements": [
+          {
+            "id": "company",
+            "issuer": "company-register",
+            "subject": "urn:fictional:supplier",
+            "kind": "company.exists",
+            "value": {
+              "value": true
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:company",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:supplier-onboarding:company"
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:supplier-onboarding:company"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "account",
+            "issuer": "supplier-bank",
+            "subject": "urn:fictional:another-entity",
+            "kind": "bank.account-owner",
+            "value": {
+              "account": "urn:account:supplier",
+              "entity": "urn:fictional:another-entity"
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:account",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:supplier-onboarding:account"
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:supplier-onboarding:account"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "certificate",
+            "issuer": "certifier",
+            "subject": "urn:fictional:supplier",
+            "kind": "certificate",
+            "value": {
+              "value": "insured",
+              "status": {
+                "ref": "urn:status:certifier",
+                "id": "insurance"
+              }
+            },
+            "method": "attested",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:certificate",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:supplier-onboarding:certificate"
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:supplier-onboarding:certificate"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "script": [
+          {
+            "id": "supplier-evidence",
+            "agent": "supplier-agent",
+            "type": "admit",
+            "statements": [
+              "company",
+              "account",
+              "certificate"
+            ],
+            "purpose": "urn:purpose:supplier-onboarding",
+            "subject": "urn:fictional:supplier"
+          },
+          {
+            "id": "supplier-applies",
+            "agent": "supplier-agent",
+            "type": "start",
+            "peer": "buyer-agent",
+            "kind": "invoke",
+            "operation": "urn:op:onboard-supplier",
+            "contents": {
+              "entity": "urn:fictional:supplier",
+              "support": [
+                "urn:scenario:supplier-onboarding:company",
+                "urn:scenario:supplier-onboarding:account",
+                "urn:scenario:supplier-onboarding:certificate"
+              ]
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:onboard-supplier",
+              "target": "urn:op:onboard-supplier",
+              "recipient": "urn:fictional:buyer",
+              "purpose": "urn:purpose:supplier-onboarding",
+              "parameters": {
+                "support": [
+                  "urn:scenario:supplier-onboarding:company",
+                  "urn:scenario:supplier-onboarding:account",
+                  "urn:scenario:supplier-onboarding:certificate"
+                ]
+              },
+              "conversation": "urn:scenario:supplier-onboarding:task"
+            },
+            "purpose": "urn:purpose:supplier-onboarding",
+            "evidence": [
+              "company",
+              "account",
+              "certificate"
+            ]
+          }
+        ],
+        "traceSteps": {
+          "1": "The supplier’s agent checks and admits the signed statements.",
+          "2": "The supplier’s agent sends a signed request."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "source",
+        "reason": "source-not-authoritative"
+      },
+      "outline": [
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "supplier-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "buyer-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "source",
+    "authority",
+    "fitness"
+  ],
+  "suites": {
+    "authority": "mandate-credential",
+    "identity": "organization-document-local"
+  },
+  "assurance": null,
+  "blocked": [],
+  "documents": [
+    {
+      "id": "urn:fictional:supplier",
+      "issuer": "registrar",
+      "typ": "awp-organization-identifier+jws",
+      "value": {
+        "type": "OrganizationIdentifier",
+        "id": "urn:document:supplier",
+        "issuer": "urn:fictional:registrar",
+        "subject": "urn:fictional:supplier",
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "keys": [
+          {
+            "agent": "supplier-agent",
+            "subject": "urn:fictional:supplier",
+            "role": "party"
+          },
+          {
+            "agent": "supplier-agent",
+            "subject": "urn:fictional:supplier-agent:agent",
+            "role": "actor"
+          }
+        ]
+      }
+    },
+    {
+      "id": "urn:fictional:buyer",
+      "issuer": "registrar",
+      "typ": "awp-organization-identifier+jws",
+      "value": {
+        "type": "OrganizationIdentifier",
+        "id": "urn:document:buyer",
+        "issuer": "urn:fictional:registrar",
+        "subject": "urn:fictional:buyer",
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "keys": [
+          {
+            "agent": "buyer-agent",
+            "subject": "urn:fictional:buyer",
+            "role": "party"
+          },
+          {
+            "agent": "buyer-agent",
+            "subject": "urn:fictional:buyer-agent:agent",
+            "role": "actor"
+          }
+        ]
+      }
+    },
+    {
+      "id": "urn:fictional:company-register",
+      "issuer": "registrar",
+      "typ": "awp-organization-identifier+jws",
+      "value": {
+        "type": "OrganizationIdentifier",
+        "id": "urn:document:company-register",
+        "issuer": "urn:fictional:registrar",
+        "subject": "urn:fictional:company-register",
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "keys": [
+          {
+            "issuer": "company-register",
+            "subject": "urn:fictional:company-register",
+            "role": "issuer"
+          }
+        ]
+      }
+    },
+    {
+      "id": "urn:fictional:supplier-bank",
+      "issuer": "registrar",
+      "typ": "awp-organization-identifier+jws",
+      "value": {
+        "type": "OrganizationIdentifier",
+        "id": "urn:document:supplier-bank",
+        "issuer": "urn:fictional:registrar",
+        "subject": "urn:fictional:supplier-bank",
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "keys": [
+          {
+            "issuer": "supplier-bank",
+            "subject": "urn:fictional:supplier-bank",
+            "role": "issuer"
+          }
+        ]
+      }
+    },
+    {
+      "id": "urn:fictional:certifier",
+      "issuer": "registrar",
+      "typ": "awp-organization-identifier+jws",
+      "value": {
+        "type": "OrganizationIdentifier",
+        "id": "urn:document:certifier",
+        "issuer": "urn:fictional:registrar",
+        "subject": "urn:fictional:certifier",
+        "validFrom": "2026-11-01T00:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "keys": [
+          {
+            "issuer": "certifier",
+            "subject": "urn:fictional:certifier",
+            "role": "issuer"
+          }
+        ]
+      }
+    },
+    {
+      "id": "urn:status:supplier",
+      "issuer": "supplier",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:status:supplier",
+        "issuer": "urn:fictional:supplier",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-11-14T00:00:00.000Z",
+        "entries": {
+          "signatory": "active"
+        }
+      }
+    },
+    {
+      "id": "urn:status:buyer",
+      "issuer": "buyer",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:status:buyer",
+        "issuer": "urn:fictional:buyer",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-11-14T00:00:00.000Z",
+        "entries": {
+          "signatory": "active"
+        }
+      }
+    },
+    {
+      "id": "urn:status:certifier",
+      "issuer": "certifier",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:status:certifier",
+        "issuer": "urn:fictional:certifier",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-11-14T00:00:00.000Z",
+        "entries": {
+          "insurance": "active"
+        }
+      }
+    }
+  ],
+  "organizationCredentials": [
+    {
+      "agent": "supplier-agent",
+      "issuer": "supplier",
+      "entity": "urn:fictional:supplier",
+      "roles": [
+        "supplier-signatory"
+      ],
+      "actions": [
+        "onboard-supplier"
+      ],
+      "validFrom": "2026-11-01T00:00:00.000Z",
+      "validUntil": "2026-12-01T00:00:00.000Z",
+      "status": {
+        "ref": "urn:status:supplier",
+        "id": "signatory"
+      }
+    },
+    {
+      "agent": "buyer-agent",
+      "issuer": "buyer",
+      "entity": "urn:fictional:buyer",
+      "roles": [
+        "supplier-signatory"
+      ],
+      "actions": [
+        "onboard-supplier"
+      ],
+      "validFrom": "2026-11-01T00:00:00.000Z",
+      "validUntil": "2026-12-01T00:00:00.000Z",
+      "status": {
+        "ref": "urn:status:buyer",
+        "id": "signatory"
+      }
+    }
+  ],
+  "useCase": "supplier-onboarding",
+  "traceSteps": {
+    "1": "The supplier’s agent checks and admits the signed statements.",
+    "2": "The supplier’s agent sends a signed request.",
+    "3": "The buyer’s agent checks the incoming message and prepares a response.",
+    "4": "The buyer’s agent proposes the local action.",
+    "5": "The buyer’s agent checks the observed result.",
+    "6": "The buyer’s agent checks the durable record."
+  }
+}

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Domain adapter: deterministic personal-to-personal appointment negotiation (UC-02
  * personal variant). Synthetic availability only — no real calendar, booking or payment.
@@ -16,6 +17,7 @@ import { z } from "zod";
 import { digestOf } from "../core/canonical.js";
 import { iso } from "../core/schema.js";
 import type { ActionIntent, Agreement, JsonObject, ProposeBody } from "../core/types.js";
+import type { ContentProfile } from "../profile/content.js";
 import type { OperationDescription } from "../profile/description.js";
 import { AWP, PURPOSE } from "../profile/vocabulary.js";
 import type {
@@ -31,6 +33,32 @@ export const SCHEDULE_OP = { id: `${AWP}op/schedule-meeting`, version: "0.1" } a
 export const MEETING_MODEL = { id: `${AWP}model/meeting-terms`, version: "0.1" } as const;
 export const PAYMENT_OP = `${AWP}op/payment`;
 export const CALENDAR_ADAPTER = "calendar.hold";
+
+/** Meeting kinds are defined terms; an arbitrary title remains prose (UNS-12). */
+export const SCHEDULING_CONTENT: ContentProfile = {
+  identifiers: [SCHEDULE_OP.id, MEETING_MODEL.id, PURPOSE.scheduling],
+  purposes: { [PURPOSE.scheduling]: ["scheduling.availability"] },
+  vocabulary: {
+    "terms.model": { type: "identifier" },
+    "terms.modelVersion": { type: "code", values: [MEETING_MODEL.version] },
+    "terms.title": { type: "term", values: ["meeting", "catch-up", "review"] },
+    "terms.durationMinutes": { type: "number" },
+    "terms.timeZone": { type: "code", values: ["UTC", ...Intl.supportedValuesOf("timeZone")] },
+    "terms.window.*": { type: "date", claimType: "scheduling.availability" },
+    "terms.candidates.*.*": { type: "date", claimType: "scheduling.availability" },
+    "terms.fee.amount": { type: "number" },
+    "terms.fee.currency": { type: "code", values: ["GBP", "USD", "EUR", "AUD"] },
+    "terms.fee.payableBy": { type: "code", values: ["acceptor", "none"] },
+    "terms.disclosure.*": { type: "code", values: ["name", "email"] },
+    "terms.location.kind": { type: "code", values: ["video", "phone", "in-person"] },
+    "terms.synthetic": { type: "code", values: [true] },
+    "selection.slot.*": { type: "date", claimType: "scheduling.availability" },
+    "observed.holdKey": { type: "identifier" },
+    "observed.start": { type: "date", claimType: "scheduling.availability" },
+    "observed.end": { type: "date", claimType: "scheduling.availability" },
+    "observed.reconciled": { type: "code", values: [true] },
+  },
+};
 
 const MINUTE = 60_000;
 
@@ -279,6 +307,7 @@ export function schedulingDescription(): OperationDescription {
 }
 
 export class SchedulingHandler implements OperationHandler {
+  readonly contentProfile = SCHEDULING_CONTENT;
   readonly description = schedulingDescription();
   readonly termsSchema = meetingTermsSchema as unknown as z.ZodType<JsonObject>;
   readonly requiresRepresentation = true;
@@ -410,7 +439,7 @@ export class SchedulingHandler implements OperationHandler {
       effects: [
         {
           adapter: CALENDAR_ADAPTER,
-          key: `${agreement.id}#${ctx.self.actor}`,
+          key: ctx.identifierFor({ agreement: agreement.id, actor: ctx.self.actor }),
           params: {
             start: s.start,
             end: s.end,

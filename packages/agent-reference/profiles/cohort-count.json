@@ -1,0 +1,16 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "cohort-count",
+  "parties": {
+    "party-1": "Several hospitals",
+    "party-2": "A research group"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

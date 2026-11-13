@@ -130,16 +130,16 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "disclosure",
-    "verdict": "not-applicable",
-    "reason": "no-personal-data"
+    "verdict": "pass",
+    "reason": "minimal-disclosure"
   },
   {
     "agent": "lender",
     "part": "outbound-gate",
     "kind": "check",
     "check": "data-terms",
-    "verdict": "not-applicable",
-    "reason": "no-personal-data"
+    "verdict": "pass",
+    "reason": "terms-allow"
   },
   {
     "agent": "lender",
@@ -240,8 +240,8 @@
     "part": "outbound-gate",
     "kind": "check",
     "check": "disclosure",
-    "verdict": "pass",
-    "reason": "minimal-disclosure"
+    "verdict": "not-applicable",
+    "reason": "no-personal-data"
   },
   {
     "agent": "sams-agent",
@@ -258,6 +258,14 @@
     "check": "limits-approval",
     "verdict": "pass",
     "reason": "within-limits"
+  },
+  {
+    "agent": "sams-agent",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "disclosure",
+    "verdict": "pass",
+    "reason": "minimal-disclosure"
   },
   {
     "agent": "sams-agent",
@@ -368,6 +376,14 @@
     "check": "limits-approval",
     "verdict": "pass",
     "reason": "within-limits"
+  },
+  {
+    "agent": "lender",
+    "part": "outbound-gate",
+    "kind": "check",
+    "check": "disclosure",
+    "verdict": "pass",
+    "reason": "minimal-disclosure"
   },
   {
     "agent": "lender",

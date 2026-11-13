@@ -1,0 +1,106 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "contract-wording",
+  "parties": {
+    "owner": "The first fictional company",
+    "receiver": "The second fictional company",
+    "owner-agent": "The first fictional company’s agent",
+    "receiver-agent": "The second fictional company’s agent"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:contract-wording:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:contract-wording",
+      "claims": [
+        "unstructured-content"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [
+    "review-clause"
+  ],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:contract-wording",
+      "version": "0.1",
+      "label": "Negotiating the wording of a contract",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:contract-wording"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:contract-wording:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:contract-wording"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:contract-wording:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:contract-wording"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [
+    {
+      "action": "transfer",
+      "decider": "principal"
+    }
+  ],
+  "readings": [
+    {
+      "claimType": "content.opinion",
+      "type": "code",
+      "values": [
+        "requires-review"
+      ]
+    }
+  ]
+}

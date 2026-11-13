@@ -1,0 +1,400 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "pay-an-invoice",
+  "path": {
+    "index": 1,
+    "what": "A message gives new bank details for a known supplier"
+  },
+  "parties": [
+    {
+      "id": "business",
+      "name": "The business"
+    },
+    {
+      "id": "business-agent",
+      "name": "The business’s agent"
+    },
+    {
+      "id": "bank",
+      "name": "The supplier’s bank"
+    },
+    {
+      "id": "bank-agent",
+      "name": "The supplier’s bank’s agent"
+    },
+    {
+      "id": "supplier",
+      "name": "The supplier"
+    },
+    {
+      "id": "email",
+      "name": "An unverified email sender"
+    }
+  ],
+  "scenario": {
+    "id": "pay-an-invoice--branch-1",
+    "title": "Paying a supplier's invoice: A message gives new bank details for a known supplier",
+    "steps": {
+      "1": "The business’s agent checks and admits the signed statements.",
+      "2": "The business’s agent sends a signed request.",
+      "3": "The business’s agent sends a signed request.",
+      "4": "The supplier’s bank’s agent checks the incoming message and prepares a response.",
+      "5": "The supplier’s bank’s agent proposes the local action.",
+      "6": "The supplier’s bank’s agent checks the observed result.",
+      "7": "The supplier’s bank’s agent completes the message step.",
+      "8": "The business’s agent checks the incoming message and prepares a response.",
+      "9": "The business’s agent checks the durable record.",
+      "10": "The supplier’s bank’s agent checks the durable record."
+    }
+  },
+  "configuration": {
+    "id": "pay-an-invoice-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "payment",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "business-agent",
+      "name": "The business’s agent",
+      "actsFor": "business",
+      "role": "agent"
+    },
+    {
+      "id": "bank-agent",
+      "name": "The supplier’s bank’s agent",
+      "actsFor": "bank",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Payment bank and account directory",
+      "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "An unverified email sender's payee-account statement is intact and signed with An unverified email sender's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-not-authoritative",
+      "resolution": {
+        "question": "Is An unverified email sender an authority for payee-account claims about The supplier?",
+        "path": [
+          {
+            "at": "The business's own list",
+            "kind": "own-list",
+            "says": "no rule recognises this source"
+          }
+        ],
+        "answer": "Not accepted for payee-account."
+      },
+      "caption": "An unverified email sender's payee-account statement: An unverified email sender is not accepted as a source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "An unverified email sender's payee-account statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "refuse",
+      "reason": "source-not-authoritative",
+      "caption": "An unverified email sender's payee-account statement is refused and kept out of memory."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The supplier's invoice statement is intact and signed with The supplier's pinned key."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source-rule:supplier",
+        "text": "The supplier is accepted for invoice claims."
+      },
+      "resolution": {
+        "question": "Is The supplier an authority for invoice claims about The business?",
+        "path": [
+          {
+            "at": "The business's own list",
+            "kind": "own-list",
+            "says": "The supplier is accepted for invoice."
+          }
+        ],
+        "answer": "Accepted, for invoice claims only."
+      },
+      "caption": "The supplier's invoice statement: The supplier is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The supplier's invoice statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "payment",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "default-terms",
+        "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      },
+      "caption": "The supplier's invoice statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:pay-an-invoice:invoice",
+        "text": "Accept invoice from urn:fictional:supplier by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The supplier's invoice statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The supplier's invoice statement is admitted."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "business-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:pay-an-invoice:invoice",
+        "label": "The supplier's invoice statement",
+        "claimType": "invoice",
+        "subject": "urn:fictional:business",
+        "value": null,
+        "source": "urn:fictional:supplier",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "provenance": "signed by The supplier"
+      },
+      "caption": "The supplier's invoice statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in pay-an-invoice with The supplier’s bank."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:monthly-payments",
+        "text": "The business's mandate lets the agent pay urn:op:payment, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "The business's mandate covers this action."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "source-not-authoritative",
+      "caption": "A structured payment needs an admitted payee-account binding from an accepted source. Required claim: payee-account."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "business-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "source-not-authoritative",
+      "caption": "The bank account cannot be taken from invoice content. Required claim: payee-account."
+    }
+  ]
+}

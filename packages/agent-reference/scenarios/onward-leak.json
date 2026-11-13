@@ -1,0 +1,1813 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "onward-leak",
+  "useCase": "onward-leak",
+  "title": "A receiver passes data on against its terms",
+  "profile": "onward-leak",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:onward-leak:owner",
+      "name": "The lender",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:onward-leak:receiver",
+      "name": "The marketing company",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "bank",
+      "identity": "urn:fictional:onward-leak:bank",
+      "name": "The person’s bank",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:onward-leak:owner-agent",
+      "name": "The lender’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:onward-leak:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:onward-leak:receiver-agent",
+      "name": "The marketing company’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:onward-leak:receiver-agent:actor",
+      "actsFor": "receiver"
+    },
+    {
+      "id": "person",
+      "identity": "urn:fictional:onward-leak:person",
+      "name": "The person",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "person-agent",
+      "identity": "urn:fictional:onward-leak:person-agent",
+      "actor": "urn:fictional:onward-leak:person-agent:actor",
+      "name": "The person’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "person"
+    },
+    {
+      "id": "observer",
+      "identity": "urn:fictional:onward-leak:observer",
+      "name": "The independent local copy observer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "forum",
+      "identity": "urn:fictional:onward-leak:forum",
+      "name": "The independent fictional ombudsman",
+      "role": "register",
+      "runs": "issuer-only"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ],
+      [
+        "person-agent",
+        "owner-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:onward-leak:receiver",
+          "tasks": [
+            "urn:op:onward-leak",
+            "urn:op:onward-leak:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:onward-leak:person",
+          "tasks": [
+            "urn:op:onward-leak:agreement"
+          ]
+        },
+        {
+          "party": "urn:fictional:onward-leak:forum",
+          "tasks": [
+            "urn:op:forum-claim",
+            "urn:op:forum-answer"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:onward-leak:owner",
+          "tasks": [
+            "urn:op:onward-leak",
+            "urn:op:onward-leak:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:onward-leak:forum",
+          "tasks": [
+            "urn:op:forum-claim",
+            "urn:op:forum-answer"
+          ]
+        }
+      ],
+      "person-agent": [
+        {
+          "party": "urn:fictional:onward-leak:owner",
+          "tasks": [
+            "urn:op:onward-leak:agreement"
+          ]
+        },
+        {
+          "party": "urn:fictional:onward-leak:forum",
+          "tasks": [
+            "urn:op:forum-claim",
+            "urn:op:forum-answer"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:onward-leak:income.total",
+          "version": "1",
+          "source": "urn:fictional:onward-leak:bank",
+          "claimTypes": [
+            "income.total"
+          ],
+          "subjects": [
+            "urn:fictional:onward-leak:owner"
+          ]
+        },
+        {
+          "id": "urn:source:observed-income",
+          "version": "1",
+          "source": "urn:fictional:onward-leak:bank",
+          "claimTypes": [
+            "income.total"
+          ],
+          "subjects": [
+            "urn:fictional:onward-leak:person"
+          ]
+        },
+        {
+          "id": "urn:source:forum-decision",
+          "version": "1",
+          "source": "urn:fictional:onward-leak:forum",
+          "claimTypes": [
+            "forum.decision"
+          ],
+          "subjects": "any"
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:onward-leak:income.total",
+          "version": "1",
+          "source": "urn:fictional:onward-leak:bank",
+          "claimTypes": [
+            "income.total"
+          ],
+          "subjects": [
+            "urn:fictional:onward-leak:owner"
+          ]
+        },
+        {
+          "id": "urn:source:forum-decision",
+          "version": "1",
+          "source": "urn:fictional:onward-leak:forum",
+          "claimTypes": [
+            "forum.decision"
+          ],
+          "subjects": "any"
+        }
+      ],
+      "person-agent": [
+        {
+          "id": "urn:source:observed-income",
+          "version": "1",
+          "source": "urn:fictional:onward-leak:bank",
+          "claimTypes": [
+            "income.total"
+          ],
+          "subjects": [
+            "urn:fictional:onward-leak:person"
+          ]
+        },
+        {
+          "id": "urn:source:forum-decision",
+          "version": "1",
+          "source": "urn:fictional:onward-leak:forum",
+          "claimTypes": [
+            "forum.decision"
+          ],
+          "subjects": "any"
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "income",
+      "issuer": "bank",
+      "subject": "urn:fictional:onward-leak:person",
+      "kind": "income.total",
+      "value": {
+        "value": 42000,
+        "currency": "GBP"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:onward-leak:income",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:onward-leak:income",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:lending"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:onward-leak:income",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:onward-leak:owner"
+                },
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:lending"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:onward-leak:income",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:onward-leak:forum"
+                },
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:redress"
+                }
+              ]
+            }
+          ],
+          "prohibitions": [
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:onward-leak:income",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:onward-leak:receiver"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:onward-leak"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:onward-leak:agreement"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:onward-leak:agreement"
+        }
+      ],
+      "withApproval": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:forum-claim"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:forum-answer"
+        }
+      ]
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:onward-leak:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:onward-leak:agreement"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:onward-leak:agreement"
+        }
+      ],
+      "withApproval": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:forum-claim"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:forum-answer"
+        }
+      ]
+    },
+    {
+      "agent": "person-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:onward-leak:agreement"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:onward-leak:agreement"
+        }
+      ],
+      "withApproval": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:forum-claim"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:forum-answer"
+        }
+      ]
+    }
+  ],
+  "script": [
+    {
+      "id": "income-held",
+      "agent": "person-agent",
+      "type": "admit",
+      "statements": [
+        "income"
+      ],
+      "purpose": "urn:purpose:lending"
+    },
+    {
+      "id": "restricted-offer",
+      "agent": "person-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "propose",
+      "operation": "urn:op:onward-leak:agreement",
+      "contents": {
+        "purpose": "urn:purpose:lending",
+        "duties": [],
+        "protectedDigest": {
+          "$ref": "statements.income.claimDigest"
+        },
+        "forbiddenRecipient": "urn:fictional:onward-leak:receiver"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:onward-leak:agreement",
+        "target": "urn:op:onward-leak:agreement",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:lending",
+        "parameters": {}
+      }
+    },
+    {
+      "id": "restricted-accept",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "person-agent",
+      "reply": {
+        "type": "accept",
+        "intent": {
+          "action": "use",
+          "operation": "urn:op:onward-leak:agreement",
+          "target": "urn:op:onward-leak:agreement",
+          "recipient": "urn:fictional:onward-leak:person",
+          "purpose": "urn:purpose:lending",
+          "parameters": {},
+          "conversation": {
+            "$ref": "current.conversation.id"
+          }
+        }
+      }
+    },
+    {
+      "id": "restricted-formed",
+      "agent": "person-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "agreementPlan": {
+        "messages": [
+          {
+            "kind": "invoke",
+            "body": {
+              "operation": {
+                "id": "urn:op:onward-leak:agreement",
+                "version": "0.1"
+              },
+              "input": {
+                "items": [
+                  "urn:scenario:onward-leak:income"
+                ]
+              },
+              "purpose": "urn:purpose:lending",
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "agreement.id"
+                }
+              }
+            },
+            "evidence": [
+              {
+                "$ref": "statements.income.evidence"
+              },
+              {
+                "role": "representation",
+                "format": "jws-compact",
+                "value": {
+                  "$ref": "representations.person-agent"
+                }
+              }
+            ],
+            "intent": {
+              "action": "distribute",
+              "operation": "urn:op:onward-leak:agreement",
+              "target": "urn:op:onward-leak:agreement",
+              "recipient": "urn:fictional:onward-leak:owner",
+              "purpose": "urn:purpose:lending",
+              "conversation": {
+                "$ref": "current.conversation.id"
+              },
+              "parameters": {}
+            }
+          }
+        ],
+        "requiredOutcomes": []
+      }
+    },
+    {
+      "id": "restricted-data-arrives",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "person-agent"
+    },
+    {
+      "id": "outside-copy",
+      "agent": "owner-agent",
+      "type": "offgate-copy",
+      "statement": "income",
+      "observer": "observer",
+      "recipient": "urn:fictional:onward-leak:receiver"
+    },
+    {
+      "id": "claimant-record",
+      "agent": "person-agent",
+      "type": "record-segment",
+      "conversation": {
+        "$ref": "steps.restricted-offer.conversation"
+      }
+    },
+    {
+      "id": "respondent-record",
+      "agent": "owner-agent",
+      "type": "record-segment",
+      "conversation": {
+        "$ref": "steps.restricted-offer.conversation"
+      }
+    },
+    {
+      "id": "file-claim",
+      "agent": "person-agent",
+      "type": "forum-claim",
+      "case": "urn:case:onward-leak",
+      "conversation": {
+        "$ref": "steps.restricted-offer.conversation"
+      },
+      "respondent": "owner",
+      "segment": {
+        "$ref": "steps.claimant-record.jws"
+      },
+      "allegation": "onward-leak",
+      "observation": {
+        "$ref": "steps.outside-copy.jws"
+      }
+    },
+    {
+      "id": "approve-claim",
+      "agent": "person-agent",
+      "type": "approve",
+      "decision": "approve",
+      "note": "Approve these exact record bytes to this forum."
+    },
+    {
+      "id": "answer",
+      "agent": "owner-agent",
+      "type": "forum-answer",
+      "case": "urn:case:onward-leak",
+      "segment": {
+        "$ref": "steps.respondent-record.jws"
+      }
+    },
+    {
+      "id": "approve-answer",
+      "agent": "owner-agent",
+      "type": "approve",
+      "decision": "approve",
+      "note": "Approve this exact record response."
+    },
+    {
+      "id": "decision",
+      "agent": "person-agent",
+      "type": "forum-decision",
+      "case": "urn:case:onward-leak"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The lender's own gate, if it is used, stops the transfer",
+      "change": {
+        "script": [
+          {
+            "id": "admit-source",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "income"
+            ],
+            "purpose": "urn:purpose:lending"
+          },
+          {
+            "id": "request",
+            "agent": "receiver-agent",
+            "type": "start",
+            "peer": "owner-agent",
+            "kind": "invoke",
+            "operation": "urn:op:onward-leak:request",
+            "contents": {
+              "request": "income.total"
+            },
+            "intent": {
+              "action": "use",
+              "target": "urn:op:onward-leak:request",
+              "operation": "urn:op:onward-leak:request",
+              "recipient": "urn:fictional:onward-leak:owner",
+              "purpose": "urn:purpose:onward-leak",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:onward-leak"
+          },
+          {
+            "id": "request-arrives",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "receiver-agent"
+          },
+          {
+            "id": "share",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "receiver-agent",
+            "kind": "invoke",
+            "operation": "urn:op:onward-leak",
+            "contents": {
+              "items": [
+                "urn:scenario:onward-leak:income"
+              ]
+            },
+            "intent": {
+              "action": "distribute",
+              "target": "urn:op:onward-leak",
+              "operation": "urn:op:onward-leak",
+              "recipient": "urn:fictional:onward-leak:receiver",
+              "purpose": "urn:purpose:onward-leak",
+              "parameters": {},
+              "evidence": [
+                {
+                  "itemId": "urn:scenario:onward-leak:income",
+                  "claimType": "income.total"
+                }
+              ]
+            },
+            "evidence": [
+              "income"
+            ],
+            "purpose": "urn:purpose:onward-leak"
+          }
+        ],
+        "traceSteps": {
+          "1": "The lender’s agent checks the signed statements.",
+          "2": "The marketing company’s agent sends the signed request.",
+          "3": "The lender’s agent checks the message and prepares a response.",
+          "4": "The lender’s agent sends the signed request."
+        },
+        "statements": [
+          {
+            "id": "income",
+            "issuer": "bank",
+            "subject": "urn:fictional:onward-leak:owner",
+            "kind": "income.total",
+            "value": {
+              "value": 42000,
+              "currency": "GBP"
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:onward-leak:income",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:onward-leak:income",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:lending"
+                      }
+                    ]
+                  }
+                ],
+                "prohibitions": [
+                  {
+                    "type": "prohibition",
+                    "action": "distribute",
+                    "target": "urn:scenario:onward-leak:income"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "trust": {
+          "introductions": [
+            [
+              "owner-agent",
+              "receiver-agent"
+            ]
+          ],
+          "ownLists": {
+            "owner-agent": [
+              {
+                "party": "urn:fictional:onward-leak:receiver",
+                "tasks": [
+                  "urn:op:onward-leak",
+                  "urn:op:onward-leak:request"
+                ]
+              }
+            ],
+            "receiver-agent": [
+              {
+                "party": "urn:fictional:onward-leak:owner",
+                "tasks": [
+                  "urn:op:onward-leak",
+                  "urn:op:onward-leak:request"
+                ]
+              }
+            ]
+          },
+          "sources": {
+            "owner-agent": [
+              {
+                "id": "urn:source:onward-leak:income.total",
+                "version": "1",
+                "source": "urn:fictional:onward-leak:bank",
+                "claimTypes": [
+                  "income.total"
+                ],
+                "subjects": [
+                  "urn:fictional:onward-leak:owner"
+                ]
+              }
+            ],
+            "receiver-agent": [
+              {
+                "id": "urn:source:onward-leak:income.total",
+                "version": "1",
+                "source": "urn:fictional:onward-leak:bank",
+                "claimTypes": [
+                  "income.total"
+                ],
+                "subjects": [
+                  "urn:fictional:onward-leak:owner"
+                ]
+              }
+            ]
+          }
+        },
+        "suites": {
+          "accountability": "local-ledger"
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "fail",
+          "reason": "prohibited"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "prohibited"
+        }
+      ],
+      "profileChange": {
+        "purposes": [
+          {
+            "id": "urn:purpose:onward-leak",
+            "claims": [
+              "income.total"
+            ]
+          },
+          {
+            "id": "urn:purpose:lending",
+            "claims": [
+              "income.total"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "expect": [
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "person-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "person-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "person-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "person-agent",
+      "part": "principal",
+      "kind": "ask-principal"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "approval-given"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "person-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "forum",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "ask-principal"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "approval-given"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "forum",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "prohibited"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "data-terms",
+    "evidence"
+  ],
+  "suites": {
+    "accountability": "regulator-claim"
+  },
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Honest-lender branch",
+      "replacedBy": "The local lender’s real gate attempts the marketing transfer of a bank-signed restricted income statement; no claim to observe an ungated remote copy"
+    }
+  ],
+  "traceSteps": {
+    "1": "Income held.",
+    "2": "Restricted offer.",
+    "3": "Restricted accept.",
+    "4": "Restricted formed.",
+    "5": "Restricted data arrives.",
+    "6": "Outside copy.",
+    "7": "Claimant record.",
+    "8": "Respondent record.",
+    "9": "File claim.",
+    "10": "Approve claim.",
+    "11": "Answer.",
+    "12": "Approve answer.",
+    "13": "Decision."
+  }
+}

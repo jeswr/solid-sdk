@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Named, coherent mechanism configurations (framework parts C and D).
  *
@@ -24,7 +25,8 @@ export interface ConfigurationDefinition {
         readonly curve: "Ed25519" | "P-256";
         readonly specs: readonly string[];
       }
-    | { readonly status: "unresolved"; readonly candidate: string };
+    | { readonly status: "unresolved"; readonly candidate: string }
+    | { readonly status: "not-applicable"; readonly limitations: string };
   /** Whether the REQUESTER must sign. Responses are always signed in these configurations. */
   readonly requesterAuthentication: ConcernStatus;
   readonly authentication: string;
@@ -79,7 +81,106 @@ export const CONFIG_P256 = `${AWP}config/signed-p256/0.1`;
 export const CONFIG_PUBLIC = `${AWP}config/public-readonly-ed25519/0.1`;
 export const CONFIG_SD_CANDIDATE = `${AWP}config/selective-disclosure-candidate/0.1`;
 
+export const CONFIG_PLAIN_LANGUAGE = `${AWP}config/plain-language-upgrade-local/0.1`;
+export const CONFIG_MAPPING = `${AWP}config/local-signed-code-mappings/0.1`;
+export const CONFIG_EMAIL = `${AWP}config/plaintext-email-human-approval/0.1`;
+export const CONFIG_AGREEMENT = `${AWP}config/local-multiparty-agreement/0.1`;
+export const CONFIG_QUERY = `${AWP}config/local-approved-query/0.1`;
+export const CONFIG_FORUM = `${AWP}config/local-record-forum/0.1`;
+export const CONFIG_REFERENCE_LOCAL = `${AWP}config/by-reference-local-holder/0.1`;
+export const CONFIG_ORGANIZATIONS = `${AWP}config/organizations-local-resolver/0.1`;
+export const CONFIG_SELECTIVE_LOCAL = `${AWP}config/salted-selective-disclosure/0.1`;
+export const CONFIG_PAYMENT = `${AWP}config/payment-local/0.1`;
+export const CONFIG_CORROBORATION = `${AWP}config/corroboration-local/0.1`;
+export const CONFIG_PINNED_LIST = `${AWP}config/pinned-list-local/0.1`;
+const localDefinition = (id: string, label: string): ConfigurationDefinition => ({
+  id,
+  label,
+  version: "0.1.0",
+  status: "executable",
+  requesterAuthentication: "selected",
+  integrity: {
+    status: "selected",
+    mechanism: "jws-compact",
+    alg: "EdDSA",
+    curve: "Ed25519",
+    specs: JWS_SPECS,
+  },
+  ...COMMON,
+  unsignedRequestKinds: [],
+  unresolved: [],
+});
+
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  [CONFIG_MAPPING]: localDefinition(
+    CONFIG_MAPPING,
+    "Signed versioned code-list mapping lookup with original-source standing",
+  ),
+  [CONFIG_EMAIL]: {
+    ...localDefinition(
+      CONFIG_EMAIL,
+      "Unsigned plain-text email to principal-pinned endpoints; approval before every send",
+    ),
+    integrity: {
+      status: "not-applicable",
+      limitations:
+        "Email has no signature. Local owner pins and approvals remain JWS-protected; only the endpoint address is known.",
+    },
+    requesterAuthentication: "not-applicable",
+    authentication: "Address-only identity, neither a verified person nor a claims issuer",
+    representation:
+      "Only this agent's principal is represented; the correspondent is a mailbox with no agent",
+    serialization:
+      "Unsigned plain text with agent/represented-principal and structured-reply footer",
+    bindings: ["scripted-mailbox/0.1"],
+    unsignedRequestKinds: [],
+  },
+  [CONFIG_AGREEMENT]: localDefinition(
+    CONFIG_AGREEMENT,
+    "Multi-party signed agreement credentials with conditional local completion",
+  ),
+  [CONFIG_QUERY]: localDefinition(
+    CONFIG_QUERY,
+    "Source-signed approved-query answers with durable per-grant caps",
+  ),
+  [CONFIG_FORUM]: localDefinition(
+    CONFIG_FORUM,
+    "Signed record claims to a separately keyed fictional forum; no core re-execution",
+  ),
+  [CONFIG_PLAIN_LANGUAGE]: localDefinition(
+    CONFIG_PLAIN_LANGUAGE,
+    "Digest-bound unstructured content and source-signed structured form upgrade",
+  ),
+  [CONFIG_REFERENCE_LOCAL]: localDefinition(
+    CONFIG_REFERENCE_LOCAL,
+    "By-reference with a fictional local holder; not Solid access control",
+  ),
+  [CONFIG_ORGANIZATIONS]: {
+    ...localDefinition(
+      CONFIG_ORGANIZATIONS,
+      "Organization identifier documents and mandate credentials via local resolver and signed issuer status",
+    ),
+    representation:
+      "organization-signed mandate credential binding actor key, entity, roles, action kinds, validity and issuer status; current registrar document membership is mandatory",
+    authentication:
+      "introduced public verification material restricted by registrar-signed current organization and delegated-agent key documents through the local resolver",
+  },
+  [CONFIG_SELECTIVE_LOCAL]: localDefinition(
+    CONFIG_SELECTIVE_LOCAL,
+    "Salted claim digests with JWS; ordinary selective disclosure, no hidden predicate proofs",
+  ),
+  [CONFIG_PAYMENT]: localDefinition(
+    CONFIG_PAYMENT,
+    "Local structured payments, signed bank submissions, calendar-month mandate limits; fictional bank only",
+  ),
+  [CONFIG_CORROBORATION]: localDefinition(
+    CONFIG_CORROBORATION,
+    "Signed claims with exact-value corroboration and independently configured controllers",
+  ),
+  [CONFIG_PINNED_LIST]: localDefinition(
+    CONFIG_PINNED_LIST,
+    "Introduced keys with purpose-scoped principal trust pins and no register fallback",
+  ),
   [CONFIG_ED25519]: {
     id: CONFIG_ED25519,
     version: "0.1.0",

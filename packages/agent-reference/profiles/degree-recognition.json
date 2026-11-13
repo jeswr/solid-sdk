@@ -1,0 +1,87 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "degree-recognition",
+  "parties": {
+    "owner": "The graduate",
+    "receiver": "The foreign employer",
+    "university": "The fictional university",
+    "national-root": "The employer’s national register",
+    "owner-agent": "The graduate’s agent",
+    "receiver-agent": "The foreign employer’s agent"
+  },
+  "claims": [
+    {
+      "kind": "education.degree",
+      "sources": [
+        "urn:fictional:degree-recognition:university"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:degree-recognition",
+      "claims": [
+        "education.degree"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "education.degree"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:degree-recognition",
+      "version": "0.1",
+      "label": "Showing a degree to an employer abroad",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:degree-recognition:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:degree-recognition",
+      "claims": [
+        "education.degree"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,406 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "trial-eligibility",
+  "path": {
+    "index": 1,
+    "what": "The practice cannot state the medication list is complete"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The volunteer"
+    },
+    {
+      "id": "receiver",
+      "name": "The trial sponsor"
+    },
+    {
+      "id": "practice",
+      "name": "The family practice"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The volunteer’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The trial sponsor’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "trial-eligibility--branch-1",
+    "title": "Proving eligibility for a clinical trial: The practice cannot state the medication list is complete",
+    "steps": {
+      "1": "The volunteer’s agent checks the signed statements."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The volunteer’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The trial sponsor’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Proof-free preflight",
+      "replacedBy": "The branch runs only source, terms, method and completeness checks on the practice’s signed list; no eligibility proof is made or disclosed"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The family practice's medication.completeness statement is intact and signed with The family practice's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:trial-eligibility:medication.completeness",
+        "text": "The family practice is accepted for medication.completeness claims."
+      },
+      "resolution": {
+        "question": "Is The family practice an authority for medication.completeness claims about The volunteer?",
+        "path": [
+          {
+            "at": "The volunteer's own list",
+            "kind": "own-list",
+            "says": "The family practice is accepted for medication.completeness."
+          }
+        ],
+        "answer": "Accepted, for medication.completeness claims only."
+      },
+      "caption": "The family practice's medication.completeness statement: The family practice is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The family practice's medication.completeness statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:trial-eligibility:completeness",
+        "text": "Its terms allow this: use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility."
+      },
+      "caption": "The family practice's medication.completeness statement: its terms allow this: use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:trial-eligibility:medication.completeness",
+        "text": "Accept medication.completeness from urn:fictional:trial-eligibility:practice by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The family practice's medication.completeness statement is fit for urn:scenario:trial-eligibility:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The family practice's medication.completeness statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:trial-eligibility:completeness",
+        "label": "The family practice's medication.completeness statement",
+        "claimType": "medication.completeness",
+        "subject": "urn:fictional:trial-eligibility:owner",
+        "value": null,
+        "source": "urn:fictional:trial-eligibility:practice",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "period": {
+          "start": "2026-11-01",
+          "end": "2026-11-13"
+        },
+        "terms": {
+          "id": "urn:terms:trial-eligibility:completeness",
+          "summary": "use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility"
+        },
+        "provenance": "signed by The family practice"
+      },
+      "caption": "The family practice's medication.completeness statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The family practice's medication.list statement is intact and signed with The family practice's pinned key."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:trial-eligibility:medication.list",
+        "text": "The family practice is accepted for medication.list claims."
+      },
+      "resolution": {
+        "question": "Is The family practice an authority for medication.list claims about The volunteer?",
+        "path": [
+          {
+            "at": "The volunteer's own list",
+            "kind": "own-list",
+            "says": "The family practice is accepted for medication.list."
+          }
+        ],
+        "answer": "Accepted, for medication.list claims only."
+      },
+      "caption": "The family practice's medication.list statement: The family practice is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The family practice's medication.list statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:trial-eligibility:medicines",
+        "text": "Its terms allow this: use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility."
+      },
+      "caption": "The family practice's medication.list statement: its terms allow this: use for urn:purpose:trial eligibility; share for urn:purpose:trial eligibility."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:trial-eligibility:medication.list",
+        "text": "Accept medication.list from urn:fictional:trial-eligibility:practice by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The family practice's medication.list statement is fit for urn:scenario:trial-eligibility:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "ask-more",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "completeness-not-established",
+      "caption": "An accepted completeness statement for medication.list, its subject and period is required."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "outcome": "ask-more",
+      "reason": "completeness-not-established",
+      "caption": "The family practice's medication.list statement is refused and kept out of memory."
+    }
+  ]
+}

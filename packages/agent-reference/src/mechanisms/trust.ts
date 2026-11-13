@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The local trust store: PINNED verification material plus SCOPED source-authority rules.
  *
@@ -12,9 +13,10 @@
  * rule version. A valid signature from a source outside its rules is `not-accepted`.
  */
 import { z } from "zod";
+import { DEFAULT_LIMITS } from "../core/limits.js";
 import { isIsoInstant } from "../core/schema.js";
 import type { Iri, SourceAuthorityAssessment } from "../core/types.js";
-import { checkPinnedRecord, type KeyAlg, type PublicKeyRecord } from "./jws.js";
+import { checkPinnedRecord, type KeyAlg, type PublicKeyRecord, verifyCompact } from "./jws.js";
 
 export type KeyRole = "actor" | "party" | "issuer";
 
@@ -48,6 +50,13 @@ export interface TrustStoreData {
   readonly owner: Iri;
   readonly keys: readonly PinnedKey[];
   readonly sourceAuthority: readonly SourceAuthorityRule[];
+  readonly controllers?: Readonly<Record<string, string>>;
+  /** Record keys are accepted only through a signed delegation by an introduced identity. */
+  readonly recordKeys?: readonly {
+    readonly identity: Iri;
+    readonly key: PublicKeyRecord;
+    readonly delegation: string;
+  }[];
 }
 
 const jwk = z
@@ -92,17 +101,38 @@ const ruleSchema = z
     },
   );
 
+const recordDelegation = z.strictObject({
+  type: z.literal("RecordKeyDelegation"),
+  id: z.string(),
+  issuer: z.string(),
+  recordKid: z.string(),
+  claimTypes: z.array(z.string()).min(1),
+  validFrom: instant,
+  validUntil: instant,
+});
 const storeSchema = z
   .object({
     version: z.literal(1),
     owner: z.string().min(3).max(512),
     keys: z.array(pinnedKeySchema).max(1024),
     sourceAuthority: z.array(ruleSchema).max(1024),
+    controllers: z.record(z.string(), z.string()).optional(),
+    recordKeys: z
+      .array(
+        z.strictObject({
+          identity: z.string(),
+          key: z.strictObject({ kid: z.string(), alg: z.enum(["EdDSA", "ES256"]), publicJwk: jwk }),
+          delegation: z.string().max(16384),
+        }),
+      )
+      .max(1024)
+      .optional(),
   })
   .strict();
 
 export class TrustStore {
   private readonly byKid = new Map<string, PinnedKey>();
+  private readonly recordScopes = new Map<string, z.infer<typeof recordDelegation>>();
 
   private constructor(readonly data: TrustStoreData) {
     for (const key of data.keys) this.byKid.set(key.kid, key);
@@ -128,7 +158,32 @@ export class TrustStore {
       }
       roleOf.set(key.subject, key.role);
     }
-    return new TrustStore(data);
+    const trust = new TrustStore(data);
+    for (const record of data.recordKeys ?? []) {
+      if (seen.has(record.key.kid)) throw new Error("record key collides with a pinned key");
+      seen.add(record.key.kid);
+      if (!(await checkPinnedRecord(record.key))) throw new Error("record key thumbprint mismatch");
+      const checked = await verifyCompact(record.delegation, {
+        resolve: (kid) => trust.resolver("party")(kid) ?? trust.resolver("issuer")(kid),
+        typ: "awp-record-key+jws",
+        allowedAlgs: ["EdDSA", "ES256"],
+        limits: DEFAULT_LIMITS,
+      });
+      if (checked.outcome !== "valid") continue;
+      const parsed = recordDelegation.safeParse(checked.payload);
+      if (
+        !parsed.success ||
+        checked.pinned.subject !== record.identity ||
+        parsed.data.issuer !== record.identity ||
+        parsed.data.recordKid !== record.key.kid
+      )
+        continue;
+      // A record key cannot delegate another record key: its signer must be an identity key.
+      if (!data.keys.some((k) => k.kid === checked.kid)) continue;
+      trust.byKid.set(record.key.kid, { ...record.key, role: "issuer", subject: record.identity });
+      trust.recordScopes.set(record.key.kid, parsed.data);
+    }
+    return trust;
   }
 
   static empty(owner: Iri): TrustStore {
@@ -143,6 +198,19 @@ export class TrustStore {
       if (algs && !algs.includes(key.alg)) return undefined;
       return key;
     };
+  }
+
+  recordKeyAllowed(kid: string, claimType: string | undefined, at: string): boolean {
+    const scope = this.recordScopes.get(kid);
+    if (!scope) return true;
+    return (
+      !!claimType &&
+      Date.parse(scope.validFrom) <= Date.parse(at) &&
+      Date.parse(at) < Date.parse(scope.validUntil) &&
+      scope.claimTypes.some((t) =>
+        t.endsWith(".*") ? claimType.startsWith(t.slice(0, -1)) : claimType === t,
+      )
+    );
   }
 
   keysFor(subject: Iri, role: KeyRole): PinnedKey[] {

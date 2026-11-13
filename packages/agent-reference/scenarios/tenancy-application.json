@@ -1,0 +1,1035 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "tenancy-application",
+  "useCase": "tenancy-application",
+  "title": "Applying to rent a home",
+  "profile": "tenancy-application",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:tenancy-application:owner",
+      "name": "The tenant",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:tenancy-application:receiver",
+      "name": "The letting agency",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "bank",
+      "identity": "urn:fictional:tenancy-application:bank",
+      "name": "The tenant’s bank",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:tenancy-application:owner-agent",
+      "name": "The tenant’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:tenancy-application:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:tenancy-application:receiver-agent",
+      "name": "The letting agency’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:tenancy-application:receiver",
+          "tasks": [
+            "urn:op:tenancy-application",
+            "urn:op:tenancy-application:request"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:tenancy-application:owner",
+          "tasks": [
+            "urn:op:tenancy-application",
+            "urn:op:tenancy-application:request"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:tenancy-application:bank.full-statements",
+          "version": "1",
+          "source": "urn:fictional:tenancy-application:bank",
+          "claimTypes": [
+            "bank.full-statements"
+          ],
+          "subjects": [
+            "urn:fictional:tenancy-application:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:tenancy-application:bank.full-statements",
+          "version": "1",
+          "source": "urn:fictional:tenancy-application:bank",
+          "claimTypes": [
+            "bank.full-statements"
+          ],
+          "subjects": [
+            "urn:fictional:tenancy-application:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "statements",
+      "issuer": "bank",
+      "subject": "urn:fictional:tenancy-application:owner",
+      "kind": "bank.full-statements",
+      "value": {
+        "months": 6,
+        "entries": [
+          {
+            "amount": 1200,
+            "merchant": "urn:fictional:shop"
+          }
+        ]
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:tenancy-application:statements",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:tenancy-application:statements",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:tenant-finances"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:tenancy-application"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:tenancy-application:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:tenancy-application"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The letting agent asks for six months of statements",
+      "change": {
+        "assurance": null,
+        "suites": {
+          "authenticity": "jws"
+        },
+        "script": [
+          {
+            "id": "admit-source",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "statements"
+            ],
+            "purpose": "urn:purpose:tenant-finances"
+          },
+          {
+            "id": "request",
+            "agent": "receiver-agent",
+            "type": "start",
+            "peer": "owner-agent",
+            "kind": "invoke",
+            "operation": "urn:op:tenancy-application:request",
+            "contents": {
+              "request": "bank.full-statements"
+            },
+            "intent": {
+              "action": "use",
+              "target": "urn:op:tenancy-application:request",
+              "operation": "urn:op:tenancy-application:request",
+              "recipient": "urn:fictional:tenancy-application:owner",
+              "purpose": "urn:purpose:tenancy-application",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:tenancy-application"
+          },
+          {
+            "id": "request-arrives",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "receiver-agent"
+          },
+          {
+            "id": "share",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "receiver-agent",
+            "kind": "invoke",
+            "operation": "urn:op:tenancy-application:raw",
+            "contents": {
+              "items": [
+                "urn:scenario:tenancy-application:statements"
+              ]
+            },
+            "intent": {
+              "action": "distribute",
+              "target": "urn:op:tenancy-application:raw",
+              "operation": "urn:op:tenancy-application:raw",
+              "recipient": "urn:fictional:tenancy-application:receiver",
+              "purpose": "urn:purpose:tenancy-application",
+              "parameters": {},
+              "evidence": [
+                {
+                  "itemId": "urn:scenario:tenancy-application:statements",
+                  "claimType": "bank.full-statements"
+                }
+              ]
+            },
+            "evidence": [
+              "statements"
+            ],
+            "purpose": "urn:purpose:tenancy-application"
+          }
+        ],
+        "traceSteps": {
+          "1": "The tenant’s agent checks the signed statements.",
+          "2": "The letting agency’s agent sends the signed request.",
+          "3": "The tenant’s agent checks the message and prepares a response.",
+          "4": "The tenant’s agent sends the signed request."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "mandate"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "fail",
+          "reason": "not-authorised"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "not-authorised"
+        }
+      ]
+    },
+    {
+      "id": "branch-2",
+      "what": "The letting agent's agent keeps asking in different words",
+      "change": {
+        "assurance": null,
+        "suites": {
+          "authenticity": "jws"
+        },
+        "script": [
+          {
+            "id": "request",
+            "agent": "receiver-agent",
+            "type": "start",
+            "peer": "owner-agent",
+            "kind": "propose",
+            "operation": "urn:op:tenancy-application",
+            "contents": {
+              "purpose": "urn:purpose:tenancy-application",
+              "evidenceRequest": [
+                {
+                  "claimType": "tenancy.application"
+                }
+              ],
+              "topic": "application-request"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:tenancy-application",
+              "target": "urn:op:tenancy-application",
+              "purpose": "urn:purpose:tenancy-application",
+              "recipient": "urn:fictional:tenancy-application:owner",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:tenancy-application",
+            "discover": false
+          },
+          {
+            "id": "counter-1",
+            "agent": "owner-agent",
+            "type": "receive",
+            "reply": {
+              "type": "counter",
+              "terms": {
+                "purpose": "urn:purpose:tenancy-application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "tenancy.application"
+                  }
+                ],
+                "topic": "application-request",
+                "turn": 1
+              },
+              "intent": {
+                "action": "use",
+                "operation": "urn:op:tenancy-application",
+                "target": "urn:op:tenancy-application",
+                "purpose": "urn:purpose:tenancy-application",
+                "recipient": {
+                  "$ref": "current.peer.party"
+                },
+                "conversation": {
+                  "$ref": "current.conversation.id"
+                },
+                "parameters": {}
+              }
+            }
+          },
+          {
+            "id": "counter-2",
+            "agent": "receiver-agent",
+            "type": "receive",
+            "reply": {
+              "type": "counter",
+              "terms": {
+                "purpose": "urn:purpose:tenancy-application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "tenancy.application"
+                  }
+                ],
+                "topic": "application-request",
+                "turn": 2
+              },
+              "intent": {
+                "action": "use",
+                "operation": "urn:op:tenancy-application",
+                "target": "urn:op:tenancy-application",
+                "purpose": "urn:purpose:tenancy-application",
+                "recipient": {
+                  "$ref": "current.peer.party"
+                },
+                "conversation": {
+                  "$ref": "current.conversation.id"
+                },
+                "parameters": {}
+              }
+            }
+          },
+          {
+            "id": "counter-3",
+            "agent": "owner-agent",
+            "type": "receive",
+            "reply": {
+              "type": "counter",
+              "terms": {
+                "purpose": "urn:purpose:tenancy-application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "tenancy.application"
+                  }
+                ],
+                "topic": "application-request",
+                "turn": 3
+              },
+              "intent": {
+                "action": "use",
+                "operation": "urn:op:tenancy-application",
+                "target": "urn:op:tenancy-application",
+                "purpose": "urn:purpose:tenancy-application",
+                "recipient": {
+                  "$ref": "current.peer.party"
+                },
+                "conversation": {
+                  "$ref": "current.conversation.id"
+                },
+                "parameters": {}
+              }
+            }
+          }
+        ],
+        "traceSteps": {
+          "1": "The letting agency’s agent sends the signed request.",
+          "2": "The tenant’s agent checks the message and prepares a response.",
+          "3": "The letting agency’s agent checks the message and prepares a response.",
+          "4": "The tenant’s agent checks the message and prepares a response."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "round-limit",
+        "check": "limits-approval"
+      },
+      "outline": [
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "fail",
+          "reason": "round-limit"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "round-limit"
+        }
+      ]
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "mandate",
+    "disclosure",
+    "limits-approval"
+  ],
+  "suites": {
+    "authenticity": "zk-query-proof"
+  },
+  "assurance": "proved",
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "needs a proof system"
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Proof-free tenancy preflights",
+      "replacedBy": "The actual agency request cannot authorize raw statements, and a fresh signed negotiation hits the real runtime round cap; no income/rent proof is fabricated"
+    }
+  ],
+  "traceSteps": {}
+}

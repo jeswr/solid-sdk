@@ -1,0 +1,91 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "salary-account-change",
+  "parties": {
+    "owner": "The employee",
+    "receiver": "The employer",
+    "bank": "The employee’s bank",
+    "owner-agent": "The employee’s agent",
+    "receiver-agent": "The employer’s agent",
+    "attacker": "The fictional attacker"
+  },
+  "claims": [
+    {
+      "kind": "salary.account",
+      "sources": [
+        "urn:fictional:salary-account-change:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:salary-account-change",
+      "claims": [
+        "salary.account"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "salary.account"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:salary-account-change",
+      "version": "0.1",
+      "label": "A request to change where salary is paid",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:salary-account-change"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:salary-account-change:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:salary-account-change"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:salary-account-change:update",
+      "version": "0.1",
+      "label": "Update this employee’s payroll account",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:salary-account-change"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}
