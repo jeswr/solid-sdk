@@ -70,16 +70,17 @@ test.describe("Connect sources", () => {
     await expect(page.getByText(/needs platform approval/i).first()).toBeVisible();
 
     // …while the file import imports the user's own export today, with the
-    // export link pointing at the Garmin activities list.
+    // export link pointing at Garmin's full account data export.
     await expect(page.getByText(/Import your Garmin export/i)).toBeVisible();
     const exportLink = page.getByRole("link", { name: /get your export from garmin/i });
     await expect(exportLink).toHaveAttribute(
       "href",
-      "https://connect.garmin.com/modern/activities",
+      "https://www.garmin.com/account/datamanagement/",
     );
     await expect(exportLink).toHaveAttribute("target", "_blank");
     await expect(exportLink).toHaveAttribute("rel", "noopener noreferrer");
-    // The hint covers both shapes + the full-archive alternative.
+    // The hint recommends the full archive and retains the legacy activity shapes.
+    await expect(page.getByText(/Export Your Data/)).toBeVisible();
     await expect(page.getByText(/Export CSV/)).toBeVisible();
     await expect(page.getByText(/GPX or TCX/)).toBeVisible();
 

@@ -350,3 +350,32 @@ placeVisit values (including missing/invalid location or duration) and all other
 shapes count as skips and make location incomplete. Contacts use an independent
 run-level row counter, including duplicate cards, across retained and capped paths;
 manifest release never resets the counter. Excess rows skip before any Pod writes.
+
+Garmin's existing `garmin` file adapter also accepts full account ZIPs. Read
+`src/garmin/archive.ts` and `health-vocab.ts` before changing archive behavior. Reuse
+Takeout's ZIP validation and `core/file-json.ts`; never recurse into Uploaded-Files FIT
+ZIPs, fetch source URLs or fall back to whole-archive text. Detect products by safe entry
+components, accepting account prefixes and filename suffixes. Activity distance/elevation
+are cm, duration ms; retain the CSV/GPX/TCX units policy and rides/indoor-cycling split.
+IDs come from activityId; daily measurements use metric/day fragments in per-metric monthly
+documents. Merge under session ETags so overlapping exports keep earlier observations;
+file imports have no cursors or deletion reconciliation. Use only existing sector terms:
+stress, Body Battery and intensity minutes currently require counted vocabulary-gap notes.
+Sleep totals exclude awake time; source stages/window/score stay labelled notes. Generic
+HRV/VO2max observations use UCUM units and source codes, never invented subclasses/IRIs.
+
+`createGarminFileAdapter` may lower GARMIN_ARCHIVE_LIMITS, never raise the ceilings.
+Bound entry count, declared/actual inflation, ratio, JSON bytes/tokens/depth/records and total
+observations (including duplicate rows). Charge malformed/oversized records to the shared
+run row budget too, so invalid input cannot reset its work allowance at each entry.
+Keep metadata directory validation before dispatch,
+entry CRC validation before JSON parsing, small inflater input pieces, and staging of
+recognised entries before the single final write. Catch entry parse failures separately from Pod writes; propagate writer failures
+and decoder exceptions. Count cap/FIT skips separately from unrecognised files; group
+vocabulary gaps once per file with distinct affected-day counts, without treating them as
+skipped records. Return static grouped run-report notes without source account paths.
+Keep legacy text capped despite `streaming: true`.
+The connector's Apple adapter is workouts-only: use the separate suite Health model's
+Observation/CodeableConcept/Instant mapping for metrics, and keep the README candid that
+current Health charts read native shards rather than connector metric directories. Do not
+claim automatic connector chart discovery or HRV/VO2max charts without app support.
