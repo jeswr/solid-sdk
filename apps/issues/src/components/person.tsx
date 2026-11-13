@@ -1,6 +1,10 @@
 "use client";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@jeswr/suite-ui";
 import { usePerson, initialsOf } from "@/lib/people";
 import { Users } from "lucide-react";
 

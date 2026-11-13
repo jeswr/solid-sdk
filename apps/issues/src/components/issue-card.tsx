@@ -2,16 +2,18 @@
 
 import type React from "react";
 import { startOfUtcDay } from "@/lib/dates";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@jeswr/suite-ui";
 import {
   Archive,
   CalendarClock,

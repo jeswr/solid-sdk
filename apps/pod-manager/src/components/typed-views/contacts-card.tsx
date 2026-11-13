@@ -13,9 +13,14 @@ import { usePodMedia } from "@/components/use-pod-media";
 import { Mail, Phone, UserRound } from "lucide-react";
 import type { ContactCard, ContactsModel } from "@/lib/typed-views/contacts-view";
 import { safeLinkHref } from "@/lib/pod-scope";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Button,
+  Card,
+  CardContent,
+} from "@jeswr/suite-ui";
 import { initials } from "@/components/account-menu";
 
 /** The profile-card list for a contacts resource. */

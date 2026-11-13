@@ -2,18 +2,20 @@
 
 import { useState } from "react";
 import type { IssueRecord, SprintRecord } from "@/lib/use-issues";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Input,
+} from "@jeswr/suite-ui";
 import { TypeBadge } from "@/components/type-badge";
 import { PersonAvatar } from "@/components/person";
 import { CalendarRange, CheckCircle2, ChevronDown, Flag, MoreHorizontal, Play, Plus } from "lucide-react";

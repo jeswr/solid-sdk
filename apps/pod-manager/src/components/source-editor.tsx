@@ -30,10 +30,14 @@ import {
   type RawResource,
 } from "@/lib/files";
 import { ResourceWriteError, ItemReadError } from "@/lib/errors";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+  Skeleton,
+  Textarea,
+} from "@jeswr/suite-ui";
 
 type SaveState =
   | { kind: "idle" }

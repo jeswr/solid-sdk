@@ -1,8 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import { TriangleAlert } from "lucide-react";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+} from "@jeswr/suite-ui";
 import { cn } from "@/lib/utils";
 
 /** A friendly, jargon-free empty state with an optional call to action. */

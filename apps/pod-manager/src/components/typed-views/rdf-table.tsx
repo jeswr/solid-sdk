@@ -16,7 +16,12 @@ import { LinkIcon } from "lucide-react";
 import type { PropertyGroup, PropertyValue } from "@/lib/resource-view";
 import { formatLiteral } from "@/lib/literal-format";
 import { safeLinkHref } from "@/lib/pod-scope";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@jeswr/suite-ui";
 
 /** Friendly property table for RDF resources (the "structured data" viewer). */
 export function RdfViewer({ groups }: { groups: PropertyGroup[] }) {

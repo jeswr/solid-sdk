@@ -24,9 +24,6 @@ import {
   writeRaw,
 } from "@/lib/files";
 import { ResourceWriteError } from "@/lib/errors";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,7 +33,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Button,
+  Input,
+  Label,
+} from "@jeswr/suite-ui";
 
 /** Friendly copy for a write failure, distinguishing the "already exists" case. */
 function writeErrorMessage(e: unknown, existsHint: string): string {

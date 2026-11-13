@@ -14,11 +14,16 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Globe, LoaderCircle } from "lucide-react";
 import { DomainsErrorState } from "@/components/domains-ui";
 import { useDomains, usePurchaseFeature } from "@/components/use-domains";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Skeleton,
+} from "@jeswr/suite-ui";
 import {
   claimDomain,
   DomainConflictError,

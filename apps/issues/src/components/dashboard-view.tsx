@@ -13,7 +13,12 @@ import {
 } from "@/lib/stats";
 import { DEFAULT_WORKFLOW, type WorkflowDef } from "@/lib/issue";
 import type { IssueRecord, SprintRecord } from "@/lib/use-issues";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@jeswr/suite-ui";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { PersonChip } from "@/components/person";
 import { AlertTriangle, CheckCircle2, CircleDot, Loader2 } from "lucide-react";

@@ -17,9 +17,14 @@ import { categoriesWithDataCount } from "@/lib/pod-data";
 import { categoryIcon } from "@/components/category-icon";
 import { ActivityFeed, ActivityEmpty } from "@/components/activity-feed";
 import { ErrorState } from "@/components/states";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 export default function HomePage() {
   const { profile } = useSession();

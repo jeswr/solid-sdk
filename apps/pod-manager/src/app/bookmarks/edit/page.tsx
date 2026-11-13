@@ -18,11 +18,13 @@ import { bookmarksStore, parseTagsInput, type Bookmark } from "@/lib/bookmarks";
 import { useStore, useItem } from "@/components/use-productivity";
 import { ErrorState } from "@/components/states";
 import { ResourceWriteError } from "@/lib/errors";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Input,
+  Label,
+  Skeleton,
+  Textarea,
+} from "@jeswr/suite-ui";
 
 /** Validate that a string is an absolute http(s) URL. */
 function isHttpUrl(value: string): boolean {

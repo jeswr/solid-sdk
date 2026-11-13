@@ -28,9 +28,13 @@ import { EmptyState, ErrorState } from "@/components/states";
 import { TierCImport } from "@/components/tier-c-import";
 import { useConnect } from "@/components/use-connect";
 import { fileAdapterById } from "@/lib/integrations/file-adapters";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+} from "@jeswr/suite-ui";
 import { categoryById } from "@/lib/categories";
 import type { ImportReport } from "@/lib/integrations/core/import-runner";
 import {

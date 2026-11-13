@@ -12,8 +12,11 @@
 import { Bookmark as BookmarkIcon, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import type { Bookmark, BookmarkModel } from "@/lib/typed-views/bookmark-view";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Button,
+  Card,
+  CardContent,
+} from "@jeswr/suite-ui";
 
 /** The bookmark-row list for a bookmarks resource. */
 export function BookmarkCardList({ model }: { model: BookmarkModel; url: string }) {
