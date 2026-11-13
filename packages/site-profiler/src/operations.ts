@@ -93,7 +93,9 @@ export function toParameter(
   } else if (/^page$/i.test(p.name)) {
     param = { ...base, path: [sab("page")], range: xsd("integer"), required: false, default: "1" };
   } else {
-    param = { ...base, path: [sab(p.name)], range: rangeFor(p), required: p.required && !p.hidden };
+    // Extra query parameters (filters, limits) stay optional: RFC 6570 drops them when unset.
+    const required = p.location !== "query" && p.required && !p.hidden;
+    param = { ...base, path: [sab(p.name)], range: rangeFor(p), required };
   }
   if (example !== undefined && example !== "[redacted]" && param.path.length)
     param.example = example;

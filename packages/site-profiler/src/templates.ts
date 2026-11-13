@@ -63,6 +63,7 @@ function contentTypeOf(r: RecordedRequest): EndpointCandidate["contentType"] {
   if (/json/i.test(ct)) return "application/json";
   if (/multipart\/form-data/i.test(ct)) return "multipart/form-data";
   if (/x-www-form-urlencoded/i.test(ct)) return "application/x-www-form-urlencoded";
+  if (ct) return undefined;
   if (r.postData && tryJson(r.postData) !== undefined && /^\s*[{[]/.test(r.postData))
     return "application/json";
   if (r.postData) return "application/x-www-form-urlencoded";
