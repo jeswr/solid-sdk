@@ -459,7 +459,7 @@
       "id": "prove-answer",
       "agent": "owner-agent",
       "type": "prove",
-      "method": "sparq-authrdf/1",
+      "method": "sparq-noir-closed-world/0",
       "request": {
         "$ref": "steps.fresh-request.request"
       },
@@ -1147,13 +1147,13 @@
   ],
   "traceSteps": {},
   "requiredMethods": [
-    "sparq-authrdf/1"
+    "sparq-noir-closed-world/0"
   ],
   "catalogueAssurance": "proved",
   "recordedAssurance": "attested",
   "proofCredentials": [
     {
-      "method": "sparq-authrdf/1",
+      "method": "sparq-noir-closed-world/0",
       "issuer": "tier",
       "subject": "urn:fictional:recycled-content:lot",
       "statements": [
@@ -1161,7 +1161,7 @@
       ]
     },
     {
-      "method": "sparq-authrdf/1",
+      "method": "sparq-noir-closed-world/0",
       "issuer": "tier-2",
       "subject": "urn:fictional:recycled-content:lot",
       "statements": [
@@ -1169,7 +1169,7 @@
       ]
     },
     {
-      "method": "sparq-authrdf/1",
+      "method": "sparq-noir-closed-world/0",
       "issuer": "tier-3",
       "subject": "urn:fictional:recycled-content:lot",
       "statements": [

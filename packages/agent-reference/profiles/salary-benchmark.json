@@ -75,6 +75,23 @@
         "derived"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "joint.keys",
+      "sources": [
+        "urn:fictional:salary-benchmark:contributor-1",
+        "urn:fictional:salary-benchmark:contributor-2",
+        "urn:fictional:salary-benchmark:contributor-3",
+        "urn:fictional:salary-benchmark:contributor-4",
+        "urn:fictional:salary-benchmark:contributor-5",
+        "urn:fictional:salary-benchmark:contributor-6",
+        "urn:fictional:salary-benchmark:computer",
+        "urn:fictional:salary-benchmark:requester"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
@@ -84,7 +101,8 @@
         "joint.message",
         "joint.count",
         "joint.sum",
-        "salary-benchmark.total"
+        "salary-benchmark.total",
+        "joint.keys"
       ]
     }
   ],
@@ -179,6 +197,12 @@
         "urn:purpose:salary-benchmark"
       ],
       "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Contributing organisations",
+      "replacedBy": "Fictional local parties, each with its own pinned identity key and aggregate keys. Joint computation uses the research-grade, unaudited sparq-aggregate/1 method."
     }
   ]
 }

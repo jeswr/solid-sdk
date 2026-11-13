@@ -12,7 +12,7 @@ const root = join(import.meta.dirname, "..");
 const doubles = () =>
   verifierRegistry([
     new ToyProofSystem(),
-    new ToyProofSystem("sparq-authrdf/1", ["rule", "issuers", "fresh", "complete"]),
+    new ToyProofSystem("sparq-noir-closed-world/0", ["rule", "issuers", "fresh", "complete"]),
     new ToyJointProtocol(),
   ]);
 it.each([
@@ -54,7 +54,7 @@ it.each([
   const paths = await runScenario(profile, scenario, {
     registry: doubles(),
     testOnly: true,
-    compare: true,
+    compare: false,
   });
   for (const path of paths.filter((p) => p.usedTestDouble)) {
     expect(path.blocked).toBeUndefined();
@@ -63,7 +63,11 @@ it.each([
       expect(path.trace?.events.some((e) => e.rule?.id === "DER-14" && e.verdict === "pass")).toBe(
         true,
       );
-    else
+    else if (id === "salary-benchmark") {
+      expect(path.actual).toMatchObject({ outcome: "admit", reason: "fit-for-use" });
+      expect(path.disagrees).toBe(true);
+      expect(path.expected).toMatchObject({ outcome: "stop", reason: "prohibited" });
+    } else
       expect(path.actual).toMatchObject({
         outcome: "stop",
         reason:

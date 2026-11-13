@@ -71,7 +71,7 @@ export class ToyJointProtocol implements JointProtocol {
       seen = new Set<string>();
     for (const c of contributions) {
       const party = String(c.party),
-        member = roster.find((p) => p.party === party && !p.computeOnly);
+        member = roster.find((p) => p.party === party);
       if (!member || seen.has(party))
         return { ok: false as const, reason: "input-not-attested", partyAtFault: party };
       seen.add(party);
@@ -97,7 +97,7 @@ export class ToyJointProtocol implements JointProtocol {
       )
         return { ok: false as const, reason: "input-not-attested", partyAtFault: party };
     }
-    const expected = roster.filter((p) => !p.computeOnly);
+    const expected = roster;
     if (seen.size !== expected.length)
       return {
         ok: false as const,

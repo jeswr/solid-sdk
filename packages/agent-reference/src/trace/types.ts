@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Trace format `agent-trace/0.1`: the ordered events an agent emits as work crosses each part
@@ -148,7 +149,16 @@ export interface TraceFile {
   };
   readonly configuration: { readonly id: string; readonly layers: Record<LayerId, SuiteId> };
   readonly agents: readonly TraceAgent[];
-  readonly generated: { readonly commit: string; readonly core: "scripted" | "recorded-model" };
+  readonly assurance?: { readonly kind: "joint"; readonly assumption: string };
+  readonly generated: {
+    readonly commit: string;
+    readonly core: "scripted" | "recorded-model";
+    readonly method?: string;
+    readonly package?: string;
+    readonly packageCommit?: string;
+    readonly sha256?: string;
+    readonly notice?: string;
+  };
   readonly events: readonly TraceEvent[];
 }
 

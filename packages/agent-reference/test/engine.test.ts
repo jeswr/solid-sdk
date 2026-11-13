@@ -5,6 +5,8 @@ import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+// @ts-expect-error Standalone artifact writer is deliberately JavaScript.
+import { recordedJoint } from "../scripts/recorded-joint.mjs";
 import { CORE_REASON_CODES } from "../src/core/types.js";
 import { loadCase, validateReferences } from "../src/engine/load.js";
 import { patch, resolveTemplate, runScenario } from "../src/engine/run.js";
@@ -22,6 +24,7 @@ const loaded = () => loadCase(root, "probing-counterparty");
 it("loads every declared case and preserves every catalogue branch, without claiming blocked paths ran", async () => {
   let runs = 0;
   let blocked = 0;
+  let recorded = 0;
   const manifest = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8"));
   for (const file of readdirSync(join(root, "scenarios"))) {
     const { profile, scenario } = loadCase(root, file.slice(0, -5));
@@ -29,6 +32,16 @@ it("loads every declared case and preserves every catalogue branch, without clai
     expect(results).toHaveLength(scenario.branches.length + 1);
     for (const result of results) {
       if (result.blocked) {
+        const row = manifest.paths.find(
+          (p: { scenario: string; path: string }) =>
+            p.scenario === scenario.id && p.path === result.path,
+        );
+        if (row?.recordedWith?.commit === "61989f5") {
+          expect(recordedJoint(root, manifest.paths, scenario.id, result.path)).toEqual(row);
+          recorded++;
+          expect(result.trace).toBeUndefined();
+          continue;
+        }
         blocked++;
         expect(result.trace).toBeUndefined();
       } else {
@@ -54,7 +67,7 @@ it("loads every declared case and preserves every catalogue branch, without clai
       }
     }
   }
-  expect(runs).toBe(
+  expect(runs + recorded).toBe(
     manifest.paths.filter((p: { status: string }) => p.status !== "blocked").length,
   );
   expect(blocked).toBe(

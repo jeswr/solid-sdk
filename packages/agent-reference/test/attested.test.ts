@@ -7,6 +7,7 @@ const referenceKey = "$ref";
 
 import { digestOf } from "../src/core/canonical.js";
 import type { JsonObject } from "../src/core/types.js";
+import { verifierRegistry } from "../src/derive/verifiers.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 import { issueMappingAttestation, mapCodeClaim } from "../src/mechanisms/code-mapping.js";
@@ -26,7 +27,7 @@ it("runs both previously blocked attested main paths and retains the joint-compu
     ).toBe(true);
   }
   const { profile, scenario } = loadCase(root, "cohort-count");
-  const jointPaths = await runScenario(profile, scenario);
+  const jointPaths = await runScenario(profile, scenario, { registry: verifierRegistry() });
   for (const path of jointPaths) {
     expect(path.blocked).toBe(
       "needs joint computation: needs the sparq-aggregate/1 package, which is not installed",

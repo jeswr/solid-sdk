@@ -15,7 +15,7 @@ import { isClaimEvidence, verifySelectivePresentation } from "../mechanisms/sele
 import { z } from "zod";
 import { digestBytes, digestContent, digestOf } from "../core/canonical.js";
 import type { ConversationState } from "../core/conversation.js";
-import { BoundsError, type PilotLimits, parseBoundedJson } from "../core/limits.js";
+import { BoundsError, jointLimits, type PilotLimits, parseBoundedJson } from "../core/limits.js";
 import { validateMessage } from "../core/schema.js";
 import type {
   AnyMessage,
@@ -28,7 +28,11 @@ import type {
   VerificationResult,
 } from "../core/types.js";
 import { verifyDerivation } from "../derive/rules.js";
-import { opaqueDerivation, verifyOpaqueDerivation } from "../derive/verification.js";
+import {
+  opaqueDerivation,
+  verifyJointMessageOutcome,
+  verifyOpaqueDerivation,
+} from "../derive/verification.js";
 import { AuthorityChainChecks } from "../mechanisms/authority-chain.js";
 import { type KeyAlg, verifyCompact } from "../mechanisms/jws.js";
 import { OrganizationChecks } from "../mechanisms/organizations.js";
@@ -881,6 +885,50 @@ export class InboundGate {
   }
 
   /** Source, terms and fitness of one claim: one event each. Returns whether all passed. */
+  // AUTHORED-BY Codex GPT-6
+  async checkJointBindings(session: JsonObject): Promise<boolean> {
+    if (!session.wire) return true; // Existing test-only protocol has a distinct wire format.
+    const roster = session.roster as JsonObject[];
+    let ok = Array.isArray(roster) && roster.length > 0;
+    for (const member of roster ?? []) {
+      if (typeof member.keyBinding !== "string") {
+        ok = false;
+        break;
+      }
+      const checked = await this.assessClaim(
+        { role: "credential", format: "derivation+jws", value: member.keyBinding },
+        String(member.party),
+      );
+      const c = checked.claim;
+      if (
+        checked.verdict !== "pass" ||
+        !c ||
+        c.claimType !== "joint.keys" ||
+        c.issuer !== member.party ||
+        c.subject !== member.party ||
+        c.method !== "recorded-by-authority" ||
+        digestOf(c.value) !==
+          digestOf({ publicKeys: member.publicKeys, computeOnly: member.computeOnly === true })
+      ) {
+        ok = false;
+        break;
+      }
+    }
+    this.verdictEvent(
+      "source",
+      ok ? "pass" : "fail",
+      "Each aggregate key and compute-only role is bound by a statement signed with its party's independently pinned identity key.",
+      {
+        reason: ok ? "source-accepted" : "source-not-accepted",
+        rule: {
+          id: "DER-key-binding",
+          text: "Authenticate every roster key binding before accepting the roster.",
+        },
+      },
+    );
+    return ok;
+  }
+
   async claimChecks(
     item: EvidenceItem,
     subject: Iri | undefined,
@@ -896,6 +944,83 @@ export class InboundGate {
     }
     let c = r.claim;
     let label = c ? this.labelOf(c) : "A relayed statement";
+    if (
+      phase === "source" &&
+      c &&
+      (c.claimType === "joint.message" ||
+        (c.derivation as JsonObject | undefined)?.assurance === "joint")
+    ) {
+      const value = c.value as JsonObject | undefined;
+      const joint = (c.derivation as JsonObject | undefined)?.joint as JsonObject | undefined;
+      const fixed = this.deps.gate.fixedJointSessions?.[String(value?.sessionId ?? "")];
+      const session = (joint?.session ?? value?.session ?? fixed?.session) as
+        | JsonObject
+        | undefined;
+      if (session && !(await this.checkJointBindings(session))) {
+        cache.set(item.value, { ...r, verdict: "fail", reason: "source-not-accepted" });
+        this.failedClaim(c, "source-not-accepted", need.taskId ?? need.task);
+        return false;
+      }
+      if (session?.wire && value && c.claimType === "joint.message") {
+        const kind =
+          "partial" in value
+            ? "partial"
+            : "contribution" in value
+              ? "contribute"
+              : "outcome" in value
+                ? "outcome"
+                : "open";
+        try {
+          parseBoundedJson(
+            JSON.stringify(value),
+            jointLimits(kind, (session.roster as JsonObject[]).length),
+          );
+          if (kind === "partial") {
+            const index = (session.roster as JsonObject[]).findIndex(
+              (p) => p.party === this.deps.identity.party,
+            );
+            if (
+              index < 0 ||
+              ((value.partial as JsonObject).message as JsonObject)?.recipient !== index
+            )
+              throw new Error("private routing mismatch");
+          }
+          if (kind === "outcome") {
+            const checked = await verifyJointMessageOutcome(
+              this.deps.gate,
+              value,
+              need.purpose ?? "",
+            );
+            this.verdictEvent(
+              "source",
+              checked.ok ? "pass" : "fail",
+              checked.ok
+                ? "The real research-grade, unaudited outcome verifier checked the complete ordered contribution set before core admission."
+                : `Joint outcome refused: ${checked.detail ?? checked.reason}.`,
+              {
+                reason: checked.ok ? "source-accepted" : checked.reason,
+                rule: {
+                  id: "DER-14",
+                  text: "Verify the complete joint outcome in the inbound source gate.",
+                },
+              },
+            );
+            if (!checked.ok) {
+              cache.set(item.value, { ...r, verdict: "fail", reason: checked.reason });
+              this.failedClaim(
+                c,
+                checked.reason ?? "derivation-not-verified",
+                need.taskId ?? need.task,
+              );
+              return false;
+            }
+          }
+        } catch {
+          cache.set(item.value, { ...r, verdict: "fail", reason: "source-not-accepted" });
+          return false;
+        }
+      }
+    }
     if (phase === "source" && c?.derivation && opaqueDerivation(c as JsonObject)) {
       const result = await verifyOpaqueDerivation({
         statement: c as JsonObject,

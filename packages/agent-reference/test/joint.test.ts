@@ -388,3 +388,16 @@ function required<T>(value: T | undefined | null): T {
   if (value === undefined || value === null) throw new Error("Required test fixture is missing");
   return value;
 }
+
+it("claims the joint outcome while verification is in flight and admits exactly one copy", async () => {
+  const f = await gateFixture();
+  const verify = f.protocol.verifyOutcome.bind(f.protocol);
+  f.protocol.verifyOutcome = async (input) => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    return verify(input);
+  };
+  const results = await Promise.all([f.admit(), f.admit()]);
+  expect(results.map((r) => r.admitted).sort()).toEqual([0, 1]);
+  expect((await f.admit()).admitted).toBe(0);
+  expect(f.events.some((e) => e.reason === "replay-conflict")).toBe(true);
+});

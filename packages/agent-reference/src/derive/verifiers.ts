@@ -49,7 +49,12 @@ export interface SessionParams {
   minimumGroup: number;
   minimumContributors: number;
   threshold?: { statistic: "count" | "sum"; operator: ">=" | "<="; value: number };
-  roster: readonly { party: string; publicKeys: JsonObject; computeOnly?: boolean }[];
+  roster: readonly {
+    party: string;
+    publicKeys: JsonObject;
+    computeOnly?: boolean;
+    keyBinding?: string;
+  }[];
 }
 /** Refusal variants deliberately have no numeric total. Evidence is adapter-owned JSON. */
 export type JointOutcome =
@@ -69,20 +74,30 @@ export interface JointProtocol {
     secretKeys: JsonObject;
     count: number;
     sum: number;
-  }): Promise<{ contribution: JsonObject; shares: Record<string, JsonObject> }>;
+  }): Promise<{
+    contribution: JsonObject;
+    shares: Record<string, JsonObject>;
+    local?: JsonObject;
+    auditOpening?: JsonObject;
+  }>;
   receiveAndPartial(input: {
     session: JsonObject;
     party: string;
     secretKeys: JsonObject;
     contributions: readonly JsonObject[];
     shares: readonly JsonObject[];
+    local?: JsonObject;
   }): Promise<
-    { ok: true; partial: JsonObject } | { ok: false; reason: string; partyAtFault?: string }
+    | { ok: true; partial: JsonObject; local?: JsonObject }
+    | { ok: false; reason: string; partyAtFault?: string; check?: string; index?: number | null }
   >;
   finish(input: {
     session: JsonObject;
     contributions: readonly JsonObject[];
     partials: readonly JsonObject[];
+    party?: string;
+    secretKeys?: JsonObject;
+    local?: JsonObject;
   }): Promise<JointOutcome>;
   verifyOutcome(input: {
     session: JsonObject;
@@ -90,7 +105,7 @@ export interface JointProtocol {
     contributions: readonly JsonObject[];
   }): Promise<
     | { ok: true; contributors: readonly string[] }
-    | { ok: false; reason: string; partyAtFault?: string }
+    | { ok: false; reason: string; partyAtFault?: string; check?: string; index?: number | null }
   >;
 }
 export interface VerifierRegistry {
@@ -149,6 +164,8 @@ export interface DerivedRequest {
   consumed: boolean;
 }
 export interface FixedJointSession {
+  consumed?: boolean;
+  outcomeConsumed?: boolean;
   method: string;
   session: JsonObject;
   ruleDigest: string;

@@ -683,7 +683,7 @@
       "id": "prove-answer",
       "agent": "owner-agent",
       "type": "prove",
-      "method": "sparq-authrdf/1",
+      "method": "sparq-noir-closed-world/0",
       "request": {
         "$ref": "steps.fresh-request.request"
       },
@@ -1833,13 +1833,13 @@
   ],
   "traceSteps": {},
   "requiredMethods": [
-    "sparq-authrdf/1"
+    "sparq-noir-closed-world/0"
   ],
   "catalogueAssurance": "proved",
   "recordedAssurance": "attested",
   "proofCredentials": [
     {
-      "method": "sparq-authrdf/1",
+      "method": "sparq-noir-closed-world/0",
       "issuer": "claims-register",
       "subject": "urn:fictional:insurance-quote:owner",
       "statements": [
@@ -1848,7 +1848,7 @@
       ]
     },
     {
-      "method": "sparq-authrdf/1",
+      "method": "sparq-noir-closed-world/0",
       "issuer": "licensing",
       "subject": "urn:fictional:insurance-quote:owner",
       "statements": [

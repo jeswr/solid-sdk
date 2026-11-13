@@ -278,24 +278,85 @@
       "scenario": "cohort-count",
       "useCase": "cohort-count",
       "path": "main",
-      "status": "blocked",
-      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "cohort-count--baseline.json",
+      "traceSha256": "e1329bdd3fe4b329f04af93a66fbabea90db13d07642ce931ae56cfaec8fa3ce",
+      "recordedWith": {
+        "method": "sparq-aggregate/1",
+        "package": "sparq-verifiable-aggregate",
+        "commit": "61989f5",
+        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+        "notice": "Research-grade and unaudited."
+      }
     },
     {
       "scenario": "cohort-count",
       "useCase": "cohort-count",
       "path": "branch-1",
       "what": "The result would cover fewer than the minimum number of patients",
-      "status": "blocked",
-      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "prohibited"
+      },
+      "consequences": [
+        {
+          "seq": 932,
+          "agent": "computer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 942,
+          "agent": "requester-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "cohort-count--branch-1--baseline.json",
+      "traceSha256": "7a2af19c8068426060844e4be0615dafc371f164101e5a5e0adf35e17a3a5365",
+      "recordedWith": {
+        "method": "sparq-aggregate/1",
+        "package": "sparq-verifiable-aggregate",
+        "commit": "61989f5",
+        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+        "notice": "Research-grade and unaudited."
+      }
     },
     {
       "scenario": "cohort-count",
       "useCase": "cohort-count",
       "path": "branch-2",
       "what": "One hospital does not attest its input",
-      "status": "blocked",
-      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "derivation-not-verified",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "derivation-not-verified"
+      },
+      "consequences": [],
+      "trace": "cohort-count--branch-2--baseline.json",
+      "traceSha256": "0d11298336260fdf3681a1c9dff8b2c4a8dd6ac07edda3c1d6082d18a245ac2c",
+      "recordedWith": {
+        "method": "sparq-aggregate/1",
+        "package": "sparq-verifiable-aggregate",
+        "commit": "61989f5",
+        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+        "notice": "Research-grade and unaudited."
+      }
     },
     {
       "scenario": "consent-for-a-child",
@@ -1279,7 +1340,7 @@
       "useCase": "insurance-quote",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-authrdf/1 package, which is not installed"
+      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
       "scenario": "insurance-quote",
@@ -2192,8 +2253,22 @@
       "scenario": "platform-income",
       "useCase": "platform-income",
       "path": "main",
-      "status": "blocked",
-      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "platform-income--baseline.json",
+      "traceSha256": "8018e91899d48c2271bfb34b650c682a1e1598510301c987823a13f2adf222e4",
+      "recordedWith": {
+        "method": "sparq-aggregate/1",
+        "package": "sparq-verifiable-aggregate",
+        "commit": "61989f5",
+        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+        "notice": "Research-grade and unaudited."
+      }
     },
     {
       "scenario": "platform-income",
@@ -2639,7 +2714,7 @@
       "useCase": "recycled-content",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-authrdf/1 package, which is not installed"
+      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
       "scenario": "recycled-content",
@@ -2962,16 +3037,49 @@
       "scenario": "salary-benchmark",
       "useCase": "salary-benchmark",
       "path": "main",
-      "status": "blocked",
-      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "salary-benchmark--baseline.json",
+      "traceSha256": "a6508463a0e1ae785d75964ae8926564f0aa1d87ee886345d608139f93a1475c",
+      "recordedWith": {
+        "method": "sparq-aggregate/1",
+        "package": "sparq-verifiable-aggregate",
+        "commit": "61989f5",
+        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+        "notice": "Research-grade and unaudited."
+      }
     },
     {
       "scenario": "salary-benchmark",
       "useCase": "salary-benchmark",
       "path": "branch-1",
       "what": "Only two employers contribute",
-      "status": "blocked",
-      "reason": "needs joint computation: needs the sparq-aggregate/1 package, which is not installed"
+      "status": "disagrees",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "prohibited"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "salary-benchmark--branch-1--baseline.json",
+      "traceSha256": "bc5032851e4567ed3818aabf6979fe9769d30a507ff693633fa6dcca1bd64c56",
+      "recordedWith": {
+        "method": "sparq-aggregate/1",
+        "package": "sparq-verifiable-aggregate",
+        "commit": "61989f5",
+        "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+        "notice": "Research-grade and unaudited."
+      }
     },
     {
       "scenario": "sell-a-car",
@@ -3353,7 +3461,7 @@
       "useCase": "trial-eligibility",
       "path": "main",
       "status": "blocked",
-      "reason": "needs a proof system: needs the sparq-authrdf/1 package, which is not installed"
+      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
       "scenario": "trial-eligibility",

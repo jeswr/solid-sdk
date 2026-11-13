@@ -70,6 +70,22 @@
         "derived"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "joint.keys",
+      "sources": [
+        "urn:fictional:cohort-count:contributor-1",
+        "urn:fictional:cohort-count:contributor-2",
+        "urn:fictional:cohort-count:contributor-3",
+        "urn:fictional:cohort-count:contributor-4",
+        "urn:fictional:cohort-count:contributor-5",
+        "urn:fictional:cohort-count:computer",
+        "urn:fictional:cohort-count:requester"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
     }
   ],
   "purposes": [
@@ -79,7 +95,8 @@
         "joint.message",
         "joint.count",
         "joint.sum",
-        "cohort-count.total"
+        "cohort-count.total",
+        "joint.keys"
       ]
     }
   ],
@@ -173,6 +190,12 @@
         "urn:purpose:cohort-count"
       ],
       "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Contributing organisations",
+      "replacedBy": "Fictional local parties, each with its own pinned identity key and aggregate keys. Joint computation uses the research-grade, unaudited sparq-aggregate/1 method."
     }
   ]
 }
